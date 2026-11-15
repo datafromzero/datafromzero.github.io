@@ -46,6 +46,11 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    GA4 consent banner.
 8. **Content migration** (SPEC §14): copy Markdown from `johnha912/data-odyssey`, add frontmatter, fix links.
 
+## Agent team
+Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and
+token rules: `.claude/agents/README.md`. Default flow per milestone: implementer → `qa-runner`
+→ `spec-reviewer` → lead commits. Do small edits inline; delegate whole milestones or batches.
+
 Ask the owner before: changing a CONTRACT, adding a dependency that ships JS to lesson pages,
 or anything in SPEC §15.
 
