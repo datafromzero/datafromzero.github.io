@@ -48,6 +48,9 @@ export default defineConfig({
 			components: {
 				ThemeProvider: './src/components/starlight/ThemeProvider.astro',
 				ThemeSelect: './src/components/starlight/ThemeSelect.astro',
+				// Lesson header and footer (SPEC §5.1); both render nothing on non-lesson pages.
+				PageTitle: './src/components/starlight/PageTitle.astro',
+				Footer: './src/components/starlight/Footer.astro',
 			},
 			// SPEC §8 / D3: English at the root, Vietnamese under /vi/ with the same slugs.
 			defaultLocale: 'root',
