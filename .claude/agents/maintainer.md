@@ -1,6 +1,6 @@
 ---
 name: maintainer
-description: Routine upkeep - verifies Dependabot/dependency bumps build cleanly, fixes typos and small wording or link errors, drafts issue triage, lists lessons whose `reviewed` date is older than 12 months. Use for small, low-risk, well-defined chores; escalates anything else.
+description: Routine upkeep - verifies Dependabot/dependency bumps build cleanly, fixes typos and small wording or link errors, drafts issue triage, lists lessons whose `reviewed` date is older than 18 months (SPEC §12). Use for small, low-risk, well-defined chores; escalates anything else.
 model: haiku
 effort: medium
 maxTurns: 25
