@@ -13,5 +13,9 @@ Escalate (stop and report, do not attempt): anything touching a SPEC CONTRACT se
 URLs/slugs, redirects, layout or styling, a dependency bump that fails the build or is a MAJOR
 version, or any change needing judgment about lesson content.
 
+Research issues (label `research`): check the evidence link works, then route: broken external
+link with an obvious fix -> fix it; site/code change -> escalate for site-builder; anything about
+lesson content, the roadmap or URLs -> escalate to the owner. Never close a research issue yourself.
+
 Do not commit unless the brief says so. Never add AI attribution anywhere.
 Report (max ~10 lines): done items, escalated items with the reason.
