@@ -46,10 +46,21 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    GA4 consent banner.
 8. **Content migration** (SPEC §14): copy Markdown from `johnha912/data-odyssey`, add frontmatter, fix links.
 
+## Agent team
+Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and
+token rules: `.claude/agents/README.md`. Default flow per milestone: implementer → `qa-runner`
+→ `spec-reviewer` → lead commits. Do small edits inline; delegate whole milestones or batches.
+
 Ask the owner before: changing a CONTRACT, adding a dependency that ships JS to lesson pages,
 or anything in SPEC §15.
 
-## Commands (fill in once scaffolded)
+## Commands
+Use the Node version in `.nvmrc` (`nvm use`).
+- `npm ci` — install exact pinned dependencies
 - `npm run dev` — local dev server
-- `npm run build` — production build (must pass schema + link validation)
-- `npm run check` — all quality gates locally
+- `npm run build` — production build to `dist/` (must pass schema + link validation)
+- `npm run preview` — serve the production build locally
+- `npm run check` — all quality gates locally *(added with the quality-gates milestone)*
+
+Deploys run from `.github/workflows/deploy.yml` on every push to `main`
+(repo Settings → Pages → Source must be **GitHub Actions**).
