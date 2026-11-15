@@ -1,8 +1,8 @@
 /**
  * Build-time content validation (SPEC §5, §8). Wraps Starlight's docs loader:
- *  - each file is validated against the schema for its content type before Starlight sees it;
- *  - after all files are loaded, cross-file rules are checked (unique ids, prerequisites,
- *    replacements, translations). Any failure aborts the build with every problem listed.
+ * After loading, EVERY entry is validated against the schema for its content type and the
+ * cross-file rules are checked (unique ids, prerequisites, replacements, translations). All problems
+ * are collected and the build aborts once with the full list.
  */
 import type { Loader } from 'astro/loaders';
 import { docsLoader } from '@astrojs/starlight/loaders';
@@ -22,37 +22,29 @@ export function validatedDocsLoader(): Loader {
 		name: 'datafromzero-docs-loader',
 		async load(context) {
 			const { parseData, store } = context;
+			const loadErrors: string[] = [];
 			await inner.load({
 				...context,
 				parseData: async (props) => {
 					const c = classify(props.id);
-					const file = (props as { filePath?: string }).filePath ?? `src/content/docs/${props.id}.md`;
 					let data = props.data as Data;
-					if (c.problem) throw new Error(`Content validation failed:\n  - ${file}: ${c.problem}`);
-					if (c.kind) {
-						// Glossary pages have `term`, not `title`; Starlight needs a title for the page.
-						if (c.kind === 'glossary' && data.title === undefined) data = { ...data, title: data.term };
-						const result = schemaByKind[c.kind].safeParse(data);
-						const issues = result.success ? [] : [...result.error.issues];
-						const stageOrArea = c.kind === 'lesson' ? 'stage' : 'area';
-						if (c.folder && data[stageOrArea] !== c.folder && !issues.some((i) => i.path[0] === stageOrArea)) {
-							issues.push({
-								path: [stageOrArea],
-								message: `is "${String(data[stageOrArea])}" but the file is in the "${c.folder}" folder; they must match`,
-							} as (typeof issues)[number]);
-						}
-						if (c.locale === 'vi' && data.translated_from_version === undefined) {
-							issues.push({
-								path: ['translated_from_version'],
-								message: 'is required on Vietnamese pages (SPEC §8)',
-							} as (typeof issues)[number]);
-						}
-						if (issues.length) throw new Error(`Content validation failed:\n${describeIssues(file, issues)}`);
+					// Glossary pages have `term`, not `title`; Starlight needs a title for the page.
+					if (c.kind === 'glossary' && data.title === undefined) data = { ...data, title: data.term };
+					// status: draft is excluded from production builds like Starlight's own `draft: true`.
+					if (c.kind && data.status === 'draft') data = { ...data, draft: true };
+					try {
+						return await parseData({ ...props, data });
+					} catch (error) {
+						// Keep going so every problem is reported together after loading.
+						const file = (props as { filePath?: string }).filePath ?? `src/content/docs/${props.id}.md`;
+						loadErrors.push(`  - ${file}: ${error instanceof Error ? error.message : String(error)}`);
+						return data;
 					}
-					return parseData({ ...props, data });
 				},
 			});
-			checkCrossReferences(store.values());
+			// Astro only re-parses changed files, so validation runs here over every entry, every build.
+			const errors = [...loadErrors, ...validateEntries(store.values())];
+			if (errors.length) throw new Error(`Content validation failed:\n${errors.join('\n')}`);
 		},
 	};
 }
@@ -63,8 +55,31 @@ interface Entry {
 	filePath?: string;
 }
 
-function checkCrossReferences(entries: Entry[]) {
+type Issue = { path: PropertyKey[]; message: string };
+
+function validateEntries(entries: Entry[]): string[] {
 	const errors: string[] = [];
+	// Per-file rules for every entry (schema, folder match, location, Vietnamese version).
+	for (const e of entries) {
+		const c = classify(e.id);
+		const file = e.filePath ?? `src/content/docs/${e.id}.md`;
+		if (c.problem) {
+			errors.push(`  - ${file}: ${c.problem}`);
+			continue;
+		}
+		if (!c.kind) continue;
+		const data = e.data;
+		const result = schemaByKind[c.kind].safeParse(data);
+		const issues: Issue[] = result.success ? [] : [...result.error.issues];
+		const field = c.kind === 'lesson' ? 'stage' : 'area';
+		if (c.folder && data[field] !== c.folder && !issues.some((i) => i.path[0] === field)) {
+			issues.push({ path: [field], message: `is "${String(data[field])}" but the file is in the "${c.folder}" folder; they must match` });
+		}
+		if (c.locale === 'vi' && data.translated_from_version === undefined) {
+			issues.push({ path: ['translated_from_version'], message: 'is required on Vietnamese pages (SPEC §8)' });
+		}
+		if (issues.length) errors.push(describeIssues(file, issues));
+	}
 	const typed = entries
 		.map((e) => ({ e, c: classify(e.id) }))
 		.filter((x): x is { e: Entry; c: Classified & { kind: NonNullable<Classified['kind']> } } => x.c.kind !== null);
@@ -81,7 +96,9 @@ function checkCrossReferences(entries: Entry[]) {
 	}
 	const lessonIds = new Map<string, Entry>();
 	for (const { e, c } of english) if (c.kind === 'lesson') lessonIds.set(String(e.data.id), e);
-	const allIds = new Set(byId.keys());
+	// see_also may point to reference entries and glossary terms only (SPEC §5.2).
+	const seeAlsoIds = new Set<string>();
+	for (const { e, c } of english) if (c.kind === 'reference' || c.kind === 'glossary') seeAlsoIds.add(String(e.data.id));
 
 	for (const { e, c } of typed) {
 		const file = fileOf(e);
@@ -94,6 +111,14 @@ function checkCrossReferences(entries: Entry[]) {
 		};
 		if (c.kind === 'lesson') {
 			missing('prerequisites', d.prerequisites, lessonIds, 'lesson');
+			if (d.status !== 'draft') {
+				for (const ref of (d.prerequisites as string[]) ?? [])
+					if (lessonIds.get(ref)?.data.status === 'draft')
+						errors.push(`  - ${file}: lesson "${String(d.id)}" (${String(d.status)}) lists draft lesson "${ref}" in \`prerequisites\`; publish it first`);
+				const r = d.replaced_by as string | null | undefined;
+				if (r && lessonIds.get(r)?.data.status === 'draft')
+					errors.push(`  - ${file}: lesson "${String(d.id)}" (${String(d.status)}) has \`replaced_by\` "${r}", which is a draft lesson`);
+			}
 			if (d.status === 'deprecated') {
 				if (!d.replaced_by) errors.push(`  - ${file}: \`replaced_by\` is required when status is "deprecated"`);
 			}
@@ -102,8 +127,11 @@ function checkCrossReferences(entries: Entry[]) {
 				errors.push(`  - ${file}: \`replaced_by\` cannot point to the lesson itself`);
 		}
 		if (c.kind === 'reference') {
-			missing('see_also', d.see_also, allIds, 'content');
+			missing('see_also', d.see_also, seeAlsoIds, 'reference or glossary');
 			missing('used_in', d.used_in, lessonIds, 'lesson');
+			for (const ref of (d.used_in as string[] | undefined) ?? [])
+				if (lessonIds.get(ref)?.data.status === 'draft')
+					errors.push(`  - ${file}: \`used_in\` lists draft lesson "${ref}"; drafts are never deployed (SPEC D18)`);
 		}
 		if (c.locale === 'vi') {
 			const twin = english.find((x) => x.c.path === c.path);
@@ -116,5 +144,5 @@ function checkCrossReferences(entries: Entry[]) {
 			}
 		}
 	}
-	if (errors.length) throw new Error(`Content validation failed:\n${errors.join('\n')}`);
+	return errors;
 }

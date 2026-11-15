@@ -20,7 +20,8 @@ export const REFERENCE_AREAS = ['excel', 'sql', 'pandas', 'stats'] as const;
 
 const id = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be lowercase kebab-case (a-z, 0-9, -)');
 const reviewed = z.coerce.date({ error: 'must be a date such as 2026-11-15' });
-const source = z.object({ title: z.string().min(1), url: z.url() }).strict();
+const httpUrl = z.httpUrl({ error: 'must be an http(s) URL' });
+const source = z.object({ title: z.string().min(1), url: httpUrl }).strict();
 const sources = z.array(source).min(1, 'needs at least 1 source');
 // Set on Vietnamese pages only (SPEC §8); presence is enforced in content-validation.ts.
 const translated_from_version = z
@@ -40,7 +41,7 @@ export const LessonSchema = z.object({
 	prerequisites: z.array(id),
 	datasets: z.array(z.string().min(1)).optional(),
 	notebook: z.string().min(1).optional(),
-	sheet: z.url().optional(),
+	sheet: httpUrl.optional(),
 	reviewed,
 	sources,
 	status: z.enum(['draft', 'published', 'deprecated']),
@@ -54,7 +55,7 @@ export const ReferenceSchema = z.object({
 	area: z.enum(REFERENCE_AREAS),
 	summary: z.string().min(1),
 	syntax: z.string().optional(),
-	see_also: z.array(id).default([]),
+	see_also: z.array(id),
 	used_in: z.array(id).optional(),
 	reviewed,
 	sources,
@@ -65,7 +66,7 @@ export const GlossarySchema = z.object({
 	id,
 	term: z.string().min(1),
 	short: z.string().min(1).max(140, 'must be at most 140 characters'),
-	aliases: z.array(z.string().min(1)).default([]),
+	aliases: z.array(z.string().min(1)),
 	reviewed,
 	translated_from_version,
 });
@@ -92,19 +93,7 @@ export const StorySchema = z.object({
 	translated_from_version,
 });
 
-/**
- * SPEC §5.4 says "see §7" for datasets, but §7 defines no frontmatter. This is the minimal
- * provisional shape; it is flagged in the milestone report and in SPEC follow-up.
- */
-export const DatasetSchema = z.object({
-	id,
-	title: z.string().min(1),
-	description: z.string().min(1),
-	reviewed,
-	translated_from_version,
-});
-
-export type Kind = 'lesson' | 'reference' | 'glossary' | 'career' | 'story' | 'dataset';
+export type Kind = 'lesson' | 'reference' | 'glossary' | 'career' | 'story';
 
 export const schemaByKind = {
 	lesson: LessonSchema,
@@ -112,7 +101,6 @@ export const schemaByKind = {
 	glossary: GlossarySchema,
 	career: CareerSchema,
 	story: StorySchema,
-	dataset: DatasetSchema,
 } as const;
 
 export type Lesson = z.infer<typeof LessonSchema>;
@@ -154,7 +142,13 @@ export function classify(entryId: string): Classified {
 		}
 		return none('reference entries must be reference/{area}/{slug}.md or reference/glossary/{slug}.md');
 	}
-	const simple: Record<string, Kind> = { careers: 'career', stories: 'story', datasets: 'dataset' };
+	// SPEC §5.4 / §7 define no dataset frontmatter yet (open owner decision): only index pages may exist.
+	if (first === 'datasets') {
+		return segs.length === 1
+			? none()
+			: none('Dataset page frontmatter is not defined in SPEC yet (§5.4/§7).');
+	}
+	const simple: Record<string, Kind> = { careers: 'career', stories: 'story' };
 	if (first in simple) {
 		if (segs.length === 1) return none();
 		if (segs.length === 2) return { kind: simple[first], locale, path };

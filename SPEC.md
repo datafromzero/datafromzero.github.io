@@ -41,6 +41,10 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D14 | Reference area | Glossary, syntax lookup (Excel / SQL / pandas), statistics formulas, career guides | §4. |
 | D15 | Learner progress | **Not stored** | No localStorage, no accounts. |
 | D16 | Comments | **None** | Each page has "Suggest an edit" + "Report an issue" links only. |
+| D17 | Content validation | **Strict, all errors at once** | Ids are lowercase kebab-case; every id reference (`prerequisites`, `replaced_by`, `see_also`, `used_in`) must exist; a file's type, `stage` and `area` follow its folder. The build lists every problem and fails (§5). |
+| D18 | Draft lessons | **Never deployed** | `status: draft` lessons appear only in local dev. Published or deprecated lessons may not depend on, or be replaced by, a draft (§5.1). |
+| D19 | Dataset page frontmatter | **Deferred** until the first dataset | The build rejects pages under `datasets/` (other than the index) until §5.4 defines their fields. |
+| D20 | Citation access date | **Reader adds it** | Pages are static, so "Cite this lesson" cannot know when it was read; a note asks the reader to add their access date (§9). |
 
 ---
 
@@ -130,8 +134,17 @@ Sidebar order and grouping are generated from frontmatter (`stage`, `order`), ne
 
 ## 5. Content model — **CONTRACT**
 
-All schemas live in `src/content.config.ts`. Adding an **optional** field = MINOR change.
+Schemas are registered in `src/content.config.ts` and defined in `src/lib/content-schemas.ts`;
+validation runs on every build (`src/lib/content-validation.ts`). Adding an **optional** field = MINOR change.
 Adding a required field, renaming or removing a field = MAJOR change + migration script.
+
+Rules for every type (D17):
+- `id` is lowercase kebab-case (`a-z`, `0-9`, `-`) and unique across all content types (an English page and
+  its Vietnamese translation share one id).
+- The file's folder decides its type (paths in the headings below). A file nested deeper than its type allows fails the build.
+- Every id reference must point to an existing entry of the right type.
+- `sources[].url` and `sheet` must be `http(s)` URLs.
+- The build reports all problems at once, naming the file and field, and fails.
 
 ### 5.1 Lesson (`src/content/docs/{stage}/{slug}.md`)
 
@@ -162,6 +175,11 @@ replaced_by: null             # lesson id, required when status = deprecated
 ---
 ```
 
+- `stage` must match the lesson's folder.
+- `status: draft` lessons are built only in local dev, never deployed (D18). A published or deprecated
+  lesson may not list a draft in `prerequisites` or `replaced_by`.
+- A deprecated lesson shows a notice linking to `replaced_by` (§3.3).
+
 Rendered at the top of every lesson: **level · duration · last reviewed**, then **Objectives** and
 **Before this lesson** (prerequisite links). Rendered at the bottom: **Sources**, **Cite this lesson**,
 **Suggest an edit**, **Report an issue**, prev/next.
@@ -184,6 +202,9 @@ sources: [ … ]
 ```
 Reference pages use a fixed section order: **Syntax → Parameters → Examples → Common mistakes → See also.**
 
+`area` must match the folder. `see_also` is required (an empty list is allowed); its ids may be reference
+entries or glossary terms. `used_in` must name existing lessons that are not drafts (D18).
+
 ### 5.3 Glossary term (`src/content/docs/reference/glossary/{slug}.md`)
 
 ```yaml
@@ -191,15 +212,17 @@ Reference pages use a fixed section order: **Syntax → Parameters → Examples 
 id: glossary-primary-key
 term: Primary key
 short: A column whose value uniquely identifies each row.   # ≤ 140 chars, used in hover/inline tooltips
-aliases: [PK]
+aliases: [PK]                 # required; an empty list is allowed
 reviewed: 2026-11-15
 ---
 ```
+`term` is also used as the page title.
 
 ### 5.4 Career guide, Story, Dataset
 - **Career** (`/careers/{career}/`): `id`, `title`, `summary`, `skills[]`, `stages[]` (which stages/branches to finish), `reviewed`, `sources[]`.
 - **Story** (`/stories/{slug}/`): `id`, `title`, `description`, `published`, `reviewed`, `sources[]`, `motion: true|false`.
-- **Dataset** (`/datasets/{name}/`): see §7.
+- **Dataset** (`/datasets/{name}/`): files are defined in §7. Page frontmatter is **not defined yet** (D19);
+  until it is, the build rejects dataset pages other than `datasets/index`.
 
 ---
 
@@ -260,6 +283,8 @@ Notebooks are cleared of outputs before commit (CI check).
 - Vietnamese files mirror English paths: `src/content/docs/vi/sql/joins.md` with the **same `id`**.
 - Untranslated pages fall back to English with Starlight's "not yet translated" notice.
 - A translation records `translated_from_version` (curriculum version it was translated from) so stale translations can be listed.
+  It is required on every Vietnamese page of a typed collection (§5), and the page must have an English
+  counterpart at the mirrored path with the same `id`.
 - Code, SQL keywords and dataset column names stay in English in both languages.
 
 ---
@@ -273,7 +298,8 @@ Notebooks are cleared of outputs before commit (CI check).
 - Each GitHub Release is archived by **Zenodo** (GitHub integration) → one **concept DOI** (always latest) + one DOI per version.
 - `CITATION.cff` at repo root (title, author, version, date, concept DOI, license). Updated on every release.
 - `/cite/` page: APA + BibTeX for the whole work (concept DOI) and per-version DOIs.
-- Every lesson footer shows **Cite this lesson**: author, title, site, version, URL, accessed date (generated).
+- Every lesson footer shows **Cite this lesson**: author, year (from `reviewed`), title, site, curriculum version, URL.
+  Static pages cannot know when they were read, so a note asks the reader to add their access date (D20).
 - `CHANGELOG.md` follows *Keep a Changelog*; `/changelog/` renders it.
 - The site footer shows the current version and its DOI badge.
 
