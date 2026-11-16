@@ -36,6 +36,7 @@ Fable is not on the team: this is a static site; escalate to it only if Opus fai
 - Brief with exact SPEC section numbers and paths. Never ask an agent to "read the whole SPEC".
 - Never run Opus on a red build: qa-runner first, spec-reviewer second.
 - Pass errors and diffs, not full logs or whole files.
+- Look things up in the knowledge graph (`node scripts/kb.mjs query|explain <terms>`, report in `.claude/kb/GRAPH_REPORT.md`) before reading whole files.
 - Escalation ladder: Haiku -> Sonnet -> Opus. An agent stuck twice on the same error reports back.
 - Independent work (e.g. translating stage 1 while migrating stage 2) can run in parallel in the
   background; use `isolation: worktree` when both edit files.

@@ -63,6 +63,12 @@ token rules: `.claude/agents/README.md`. Default flow per milestone: implementer
 Ask the owner before: changing a CONTRACT, adding a dependency that ships JS to lesson pages,
 or anything in SPEC §15.
 
+## Knowledge graph
+Before answering architecture, SPEC or "where is X defined / what depends on X" questions, read
+`.claude/kb/GRAPH_REPORT.md` and use `node scripts/kb.mjs query|path|explain` (skill: `.claude/skills/kb/SKILL.md`)
+instead of re-reading SPEC.md or grepping. Open the cited file:line before relying on details.
+After changing SPEC.md, CLAUDE.md, design/README.md, `src/`, `scripts/` or config, run `npm run kb` and include the result.
+
 ## Commands
 Use the Node version in `.nvmrc` (`nvm use`).
 - `npm ci` — install exact pinned dependencies
