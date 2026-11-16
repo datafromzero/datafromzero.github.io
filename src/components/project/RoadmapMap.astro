@@ -1,0 +1,171 @@
+---
+// The roadmap map for /start/ (SPEC §3.1): a static SVG generated at build time, plus the same
+// content as an ordered list for screen readers and anyone who prefers text. No client-side JavaScript.
+import { getCollection } from 'astro:content';
+import { classify, STAGES, type Lesson } from '../../lib/content-schemas.ts';
+import { layoutRoadmap, ROADMAP_STAGES, type MapLesson } from '../../lib/roadmap.ts';
+
+const docs = await getCollection('docs');
+const lessons: MapLesson[] = docs
+	.filter((d) => {
+		const c = classify(d.id);
+		return c.kind === 'lesson' && c.locale === null && (d.data as Lesson).status !== 'draft';
+	})
+	.map((d) => {
+		const l = d.data as Lesson;
+		return { id: l.id, title: d.data.title, stage: l.stage, order: l.order, href: `/${classify(d.id).path}/`, prerequisites: l.prerequisites, status: l.status };
+	});
+const landings = new Set(docs.filter((d) => (STAGES as readonly string[]).includes(d.id)).map((d) => d.id));
+const map = layoutRoadmap(lessons, landings);
+const titleOf = new Map(lessons.map((l) => [l.id, l.title]));
+const byId = new Map(lessons.map((l) => [l.id, l]));
+const count = (id: string) => lessons.filter((l) => l.stage === id).length;
+const summary = (n: number) => (n === 0 ? 'Coming soon' : `${n} ${n === 1 ? 'lesson' : 'lessons'}`);
+---
+
+<figure class="roadmap not-content">
+	<svg viewBox={`0 0 ${map.width} ${map.height}`} width={map.width} height={map.height} aria-hidden="true" focusable="false">
+		<g class="rails">
+			{map.rails.map((d) => <path d={d} />)}
+			{map.markers.map((m) => <circle cx={m.x} cy={m.y} r="4" />)}
+		</g>
+		<text class="fork mono" x="58" y={map.fork.y + 4}>Then choose a branch</text>
+		{map.stages.map((s) => {
+			const inner = (
+				<>
+					<rect class="stage" x={s.x} y={s.y} width={s.w} height={s.h} rx="6" />
+					<text class="num mono" x={s.x + 16} y={s.y + 24}>{s.number}</text>
+					<text class="name" x={s.x + 16} y={s.y + 48}>{s.title}</text>
+					<text class="count mono" x={s.x + s.w - 16} y={s.y + 48} text-anchor="end">{summary(count(s.id))}</text>
+				</>
+			);
+			return (
+				<g>
+					{s.href ? <a href={s.href} tabindex="-1">{inner}</a> : inner}
+					{s.lessons.map((l) => (
+						<a href={l.href} tabindex="-1">
+							<rect class="lesson" x={l.x} y={l.y} width={l.w} height={l.h} rx="4" />
+							<text class="ltext" x={l.x + 8} y={l.y + (l.lines.length === 1 ? 26 : 19)}>
+								{l.lines.map((line, i) => <tspan x={l.x + 8} dy={i === 0 ? 0 : 15}>{line}</tspan>)}
+							</text>
+						</a>
+					))}
+				</g>
+			);
+		})}
+	</svg>
+	<figcaption class="mono">Four stages in order, then five career branches. Lessons appear under their stage as they are published.</figcaption>
+</figure>
+
+<h3>The roadmap as a list</h3>
+<ol class="roadmap-list">
+	{ROADMAP_STAGES.map((def) => {
+		const box = map.stages.find((s) => s.id === def.id)!;
+		return (
+			<li>
+				{box.href ? <a href={box.href}>{def.title}</a> : def.title}
+				{def.branch ? ' (career branch)' : ''}
+				{box.lessons.length === 0 ? (
+					<span class="muted"> · no lessons published yet</span>
+				) : (
+					<ol>
+						{box.lessons.map((l) => {
+							const needs = (byId.get(l.id)?.prerequisites ?? []).map((p) => titleOf.get(p) ?? p);
+							return (
+								<li>
+									<a href={l.href}>{l.title}</a>
+									{needs.length > 0 && <span class="muted"> · needs {needs.join(', ')}</span>}
+								</li>
+							);
+						})}
+					</ol>
+				)}
+			</li>
+		);
+	})}
+</ol>
+
+<style>
+	.roadmap {
+		margin: 24px 0;
+	}
+	svg {
+		display: block;
+		width: 100%;
+		max-width: 480px;
+		height: auto;
+		overflow: visible;
+	}
+	.rails path {
+		fill: none;
+		stroke: var(--mute);
+		stroke-width: 1;
+	}
+	.rails circle {
+		fill: var(--bg);
+		stroke: var(--fg);
+		stroke-width: 1.5;
+	}
+	.stage {
+		fill: var(--bg);
+		stroke: var(--mute);
+		stroke-width: 1;
+	}
+	.lesson {
+		fill: var(--bg);
+		stroke: var(--dim);
+		stroke-width: 1;
+	}
+	a:hover .lesson,
+	a:hover .stage {
+		stroke: var(--fg);
+	}
+	text {
+		fill: var(--fg);
+		font-family: var(--font-sans);
+	}
+	.name {
+		font-size: 18px;
+		letter-spacing: -0.02em;
+	}
+	.ltext {
+		font-size: 12.5px;
+	}
+	.mono {
+		font-family: var(--font-mono);
+	}
+	.num,
+	.count,
+	.fork {
+		font-size: 10.5px;
+		fill: var(--mute);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	figcaption {
+		margin-top: 8px;
+		font-size: 11px;
+		color: var(--mute);
+	}
+	.roadmap-list {
+		padding-left: 1.4em;
+	}
+	.roadmap-list ol {
+		margin: 4px 0 12px;
+		font-size: 0.95em;
+	}
+	.roadmap-list a {
+		color: var(--fg);
+		text-decoration: underline;
+		text-decoration-color: var(--mute);
+		text-underline-offset: 0.2em;
+	}
+	.muted {
+		color: var(--mute);
+	}
+	@media print {
+		svg {
+			max-width: 100%;
+		}
+	}
+</style>

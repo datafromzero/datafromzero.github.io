@@ -1,0 +1,33 @@
+---
+title: About
+description: What datafromzero is, how its content is made, and who is behind it.
+---
+
+## What it is
+
+datafromzero (*From A1 to AI*) is a free, open data roadmap for beginners who only know Microsoft
+Office. It moves from Excel and Google Sheets to SQL and Python, then an advanced core, and
+finally five data careers. Lessons are written to be read on a phone, with exercises and practice
+data you can reuse.
+
+## How the content is made
+
+- **One author.** The lessons are written from scratch by a single author, so the voice and the order stay consistent.
+- **Sourced and dated.** Every lesson lists its sources and the date it was last reviewed.
+- **Versioned.** The curriculum has version numbers and a [changelog](/changelog/), and the whole work can be [cited](/cite/).
+- **Open.** Content is CC BY 4.0, code is MIT, datasets are CC BY 4.0. See the [license](/license/) page.
+
+## Who is behind it
+
+TODO(owner): a short bio, written in your own words. Keep to what you want readers to know.
+
+## Why this project exists
+
+TODO(owner): your motivation for building datafromzero.
+
+## Contact
+
+TODO(owner): how readers should reach you (email address, social profile, or "use GitHub issues").
+
+You can always [open an issue](https://github.com/datafromzero/datafromzero.github.io/issues)
+to report a mistake or suggest an improvement.

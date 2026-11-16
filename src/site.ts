@@ -10,3 +10,11 @@ export const GITHUB_REPO = 'datafromzero/datafromzero.github.io';
 export const GITHUB_BRANCH = 'main';
 /** Curriculum version (SPEC §9); package.json `version` until releases are tagged. */
 export const CURRICULUM_VERSION: string = pkg.version;
+/** Year of first publication, used for citations until the first release date exists (SPEC §9). */
+export const FIRST_YEAR = 2026;
+/**
+ * Google Analytics 4 Measurement ID (SPEC §11, D8). Empty = analytics off: no banner, no GA code,
+ * no "Cookie settings" link and no added JavaScript anywhere. Set to `G-XXXXXXXXXX` to turn it on.
+ */
+export const GA_ID = '';
+export const ANALYTICS_ENABLED = GA_ID !== '';

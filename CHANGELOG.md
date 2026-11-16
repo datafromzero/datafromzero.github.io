@@ -20,7 +20,14 @@ All notable changes to datafromzero are recorded here. The format follows
 - Navigation (SPEC D26, D27): cross-document View Transitions (CSS root fade, off for reduced motion)
   and Speculation Rules prefetch (same-origin, moderate, no prerender) replacing Astro's prefetch script.
 
+- Project pages (SPEC §3.1): `/start/` with the roadmap map (static SVG laid out by the prerequisite layers, plus a text list),
+  `/cite/` (APA and BibTeX generated from the new `CITATION.cff`), `/changelog/`, `/license/`, `/privacy/` and `/about/`
+  (owner placeholders marked `TODO(owner)`); footer links on docs pages and the homepage.
+- Analytics (SPEC §11): `GA_ID` in `src/site.ts`, empty for now. When set: consent banner, Consent Mode v2 defaults denied,
+  GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
+
 ### Changed
+- SPEC §3.1, §9, §11: wording for the roadmap map, generated citation, single-source changelog and license pages, and `GA_ID`.
 - SPEC §5.1: `order` within a stage must follow the prerequisites; the footer shows "Unlocks next".
 - SPEC §1: decisions D17 (strict content validation), D18 (draft lessons are never deployed),
   D19 (dataset page frontmatter deferred) and D20 (readers add the citation access date).

@@ -1,0 +1,134 @@
+---
+// Consent banner + Consent Mode v2 + GA4 loader (SPEC §11, D8). Renders nothing, and so adds no HTML,
+// CSS or JavaScript, while GA_ID is empty. When set: defaults are `denied` before anything loads, gtag.js
+// is requested only after Accept, and the choice lives in localStorage `dfz-consent`.
+import { ANALYTICS_ENABLED, GA_ID } from '../../site';
+import { projectHref, siteUi } from '../../i18n/site-ui';
+
+interface Props {
+	lang?: string;
+}
+const lang = Astro.props.lang ?? 'en';
+const t = siteUi(lang).consent;
+---
+
+{ANALYTICS_ENABLED && (
+	<>
+		<div id="dfz-consent" class="dfz-consent dfz-noprint" role="region" aria-labelledby="dfz-consent-text" hidden>
+			<p id="dfz-consent-text">{t.text} <a href={projectHref(lang, 'privacy')}>{t.privacy}</a></p>
+			<div class="actions">
+				<button type="button" data-consent="denied">{t.decline}</button>
+				<button type="button" data-consent="granted" class="primary">{t.accept}</button>
+			</div>
+		</div>
+		<script is:inline define:vars={{ id: GA_ID }}>
+			(function () {
+				var KEY = 'dfz-consent';
+				var w = window;
+				w.dataLayer = w.dataLayer || [];
+				function gtag() { w.dataLayer.push(arguments); }
+				// Consent Mode v2: everything denied until the visitor accepts. Nothing is requested yet.
+				gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
+				var loaded = false;
+				function load() {
+					if (loaded) return;
+					loaded = true;
+					gtag('js', new Date());
+					gtag('config', id);
+					var s = document.createElement('script');
+					s.async = true;
+					s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+					document.head.appendChild(s);
+				}
+				function read() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+				function save(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+				function apply(v) {
+					if (v === 'granted') {
+						w['ga-disable-' + id] = false;
+						gtag('consent', 'update', { analytics_storage: 'granted' });
+						load();
+					} else {
+						w['ga-disable-' + id] = true;
+						gtag('consent', 'update', { analytics_storage: 'denied' });
+					}
+				}
+				var box = document.getElementById('dfz-consent');
+				var opener = null;
+				var stored = read();
+				if (stored === 'granted' || stored === 'denied') apply(stored);
+				else box.hidden = false;
+				box.addEventListener('click', function (e) {
+					var b = e.target.closest('[data-consent]');
+					if (!b) return;
+					var v = b.getAttribute('data-consent');
+					save(v);
+					apply(v);
+					box.hidden = true;
+					if (opener) { opener.focus(); opener = null; }
+				});
+				document.addEventListener('click', function (e) {
+					var o = e.target.closest('[data-consent-open]');
+					if (!o) return;
+					opener = o;
+					box.hidden = false;
+					box.querySelector('button').focus();
+				});
+			})();
+		</script>
+	</>
+)}
+
+<style>
+	.dfz-consent {
+		position: fixed;
+		inset: auto 16px 16px 16px;
+		z-index: 100;
+		max-width: 36rem;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px 16px;
+		padding: 16px;
+		background: var(--bg);
+		color: var(--fg);
+		border: 1px solid var(--mute);
+		border-radius: var(--radius-panel);
+		font: 400 14px/1.5 var(--font-sans);
+	}
+	.dfz-consent[hidden] {
+		display: none;
+	}
+	p {
+		margin: 0;
+		flex: 1 1 16rem;
+	}
+	a {
+		color: inherit;
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.actions {
+		display: flex;
+		gap: 8px;
+	}
+	button {
+		font: 500 14px/1 var(--font-sans);
+		min-height: 44px;
+		padding: 0 20px;
+		border-radius: var(--radius-pill);
+		border: 1px solid var(--mute);
+		background: transparent;
+		color: var(--fg);
+		cursor: pointer;
+	}
+	button.primary {
+		background: var(--fg);
+		color: var(--bg);
+		border-color: var(--fg);
+	}
+	button:focus-visible,
+	a:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: 2px;
+	}
+</style>

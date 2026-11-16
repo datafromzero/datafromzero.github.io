@@ -77,7 +77,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | Route | What | Collection |
 |---|---|---|
 | `/` | Homepage (custom page, GSAP) | — |
-| `/start/` | How to use datafromzero, the roadmap overview | `docs` |
+| `/start/` | How to use datafromzero, plus the roadmap map: a static SVG generated at build time from the stages and, as lessons are published, their lessons in rows by `layers()` (`src/lib/graph.ts`); an ordered text list repeats it; no client JavaScript | `docs` |
 | `/excel/` · `/excel/{lesson}/` | Stage 1 — Excel / Google Sheets | `lessons` |
 | `/sql/` · `/sql/{lesson}/` | Stage 2 — SQL | `lessons` |
 | `/python/` · `/python/{lesson}/` | Stage 3 — Python | `lessons` |
@@ -314,10 +314,10 @@ Notebooks are cleared of outputs before commit (CI check).
   - **PATCH** — corrections, clarifications, link fixes
 - Each GitHub Release is archived by **Zenodo** (GitHub integration) → one **concept DOI** (always latest) + one DOI per version.
 - `CITATION.cff` at repo root (title, author, version, date, concept DOI, license). Updated on every release.
-- `/cite/` page: APA + BibTeX for the whole work (concept DOI) and per-version DOIs.
+- `/cite/` page: APA + BibTeX for the whole work, generated at build time from `CITATION.cff` (the build fails if its `version` differs from `package.json`); the DOI line reads "after the first release" until Zenodo exists, then shows the concept DOI and per-version DOIs.
 - Every lesson footer shows **Cite this lesson**: author, year (from `reviewed`), title, site, curriculum version, URL.
   Static pages cannot know when they were read, so a note asks the reader to add their access date (D20).
-- `CHANGELOG.md` follows *Keep a Changelog*; `/changelog/` renders it.
+- `CHANGELOG.md` follows *Keep a Changelog*; `/changelog/` renders it (single source, no copy); `/license/` shows `LICENSE` and `LICENSE-CONTENT` the same way.
 - The site footer shows the current version and its DOI badge.
 
 ---
@@ -338,6 +338,7 @@ Notebooks are cleared of outputs before commit (CI check).
 - **Google Analytics 4**, loaded **only after consent** (Consent Mode v2, default `denied`).
 - A minimal consent banner (Accept / Decline), choice remembered; "Cookie settings" link in the footer to change it.
 - Declining must leave the site fully functional; GA script must never block rendering.
+- The Measurement ID is the single value `GA_ID` in `src/site.ts`. While it is empty there is no banner, no GA code, no "Cookie settings" link and no added JavaScript. The choice is kept in `localStorage` key `dfz-consent`; only page views are collected for now.
 - `/privacy/` page states what is collected, why, retention, and how to opt out.
 - Events worth tracking (optional): `open_in_colab`, `open_in_sheets`, `show_solution`, `report_issue`.
 
