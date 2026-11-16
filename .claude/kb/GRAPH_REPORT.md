@@ -5,15 +5,15 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 336 nodes, 430 edges, 80 communities (55 isolated nodes).
-- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 4, style 6, symbol 92, template 1, token 5.
-- Edges: defines 92, imports 29, mentions 249, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- 338 nodes, 434 edges, 81 communities (55 isolated nodes).
+- Nodes: agent 7, build plan 9, component 30, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 5, style 6, symbol 92, template 1, token 5.
+- Edges: defines 92, imports 31, mentions 249, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
-| 1 | `astro.config.mjs` | config | 35 | astro.config.mjs:1 |
+| 1 | `astro.config.mjs` | config | 36 | astro.config.mjs:1 |
 | 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
 | 4 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:352 |
@@ -53,15 +53,15 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `ctype:career` -specified-by-> `S5.4` (C53 to C51, src/lib/content-schemas.ts:97)
 - `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C27 to C39, .claude/agents/README.md:39)
 - `DG6` -mentions-> `DG2` (C44 to C11, design/README.md:136)
-- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C64 to C2, src/components/starlight/ThemeProvider.astro:2)
+- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C65 to C2, src/components/starlight/ThemeProvider.astro:2)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C15 to C17, .claude/skills/kb/SKILL.md:3)
 - `S5.2` -mentions-> `D18` (C31 to C28, SPEC.md:217)
 - `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C62 to C37, src/components/project/ProjectExtras.astro:3)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C65 to C2, src/components/starlight/ThemeSelect.astro:3)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C66 to C2, src/components/starlight/ThemeSelect.astro:3)
 - `DG5` -mentions-> `DG4` (C15 to C2, design/README.md:111)
-- `S3.3` -mentions-> `src/redirects.ts` (C48 to C71, SPEC.md:110)
-- `src/i18n/home/types.ts` -mentions-> `DG5` (C67 to C15, src/i18n/home/types.ts:1)
-- `src/redirects.ts` -mentions-> `S3.3` (C71 to C48, src/redirects.ts:2)
+- `S3.3` -mentions-> `src/redirects.ts` (C48 to C72, SPEC.md:110)
+- `src/i18n/home/types.ts` -mentions-> `DG5` (C68 to C15, src/i18n/home/types.ts:1)
+- `src/redirects.ts` -mentions-> `S3.3` (C72 to C48, src/redirects.ts:2)
 
 ## Decisions (SPEC §1)
 
