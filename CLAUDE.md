@@ -21,12 +21,12 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Schemas are enforced** with Zod content collections (SPEC §5). Missing required fields must fail the build.
 - **Content portability:** lessons are plain `.md`; use `.mdx` only for the components listed in SPEC §6.
   No other components or raw `<script>` in content.
-- **Motion:** GSAP, any plugin, on `/`, `/stories/*` and project pages only; effects load on demand after first paint
+- **Motion:** GSAP on `/` only (any plugin); project pages, stories and lessons get no effects; effects load on demand after first paint
   (deferred chunks); JS before first paint ≈ 3 KB gzipped; frame budget in SPEC §12 (`npm run perf`) (SPEC D28).
   Respect `prefers-reduced-motion`.
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
-- **Language:** American English. Vietnamese lives under `/vi/` with the same slugs (SPEC §8).
+- **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.
 - **No** accounts, saved progress, comments or in-browser code execution (SPEC §15).
@@ -55,13 +55,13 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →
    the owner writes the text; `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
-   links and sources → the owner publishes. English first; `vi-translator` follows. Lesson content PRs always
+   links and sources → the owner publishes. English only for now (D30; `vi-translator` stays, unused). Lesson content PRs always
    wait for the owner. Research source: `research/curriculum/` (02 syllabus inventory = topic backlog,
    03 teaching playbook = lesson standard; its §4 honesty rules bind any number on the site). Lesson visuals
    are static (build-time SVG, CSS, `<details>`), never JS; no progress tracking (D15).
 9. **Motion & speed** (SPEC D28): frame-budget pass (done, `npm run perf`), then the full GSAP plugin set on the
-   homepage, `/start/` (animated roadmap map over the static SVG) and project pages, each effect loaded on demand;
-   budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS.
+   homepage only, each effect loaded on demand (done; project pages and the `/start/` map are static again by owner
+   decision); budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS.
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and

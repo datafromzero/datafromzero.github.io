@@ -2,7 +2,7 @@ import { gsap, ScrollTrigger, willChange } from '../gsap';
 import type * as Drive from '../fx/drive';
 
 let drive: typeof Drive | undefined;
-/** Touch and trackpad input is its own chunk (Observer), shared with the modes section. */
+/** Touch and trackpad input is its own chunk (Observer). */
 export const load = () =>
 	import('../fx/drive').then((m) => {
 		drive = m;

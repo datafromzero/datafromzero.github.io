@@ -1,14 +1,13 @@
-import type * as Scramble from '../fx/scramble';
+import type * as Select from '../fx/select';
 
-let scramble: typeof Scramble | undefined;
-/** The caption decode is its own chunk (ScrambleText): fetched once the page is idle, before the intro ends. */
+let select: typeof Select | undefined;
+/** The selection box is its own small chunk: fetched once the page is idle, usually before the box is due. */
 export const load = () =>
-	import('../fx/scramble').then((m) => {
-		scramble = m;
+	import('../fx/select').then((m) => {
+		select = m;
 	});
 
-/** Hero: after the CSS intro, the roadmap caption decodes once. The headline, logo and buttons stay CSS. */
+/** Hero: the logo and the wordmark stay CSS; the script adds the Excel-style selection box (A1 → AI). */
 export function init(hero: HTMLElement, onCleanup: (fn: () => void) => void) {
-	const cap = hero.querySelector<HTMLElement>('.cap-t');
-	if (cap && scramble) onCleanup(scramble.init(cap));
+	if (select) onCleanup(select.init(hero));
 }

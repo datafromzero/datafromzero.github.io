@@ -8,6 +8,7 @@ import type { Loader } from 'astro/loaders';
 import { docsLoader } from '@astrojs/starlight/loaders';
 import { classify, schemaByKind, type Classified } from './content-schemas.ts';
 import { referenceErrors, type GraphNode } from './graph.ts';
+import { VI_ENABLED } from '../site.ts';
 
 type Data = Record<string, unknown>;
 
@@ -84,6 +85,11 @@ function validateEntries(entries: Entry[]): string[] {
 			errors.push(`  - ${file}: ${c.problem}`);
 			continue;
 		}
+		// SPEC D30: no Vietnamese locale is built, so a page under vi/ would be published as an English page.
+		if (c.locale === 'vi' && !VI_ENABLED) {
+			errors.push(`  - ${file}: Vietnamese is paused (SPEC D30); pages under vi/ are not built until §8 is reactivated`);
+			continue;
+		}
 		if (!c.kind) continue;
 		const data = e.data;
 		const result = schemaByKind[c.kind].safeParse(data);
@@ -92,6 +98,7 @@ function validateEntries(entries: Entry[]): string[] {
 		if (c.folder && data[field] !== c.folder && !issues.some((i) => i.path[0] === field)) {
 			issues.push({ path: [field], message: `is "${String(data[field])}" but the file is in the "${c.folder}" folder; they must match` });
 		}
+		// Only meaningful while a translated locale is built (VI_ENABLED); the field itself stays in the schema.
 		if (c.locale === 'vi' && data.translated_from_version === undefined) {
 			issues.push({ path: ['translated_from_version'], message: 'is required on Vietnamese pages (SPEC §8)' });
 		}
@@ -99,7 +106,9 @@ function validateEntries(entries: Entry[]): string[] {
 	}
 	const typed = entries
 		.map((e) => ({ e, c: classify(e.id) }))
-		.filter((x): x is { e: Entry; c: Classified & { kind: NonNullable<Classified['kind']> } } => x.c.kind !== null);
+		.filter((x): x is { e: Entry; c: Classified & { kind: NonNullable<Classified['kind']> } } => x.c.kind !== null)
+		// While Vietnamese is paused its pages were already reported above; the cross-file rules skip them.
+		.filter((x) => VI_ENABLED || x.c.locale === null);
 	const fileOf = (e: Entry) => e.filePath ?? `src/content/docs/${e.id}.md`;
 
 	// English pages own the ids. Ids are unique across all content types.
