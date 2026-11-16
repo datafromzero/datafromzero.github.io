@@ -28,3 +28,6 @@ All notable changes to datafromzero are recorded here. The format follows
   other components, `<script>`, event handlers, `set:html`, `javascript:` URLs and math in headings; `Term` uses a native popover (hint on hover/focus where supported, a tap/click "?" button otherwise, both dismissed with Esc, no JS); literal
   dollar signs are written `\$`.
 - SPEC §13: repository layout updated for `src/lib/`, `src/site.ts` and the component folders.
+- SPEC §1, §2: decision D22; homepage and story motion may use GSAP `SplitText` and `DrawSVG` besides
+  `ScrollTrigger`, with a homepage JavaScript budget of about 90 KB gzipped.
+- SPEC §1: decision D23; pure scroll-linked effects use CSS scroll-driven animations, with GSAP as fallback.

@@ -46,6 +46,8 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D19 | Dataset page frontmatter | **Deferred** until the first dataset | The build rejects pages under `datasets/` (other than the index) until §5.4 defines their fields. |
 | D20 | Citation access date | **Reader adds it** | Pages are static, so "Cite this lesson" cannot know when it was read; a note asks the reader to add their access date (§9). |
 | D21 | Using components in content | **Auto-imported, enforced** | `.mdx` files use the §6 components without import lines; the build rejects imports, other components and `<script>` in content (§6). |
+| D22 | Homepage motion | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
+| D23 | Scroll-linked effects | **CSS scroll-driven animations first**, GSAP fallback | Pure scroll-linked effects (progress bar, rail fill) run on the compositor with zero JS where `animation-timeline` is supported; GSAP scrub only as fallback. Triggered choreography stays GSAP. |
 
 ---
 
@@ -59,7 +61,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | Schemas | Astro content collections + Zod | Build fails on invalid frontmatter |
 | Search | Starlight built-in (Pagefind) | Static, no external service |
 | Math | `remark-math` + `rehype-katex` (KaTeX, MathML output for accessibility) | Formulas in `$…$` / `$$…$$` |
-| Motion | GSAP 3.13+ (`ScrollTrigger` only) | Homepage and `/stories/` only (§10) |
+| Motion | GSAP 3.13+ (`ScrollTrigger`, `SplitText`, `DrawSVG` only) | Homepage and `/stories/` only (§10); homepage JS ≈ 90 KB gzipped max (D22) |
 | Hosting | GitHub Pages via GitHub Actions | Deploy on push to `main` |
 
 ---
@@ -350,7 +352,7 @@ Notebooks are cleared of outputs before commit (CI check).
 | Accessibility + performance | Lighthouse CI on `/`, one lesson, one reference page | Yes if a budget is missed |
 
 **Budgets:** Lighthouse mobile ≥ 90 (performance), ≥ 95 (accessibility). Lesson pages ship no
-framework JS beyond Starlight's own. Homepage JS ≈ 70 KB gzip max.
+framework JS beyond Starlight's own. Homepage JS ≈ 90 KB gzip max (D22).
 **Accessibility target:** WCAG 2.2 AA (contrast, keyboard navigation, alt text, MathML).
 
 **Maintenance:** Dependabot monthly, grouped; Node LTS upgraded once a year; Astro/Starlight major upgrades
