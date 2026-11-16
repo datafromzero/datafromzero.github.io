@@ -23,9 +23,10 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
   No other components or raw `<script>` in content.
 - **Motion:** GSAP on `/` only (any plugin); project pages, stories and lessons get no effects; effects load on demand after first paint
   (deferred chunks); JS before first paint ≈ 3 KB gzipped; frame budget in SPEC §12 (`npm run perf`) (SPEC D28).
-  Respect `prefers-reduced-motion`.
+  Respect `prefers-reduced-motion`. The bottom taskbar (D31) on every other page moves with CSS transitions only.
   Every page must be readable with JavaScript disabled.
-- **Speed first:** lesson/reference pages ship no JS beyond Starlight's own. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
+- **Speed first:** lesson/reference pages ship no JS beyond Starlight's own and the taskbar script (D31: one script
+  under 1 KB gzipped, no GSAP, no library). Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.

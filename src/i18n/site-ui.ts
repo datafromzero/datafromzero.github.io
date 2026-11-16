@@ -6,6 +6,20 @@ export type UiLang = 'en' | 'vi';
 export interface SiteUi {
 	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
 	consent: { label: string; text: string; privacy: string; accept: string; decline: string };
+	/** The bottom taskbar on every page (SPEC D31). */
+	taskbar: {
+		label: string;
+		shortcuts: string;
+		main: string;
+		onPage: string;
+		home: string;
+		start: string;
+		learn: string;
+		learnShort: string;
+		toLight: string;
+		toDark: string;
+		top: string;
+	};
 }
 
 const en: SiteUi = {
@@ -17,6 +31,19 @@ const en: SiteUi = {
 		accept: 'Accept',
 		decline: 'Decline',
 	},
+	taskbar: {
+		label: 'Taskbar',
+		shortcuts: 'shortcuts',
+		main: 'Main',
+		onPage: 'On this page',
+		home: 'Home',
+		start: 'Start here',
+		learn: 'Start learning',
+		learnShort: 'Learn',
+		toLight: 'Switch to light theme',
+		toDark: 'Switch to dark theme',
+		top: 'Back to top',
+	},
 };
 
 const vi: SiteUi = {
@@ -27,6 +54,19 @@ const vi: SiteUi = {
 		privacy: 'Quyền riêng tư',
 		accept: 'Đồng ý',
 		decline: 'Từ chối',
+	},
+	taskbar: {
+		label: 'Thanh công cụ',
+		shortcuts: 'lối tắt',
+		main: 'Chính',
+		onPage: 'Trên trang này',
+		home: 'Trang chủ',
+		start: 'Bắt đầu',
+		learn: 'Bắt đầu học',
+		learnShort: 'Học',
+		toLight: 'Chuyển sang giao diện sáng',
+		toDark: 'Chuyển sang giao diện tối',
+		top: 'Lên đầu trang',
 	},
 };
 

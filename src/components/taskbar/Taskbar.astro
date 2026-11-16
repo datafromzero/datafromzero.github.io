@@ -1,0 +1,455 @@
+---
+// The bottom taskbar on every page (SPEC D31): a floating glass bar with the shortcuts menu (left), and
+// "Start learning", the light / dark switch and back-to-top (right). Ported from the approved mockup.
+// One small script (scripts/taskbar.ts, < 1 KB gzipped) and CSS transitions only: no GSAP, no library.
+// Without script the menu is a <details> toggle (the sheet opens through :has()), the theme switch is hidden
+// and back-to-top is a plain anchor. The label is the page title; on the homepage the script swaps it for the
+// name of the section on screen (elements with data-tb-name).
+import { GITHUB_REPO } from '../../site';
+import { projectHref, siteUi } from '../../i18n/site-ui';
+
+interface Props {
+	lang: string;
+	/** Text beside the menu button: the page title, or the homepage's first section name. */
+	label: string;
+	/** In-page anchor of the top of the page (back-to-top without script). */
+	top: string;
+	/** Homepage only: its section anchors, listed in the sheet under "On this page". */
+	sections?: { href: string; name: string }[];
+}
+const { lang, label, top, sections = [] } = Astro.props;
+const ui = siteUi(lang);
+const t = ui.taskbar;
+const n = ui.nav;
+const path = Astro.url.pathname.replace(/index\.html$/, '');
+const start = projectHref(lang, 'start');
+const big = [
+	[lang === 'vi' ? '/vi/' : '/', t.home],
+	[start, t.start],
+	[projectHref(lang, 'about'), n.about],
+];
+const project = (['changelog', 'cite', 'license', 'privacy'] as const).map((s) => [projectHref(lang, s), n[s]]);
+const current = (href: string) => (href === path ? 'page' : undefined);
+---
+
+<div class="tb-gap" aria-hidden="true"></div>
+<nav class="tb" aria-label={t.label}>
+	<div class="tb-card">
+		<div class="tb-sheet" id="tb-sheet">
+			<div>
+				<div class="tb-in">
+					<ul class="tb-big" aria-label={t.main}>
+						{big.map(([href, text]) => <li class="tb-mask"><a href={href} aria-current={current(href)}>{text}</a></li>)}
+					</ul>
+					<div class="tb-small">
+						{
+							sections.length > 0 && (
+								<div>
+									<span class="tb-grp" id="tb-on">{t.onPage}</span>
+									<ul aria-labelledby="tb-on">
+										{sections.map((s) => <li><a href={s.href}>{s.name}</a></li>)}
+									</ul>
+								</div>
+							)
+						}
+						<div>
+							<span class="tb-grp" id="tb-project">{n.label}</span>
+							<ul aria-labelledby="tb-project">
+								{project.map(([href, text]) => <li><a href={href} aria-current={current(href)}>{text}</a></li>)}
+								<li><a href={`https://github.com/${GITHUB_REPO}`} rel="noopener">GitHub ↗</a></li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="tb-row">
+			<button class="tb-menu tb-js" type="button" aria-expanded="false" aria-controls="tb-sheet">
+				<span class="tb-burger" aria-hidden="true"><i></i><i></i><i></i></span>
+				<span class="tb-label">{label}</span>
+				<span class="tb-sr">, {t.shortcuts}</span>
+			</button>
+			<noscript>
+				<details class="tb-fallback">
+					<summary class="tb-menu">
+						<span class="tb-burger" aria-hidden="true"><i></i><i></i><i></i></span>
+						<span class="tb-label">{label}</span>
+						<span class="tb-sr">, {t.shortcuts}</span>
+					</summary>
+				</details>
+				<style is:inline>
+					.tb-js {
+						display: none !important;
+					}
+				</style>
+			</noscript>
+			<a class="tb-learn" href={start}>
+				<span class="tb-long">{t.learn}</span><span class="tb-short">{t.learnShort}</span>
+				<span class="tb-arr" aria-hidden="true">→</span>
+			</a>
+			<button class="tb-icon tb-theme tb-js" type="button" aria-label={t.toLight} data-light={t.toLight} data-dark={t.toDark}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+					<circle cx="12" cy="12" r="8.5"></circle>
+					<path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"></path>
+				</svg>
+			</button>
+			<a class="tb-icon tb-top" href={top} aria-label={t.top}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M6 14l6-6 6 6"></path>
+				</svg>
+			</a>
+		</div>
+	</div>
+</nav>
+
+<script>
+	import '../../scripts/taskbar';
+</script>
+
+<style>
+	/* Colors come from the site tokens (src/styles/tokens.css); only the glass tints are the bar's own. */
+	:global(:root) {
+		--tb-space: calc(88px + env(safe-area-inset-bottom, 0px));
+		--tb-glass: rgba(18, 18, 18, 0.72);
+		--tb-edge: rgba(255, 255, 255, 0.09);
+		--tb-chip: rgba(255, 255, 255, 0.07);
+		--tb-ease: cubic-bezier(0.16, 1, 0.3, 1);
+	}
+	:global(:root[data-theme='light']) {
+		--tb-glass: rgba(250, 250, 250, 0.78);
+		--tb-edge: rgba(0, 0, 0, 0.08);
+		--tb-chip: rgba(0, 0, 0, 0.06);
+	}
+	/* Room under the last content (footer, pagination) so the floating bar never covers it. */
+	.tb-gap {
+		height: var(--tb-space);
+	}
+	/* The consent banner (SPEC §11) sits above the bar. */
+	:global(.dfz-consent) {
+		bottom: var(--tb-space) !important;
+	}
+
+	.tb {
+		position: fixed;
+		left: 50%;
+		bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+		z-index: 40;
+		width: min(720px, calc(100% - 2 * max(16px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))));
+		transform: translateX(-50%);
+		color: var(--fg);
+		font-family: var(--font-sans);
+		line-height: 1.5;
+	}
+	/* Docs pages with the fixed sidebar: centered on the main frame, so the sidebar never covers the bar. */
+	@media (min-width: 50rem) {
+		:global(:root[data-has-sidebar]) .tb {
+			left: calc(50% + var(--sl-sidebar-width) / 2);
+			width: min(720px, calc(100% - var(--sl-sidebar-width) - 32px));
+		}
+	}
+	/* With the table of contents on the right too: centered on the content column between them (the TOC
+	   width is Starlight's own formula from TwoColumnContent), so neither sidebar draws over the bar. */
+	@media (min-width: 72rem) {
+		:global(:root[data-has-sidebar][data-has-toc]) .tb {
+			--tb-toc: calc(var(--sl-sidebar-width) + (100% - 2 * var(--sl-sidebar-width) - var(--sl-content-width)) / 2);
+			left: calc(var(--sl-sidebar-width) + (100% - var(--sl-sidebar-width) - var(--tb-toc)) / 2);
+			width: min(720px, calc(100% - var(--sl-sidebar-width) - var(--tb-toc) - 32px));
+		}
+	}
+	.tb-card {
+		position: relative;
+		overflow: hidden;
+		background: var(--tb-glass);
+		border: 1px solid var(--tb-edge);
+		border-radius: 16px;
+		-webkit-backdrop-filter: blur(16px) saturate(1.4);
+		backdrop-filter: blur(16px) saturate(1.4);
+		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+	}
+	.tb ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.tb a {
+		color: var(--fg);
+		text-decoration: none;
+	}
+	.tb :is(a, button, summary):focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: -2px;
+	}
+
+	.tb-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 56px;
+		padding: 0 6px;
+	}
+	/* Without script the <noscript> wrapper is the row's first flex item (Astro does not scope it). Never
+	   change its display: with script its content is raw text that must stay hidden. */
+	.tb-row :global(noscript) {
+		min-width: 0;
+		margin-right: auto;
+	}
+	.tb-menu {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
+		height: 44px;
+		margin: 0 auto 0 0;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 10px;
+		background: none;
+		color: var(--fg);
+		font: inherit;
+		cursor: pointer;
+		list-style: none;
+	}
+	.tb-fallback .tb-menu {
+		margin: 0;
+	}
+	.tb-menu::-webkit-details-marker {
+		display: none;
+	}
+	.tb-menu:hover {
+		background: var(--tb-chip);
+	}
+	.tb-label {
+		overflow: hidden;
+		font: 500 15px/1.2 var(--font-sans);
+		letter-spacing: -0.01em;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.tb-sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	.tb-burger {
+		position: relative;
+		flex: none;
+		width: 20px;
+		height: 14px;
+	}
+	.tb-burger i {
+		position: absolute;
+		left: 0;
+		width: 20px;
+		height: 2px;
+		border-radius: 2px;
+		background: currentColor;
+		transition:
+			transform 0.4s var(--tb-ease),
+			opacity 0.2s;
+	}
+	.tb-burger i:nth-child(2) {
+		top: 6px;
+	}
+	.tb-burger i:nth-child(3) {
+		top: 12px;
+	}
+	.tb-learn {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: 8px;
+		height: 44px;
+		padding: 0 18px;
+		border-radius: 10px;
+		background: var(--fg);
+		font: 500 14px/1 var(--font-sans);
+		white-space: nowrap;
+	}
+	.tb .tb-learn {
+		color: var(--bg);
+	}
+	.tb-arr {
+		transition: transform 0.3s var(--tb-ease);
+	}
+	.tb-learn:hover .tb-arr {
+		transform: translateX(3px);
+	}
+	.tb .tb-learn:focus-visible {
+		outline-offset: 2px;
+	}
+	.tb-short {
+		display: none;
+	}
+	@media (max-width: 420px) {
+		.tb-long {
+			display: none;
+		}
+		.tb-short {
+			display: inline;
+		}
+		.tb-learn {
+			padding: 0 12px;
+		}
+		.tb-menu {
+			gap: 10px;
+			padding: 0 10px;
+		}
+	}
+	.tb-icon {
+		display: grid;
+		flex: none;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		padding: 0;
+		border: 0;
+		border-radius: 10px;
+		background: var(--tb-chip);
+		color: var(--fg);
+		cursor: pointer;
+		transition: opacity 0.3s;
+	}
+	.tb-icon svg {
+		width: 20px;
+		height: 20px;
+	}
+	.tb-icon:hover {
+		outline: 1px solid var(--tb-edge);
+	}
+	.tb-icon[aria-disabled='true'] {
+		opacity: 0.35;
+		pointer-events: none;
+	}
+
+	/* The sheet: the card grows upward from the bar. Closed, it is collapsed and hidden (no focus, no
+	   reading); the script also makes it inert. */
+	.tb-sheet {
+		display: grid;
+		grid-template-rows: 0fr;
+		visibility: hidden;
+		transition:
+			grid-template-rows 0.55s var(--tb-ease),
+			visibility 0s 0.55s;
+	}
+	.tb-sheet > div {
+		min-height: 0;
+		overflow: hidden;
+	}
+	.tb.open .tb-sheet,
+	.tb:has(.tb-fallback[open]) .tb-sheet {
+		grid-template-rows: 1fr;
+		visibility: visible;
+		transition-delay: 0s;
+	}
+	.tb.open .tb-burger i:nth-child(1),
+	.tb-fallback[open] .tb-burger i:nth-child(1) {
+		transform: translateY(6px) rotate(45deg);
+	}
+	.tb.open .tb-burger i:nth-child(2),
+	.tb-fallback[open] .tb-burger i:nth-child(2) {
+		opacity: 0;
+	}
+	.tb.open .tb-burger i:nth-child(3),
+	.tb-fallback[open] .tb-burger i:nth-child(3) {
+		transform: translateY(-6px) rotate(-45deg);
+	}
+	.tb-in {
+		display: grid;
+		grid-template-columns: 1.3fr 1fr;
+		gap: 22px;
+		max-height: calc(100svh - 120px - env(safe-area-inset-bottom, 0px));
+		overflow-y: auto;
+		padding: 22px 22px 10px;
+		border-bottom: 1px solid var(--tb-edge);
+	}
+	.tb-big li,
+	.tb-small li {
+		display: flex;
+	}
+	.tb-big a {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 44px;
+		font: 500 clamp(28px, 4.4vw, 38px) / 1.12 var(--font-sans);
+		letter-spacing: -0.035em;
+	}
+	.tb .tb-big a:not([aria-current]) {
+		color: var(--mute);
+	}
+	.tb .tb-big a:hover {
+		color: var(--fg);
+	}
+	.tb-big a[aria-current]::before {
+		content: '';
+		width: 9px;
+		height: 9px;
+		background: var(--fg);
+	}
+	.tb-mask {
+		overflow: hidden;
+	}
+	.tb-mask > a {
+		transform: translateY(110%);
+		transition: transform 0.6s var(--tb-ease);
+	}
+	.tb.open .tb-mask > a,
+	.tb:has(.tb-fallback[open]) .tb-mask > a {
+		transform: none;
+	}
+	.tb.open .tb-mask:nth-child(2) > a {
+		transition-delay: 0.04s;
+	}
+	.tb.open .tb-mask:nth-child(3) > a {
+		transition-delay: 0.08s;
+	}
+	.tb-small {
+		display: grid;
+		align-content: start;
+		gap: 14px;
+	}
+	.tb-grp {
+		display: block;
+		color: var(--mute);
+		font: 500 13px/1 var(--font-sans);
+	}
+	.tb-small a {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
+		font-size: 15px;
+	}
+	.tb-small a[aria-current] {
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+	.tb-small a:hover {
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+	@media (max-width: 560px) {
+		.tb-in {
+			grid-template-columns: 1fr;
+			gap: 16px;
+			padding: 18px 18px 8px;
+		}
+		.tb-small {
+			grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.tb *,
+		.tb-sheet {
+			transition: none !important;
+		}
+	}
+	@media print {
+		.tb,
+		.tb-gap {
+			display: none !important;
+		}
+	}
+</style>
