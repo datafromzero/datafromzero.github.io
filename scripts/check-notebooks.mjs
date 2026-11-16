@@ -1,6 +1,6 @@
 /**
  * Notebooks must have no outputs (SPEC §12): `nbstripout --verify`. Skipped with a note when there are
- * no notebooks yet, or when nbstripout is not installed (CI installs it with pip; locally: pipx install nbstripout).
+ * no notebooks yet, or when nbstripout is not installed (an error when CI is set) (CI installs it with pip; locally: pipx install nbstripout).
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +20,12 @@ if (!files.length) {
 	process.exit(0);
 }
 if (spawnSync('nbstripout', ['--version'], { stdio: 'ignore' }).status !== 0) {
-	console.log(`nbstripout: skipped, not installed (${files.length} notebooks not verified). Install it with: pipx install nbstripout`);
+	const msg = `nbstripout: not installed (${files.length} notebooks not verified). Install it with: pipx install nbstripout`;
+	if (process.env.CI) {
+		console.error(msg);
+		process.exit(1);
+	}
+	console.log(`${msg.replace('not installed', 'skipped, not installed')}`);
 	process.exit(0);
 }
 const r = spawnSync('nbstripout', ['--verify', ...files], { stdio: 'inherit' });

@@ -23,14 +23,24 @@ export async function lessonLinks(ids: string[], locale: string | undefined): Pr
 	});
 }
 
+let unlocksMemo: Promise<Map<string, string[]>> | undefined;
+/** Reverse prerequisite edges, computed once per build/process (the collection does not change while rendering). */
+function unlocksMap() {
+	unlocksMemo ??= getCollection('docs').then((docs) =>
+		unlocks(
+			docs
+				.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null)
+				.map((d) => {
+					const l = d.data as Lesson;
+					return { id: l.id, kind: 'lesson' as const, file: d.id, stage: l.stage, order: l.order, status: l.status, prerequisites: l.prerequisites };
+				}),
+			STAGES,
+		),
+	);
+	return unlocksMemo;
+}
+
 /** Lessons that list `id` as a prerequisite ("unlocks next"), drafts excluded, in the reader's locale. */
 export async function unlockedLessons(id: string, locale: string | undefined): Promise<LessonLink[]> {
-	const docs = await getCollection('docs');
-	const nodes = docs
-		.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null)
-		.map((d) => {
-			const l = d.data as Lesson;
-			return { id: l.id, kind: 'lesson' as const, file: d.id, stage: l.stage, order: l.order, status: l.status, prerequisites: l.prerequisites };
-		});
-	return lessonLinks(unlocks(nodes, STAGES).get(id) ?? [], locale);
+	return lessonLinks((await unlocksMap()).get(id) ?? [], locale);
 }

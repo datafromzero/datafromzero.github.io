@@ -49,6 +49,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D22 | Homepage motion | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
 | D23 | Scroll-linked effects | **CSS scroll-driven animations first**, GSAP fallback | Pure scroll-linked effects (progress bar, rail fill) run on the compositor with zero JS where `animation-timeline` is supported; GSAP scrub only as fallback. Triggered choreography stays GSAP. |
 | D24 | Content source | **Written from scratch**, outline first, English first | A researched curriculum map is approved by the owner, then lessons are created as drafts; the owner writes the text and the team adds frontmatter, exercises, notebooks, datasets, links and checks. Vietnamese follows in later PRs (§14). |
+| D25 | Prerequisite graph | **Order follows prerequisites; footer shows Unlocks next** | Within a stage, `order` is a topological order of `prerequisites`; cycles and duplicate ids fail the check. Each lesson lists the published lessons it unlocks, computed at build time (§5.1, §12). |
 
 ---
 
@@ -348,7 +349,7 @@ Notebooks are cleared of outputs before commit (CI check).
 |---|---|---|
 | Build + schema validation | `astro build` (Zod content collections) | Yes |
 | Internal links & anchors | `starlight-links-validator` | Yes |
-| Prerequisite / see-also ids exist; no cycles in prerequisites | `scripts/check-graph.ts` | Yes |
+| Prerequisite / see-also ids exist; no cycles in prerequisites; `order` follows prerequisites within a stage (D25) | `scripts/check-graph.ts` | Yes |
 | External links | `lychee` (weekly scheduled job, opens an issue) | No |
 | Spelling (American English) | `cspell` with project dictionary | Yes |
 | Markdown style | `markdownlint` | Yes |

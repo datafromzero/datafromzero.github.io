@@ -38,3 +38,5 @@ All notable changes to datafromzero are recorded here. The format follows
 - SPEC §1: decision D23; pure scroll-linked effects use CSS scroll-driven animations, with GSAP as fallback.
 - SPEC §1, §14: decision D24; content is written from scratch (outline first, English first) instead of
   migrated from `data-odyssey`; §14 now describes content production.
+- SPEC §1, §5.1, §12: decision D25; `order` must follow prerequisites within a stage, and lessons show
+  "Unlocks next".

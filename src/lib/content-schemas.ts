@@ -19,6 +19,7 @@ export const STAGES = [
 export const REFERENCE_AREAS = ['excel', 'sql', 'pandas', 'stats'] as const;
 
 const id = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be lowercase kebab-case (a-z, 0-9, -)');
+const ids = z.array(id).refine((a) => new Set(a).size === a.length, 'must not list the same id twice');
 const reviewed = z.coerce.date({ error: 'must be a date such as 2026-11-15' });
 const httpUrl = z.httpUrl({ error: 'must be an http(s) URL' });
 const source = z.object({ title: z.string().min(1), url: httpUrl }).strict();
@@ -38,7 +39,7 @@ export const LessonSchema = z.object({
 	level: z.enum(['beginner', 'intermediate', 'advanced']),
 	duration: z.number().int().positive(),
 	objectives: z.array(z.string().min(1)).min(2, 'needs 2 to 5 items').max(5, 'needs 2 to 5 items'),
-	prerequisites: z.array(id),
+	prerequisites: ids,
 	datasets: z.array(z.string().min(1)).optional(),
 	notebook: z.string().min(1).optional(),
 	sheet: httpUrl.optional(),
@@ -55,8 +56,8 @@ export const ReferenceSchema = z.object({
 	area: z.enum(REFERENCE_AREAS),
 	summary: z.string().min(1),
 	syntax: z.string().optional(),
-	see_also: z.array(id),
-	used_in: z.array(id).optional(),
+	see_also: ids,
+	used_in: ids.optional(),
 	reviewed,
 	sources,
 	translated_from_version,

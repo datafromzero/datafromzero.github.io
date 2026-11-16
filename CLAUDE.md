@@ -48,7 +48,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    layering for the roadmap map. Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
    (§3.1 `/start/`) in SPEC when they are built.
    Then a small navigation PR: cross-document View Transitions (CSS, ≤150 ms, off for reduced motion) and
-   Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D25/D26.
+   Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D26/D27.
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;
    GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →

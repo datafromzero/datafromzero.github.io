@@ -112,13 +112,9 @@ function validateEntries(entries: Entry[]): string[] {
 		else byId.set(key, e);
 	}
 	// Id references, drafts and replacements are shared with scripts/check-graph.ts (graph.ts).
-	errors.push(
-		...referenceErrors(
-			english.flatMap(({ e, c }) =>
-				c.kind === 'lesson' || c.kind === 'reference' || c.kind === 'glossary' ? [toNode(e, c.kind, fileOf(e))] : [],
-			),
-		),
-	);
+	const nodeOf = ({ e, c }: (typeof typed)[number]) =>
+		c.kind === 'lesson' || c.kind === 'reference' || c.kind === 'glossary' ? [toNode(e, c.kind, fileOf(e))] : [];
+	errors.push(...referenceErrors(english.flatMap(nodeOf), typed.flatMap(nodeOf)));
 
 	for (const { e, c } of typed) {
 		const file = fileOf(e);

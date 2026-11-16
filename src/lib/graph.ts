@@ -33,15 +33,17 @@ const line = (file: string, text: string) => `  - ${file}: ${text}`;
  * deprecated lessons have a valid replacement. O(V + E): one map build, one pass over the edges.
  * Messages are the build's own (formerly in content-validation.ts).
  */
-export function referenceErrors(nodes: GraphNode[]): string[] {
+export function referenceErrors(nodes: GraphNode[], sources: GraphNode[] = nodes): string[] {
 	const errors: string[] = [];
 	const lessons = new Map<string, GraphNode>();
 	const seeAlso = new Set<string>();
+	// Known ids come from `nodes` (English pages own the ids); every node in `sources`
+	// (all locales) has its references checked.
 	for (const n of nodes) {
 		if (n.kind === 'lesson') lessons.set(n.id, n);
 		else seeAlso.add(n.id); // see_also may point to reference entries and glossary terms only (SPEC §5.2)
 	}
-	for (const n of nodes) {
+	for (const n of sources) {
 		const missing = (field: string, ids: string[] | undefined, known: { has(id: string): boolean }, what: string) => {
 			for (const ref of ids ?? [])
 				if (!known.has(ref)) errors.push(line(n.file, `\`${field}\` references "${ref}", which is not an existing ${what} id`));
@@ -76,7 +78,8 @@ export function referenceErrors(nodes: GraphNode[]): string[] {
 function prerequisiteEdges(nodes: GraphNode[]): Map<string, string[]> {
 	const lessons = nodes.filter((n) => n.kind === 'lesson');
 	const known = new Set(lessons.map((n) => n.id));
-	return new Map(lessons.map((n) => [n.id, (n.prerequisites ?? []).filter((p) => known.has(p))]));
+	// Duplicate ids in `prerequisites` are collapsed (the schema rejects them; this keeps reports unique).
+	return new Map(lessons.map((n) => [n.id, [...new Set(n.prerequisites ?? [])].filter((p) => known.has(p))]));
 }
 
 /**
@@ -146,7 +149,7 @@ export function unlocks(nodes: GraphNode[], stageOrder: readonly string[] = []):
 	const out = new Map<string, string[]>(lessons.map((n) => [n.id, []]));
 	for (const n of lessons) {
 		if (n.status === 'draft') continue;
-		for (const p of n.prerequisites ?? []) out.get(p)?.push(n.id);
+		for (const p of new Set(n.prerequisites ?? [])) out.get(p)?.push(n.id);
 	}
 	const rank = (s: string | undefined) => {
 		const i = stageOrder.indexOf(s ?? '');
@@ -177,14 +180,18 @@ export function layers(nodes: GraphNode[]): Map<string, number> {
 		for (const p of prereqs) (dependents.get(p) ?? dependents.set(p, []).get(p)!).push(id);
 	}
 	const layer = new Map<string, number>();
+	const best = new Map<string, number>();
 	const queue = [...edges.keys()].filter((id) => remaining.get(id) === 0);
 	for (const id of queue) layer.set(id, 0);
 	for (let i = 0; i < queue.length; i++) {
 		const u = queue[i];
 		for (const v of dependents.get(u) ?? []) {
-			layer.set(v, Math.max(layer.get(v) ?? 0, layer.get(u)! + 1));
+			best.set(v, Math.max(best.get(v) ?? 0, layer.get(u)! + 1));
 			remaining.set(v, remaining.get(v)! - 1);
-			if (remaining.get(v) === 0) queue.push(v);
+			if (remaining.get(v) === 0) {
+				layer.set(v, best.get(v)!); // assigned only when dequeued-ready, so nothing on or after a cycle gets a layer
+				queue.push(v);
+			}
 		}
 	}
 	return layer;

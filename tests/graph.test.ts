@@ -84,6 +84,24 @@ describe('unlocks', () => {
 	});
 });
 
+describe('duplicate ids', () => {
+	test('duplicate prerequisites give one cycle report and one unlock', () => {
+		const g = [lesson('a', { prerequisites: ['b', 'b'] }), lesson('b', { prerequisites: ['a'] })];
+		assert.equal(findCycles(g).length, 1);
+		const h = [lesson('a'), lesson('b', { order: 20, prerequisites: ['a', 'a'] })];
+		assert.deepEqual(unlocks(h).get('a'), ['b']);
+	});
+});
+
+describe('referenceErrors locales', () => {
+	test('source nodes from other locales are checked against English ids', () => {
+		const en = [lesson('a')];
+		const vi = [...en, lesson('b', { file: 'vi/b.md', prerequisites: ['ghost'] })];
+		assert.deepEqual(referenceErrors(en, en), []);
+		assert.match(referenceErrors(en, vi)[0], /vi\/b\.md.*"ghost"/);
+	});
+});
+
 describe('layers', () => {
 	test('longest path from a root', () => {
 		const g = [
@@ -94,6 +112,10 @@ describe('layers', () => {
 			lesson('e'),
 		];
 		assert.deepEqual(Object.fromEntries(layers(g)), { a: 0, e: 0, b: 1, c: 2, d: 3 });
+	});
+	test('nodes on or downstream of a cycle get no layer', () => {
+		const g = [lesson('x'), lesson('b', { prerequisites: ['c', 'x'] }), lesson('c', { prerequisites: ['b'] }), lesson('d', { prerequisites: ['b', 'x'] })];
+		assert.deepEqual(Object.fromEntries(layers(g)), { x: 0 });
 	});
 	test('lessons on a cycle get no layer', () => {
 		const g = [lesson('a', { prerequisites: ['b'] }), lesson('b', { prerequisites: ['a'] }), lesson('c')];
