@@ -1,4 +1,4 @@
-import { gsap, ScrollTrigger } from '../gsap';
+import { gsap, ScrollTrigger, prime, initEarly } from '../gsap';
 import { nativeScrollTimeline } from '../native';
 
 /** 01: each step lights up (and its counter ticks) as it is reached. */
@@ -36,16 +36,24 @@ export function init(section: HTMLElement) {
 			.fromTo(cur, { yPercent: 100, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'expo.out' });
 	};
 
+	// Reads first (one style recalculation), then the writes: no read follows a write.
+	const parts = steps.map((step) => Array.from(step.querySelectorAll<HTMLElement>('.mono, h3, p')));
+	const nodes = steps.map((step) => step.querySelector<HTMLElement>('.node'));
+	prime(steps, ['opacity']);
+	prime(parts.flat(), ['x']);
+	prime(nodes.filter((n): n is HTMLElement => !!n), ['scale']);
+	gsap.set(steps, { opacity: 0.25 });
+	gsap.set(parts.flat(), { x: -14 });
+
 	steps.forEach((step, i) => {
-		const node = step.querySelector('.node');
-		const parts = step.querySelectorAll('.mono, h3, p');
-		gsap.set(step, { opacity: 0.25 });
-		gsap.set(parts, { x: -14 });
-		const tl = gsap
-			.timeline({ paused: true })
-			.to(step, { opacity: 1, duration: 0.7, ease: 'expo.out' }, 0)
-			.to(parts, { x: 0, duration: 1, ease: 'expo.out', stagger: 0.06 }, 0)
-			.fromTo(node, { scale: 1 }, { scale: 1.25, duration: 0.9, ease: 'back.out(4)' }, 0);
+		const node = nodes[i];
+		const tl = initEarly(
+			gsap
+				.timeline({ paused: true })
+				.to(step, { opacity: 1, duration: 0.7, ease: 'expo.out' }, 0)
+				.to(parts[i], { x: 0, duration: 1, ease: 'expo.out', stagger: 0.06 }, 0)
+				.fromTo(node, { scale: 1 }, { scale: 1.25, duration: 0.9, ease: 'back.out(4)' }, 0),
+		);
 
 		ScrollTrigger.create({
 			trigger: step,

@@ -51,3 +51,16 @@ All notable changes to datafromzero are recorded here. The format follows
   migrated from `data-odyssey`; §14 now describes content production.
 - SPEC §1, §5.1, §12: decision D25; `order` must follow prerequisites within a stage, and lessons show
   "Unlocks next".
+- Homepage motion performance pass for 120 Hz displays (SPEC §12, "Motion performance budget"); the design and
+  choreography are unchanged:
+  - The hero pointer glow is a small window onto a copy of the dot grid that moves by `transform` only; the
+    full-size mask is no longer repainted on every pointer move.
+  - The marquee runs from one ticker callback with smoothed scroll velocity (no tween created per scroll event)
+    and is promoted to its own layer only while it is on screen.
+  - Section timelines are built in separate tasks right after a presented frame: nearby sections first, the rest
+    after the intro while the reader is not scrolling, so scrolling no longer pays for setup. Reads are batched
+    before writes.
+  - Headings revert their SplitText wrappers once the reveal has played; `will-change` is set only while a
+    scrubbed animation is active.
+- `npm run perf` (dev only, not part of `npm run check` or CI): measures frame times, long animation frames,
+  style, layout and paint cost on the built site with a 4× CPU throttle at 390 and 1280 px.

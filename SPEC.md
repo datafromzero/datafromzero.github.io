@@ -362,6 +362,13 @@ Notebooks are cleared of outputs before commit (CI check).
 
 **Budgets:** Lighthouse mobile ≥ 90 (performance), ≥ 95 (accessibility). Lesson pages ship no
 framework JS beyond Starlight's own. Homepage JS ≈ 90 KB gzip max (D22).
+**Motion performance budget:** every frame of motion fits 8.3 ms of main-thread work (120 Hz). Per-frame
+work is O(1) and writes only `transform` and `opacity`; sizes are measured once and on ScrollTrigger's
+refresh; section setup runs in its own task after a presented frame, never while scrolling; `will-change`
+exists only while its animation is active. Measured with `npm run perf` (dev only, noisy, not a CI gate):
+Chromium, CPU throttled 4×, 390×844 and 1280×800, intro, scroll, pointer and a docs page. Targets at 4×:
+no long animation frame above 50 ms after the intro, scroll p95 main-thread frame at or under 16.7 ms
+(a proxy for 8.3 ms on a real phone), docs pages with zero layout, style and paint work while scrolling.
 **Accessibility target:** WCAG 2.2 AA (contrast, keyboard navigation, alt text, MathML).
 
 **Maintenance:** Dependabot monthly, grouped; Node LTS upgraded once a year; Astro/Starlight major upgrades

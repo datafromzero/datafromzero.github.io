@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 328 nodes, 414 edges, 80 communities (56 isolated nodes).
-- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 17, page 2, rule 10, script 21, skill 1, spec-section 25, starlight-component 4, style 6, symbol 87, template 1, token 5.
-- Edges: defines 87, imports 29, mentions 239, overrides 4, references 23, runs 8, specified-by 4, uses-token 15, validated-by 5.
+- 335 nodes, 421 edges, 81 communities (56 isolated nodes).
+- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 4, style 6, symbol 92, template 1, token 5.
+- Edges: defines 92, imports 29, mentions 240, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,9 +17,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
 | 4 | `design/README.md` | doc | 16 | design/README.md:1 |
-| 5 | `S6` Authoring components | spec-section | 15 | SPEC.md:239 |
-| 6 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
-| 7 | `S12` Quality gates (CI on every PR… | spec-section | 14 | SPEC.md:350 |
+| 5 | `S12` Quality gates (CI on every PR… | spec-section | 15 | SPEC.md:350 |
+| 6 | `S6` Authoring components | spec-section | 15 | SPEC.md:239 |
+| 7 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 8 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:156 |
 | 9 | `CLAUDE.md` | doc | 10 | CLAUDE.md:1 |
 | 10 | `S5` Content model | spec-section | 10 | SPEC.md:142 |
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C52 to C50, src/lib/content-schemas.ts:97)
-- `DG6` -mentions-> `D22` (C43 to C40, design/README.md:131)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C24 to C35, .claude/agents/README.md:39)
-- `DG6` -mentions-> `DG2` (C43 to C9, design/README.md:136)
-- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C63 to C6, src/components/starlight/ThemeProvider.astro:2)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C13 to C15, .claude/skills/kb/SKILL.md:3)
-- `S5.2` -mentions-> `D18` (C28 to C25, SPEC.md:216)
-- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C61 to C34, src/components/project/ProjectExtras.astro:3)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C64 to C6, src/components/starlight/ThemeSelect.astro:3)
-- `DG5` -mentions-> `DG4` (C13 to C42, design/README.md:111)
-- `S10` -mentions-> `D26` (C9 to C27, SPEC.md:330)
-- `S3.3` -mentions-> `src/redirects.ts` (C47 to C70, SPEC.md:109)
+- `ctype:career` -specified-by-> `S5.4` (C54 to C52, src/lib/content-schemas.ts:97)
+- `DG6` -mentions-> `D22` (C45 to C42, design/README.md:131)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C38, .claude/agents/README.md:39)
+- `DG6` -mentions-> `DG2` (C45 to C9, design/README.md:136)
+- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C65 to C6, src/components/starlight/ThemeProvider.astro:2)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C14 to C16, .claude/skills/kb/SKILL.md:3)
+- `S5.2` -mentions-> `D18` (C30 to C27, SPEC.md:216)
+- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C63 to C36, src/components/project/ProjectExtras.astro:3)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C66 to C6, src/components/starlight/ThemeSelect.astro:3)
+- `DG5` -mentions-> `DG4` (C14 to C44, design/README.md:111)
+- `S10` -mentions-> `D26` (C9 to C29, SPEC.md:330)
+- `S3.3` -mentions-> `src/redirects.ts` (C49 to C72, SPEC.md:109)
 
 ## Decisions (SPEC §1)
 
@@ -107,7 +107,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 term: id — file:line
 
 - draft: `S5.1` — SPEC.md:156
-- prerequisites: `src/lib/graph.ts` — src/lib/graph.ts:1
+- prerequisites: `S12` — SPEC.md:350
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
 - slug: `S3.2` — SPEC.md:101
@@ -118,7 +118,7 @@ term: id — file:line
 - analytics: `R9` — CLAUDE.md:29
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:23
-- gsap: `pkg:gsap` — package.json:38
+- gsap: `pkg:gsap` — package.json:39
 - scroll: `DG5` — design/README.md:104
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `src/styles/tokens.css` — src/styles/tokens.css:1
@@ -135,15 +135,15 @@ term: id — file:line
 - colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
 - sheets: `S6` — SPEC.md:239
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:39
+- katex: `pkg:katex` — package.json:40
 - math: `src/styles/math.css` — src/styles/math.css:1
-- mdx: `pkg:@astrojs/mdx` — package.json:32
-- auto-import: `pkg:astro-auto-import` — package.json:37
+- mdx: `pkg:@astrojs/mdx` — package.json:33
+- auto-import: `pkg:astro-auto-import` — package.json:38
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
-- quality gates: `S12` — SPEC.md:350
-- cspell: `pkg:cspell` — package.json:45
+- quality gates: `M6` — CLAUDE.md:44
+- cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
-- migration: `S14` — SPEC.md:409
+- migration: `S14` — SPEC.md:416
 - license: `R8` — CLAUDE.md:28
 - changelog: `S9` — SPEC.md:309
 - zenodo: `S1` — SPEC.md:24
@@ -155,7 +155,7 @@ term: id — file:line
 - font: `src/styles/fonts-vi.css` — src/styles/fonts-vi.css:1
 - agents: `agent:content-producer` — .claude/agents/content-producer.md:1
 - build plan: `npm:build` — package.json:13
-- out of scope: `S15` — SPEC.md:421
+- out of scope: `S15` — SPEC.md:428
 - career: `ctype:career` — src/lib/content-schemas.ts:97
 - story: `ctype:story` — src/lib/content-schemas.ts:97
 - stage: `src/lib/content-schemas.ts#STAGES` — src/lib/content-schemas.ts:8
@@ -165,7 +165,7 @@ term: id — file:line
 - nvmrc: `.nvmrc` — .nvmrc:1
 - Content model: `S5` — SPEC.md:142
 - CITATION.cff: `CITATION.cff` — CITATION.cff:1
-- Repository layout: `S13` — SPEC.md:372
+- Repository layout: `S13` — SPEC.md:379
 
 ## Suggested questions
 
