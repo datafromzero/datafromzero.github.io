@@ -7,7 +7,7 @@ import { classify, type Lesson } from './content-schemas.ts';
 import { GITHUB_BRANCH, GITHUB_REPO } from '../site.ts';
 
 interface Route {
-	entry: { id: string; data: Record<string, unknown> };
+	entry: { id: string; filePath?: string; data: Record<string, unknown> };
 	locale?: string;
 }
 
@@ -15,7 +15,7 @@ export function pageOf(locals: App.Locals) {
 	const route = (locals as unknown as { starlightRoute: Route }).starlightRoute;
 	const c = classify(route.entry.id);
 	return {
-		file: `src/content/docs/${route.entry.id}`,
+		file: route.entry.filePath ?? `src/content/docs/${route.entry.id}.md`,
 		locale: route.locale === 'vi' ? ('vi' as const) : null,
 		lesson: c.kind === 'lesson' ? (route.entry.data as unknown as Lesson) : null,
 	};
@@ -26,11 +26,18 @@ export function misuse(file: string, component: string, message: string): never 
 	throw new Error(`${file}: <${component}> ${message}`);
 }
 
-const seenExerciseIds = new WeakMap<object, Set<string>>();
+const seenIds = new WeakMap<object, Set<string>>();
+/** Next unused `{prefix}-{n}` for this page render (unique DOM ids). */
+export function uniqueId(locals: object, prefix: string): string {
+	for (let n = 1; ; n++) if (claim(locals, `${prefix}-${n}`)) return `${prefix}-${n}`;
+}
 /** Remembers an Exercise id for this page render; false when it was already used on the page. */
 export function claimExerciseId(locals: object, id: string): boolean {
-	let seen = seenExerciseIds.get(locals);
-	if (!seen) seenExerciseIds.set(locals, (seen = new Set()));
+	return claim(locals, `exercise:${id}`);
+}
+function claim(locals: object, id: string): boolean {
+	let seen = seenIds.get(locals);
+	if (!seen) seenIds.set(locals, (seen = new Set()));
 	if (seen.has(id)) return false;
 	seen.add(id);
 	return true;

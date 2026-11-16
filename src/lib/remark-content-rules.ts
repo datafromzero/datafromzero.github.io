@@ -1,5 +1,5 @@
 /**
- * Build-time rule for authoring components (SPEC §6): `<Solution>` is only valid inside `<Exercise>`.
+ * Build-time rules for content: `<Solution>` is only valid inside `<Exercise>` (SPEC §6), and headings may not contain math.
  * Runs on every `.mdx` page before rendering; throwing here fails the build with the file path.
  */
 interface MdxNode {
@@ -11,7 +11,17 @@ interface MdxNode {
 
 const isJsx = (n: MdxNode) => n.type === 'mdxJsxFlowElement' || n.type === 'mdxJsxTextElement';
 
+function hasInlineMath(node: MdxNode): boolean {
+	return node.type === 'inlineMath' || (node.children ?? []).some(hasInlineMath);
+}
+
 function walk(node: MdxNode, insideExercise: boolean, file: string) {
+	if (node.type === 'heading' && hasInlineMath(node)) {
+		const line = node.position?.start.line;
+		throw new Error(
+			`${file}${line ? `:${line}` : ''}: math ($…$) is not allowed in headings; it breaks heading ids and the table of contents. Put the formula in the paragraph below the heading.`,
+		);
+	}
 	const inside = insideExercise || (isJsx(node) && node.name === 'Exercise');
 	if (isJsx(node) && node.name === 'Solution' && !insideExercise) {
 		const line = node.position?.start.line;
