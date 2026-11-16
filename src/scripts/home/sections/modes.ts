@@ -30,7 +30,8 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void):
 			panel,
 			{ clipPath: 'inset(100% 0% 0% 0% round 6px)' },
 			{ clipPath: 'inset(0% 0% 0% 0% round 6px)', duration: 1.4, ease: 'expo.inOut' },
-		).from(kids, { y: 30, opacity: 0, duration: 1.1, ease: 'dfz', stagger: 0.1 }, 0.5);
+		// transform only: the wipe hides the content, and text never passes through low contrast
+		).from(kids, { y: 30, duration: 1.1, ease: 'dfz', stagger: 0.1 }, 0.5);
 		// start values are read now, not in the frame where the wipe begins
 		ScrollTrigger.create({ animation: initEarly(tl), trigger: modes, start: 'top 75%', once: true });
 

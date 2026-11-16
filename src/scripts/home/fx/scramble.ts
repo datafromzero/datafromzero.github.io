@@ -8,6 +8,8 @@ gsap.registerPlugin(ScrambleTextPlugin);
 
 /** The intro (design/README.md §4) is finished about here; the CSS fallback shows the caption a little later. */
 const AT_MS = 3000;
+/** After this the CSS fallback may already be showing the caption. */
+const LATE_MS = 3400;
 
 export function init(cap: HTMLElement): () => void {
 	const box = cap.parentElement as HTMLElement; // .cap
@@ -22,6 +24,7 @@ export function init(cap: HTMLElement): () => void {
 		gsap.set(box, { clearProps: 'opacity,transform' });
 	};
 	const go = () => {
+		if (performance.now() > LATE_MS) return; // a late timer: the caption is already showing
 		// the CSS entrance would show the caption now: this takes over in the same frame
 		box.classList.add('is-decoding');
 		sr = document.createElement('span');
@@ -39,6 +42,8 @@ export function init(cap: HTMLElement): () => void {
 		gsap.to(box, { opacity: 1, y: 0, duration: 0.7, ease: 'dfz' });
 	};
 
+	// Too late: the CSS fallback has already shown the caption, so it is not hidden and decoded a second time.
+	if (performance.now() > LATE_MS) return () => {};
 	const timer = setTimeout(go, Math.max(0, AT_MS - performance.now()));
 	return () => {
 		clearTimeout(timer);

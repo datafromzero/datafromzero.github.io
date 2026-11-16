@@ -5,20 +5,20 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 530 nodes, 477 edges, 92 communities (215 isolated nodes).
+- 530 nodes, 480 edges, 92 communities (215 isolated nodes).
 - Nodes: agent 7, build plan 9, component 31, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 13, i18n 7, layout 1, module 13, npm-script 18, page 2, research-section 157, rule 10, script 31, skill 1, spec-section 25, starlight-component 5, style 6, symbol 111, template 1, token 5.
-- Edges: defines 111, imports 37, mentions 267, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- Edges: defines 111, imports 37, mentions 270, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
 | 1 | `astro.config.mjs` | config | 36 | astro.config.mjs:1 |
-| 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
-| 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
-| 4 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:352 |
-| 5 | `S6` Authoring components | spec-section | 17 | SPEC.md:240 |
-| 6 | `design/README.md` | doc | 17 | design/README.md:1 |
+| 2 | `S12` Quality gates (CI on every PR… | spec-section | 18 | SPEC.md:352 |
+| 3 | `design/README.md` | doc | 18 | design/README.md:1 |
+| 4 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
+| 5 | `src/site.ts` | module | 18 | src/site.ts:1 |
+| 6 | `S6` Authoring components | spec-section | 17 | SPEC.md:240 |
 | 7 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 8 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:157 |
 | 9 | `S5` Content model | spec-section | 11 | SPEC.md:143 |
@@ -54,14 +54,14 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `research/curriculum/02-syllabus-inventory.md` -mentions-> `D1` (C67 to C32, research/curriculum/02-syllabus-inventory.md:319)
 - `M8` -mentions-> `D24` (C54 to C32, CLAUDE.md:56)
 - `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C28 to C41, .claude/agents/README.md:39)
-- `DG6` -mentions-> `DG2` (C52 to C13, design/README.md:136)
 - `research/curriculum/00-README.md` -mentions-> `S4` (C37 to C59, research/curriculum/00-README.md:131)
 - `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C75 to C5, src/components/starlight/ThemeProvider.astro:2)
 - `src/scripts/home/fx/scramble.ts` -mentions-> `DG4` (C84 to C51, src/scripts/home/fx/scramble.ts:9)
+- `src/scripts/project/roadmap.ts` -mentions-> `DG6` (C92 to C52, src/scripts/project/roadmap.ts:23)
+- `DG6` -mentions-> `DG2` (C52 to C13, design/README.md:136)
 - `M8` -mentions-> `S4` (C54 to C59, CLAUDE.md:60)
 - `S5.2` -mentions-> `D18` (C33 to C29, SPEC.md:217)
 - `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C76 to C5, src/components/starlight/ThemeSelect.astro:3)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C18 to C32, .claude/skills/kb/SKILL.md:3)
 
 ## Decisions (SPEC §1)
 
@@ -120,7 +120,7 @@ term: id — file:line
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:24
 - gsap: `pkg:gsap` — package.json:39
-- scroll: `DG5` — design/README.md:104
+- scroll: `src/scripts/home/fx/drive.ts` — src/scripts/home/fx/drive.ts:1
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `src/styles/tokens.css` — src/styles/tokens.css:1
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1

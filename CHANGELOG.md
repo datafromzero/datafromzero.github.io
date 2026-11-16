@@ -33,8 +33,8 @@ All notable changes to datafromzero are recorded here. The format follows
   - Homepage: one brand ease (CustomEase, the same curve as the CSS `--ease`) across sections; the hero caption decodes
     once after the intro (ScrambleText; the real text stays available to assistive tech); in 04 the logo's void and
     layers morph into place (MorphSVG); in 02 small lights travel down the branches once drawn and pause off screen
-    (MotionPath); in 03 each panel has an Enlarge button that animates the layout change (Flip; a real button with
-    `aria-expanded`, hidden without script); the marquee can be flicked sideways with a finger, mouse or trackpad and the
+    (MotionPath); in 03 each panel has an Enlarge button that animates the layout change (Flip, transforms only; a real
+    button with `aria-pressed`, hidden without script); the marquee can be flicked sideways with a finger, mouse or trackpad and the
     03 headline trails fast scrolling a few pixels (Observer; vertical scrolling stays native).
   - `/start/`: the roadmap map draws itself (DrawSVG rails, markers pop, stages and lesson rows arrive); the static SVG and
     the text list are unchanged without script or with reduced motion.
