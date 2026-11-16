@@ -27,6 +27,9 @@ All notable changes to datafromzero are recorded here. The format follows
   GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
 
 ### Changed
+- SPEC §1, §2, §10, §12: decision D28 (supersedes D22); any GSAP plugin, each effect loaded on demand, on the
+  homepage, stories and project pages; budget measured as JavaScript before first paint. Build plan item 9 is now
+  "Motion & speed" (the DFS story was dropped).
 - The author of record is the organization "datafromzero" (citations, copyright, footer); no personal name
   appears on the site or in the repository documents.
 - SPEC §3.1, §9, §11: wording for the roadmap map, generated citation, single-source changelog and license pages, and `GA_ID`.

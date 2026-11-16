@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 335 nodes, 421 edges, 81 communities (56 isolated nodes).
-- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 4, style 6, symbol 92, template 1, token 5.
-- Edges: defines 92, imports 29, mentions 240, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- 336 nodes, 429 edges, 80 communities (55 isolated nodes).
+- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 4, style 6, symbol 92, template 1, token 5.
+- Edges: defines 92, imports 29, mentions 248, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -16,15 +16,15 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 1 | `astro.config.mjs` | config | 35 | astro.config.mjs:1 |
 | 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
-| 4 | `design/README.md` | doc | 16 | design/README.md:1 |
-| 5 | `S12` Quality gates (CI on every PR… | spec-section | 15 | SPEC.md:350 |
-| 6 | `S6` Authoring components | spec-section | 15 | SPEC.md:239 |
+| 4 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:352 |
+| 5 | `design/README.md` | doc | 16 | design/README.md:1 |
+| 6 | `S6` Authoring components | spec-section | 15 | SPEC.md:240 |
 | 7 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
-| 8 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:156 |
+| 8 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:157 |
 | 9 | `CLAUDE.md` | doc | 10 | CLAUDE.md:1 |
-| 10 | `S5` Content model | spec-section | 10 | SPEC.md:142 |
-| 11 | `S7` Datasets | spec-section | 10 | SPEC.md:271 |
-| 12 | `S8` Internationalization | spec-section | 10 | SPEC.md:297 |
+| 10 | `S5` Content model | spec-section | 10 | SPEC.md:143 |
+| 11 | `S7` Datasets | spec-section | 10 | SPEC.md:272 |
+| 12 | `S8` Internationalization | spec-section | 10 | SPEC.md:298 |
 | 13 | `src/lib/content-context.ts` | module | 10 | src/lib/content-context.ts:1 |
 | 14 | `src/lib/roadmap.ts` | module | 10 | src/lib/roadmap.ts:1 |
 | 15 | `src/styles/tokens.css` | style | 10 | src/styles/tokens.css:1 |
@@ -34,34 +34,34 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 Label propagation; each community is named by its top-degree node.
 
 - **C1 site.ts** (16): src/site.ts; S11 Analytics & privacy; D8 Analytics; src/components/project/Consent.astro; R9 Analytics; src/components/project/CookieSettings.astro
-- **C2 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C3 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
-- **C4 astro.config.mjs** (9): astro.config.mjs; D3 Languages; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import
-- **C5 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
-- **C6 tokens.css** (9): src/styles/tokens.css; src/styles/home.css; src/styles/print.css; D9 Theme; token:--bg --bg; token:--dim --dim
+- **C2 tokens.css** (11): src/styles/tokens.css; src/styles/home.css; src/styles/print.css; D9 Theme; DG4 Logo animation (approved — match…; token:--bg --bg
+- **C3 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
+- **C5 astro.config.mjs** (9): astro.config.mjs; D3 Languages; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import
+- **C6 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
 - **C7 Authoring components** (8): S6 Authoring components; src/components/content/index.ts; D21 Using components in content; M4 Authoring components; R4 Content portability; src/components/content/Exercise.astro
 - **C8 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C9 README.md** (6): design/README.md; S10 Design & motion; DG2 Visual direction; M2 Design system; src/components/home/Heading.astro; agent:frontend-designer frontend-designer
-- **C10 review-report.ts** (6): scripts/review-report.ts; .github/workflows/review-reminder.yml; npm:review-report npm run review-report; scripts/review-report.ts#Stale; scripts/review-report.ts#isStale; scripts/review-report.ts#staleLessons
-- **C11 site-ui.ts** (5): src/i18n/site-ui.ts; src/i18n/site-ui.ts#SiteUi; src/i18n/site-ui.ts#UiLang; src/i18n/site-ui.ts#projectHref; src/i18n/site-ui.ts#siteUi
-- **C12 citation.ts** (5): src/lib/citation.ts; package.json; src/lib/citation.ts#Citation; src/lib/citation.ts#buildCitation; src/lib/citation.ts#loadCitation
+- **C9 review-report.ts** (6): scripts/review-report.ts; .github/workflows/review-reminder.yml; npm:review-report npm run review-report; scripts/review-report.ts#Stale; scripts/review-report.ts#isStale; scripts/review-report.ts#staleLessons
+- **C10 Motion scope and budget** (5): D28 Motion scope and budget; agent:frontend-designer frontend-designer; R5 Motion; D22 Homepage motion (superseded by D2…; M9 Motion & speed
+- **C11 README.md** (5): design/README.md; S10 Design & motion; DG2 Visual direction; M2 Design system; src/components/home/Heading.astro
+- **C12 site-ui.ts** (5): src/i18n/site-ui.ts; src/i18n/site-ui.ts#SiteUi; src/i18n/site-ui.ts#UiLang; src/i18n/site-ui.ts#projectHref; src/i18n/site-ui.ts#siteUi
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C54 to C52, src/lib/content-schemas.ts:97)
-- `DG6` -mentions-> `D22` (C45 to C42, design/README.md:131)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C38, .claude/agents/README.md:39)
-- `DG6` -mentions-> `DG2` (C45 to C9, design/README.md:136)
-- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C65 to C6, src/components/starlight/ThemeProvider.astro:2)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C14 to C16, .claude/skills/kb/SKILL.md:3)
-- `S5.2` -mentions-> `D18` (C30 to C27, SPEC.md:216)
-- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C63 to C36, src/components/project/ProjectExtras.astro:3)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C66 to C6, src/components/starlight/ThemeSelect.astro:3)
-- `DG5` -mentions-> `DG4` (C14 to C44, design/README.md:111)
-- `S10` -mentions-> `D26` (C9 to C29, SPEC.md:330)
-- `S3.3` -mentions-> `src/redirects.ts` (C49 to C72, SPEC.md:109)
+- `ctype:career` -specified-by-> `S5.4` (C53 to C51, src/lib/content-schemas.ts:97)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C27 to C39, .claude/agents/README.md:39)
+- `DG6` -mentions-> `DG2` (C44 to C11, design/README.md:136)
+- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C64 to C2, src/components/starlight/ThemeProvider.astro:2)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C15 to C17, .claude/skills/kb/SKILL.md:3)
+- `S5.2` -mentions-> `D18` (C31 to C28, SPEC.md:217)
+- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C62 to C37, src/components/project/ProjectExtras.astro:3)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C65 to C2, src/components/starlight/ThemeSelect.astro:3)
+- `DG5` -mentions-> `DG4` (C15 to C2, design/README.md:111)
+- `S3.3` -mentions-> `src/redirects.ts` (C48 to C71, SPEC.md:110)
+- `src/i18n/home/types.ts` -mentions-> `DG5` (C67 to C15, src/i18n/home/types.ts:1)
+- `src/redirects.ts` -mentions-> `S3.3` (C71 to C48, src/redirects.ts:2)
 
 ## Decisions (SPEC §1)
 
@@ -88,34 +88,35 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D19 | Dataset page frontmatter | Deferred until the first dataset | SPEC.md:46 §5.4 |
 | D20 | Citation access date | Reader adds it | SPEC.md:47 §9 |
 | D21 | Using components in content | Auto-imported, enforced | SPEC.md:48 §6 |
-| D22 | Homepage motion | GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`, ≈ 90 KB gzipped JS | SPEC.md:49 |
+| D22 | Homepage motion (superseded by D2… | GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`, ≈ 90 KB gzipped JS | SPEC.md:49 |
 | D23 | Scroll-linked effects | CSS scroll-driven animations first, GSAP fallback | SPEC.md:50 |
 | D24 | Content source | Written from scratch, outline first, English first | SPEC.md:51 §14 |
 | D25 | Prerequisite graph | Order follows prerequisites; footer shows Unlocks next | SPEC.md:52 §12 §5.1 |
 | D26 | Page transitions | Cross-document View Transitions, CSS only | SPEC.md:53 |
 | D27 | Prefetch | Speculation Rules `prefetch`, moderate eagerness; never prerender | SPEC.md:54 §11 |
+| D28 | Motion scope and budget | Full GSAP plugin set, each effect loaded on demand, on `/`, `/stories… | SPEC.md:55 §12 |
 
 ## CONTRACT sections
 
-- §3 URL contract — SPEC.md:73-120 (includes §3.1, §3.2, §3.3, §3.4)
-- §5 Content model — SPEC.md:142-238 (includes §5.1, §5.2, §5.3, §5.4)
-- §6 Authoring components — SPEC.md:239-270 (includes §6.4)
-- §7 Datasets — SPEC.md:271-296
+- §3 URL contract — SPEC.md:74-121 (includes §3.1, §3.2, §3.3, §3.4)
+- §5 Content model — SPEC.md:143-239 (includes §5.1, §5.2, §5.3, §5.4)
+- §6 Authoring components — SPEC.md:240-271 (includes §6.4)
+- §7 Datasets — SPEC.md:272-297
 
 ## Where is…
 
 term: id — file:line
 
-- draft: `S5.1` — SPEC.md:156
-- prerequisites: `S12` — SPEC.md:350
+- draft: `S5.1` — SPEC.md:157
+- prerequisites: `S12` — SPEC.md:352
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
-- slug: `S3.2` — SPEC.md:101
+- slug: `S3.2` — SPEC.md:102
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:97
-- dataset: `S7` — SPEC.md:271
+- dataset: `S7` — SPEC.md:272
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
 - consent: `src/components/project/Consent.astro` — src/components/project/Consent.astro:1
-- analytics: `R9` — CLAUDE.md:29
+- analytics: `R9` — CLAUDE.md:30
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:23
 - gsap: `pkg:gsap` — package.json:39
@@ -126,26 +127,26 @@ term: id — file:line
 - logo: `src/components/home/Logo.astro` — src/components/home/Logo.astro:1
 - favicon: `DG6` — design/README.md:123
 - i18n: `src/i18n/site-ui.ts` — src/i18n/site-ui.ts:1
-- vietnamese: `S8` — SPEC.md:297
+- vietnamese: `S8` — SPEC.md:298
 - validation: `src/lib/content-validation.ts` — src/lib/content-validation.ts:1
 - schema: `src/lib/content-schemas.ts` — src/lib/content-schemas.ts:1
 - lesson metadata: `src/lib/content-schemas.ts#Lesson` — src/lib/content-schemas.ts:107
 - exercise: `src/components/content/Exercise.astro` — src/components/content/Exercise.astro:1
 - solution: `src/components/content/Solution.astro` — src/components/content/Solution.astro:1
 - colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
-- sheets: `S6` — SPEC.md:239
+- sheets: `S6` — SPEC.md:240
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
 - katex: `pkg:katex` — package.json:40
 - math: `src/styles/math.css` — src/styles/math.css:1
 - mdx: `pkg:@astrojs/mdx` — package.json:33
 - auto-import: `pkg:astro-auto-import` — package.json:38
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
-- quality gates: `M6` — CLAUDE.md:44
+- quality gates: `M6` — CLAUDE.md:45
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
-- migration: `S14` — SPEC.md:416
-- license: `R8` — CLAUDE.md:28
-- changelog: `S9` — SPEC.md:309
+- migration: `S14` — SPEC.md:418
+- license: `R8` — CLAUDE.md:29
+- changelog: `S9` — SPEC.md:310
 - zenodo: `S1` — SPEC.md:24
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
@@ -155,7 +156,7 @@ term: id — file:line
 - font: `src/styles/fonts-vi.css` — src/styles/fonts-vi.css:1
 - agents: `agent:content-producer` — .claude/agents/content-producer.md:1
 - build plan: `npm:build` — package.json:13
-- out of scope: `S15` — SPEC.md:428
+- out of scope: `S15` — SPEC.md:430
 - career: `ctype:career` — src/lib/content-schemas.ts:97
 - story: `ctype:story` — src/lib/content-schemas.ts:97
 - stage: `src/lib/content-schemas.ts#STAGES` — src/lib/content-schemas.ts:8
@@ -163,9 +164,9 @@ term: id — file:line
 - lesson header: `src/lib/lessons.ts` — src/lib/lessons.ts:1
 - footer: `src/components/starlight/Footer.astro` — src/components/starlight/Footer.astro:1
 - nvmrc: `.nvmrc` — .nvmrc:1
-- Content model: `S5` — SPEC.md:142
+- Content model: `S5` — SPEC.md:143
 - CITATION.cff: `CITATION.cff` — CITATION.cff:1
-- Repository layout: `S13` — SPEC.md:379
+- Design & motion: `S10` — SPEC.md:326
 
 ## Suggested questions
 

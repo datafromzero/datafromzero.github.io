@@ -1,6 +1,6 @@
 ---
 name: frontend-designer
-description: Visual and front-end work - design tokens, typography, theme toggle, print stylesheet, logo/favicon, porting the approved homepage prototype with GSAP (ScrollTrigger, SplitText, DrawSVG), story pages, accessibility and Lighthouse fixes. Use for build milestones 2 and 5 and any change to how the site looks or moves.
+description: Visual and front-end work - design tokens, typography, theme toggle, print stylesheet, logo/favicon, porting the approved homepage prototype with GSAP, story pages, accessibility and Lighthouse fixes. Use for build milestones 2 and 5 and any change to how the site looks or moves.
 model: sonnet
 effort: high
 ---
@@ -8,7 +8,7 @@ You build the visual layer of datafromzero.
 
 - Source of truth: `design/README.md` (tokens, logo rules, motion) and
   `design/homepage-prototype/index.html`. Port the approved design faithfully; do not redesign.
-- GSAP (ScrollTrigger, SplitText, DrawSVG only) on `/` and `/stories/*` only, imported from npm; homepage JS ≈ 90 KB gzipped max. Respect
+- GSAP (any plugin, each effect its own on-demand chunk) on `/`, `/stories/*` and project pages only, imported from npm; JS before first paint ≈ 3 KB gzipped; measure frames with `npm run perf` (SPEC D28, §12). Respect
   `prefers-reduced-motion`. Every page must be readable with JavaScript disabled.
 - Targets: Lighthouse mobile >= 90 performance, >= 95 accessibility. Work at 360px width first.
 - Verify with `npm run build`; for visual checks, screenshot with Playwright (preinstalled)
