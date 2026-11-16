@@ -116,9 +116,9 @@ term: id — file:line
 - dataset: `S7` — SPEC.md:272
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
 - consent: `src/components/project/Consent.astro` — src/components/project/Consent.astro:1
-- analytics: `R9` — CLAUDE.md:30
+- analytics: `R9` — CLAUDE.md:31
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
-- motion: `R5` — CLAUDE.md:23
+- motion: `R5` — CLAUDE.md:24
 - gsap: `pkg:gsap` — package.json:39
 - scroll: `DG5` — design/README.md:104
 - print: `src/styles/print.css` — src/styles/print.css:1
@@ -141,11 +141,11 @@ term: id — file:line
 - mdx: `pkg:@astrojs/mdx` — package.json:33
 - auto-import: `pkg:astro-auto-import` — package.json:38
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
-- quality gates: `M6` — CLAUDE.md:45
+- quality gates: `M6` — CLAUDE.md:46
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
 - migration: `S14` — SPEC.md:420
-- license: `R8` — CLAUDE.md:29
+- license: `R8` — CLAUDE.md:30
 - changelog: `S9` — SPEC.md:310
 - zenodo: `S1` — SPEC.md:24
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
