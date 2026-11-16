@@ -7,6 +7,10 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Curriculum map approved (SPEC D29): 161 draft lessons across the nine stages, created from
+  `research/curriculum/06-curriculum-map.yaml` with ids, order, prerequisites, objectives and sources.
+  Drafts are validated but never deployed. SQL lessons use DuckDB; dashboard lessons are tool-neutral;
+  datasets are English with prices in US dollars.
 - Curriculum research package in `research/curriculum/` (competitor map, syllabus inventory, teaching
   playbook, UI/UX lessons, career and distribution), indexed in the knowledge graph.
 - Site scaffold: Astro + Starlight, English at the root and Vietnamese under `/vi/`, deploy to GitHub Pages.
