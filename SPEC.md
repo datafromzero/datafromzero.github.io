@@ -17,7 +17,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 2. **Stability & speed.** Static site, minimal JavaScript, works with JS disabled, fast on a phone.
 3. **Academic quality.** Versioned, citable (DOI), sourced, dated, reviewed.
 4. **Beginner-first.** Audience knows only Microsoft Office; most read on phones.
-5. **Delight, sparingly.** GSAP motion only on the homepage and story pages.
+5. **Delight, sparingly.** GSAP motion only on the homepage (D28).
 
 ---
 
@@ -27,7 +27,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 |---|---|---|---|
 | D1 | Source of truth for content | **Single repo** `datafromzero/datafromzero.github.io` | Content, site code, datasets and notebooks live together. Content is **written from scratch** (D24); `johnha912/data-odyssey` is not migrated. |
 | D2 | Domain | **datafromzero.github.io** now; custom domain may be added later | GitHub Pages redirects github.io → custom domain automatically. Never use absolute self-links in content (§3.4). |
-| D3 | Languages | **English at root, Vietnamese under `/vi/`** | `/sql/joins/` and `/vi/sql/joins/`. English URLs never gain a prefix. |
+| D3 | Languages (**paused by D30**) | **English at root, Vietnamese under `/vi/`** | `/sql/joins/` and `/vi/sql/joins/`. English URLs never gain a prefix. Paused: English only until the owner reactivates §8 (D30). |
 | D4 | Running code | **Links out** to Google Colab (Python/SQL) and Google Sheets templates (Excel stage) | No in-browser runtime now. Content is authored so one can be added later without edits (§6.4). |
 | D5 | Versioning & citation | **GitHub Releases + Zenodo DOI**, `CITATION.cff` | Semantic versions for the curriculum (§9). |
 | D6 | URL style | **Topic slugs, no numbers** (`/sql/joins/`) | Order lives in frontmatter, never in URLs or file names. |
@@ -52,8 +52,9 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D25 | Prerequisite graph | **Order follows prerequisites; footer shows Unlocks next** | Within a stage, `order` is a topological order of `prerequisites`; cycles and duplicate ids fail the check. Each lesson lists the published lessons it unlocks, computed at build time (§5.1, §12). |
 | D26 | Page transitions | **Cross-document View Transitions, CSS only** | `@view-transition { navigation: auto; }` with a root cross-fade of 120 ms (≤ 150 ms), declared only inside `prefers-reduced-motion: no-preference` so reduced-motion readers get none. No named per-element morphs, no JavaScript, no change to first paint. Chrome/Edge 126+ and Safari 18.2+ animate; Firefox navigates normally. |
 | D27 | Prefetch | **Speculation Rules `prefetch`, moderate eagerness; never prerender** | One JSON `<script type="speculationrules">` (`src/lib/speculation-rules.ts`) in every page head: same-origin links only, excluding `#` links, `target=_blank`, `download`, `rel=external` and file paths. Astro's own prefetch script is off (`prefetch: false`), so every page ships one fewer script. Prerender is forbidden: it would run page code, and later analytics (§11), before the visit. Chromium only; Safari and Firefox navigate normally, so no request is spent on pages that may not be read. |
-| D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand**, on `/`, `/stories/*` and project pages; lessons, reference and datasets stay zero-JS | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. |
+| D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand, on the homepage `/` only**; project pages, stories, lessons, reference and datasets get no effects (narrowed by the owner in 2026-11: project pages and `/stories/*` were included before) | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. Project pages keep only CSS (the View Transitions of D26); the `/start/` roadmap map is a static SVG. A story's `motion` field (§5.4) stays in the schema and has no effect for now. |
 | D29 | Curriculum map | **Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; one English dataset set in USD** | The map is `research/curriculum/06-curriculum-map.yaml` (rationale in `07-…`); lessons are created as drafts from it (§14) and their frontmatter is the source of truth from then on. `v1.0.0` = the four core stages (102 lessons); the five branches follow in 1.x. SQL lessons run DuckDB in Colab and cite DuckDB docs; dbt lessons use dbt-duckdb. Dashboard lessons teach principles, then short parallel how-tos for Power BI Desktop and Looker Studio. Datasets are English with prices in US dollars and cents; `/vi/` reuses them. |
+| D30 | Vietnamese paused | **English only for now**; Vietnamese and other languages later, when the owner decides | No `vi` locale is built (one switch, `VI_ENABLED` in `src/site.ts`), so there is no language picker and no `hreflang` alternates. Every `/vi/` URL that was published (`/vi/` and the six project pages) redirects to its English twin (`src/redirects.ts`, static meta-refresh pages, not in the sitemap). A page under `src/content/docs/vi/` fails the build. D3 and §8 are paused, not deleted: the `translated_from_version` field stays in the schemas (§5, CONTRACT) and its rule applies again once §8 is reactivated. |
 
 ---
 
@@ -67,7 +68,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | Schemas | Astro content collections + Zod | Build fails on invalid frontmatter |
 | Search | Starlight built-in (Pagefind) | Static, no external service |
 | Math | `remark-math` + `rehype-katex` (KaTeX, MathML output for accessibility) | Formulas in `$…$` / `$$…$$` |
-| Motion | GSAP 3.13+ (any plugin, each effect loaded on demand, D28) | Homepage, `/stories/` and project pages (§10); JS before first paint ≈ 3 KB gzipped (D28) |
+| Motion | GSAP 3.13+ (any plugin, each effect loaded on demand, D28) | Homepage only (§10); JS before first paint ≈ 3 KB gzipped (D28) |
 | Hosting | GitHub Pages via GitHub Actions | Deploy on push to `main` |
 
 ---
@@ -95,10 +96,10 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | `/reference/pandas/{name}/` | e.g. `/reference/pandas/merge/` | `reference` |
 | `/reference/stats/{formula}/` | e.g. `/reference/stats/standard-deviation/` | `reference` |
 | `/careers/{career}/` | Career guides (the 5 roles) | `careers` |
-| `/stories/{slug}/` | History / story / visualization pages (GSAP allowed) | `stories` |
+| `/stories/{slug}/` | History / story / visualization pages (static for now, D28) | `stories` |
 | `/datasets/` · `/datasets/{name}/` | Dataset documentation + download | `datasets` |
 | `/cite/` · `/changelog/` · `/about/` · `/license/` · `/privacy/` | Project pages | `docs` |
-| `/vi/…` | Vietnamese mirror of every route above, **same slugs** | |
+| `/vi/…` | Vietnamese mirror of every route above, **same slugs**. **Paused (D30):** the published `/vi/` pages redirect to English | |
 
 ### 3.2 Slug rules
 - Lowercase English, kebab-case, ASCII only: `/sql/window-functions/`. Vietnamese pages reuse the English slug.
@@ -298,6 +299,10 @@ Notebooks are cleared of outputs before commit (CI check).
 
 ## 8. Internationalization
 
+> **Paused (D30).** The site is English only until the owner reactivates this section. Nothing below is
+> built meanwhile: no `vi` locale, and any page under `src/content/docs/vi/` fails the build. The rules stay
+> as written for when Vietnamese returns (set `VI_ENABLED` in `src/site.ts`, remove the `/vi/` redirects).
+
 - Starlight i18n with `root` locale **English** and `vi` locale. UI strings translated in `src/content/i18n/vi.json`.
 - Vietnamese files mirror English paths: `src/content/docs/vi/sql/joins.md` with the **same `id`**.
 - Untranslated pages fall back to English with Starlight's "not yet translated" notice.
@@ -327,8 +332,9 @@ Notebooks are cleared of outputs before commit (CI check).
 ## 10. Design & motion
 
 - Tokens, typography and logo rules: see `design/README.md` §2–3. Dark is default; docs pages get a light toggle; `@media print` forces black-on-white, hides nav/buttons, prints link URLs.
-- **GSAP is allowed on `/`, `/stories/*` and project pages** (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`,
-  `/privacy/`), any plugin, each effect loaded on demand (D28). Never on lessons, reference or datasets.
+- **GSAP is allowed on the homepage `/` only**, any plugin, each effect loaded on demand (D28). Project pages
+  (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`), stories, lessons, reference and datasets
+  load no motion script.
 - Every animation respects `prefers-reduced-motion`; all content is visible with JS disabled.
 - Page-to-page navigation uses CSS-only cross-document View Transitions (D26) and Speculation Rules prefetch (D27); neither adds executable JS to lesson pages.
 - Study pages (lessons): wide line-height, max ~70ch, one idea per section.
@@ -364,7 +370,7 @@ Notebooks are cleared of outputs before commit (CI check).
 | Accessibility + performance | Lighthouse CI on `/`, one lesson, one reference page | Yes if a budget is missed |
 
 **Budgets:** Lighthouse mobile ≥ 90 (performance), ≥ 95 (accessibility). Lesson pages ship no
-framework JS beyond Starlight's own. JavaScript before first paint ≈ 3 KB gzipped on motion pages; effects load on demand (D28).
+framework JS beyond Starlight's own. JavaScript before first paint ≈ 3 KB gzipped on the homepage; effects load on demand (D28).
 **Motion performance budget:** every frame of motion fits 8.3 ms of main-thread work (120 Hz). Per-frame
 work is O(1) and writes only `transform` and `opacity`; sizes are measured once and on ScrollTrigger's
 refresh; section setup runs one section per task after a presented frame: sections near the viewport first (also while
@@ -392,14 +398,14 @@ datafromzero.github.io/
 │  │  │  ├─ data-analyst/ data-engineer/ data-scientist/ analytics-engineer/ ml-engineer/
 │  │  │  ├─ reference/{glossary,excel,sql,pandas,stats}/
 │  │  │  ├─ careers/ stories/ datasets/
-│  │  │  └─ vi/               # Vietnamese mirror (same structure)
-│  │  └─ i18n/vi.json
+│  │  │  └─ vi/               # Vietnamese mirror (same structure; paused, D30)
+│  │  └─ i18n/vi.json         # kept for when Vietnamese returns (D30)
 │  ├─ components/
 │  │  ├─ content/             # the §6 authoring components (auto-imported in .mdx)
 │  │  ├─ lesson/              # lesson header and footer
 │  │  └─ starlight/           # Starlight component overrides
 │  ├─ lib/                    # schemas, validation, content rules (§5, §6)
-│  ├─ pages/index.astro       # custom homepage (GSAP)
+│  ├─ pages/index.astro       # custom homepage (the only page with GSAP)
 │  ├─ styles/                 # tokens.css, print.css, math.css
 │  ├─ site.ts                 # site name, author, repository, URL
 │  ├─ redirects.ts            # §3.3

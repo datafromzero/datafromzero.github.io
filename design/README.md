@@ -95,7 +95,11 @@ Total ≈ 2.9 s. All in `logo/logo-animation.js`.
 | 3 | The void (database) opens from the centre (scaleY 0→1, scaleX .7→1) | 1.0 s, `expo.out` (overlap −0.7 s) |
 | 4 | The three layer lines draw left→right, staggered | 0.6 s each, stagger .12, `power2.out` |
 
-- Plays once on homepage load. **Tap/click the logo to replay.**
+- Plays once on homepage load, as CSS keyframes (first paint never waits for GSAP). **Tap/click the logo to replay:**
+  the replay re-runs the whole hero lockup (logo and wordmark, §5) and the selection box with it.
+- On the homepage the logo is part of the lockup with the wordmark "From A1 to AI." (§5); the wordmark's own motion
+  follows the logo: words rise from 0.9 s, the selection box lands on "A1" at 1.5 s, and the reel rolls 1 → I from
+  2.2 s for 1.1 s (`power3.inOut`). The intro ends at about 3.3 s.
 - `prefers-reduced-motion: reduce` → no animation, logo shown static.
 - Nav logo: static, never animated.
 
@@ -103,15 +107,18 @@ Total ≈ 2.9 s. All in `logo/logo-animation.js`.
 
 ## 5. Homepage (see `homepage-prototype/index.html`)
 
-Content is English at the root; Vietnamese lives under `/vi/` (see SPEC §8) — keep all copy in i18n strings.
+Content is English only for now (SPEC D30; Vietnamese under `/vi/` is paused) — keep all copy in i18n strings
+(`src/i18n/home/en.ts`).
+The hero and section 03 differ from `homepage-prototype/index.html` by owner decision (2026-11): this table is
+authoritative where they disagree.
 
 | Section | Layout | Motion (GSAP) |
 |---|---|---|
-| **Nav** (fixed) | Logo + `datafromzero` wordmark left; Roadmap · Reference · GitHub right (only GitHub on mobile). `mix-blend-mode: difference` | Thin 1 px scroll-progress bar at very top (CSS scroll-driven, SPEC D23; ScrollTrigger scrub fallback) |
-| **Hero** (100svh) | Faint dot grid background; logo centred with caption `EXCEL → SQL → PYTHON → DA · DE · DS`; headline bottom-left "From spreadsheet / to data career." (2nd line muted); sub-copy + 2 buttons | Dot grid staggers in from centre → logo animation (§4) → headline words rise in from a mask → copy & buttons fade up → the caption decodes once (ScrambleText; skipped if the script arrives after the CSS fallback has shown it). On scroll: grid parallax, hero content drifts up and fades. Desktop only: grid follows the mouse slightly |
+| **Nav** (fixed) | Logo + `datafromzero` wordmark left; Roadmap · Example (→ section 03) · GitHub right (only GitHub on mobile). `mix-blend-mode: difference` | Thin 1 px scroll-progress bar at very top (CSS scroll-driven, SPEC D23; ScrollTrigger scrub fallback) |
+| **Hero** (100svh) | Faint dot grid background; centred **lockup**: the logo and the wordmark "From A1 to AI." side by side (stacked up to 640 px wide). The wordmark is the page's only `<h1>` (accessible name "From A1 to AI."). The last word is "A" plus a one-line reel that rests on "I". Sub-copy + 2 buttons (Start at zero → `/start/`, See an example → `#tools`) bottom. No caption, no separate headline | CSS first: dot grid staggers in from centre → logo animation (§4) → the wordmark's words rise from a mask → the reel rolls 1 → λ → Σ → 3 → 2 → I and the "." slides with it (transforms only; the reel's width is the I's, so CLS stays 0) → copy & buttons fade up. Without JS or before GSAP, the CSS alone plays this and ends on "From A1 to AI.". GSAP (deferred chunk) adds an Excel-style selection box (2 px border, square fill handle) that lands on "A1" and slides to "AI" in sync with the roll; a chunk that arrives after the roll only fades the box in on "AI". Reduced motion: final state, no box. On scroll: grid parallax, hero content drifts up and fades. Desktop only: grid follows the mouse slightly |
 | **01 — The core** | "Four steps. No skipped rungs." + vertical track: Excel/Sheets, SQL, Python, Advanced core | A white rail fills top→bottom with scroll (scrub); each step's node lights up and its text goes from 25% → 100% opacity as it is reached |
 | **02 — Then branch** | "One trunk. Five careers." + SVG tree: trunk splits into 5 branches → DA, DE, DS, AE, ML (Data Analyst, Data Engineer, Data Scientist, Analytics Engineer, ML/AI Engineer) | Trunk then branches draw with scroll (scrub), leaf dots pop, labels fade up; once drawn, small lights travel down the branches (MotionPath, paused off screen) |
-| **03 — Two ways in** | "Learn in order. Look it up later." Two panels: **Study** (white panel, lesson mock, progress pips) and **Reference** (dark, book-index mock with a formula) | Panels reveal with a bottom-up clip-path wipe; content rises (transform only); progress pips grow. Each panel has an **Enlarge** button (shown only once the script loads): the open panel widens, animated with Flip transforms (content counter-scaled, section height unchanged), and demos itself (pips fill, rows scan). The headline trails fast scrolling a few pixels (Observer) |
+| **03 — One idea, three tools** (`#tools`) | "Same question. Three tools." (2nd part muted). The question "Which store sold the most in March?", then the Excel (`SUMIFS`), SQL and Python solutions beside one result table (Riverside $1,284.50 · Old Quarter $1,102.75 · Harbor $968.20, "Example numbers."). Code in Geist Mono, wrapping (no horizontal scroll); one column on phones. Without JS: the three solutions stacked, each under its tool name | A script (no GSAP, also with reduced motion) turns the solutions into a real ARIA tab list (roving tabindex, ←/→/Home/End); panels share one cell, so switching never moves the page. GSAP (deferred): the underline slides (Flip, transforms only), the code fades up, the result rows pulse. The tabs cycle every 3.6 s while the section is on screen, stop for good on any interaction (click, key, focus, hover), and have a Pause / Play button (WCAG 2.2.2). Reduced motion: no cycle, no animation |
 | **Marquee** | Large alternating solid/outlined words: Free · Open source · CC BY 4.0 · Mobile-first · Zero to job-ready | Infinite horizontal loop; speeds up with scroll velocity, eases back; can be flicked sideways by finger, mouse or trackpad (Observer; vertical scroll stays native) |
 | **04 — Begin** | Small logo, "Start / at zero.", one big button | Logo assembles once as it enters (disc → void and layers morph into place, MorphSVG). Button is magnetic on desktop (pointer: fine only) |
 | **Footer** | Mono: © 2026 datafromzero · Content CC BY 4.0 · Code MIT · version + DOI · Cookie settings · GitHub link | — |
@@ -124,8 +131,8 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
 
 **Priorities (in order): stability & speed → mobile-first (most readers are on phones) → nice motion.**
 
-- **Where GSAP is allowed:** homepage and story / history / visualization pages only.
-  **Not** on lessons, exercises or reference pages — those stay plain Starlight for speed.
+- **Where GSAP is allowed:** the homepage only (SPEC D28). Project pages, stories, lessons, exercises and
+  reference pages load no motion script — they stay plain Starlight for speed.
 - **Homepage:** build it as a custom Astro page (its own layout, not the docs layout), port the prototype
   into components, and load GSAP only there (`<script>` inside the page/component so it is bundled per-page).
 - **GSAP:** `npm i gsap` (3.13+; all plugins are free now). Any plugin, each effect loaded on demand (SPEC D28).
@@ -138,7 +145,7 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
   - **Study / lessons:** open, quiet, one idea per screen, generous spacing.
   - **Reference:** book-like, indexed, searchable (Starlight's built-in search), compact.
 - **Math:** DS / Statistics pages need LaTeX — add `remark-math` + `rehype-katex` (and KaTeX CSS).
-- **Fonts:** self-host or use Google Fonts with `display=swap`; preload Geist 400.
+- **Fonts:** self-host or use Google Fonts with `display=swap`; preload Geist 400 and, on the homepage, Geist 500 (the hero wordmark).
 - **Performance budget:** JS before first paint ≈ 3 KB gzipped, effects loaded on demand (SPEC D28); no images
   required — everything is SVG/CSS. Content must be fully readable with JS disabled
   (GSAP sets hidden states, CSS never hides content by default — the prototype already works this way).

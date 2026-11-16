@@ -7,6 +7,15 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Homepage hero lockup (owner's choice, sample 1): the logo and the wordmark "From A1 to AI." side by side (stacked
+  on phones), the wordmark being the page's only `<h1>`. CSS first: the words rise from a mask and the last word's
+  reel rolls 1 → I; GSAP (deferred) adds an Excel-style selection box that moves from "A1" to "AI" with the roll,
+  or just fades in on "AI" when the chunk arrives late. Tapping the logo replays logo and wordmark. Geist 500 is
+  preloaded and the wordmark's width reserved, so the lockup never shifts (CLS 0).
+- Homepage section 03 "One idea, three tools" (owner's choice, option B), replacing "Two ways in": one question
+  answered in Excel, SQL and Python beside the same result table (example numbers). Without script the three
+  solutions are stacked; with script they are an ARIA tab list (also with reduced motion), and the motion chunk
+  adds the Flip underline, the code fade, the row pulse and an auto-cycle with a Pause / Play button.
 - Curriculum map approved (SPEC D29): 161 draft lessons across the nine stages, created from
   `research/curriculum/06-curriculum-map.yaml` with ids, order, prerequisites, objectives and sources.
   Drafts are validated but never deployed. SQL lessons use DuckDB; dashboard lessons are tool-neutral;
@@ -47,6 +56,15 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC §1 decision D30, §3.1, §8, §13: Vietnamese is paused; the site is English only for now. No `vi` locale is
+  built (no language picker, no `hreflang`), the seven published `/vi/` URLs (`/vi/`, `/vi/start/`, `/vi/about/`,
+  `/vi/cite/`, `/vi/changelog/`, `/vi/license/`, `/vi/privacy/`) redirect to their English pages, the sitemap has no
+  `/vi/`, and a page under `src/content/docs/vi/` fails the build. D3 and §8 are marked paused; the
+  `translated_from_version` field stays in the schemas. CLAUDE.md's language rule follows.
+- SPEC §0, §1 decision D28, §2, §3.1, §10, §12: GSAP runs on the homepage only. Project pages and stories get no
+  effects; the `/start/` roadmap map is a static SVG again. CLAUDE.md's motion rule and design/README.md §6 follow.
+- Homepage nav: "Reference" becomes "Example", and the hero's second button "Browse reference" becomes
+  "See an example"; both point to section 03 (`#tools`), since there is no reference section any more.
 - Faster first paint on docs and project pages: font files are no longer inlined as base64 into the
   render-blocking stylesheet (150 KB to 80 KB), the regular Latin Geist is preloaded, and the consent
   banner's styles load only when analytics is enabled (`/start/` lab LCP 2.56 s to 1.55 s).
@@ -91,3 +109,11 @@ All notable changes to datafromzero are recorded here. The format follows
     scrubbed animation is active.
 - `npm run perf` (dev only, not part of `npm run check` or CI): measures frame times, long animation frames,
   style, layout and paint cost on the built site with a 4× CPU throttle at 390 and 1280 px.
+
+### Removed
+- The hero caption ("Excel → SQL → Python → DA · DE · DS") and its ScrambleText decode, and the separate
+  "From A1 / to AI." headline (the lockup wordmark replaces it).
+- Section 03 "Two ways in" (Study / Reference panels, the Enlarge button and its Flip effect, the headline lag).
+- Project-page motion: the roadmap map drawing on `/start/` and the heading reveal (`project-boot.ts`, `scripts/project/`).
+- The Vietnamese homepage (`/vi/`, now a redirect), its Vietnamese font subset and the Vietnamese homepage copy
+  (`src/i18n/home/vi.ts`, kept in git history). The docs UI strings (`src/content/i18n/vi.json`) stay for later.

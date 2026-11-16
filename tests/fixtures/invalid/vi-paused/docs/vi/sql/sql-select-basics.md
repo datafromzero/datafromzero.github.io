@@ -9,7 +9,7 @@ duration: 15
 objectives:
   - Explain the fixture idea
   - Apply the fixture idea
-prerequisites: [excel-formulaz]
+prerequisites: [excel-formulas]
 reviewed: 2026-11-01
 sources:
   - title: Fixture source

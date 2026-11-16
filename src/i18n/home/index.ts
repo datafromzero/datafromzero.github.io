@@ -1,17 +1,17 @@
 import type { HomeStrings } from './types';
 import { en } from './en';
-import { vi } from './vi';
 
-export type HomeLang = 'en' | 'vi';
+/** English only for now (SPEC D30). Vietnamese copy returns as vi.ts (see git history) when §8 is reactivated. */
+export type HomeLang = 'en';
 export type { HomeStrings };
 
-const copy: Record<HomeLang, HomeStrings> = { en, vi };
+const copy: Record<HomeLang, HomeStrings> = { en };
 
 export function homeStrings(lang: HomeLang): HomeStrings {
 	return copy[lang];
 }
 
-/** Prefix an internal path with the language root: /start/ -> /vi/start/ for Vietnamese. */
-export function homeHref(lang: HomeLang, path: string): string {
-	return lang === 'vi' ? `/vi${path}` : path;
+/** Root-relative path for an internal page in the homepage's language (English: unchanged). */
+export function homeHref(_lang: HomeLang, path: string): string {
+	return path;
 }

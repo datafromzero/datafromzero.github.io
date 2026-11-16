@@ -9,7 +9,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { redirects } from './src/redirects.ts';
-import { SITE_NAME, SITE_URL } from './src/site.ts';
+import { SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
 
 // https://astro.build/config
@@ -83,11 +83,12 @@ export default defineConfig({
 				PageTitle: './src/components/starlight/PageTitle.astro',
 				Footer: './src/components/starlight/Footer.astro',
 			},
-			// SPEC §8 / D3: English at the root, Vietnamese under /vi/ with the same slugs.
+			// SPEC §8 / D3: English at the root, Vietnamese under /vi/ with the same slugs. Vietnamese is paused
+			// (D30): with the root locale alone the site is monolingual, so there is no language picker.
 			defaultLocale: 'root',
 			locales: {
 				root: { label: 'English', lang: 'en' },
-				vi: { label: 'Tiếng Việt', lang: 'vi' },
+				...(VI_ENABLED ? { vi: { label: 'Tiếng Việt', lang: 'vi' } } : {}),
 			},
 		}),
 		// SPEC §6: the six allowed components are available in every .mdx without import lines.

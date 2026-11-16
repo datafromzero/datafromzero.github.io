@@ -9,6 +9,12 @@ export const AUTHOR_NAME = 'datafromzero';
 /** GitHub repository that holds the content (edit and issue links). */
 export const GITHUB_REPO = 'datafromzero/datafromzero.github.io';
 export const GITHUB_BRANCH = 'main';
+/**
+ * Vietnamese under /vi/ (SPEC §8, D3). Paused while the English site is finished (D30): no `vi` locale is
+ * built, the old /vi/ pages redirect to English (src/redirects.ts) and any page under docs/vi/ fails the
+ * build. The translation source src/content/i18n/vi.json is kept; src/i18n/home/vi.ts is in git history.
+ */
+export const VI_ENABLED = false;
 /** Curriculum version (SPEC §9); package.json `version` until releases are tagged. */
 export const CURRICULUM_VERSION: string = pkg.version;
 /** Year of first publication, used for citations until the first release date exists (SPEC §9). */

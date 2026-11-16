@@ -9,18 +9,17 @@ export const en: HomeStrings = {
 	nav: {
 		label: 'Primary',
 		roadmap: 'Roadmap',
-		reference: 'Reference',
+		example: 'Example',
 		github: 'GitHub',
 		skip: 'Skip to content',
 	},
 	hero: {
 		logoLabel: 'Logo: a disc of light with a database-shaped void at its center',
-		replay: 'Replay the logo animation',
-		caption: 'Excel → SQL → Python → DA · DE · DS',
-		headline: 'From A1\nto *AI.*',
+		replay: 'Replay the intro animation',
+		lockup: 'From A1 to AI.',
 		sub: 'A free, zero-to-job-ready roadmap for people who only know Office. Excel → SQL → Python → the branch you choose.',
 		ctaStart: 'Start at zero',
-		ctaReference: 'Browse reference',
+		ctaExample: 'See an example',
 		scroll: 'Scroll',
 	},
 	core: {
@@ -57,28 +56,37 @@ export const en: HomeStrings = {
 			{ abbr: 'ML', name: 'ML / AI\nEngineer' },
 		],
 	},
-	modes: {
-		label: '03 — Two ways in',
-		heading: 'Learn in order.\n*Look it up later.*',
-		toggle: 'Enlarge',
-		study: {
-			tag: 'Study',
-			lesson: 'Lesson 2.3 · JOIN',
-			question: 'Two tables.\nOne question.',
-			title: 'Open & quiet.',
-			text: 'One idea per screen, in sequence. Built for a phone on the bus.',
-		},
-		reference: {
-			tag: 'Reference',
+	tools: {
+		label: '03 — One idea, three tools',
+		heading: 'Same question. *Three tools.*',
+		questionLabel: 'The question',
+		question: 'Which store sold the most in March?',
+		tabsLabel: 'Tool',
+		solutions: [
+			{
+				tool: 'Excel',
+				code: '{=SUMIFS}(Orders[Amount],\n        Orders[Store], A2,\n        Orders[Month], "2026-03")\n\n{Fill down} for each store, then sort.',
+			},
+			{
+				tool: 'SQL',
+				code: "{SELECT} store, {SUM}(amount) {AS} sales\n{FROM} orders\n{WHERE} month = '2026-03'\n{GROUP BY} store\n{ORDER BY} sales {DESC};",
+			},
+			{
+				tool: 'Python',
+				code: '(orders\n  .{query}("month == \'2026-03\'")\n  .{groupby}("store")["amount"].{sum}()\n  .{sort_values}(ascending={False}))',
+			},
+		],
+		result: {
+			caption: 'Same answer, every time',
+			columns: ['Store', 'March sales'],
 			rows: [
-				{ name: 'Statistics', value: '§ 4' },
-				{ name: 'Standard deviation', value: '4.2', highlight: true },
-				{ name: 'Variance', value: '4.1' },
+				['Riverside', '$1,284.50'],
+				['Old Quarter', '$1,102.75'],
+				['Harbor', '$968.20'],
 			],
-			formula: 'σ = √( Σ(x − μ)² / N )',
-			title: 'Book-like.',
-			text: 'Indexed, searchable, formulas typeset. Find it, read it, get back to work.',
+			note: 'Example numbers.',
 		},
+		control: { pause: 'Pause', play: 'Play', what: 'tool cycle' },
 	},
 	marquee: [
 		{ text: 'Free' },
@@ -88,7 +96,7 @@ export const en: HomeStrings = {
 		{ text: 'Zero to job-ready' },
 		{ text: 'Free', outline: true },
 	],
-	marqueeControl: { pause: 'Pause', play: 'Play' },
+	marqueeControl: { pause: 'Pause', play: 'Play', what: 'marquee' },
 	begin: { label: '04 — Begin', heading: 'Start\n*at zero.*', cta: 'Open step 01' },
 	footer: {
 		content: 'Content CC BY 4.0',

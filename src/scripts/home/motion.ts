@@ -27,8 +27,8 @@ interface Job {
 	loaded?: boolean;
 }
 
-/** After the CSS intro (about 3 s) the main thread is idle: start building the sections that are still far away. */
-const WARM_AT_MS = 3300;
+/** After the CSS intro (about 3.3 s: the wordmark's reel ends last) the main thread is idle: start building the sections that are still far away. */
+const WARM_AT_MS = 3400;
 /** Do not start background setup while the reader scrolled this recently. */
 const SCROLL_QUIET_MS = 160;
 /** Sections that are cheap enough to share a frame slot (headings, rules). */
@@ -60,7 +60,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 	add('h2[data-split=""]:not(.end h2)', 'headings');
 	add('.core', 'core');
 	add('.branch', 'branches');
-	add('#modes', 'modes');
+	add('#tools', 'tools');
 	add('.marquee', 'marquee');
 	add('.end', 'begin');
 	add('.rule', 'rules');
