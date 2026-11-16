@@ -17,6 +17,8 @@ All notable changes to datafromzero are recorded here. The format follows
   `starlight-links-validator`, cspell, markdownlint, Lighthouse CI, fixture tests, `npm run check`;
   workflows `ci.yml`, `link-check.yml` and `review-reminder.yml`; Dependabot (monthly, grouped).
 - Lesson footer: **Unlocks next** lists the lessons that require this one (SPEC §5.1).
+- Navigation (SPEC D26, D27): cross-document View Transitions (CSS root fade, off for reduced motion)
+  and Speculation Rules prefetch (same-origin, moderate, no prerender) replacing Astro's prefetch script.
 
 ### Changed
 - SPEC §5.1: `order` within a stage must follow the prerequisites; the footer shows "Unlocks next".
