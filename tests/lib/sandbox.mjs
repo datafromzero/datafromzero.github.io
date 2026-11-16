@@ -11,6 +11,8 @@ import { spawnSync } from 'node:child_process';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const FIXTURES = join(REPO, 'tests', 'fixtures');
+// Lesson stage folders (STAGES in src/lib/content-schemas.ts) and the reference folder.
+const CONTENT_DIRS = new Set(['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'analytics-engineer', 'ml-engineer', 'reference']);
 const SKIP = new Set(['node_modules', 'dist', '.astro', '.git', 'tests', '.lighthouseci']);
 
 export function createSandbox() {
@@ -35,7 +37,17 @@ export function useDocs(sandbox, ...fixtureDirs) {
 	const docs = join(sandbox, 'src', 'content', 'docs');
 	rmSync(docs, { recursive: true, force: true });
 	rmSync(join(sandbox, '.astro'), { recursive: true, force: true });
-	cpSync(join(REPO, 'src', 'content', 'docs'), docs, { recursive: true });
+	// The site's project pages come along; its lessons and reference pages do not, so fixture ids never collide
+	// with real ones and counts stay those of the fixtures.
+	const src = join(REPO, 'src', 'content', 'docs');
+	cpSync(src, docs, {
+		recursive: true,
+		filter: (path) => {
+			const segs = path.slice(src.length + 1).split('/');
+			const first = segs[0] === 'vi' ? segs[1] : segs[0];
+			return !(segs.length > (segs[0] === 'vi' ? 2 : 1) && CONTENT_DIRS.has(first));
+		},
+	});
 	for (const f of fixtureDirs) cpSync(join(f, 'docs'), docs, { recursive: true });
 	return docs;
 }
