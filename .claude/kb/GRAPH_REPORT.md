@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 694 nodes, 521 edges, 88 communities (378 isolated nodes).
+- 694 nodes, 522 edges, 88 communities (378 isolated nodes).
 - Nodes: agent 7, build plan 9, component 30, config 10, content 168, content-type 5, decision 30, dependency 16, design-section 11, doc 14, i18n 6, layout 1, module 13, npm-script 18, page 1, research-section 164, rule 10, script 28, skill 1, spec-section 25, starlight-component 5, style 5, symbol 111, template 1, token 5.
-- Edges: defines 111, imports 34, mentions 314, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- Edges: defines 111, imports 34, mentions 315, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -19,7 +19,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 5 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:359 |
 | 6 | `S6` Authoring components | spec-section | 17 | SPEC.md:242 |
-| 7 | `D30` Vietnamese paused | decision | 15 | SPEC.md:56 |
+| 7 | `D30` Vietnamese paused | decision | 16 | SPEC.md:56 |
 | 8 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 9 | `D28` Motion scope and budget | decision | 14 | SPEC.md:55 |
 | 10 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:159 |
@@ -156,7 +156,7 @@ term: id — file:line
 - marquee: `src/components/home/Marquee.astro` — src/components/home/Marquee.astro:1
 - tokens: `DG2:design-tokens` — design/README.md:37
 - font: `src/components/starlight/Head.astro` — src/components/starlight/Head.astro:1
-- agents: `agent:content-producer` — .claude/agents/content-producer.md:1
+- agents: `agent:spec-reviewer` — .claude/agents/spec-reviewer.md:1
 - build plan: `R:curriculum/00-README#3-how-each-package-file-maps-to-build-decisions:04-ui-ux-lessons-site-build` — research/curriculum/00-README.md:81
 - out of scope: `R:curriculum/00-README#4-evidence-and-confidence:what-remains-unverified-or-out-of-scope` — research/curriculum/00-README.md:118
 - career: `R:curriculum/01-competitor-map#2-platform-profiles:2-4-codecademy-structure-plus-career-tooling` — research/curriculum/01-competitor-map.md:74
