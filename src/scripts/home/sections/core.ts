@@ -33,7 +33,7 @@ export function init(section: HTMLElement) {
 			.add(() => {
 				cur.textContent = String(n).padStart(2, '0');
 			})
-			.fromTo(cur, { yPercent: 100, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'expo.out' });
+			.fromTo(cur, { yPercent: 100, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'dfz' });
 	};
 
 	// Reads first (one style recalculation), then the writes: no read follows a write.
@@ -50,8 +50,8 @@ export function init(section: HTMLElement) {
 		const tl = initEarly(
 			gsap
 				.timeline({ paused: true })
-				.to(step, { opacity: 1, duration: 0.7, ease: 'expo.out' }, 0)
-				.to(parts[i], { x: 0, duration: 1, ease: 'expo.out', stagger: 0.06 }, 0)
+				.to(step, { opacity: 1, duration: 0.7, ease: 'dfz' }, 0)
+				.to(parts[i], { x: 0, duration: 1, ease: 'dfz', stagger: 0.06 }, 0)
 				.fromTo(node, { scale: 1 }, { scale: 1.25, duration: 0.9, ease: 'back.out(4)' }, 0),
 		);
 

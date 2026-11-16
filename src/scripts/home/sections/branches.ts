@@ -1,8 +1,16 @@
 import { gsap, ScrollTrigger, prime, initEarly, initAgainOnRefresh, willChange } from '../gsap';
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
 import type { Step } from './index';
+import type * as Pulses from '../fx/pulses';
 
 gsap.registerPlugin(DrawSVGPlugin);
+
+let pulses: typeof Pulses | undefined;
+/** The traveling lights are their own chunk (MotionPath), fetched when the section is near. */
+export const load = () =>
+	import('../fx/pulses').then((m) => {
+		pulses = m;
+	});
 
 const tall = matchMedia('(prefers-reduced-motion: no-preference) and (scripting: enabled) and (min-height: 600px)');
 
@@ -61,6 +69,13 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void):
 			// path lengths depend on size: re-measure after a refresh, in a setup slot (see initAgainOnRefresh)
 			onCleanup(initAgainOnRefresh(tl));
 			initEarly(tl);
+		},
+		// the lights get a task of their own: MotionPath measures every path when it is first rendered
+		() => {
+			if (tree && pulses) {
+				// every branch has drawn at (label + draw time + the last stagger)
+				onCleanup(pulses.init({ section, svg: tree, trunk, branches, tl, drawnAt: tl.labels.branches + draw + step * (branches.length - 1) }));
+			}
 		},
 	];
 }

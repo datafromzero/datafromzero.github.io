@@ -17,7 +17,7 @@ export function init(heading: HTMLElement) {
 		yPercent: 115,
 		skewY: 5,
 		duration: 1.2,
-		ease: 'expo.out',
+		ease: 'dfz',
 		stagger: 0.07,
 		scrollTrigger: { trigger: heading, start: 'top 88%', once: true },
 		onComplete: () => {

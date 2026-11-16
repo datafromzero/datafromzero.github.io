@@ -28,6 +28,8 @@ export interface HomeStrings {
 	modes: {
 		label: string;
 		heading: string;
+		/** Accessible name of the button that enlarges a panel (read with the panel's title). */
+		toggle: string;
 		study: {
 			tag: string;
 			lesson: string;

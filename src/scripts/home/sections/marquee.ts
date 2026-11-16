@@ -1,4 +1,12 @@
 import { gsap, ScrollTrigger, willChange } from '../gsap';
+import type * as Drive from '../fx/drive';
+
+let drive: typeof Drive | undefined;
+/** Touch and trackpad input is its own chunk (Observer), shared with the modes section. */
+export const load = () =>
+	import('../fx/drive').then((m) => {
+		drive = m;
+	});
 
 /** One lap is 30 s: the track holds two copies of the words, so a lap is 50% of its own width. */
 const PERCENT_PER_SECOND = 50 / 30;
@@ -11,6 +19,9 @@ const PERCENT_PER_SECOND = 50 / 30;
  * per frame, one `transform` write, no tween created per scroll event. The speed and the lean are
  * exponentially smoothed toward targets taken from ScrollTrigger's velocity, so they are frame-rate
  * independent (the same feel at 60 and 120 Hz).
+ *
+ * With Observer (fx/drive.ts) the line can also be flicked sideways with a finger, mouse or trackpad: it
+ * follows the pointer, then coasts and settles back to its own pace. Vertical scrolling is never touched.
  */
 export function init(marquee: HTMLElement, onCleanup: (fn: () => void) => void) {
 	const inner = marquee.querySelector<HTMLElement>('.marquee-inner');
@@ -22,6 +33,10 @@ export function init(marquee: HTMLElement, onCleanup: (fn: () => void) => void) 
 	let hovered = false;
 	let focused = false;
 	let running = false; // the loop advances (visible and not held)
+	let dragging = false;
+	let width = 1; // track width in px while dragging
+	let fling = 0; // percent of the track per second, after a flick; decays on its own
+	let dragV = 0; // px/s while dragging, for the lean
 
 	let pos = 0; // percent of the track's width, 0 to 50
 	let speed = 1; // signed multiplier of the base speed
@@ -51,18 +66,22 @@ export function init(marquee: HTMLElement, onCleanup: (fn: () => void) => void) 
 		const target = moving ? dir * (1 + Math.min(Math.abs(v) / 250, 7)) : speed < 0 ? -1 : 1;
 		// quick to speed up (about 0.15 s), slow to settle back (about 1.2 s)
 		speed += (target - speed) * (1 - Math.exp(-dt / (Math.abs(target) > Math.abs(speed) ? 0.06 : 0.45)));
-		const lean = moving ? Math.max(-9, Math.min(9, -v / 300)) : 0;
+		const lean = dragging ? Math.max(-9, Math.min(9, -dragV / 300)) : moving ? Math.max(-9, Math.min(9, -v / 300)) : 0;
 		skew += (lean - skew) * (1 - Math.exp(-dt / 0.12));
-		if (running) {
-			pos = (pos + speed * PERCENT_PER_SECOND * dt) % 50;
-			if (pos < 0) pos += 50;
+		if (running) pos += speed * PERCENT_PER_SECOND * dt;
+		if (fling) {
+			pos += fling * dt;
+			fling *= Math.exp(-dt / 0.55);
+			if (Math.abs(fling) < 0.05) fling = 0;
 		}
+		pos %= 50;
+		if (pos < 0) pos += 50;
 		const next = `translate3d(${(-pos).toFixed(3)}%,0,0) skewX(${skew.toFixed(2)}deg)`;
 		if (next !== written) inner.style.transform = written = next;
 	};
 
 	const sync = () => {
-		running = visible && !userPaused && !hovered && !focused;
+		running = visible && !userPaused && !hovered && !focused && !dragging;
 		// the layer exists only while the marquee is on screen; the ticker callback likewise
 		gsap.ticker.remove(tick);
 		if (visible) {
@@ -82,6 +101,35 @@ export function init(marquee: HTMLElement, onCleanup: (fn: () => void) => void) 
 		inner.style.transform = '';
 		st.kill();
 	});
+
+	if (drive) {
+		const pct = (px: number) => (px / width) * 100;
+		onCleanup(
+			drive.drag(marquee, {
+				start: () => {
+					width = inner.offsetWidth || 1;
+					dragging = true;
+					fling = 0;
+					sync();
+				},
+				// dragging right pulls the line right: the position (how far it has moved left) goes down
+				move: (dx, vx) => {
+					pos -= pct(dx);
+					dragV = vx;
+				},
+				end: (vx) => {
+					dragging = false;
+					dragV = 0;
+					fling = Math.max(-400, Math.min(400, -pct(vx))); // percent per second, same direction as the flick
+					sync();
+				},
+				wheel: (dx) => {
+					width = inner.offsetWidth || 1;
+					pos += pct(dx) * 0.8;
+				},
+			}),
+		);
+	}
 
 	if (!toggle) return;
 	toggle.hidden = false;

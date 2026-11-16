@@ -60,6 +60,7 @@ export const vi: HomeStrings = {
 	modes: {
 		label: '03 — Hai cách vào học',
 		heading: 'Học theo thứ tự.\n*Tra cứu khi cần.*',
+		toggle: 'Phóng to',
 		study: {
 			tag: 'Học',
 			lesson: 'Bài 2.3 · JOIN',

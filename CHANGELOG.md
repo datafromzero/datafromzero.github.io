@@ -28,6 +28,20 @@ All notable changes to datafromzero are recorded here. The format follows
 - Analytics (SPEC §11): `GA_ID` in `src/site.ts`, empty for now. When set: consent banner, Consent Mode v2 defaults denied,
   GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
 
+- Full GSAP plugin set (SPEC D28), every effect in a deferred chunk fetched when its section nears the viewport or
+  the page is idle; reduced motion never loads GSAP, and lesson, reference and dataset pages ship no new script:
+  - Homepage: one brand ease (CustomEase, the same curve as the CSS `--ease`) across sections; the hero caption decodes
+    once after the intro (ScrambleText; the real text stays available to assistive tech); in 04 the logo's void and
+    layers morph into place (MorphSVG); in 02 small lights travel down the branches once drawn and pause off screen
+    (MotionPath); in 03 each panel has an Enlarge button that animates the layout change (Flip, transforms only; a real
+    button with `aria-pressed`, hidden without script); the marquee can be flicked sideways with a finger, mouse or trackpad and the
+    03 headline trails fast scrolling a few pixels (Observer; vertical scrolling stays native).
+  - `/start/`: the roadmap map draws itself (DrawSVG rails, markers pop, stages and lesson rows arrive); the static SVG and
+    the text list are unchanged without script or with reduced motion.
+  - Project pages: headings below the fold reveal line by line (SplitText), one small shared chunk.
+  - Skipped: ScrollSmoother (it moves scrolling from the compositor to the main thread and breaks the CSS sticky stages)
+    and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
+
 ### Changed
 - Faster first paint on docs and project pages: font files are no longer inlined as base64 into the
   render-blocking stylesheet (150 KB to 80 KB), the regular Latin Geist is preloaded, and the consent
