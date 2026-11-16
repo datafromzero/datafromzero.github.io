@@ -11,7 +11,9 @@ author's wording; never invent teaching content, sources or facts.
   Read those sections only.
 - Frontmatter values you cannot derive from the text (e.g. objectives, sources, duration) get a
   clearly marked `TODO(owner)` value and are listed in your report. Do not guess.
-- Keep `.md` unless a §6 component is needed. No raw HTML scripts.
+- Keep `.md` unless a §6 component is needed. No raw HTML scripts. Components are auto-imported:
+  never add import lines.
+- Escape every literal dollar sign in prose as `\$` (e.g. prices, Excel `$A$1`); otherwise it renders as math.
 - Work in batches (one stage at a time). Verify with `npm run build` after each batch.
 - Do not commit unless the brief says so. Never add AI attribution anywhere.
 

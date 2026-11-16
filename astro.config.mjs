@@ -2,6 +2,8 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
+import mdx from '@astrojs/mdx';
+import AutoImport from 'astro-auto-import';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
@@ -72,5 +74,17 @@ export default defineConfig({
 				vi: { label: 'Tiếng Việt', lang: 'vi' },
 			},
 		}),
+		// SPEC §6: the six allowed components are available in every .mdx without import lines.
+		// order matters: Starlight first (its code-block integration must precede MDX), then auto-import,
+		// then MDX, because auto-import only hooks in when MDX is registered after it.
+		AutoImport({
+			imports: [
+				{
+					'./src/components/content/index.ts': ['Exercise', 'Solution', 'OpenInColab', 'OpenInSheets', 'Term'],
+					'@astrojs/starlight/components': ['Aside'],
+				},
+			],
+		}),
+		mdx(),
 	],
 });

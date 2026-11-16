@@ -45,6 +45,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D18 | Draft lessons | **Never deployed** | `status: draft` lessons appear only in local dev. Published or deprecated lessons may not depend on, or be replaced by, a draft (§5.1). |
 | D19 | Dataset page frontmatter | **Deferred** until the first dataset | The build rejects pages under `datasets/` (other than the index) until §5.4 defines their fields. |
 | D20 | Citation access date | **Reader adds it** | Pages are static, so "Cite this lesson" cannot know when it was read; a note asks the reader to add their access date (§9). |
+| D21 | Using components in content | **Auto-imported, enforced** | `.mdx` files use the §6 components without import lines; the build rejects imports, other components and `<script>` in content (§6). |
 
 ---
 
@@ -242,6 +243,12 @@ The only components content may use. Each must degrade to readable static HTML w
 
 Rules:
 - No other components or raw `<script>` in content. New components are added here first (MINOR change).
+- Components are available in every `.mdx` file **without import lines** (D21). The build fails, naming the
+  file and line, on any `import`/`export` in content, any component not in this table, any `<script>`
+  (in `.md` or `.mdx`), a `Solution` outside an `Exercise`, or math inside a heading.
+- `Term` shows the definition as a native hint popover (hover/focus, dismissed with Esc); without
+  support it is a plain link to the glossary page.
+- A literal dollar sign in prose must be written `\$`; otherwise `$…$` is read as math.
 - Exercise ids are permanent (`{lesson-id}-{n}`) so teachers can reference "Exercise sql-joins-2".
 
 ### 6.4 Future in-browser code (not now)
@@ -363,11 +370,16 @@ datafromzero.github.io/
 │  │  │  ├─ careers/ stories/ datasets/
 │  │  │  └─ vi/               # Vietnamese mirror (same structure)
 │  │  └─ i18n/vi.json
-│  ├─ components/             # only the components in §6 + layout pieces
+│  ├─ components/
+│  │  ├─ content/             # the §6 authoring components (auto-imported in .mdx)
+│  │  ├─ lesson/              # lesson header and footer
+│  │  └─ starlight/           # Starlight component overrides
+│  ├─ lib/                    # schemas, validation, content rules (§5, §6)
 │  ├─ pages/index.astro       # custom homepage (GSAP)
-│  ├─ styles/                 # tokens.css, print.css
+│  ├─ styles/                 # tokens.css, print.css, math.css
+│  ├─ site.ts                 # site name, author, repository, URL
 │  ├─ redirects.ts            # §3.3
-│  └─ content.config.ts       # schemas (§5)
+│  └─ content.config.ts       # registers the collections (§5)
 ├─ public/                    # favicon.svg, logo files, og-image
 ├─ datasets/                  # §7
 ├─ notebooks/                 # §7
