@@ -60,6 +60,7 @@ export const en: HomeStrings = {
 	modes: {
 		label: '03 — Two ways in',
 		heading: 'Learn in order.\n*Look it up later.*',
+		toggle: 'Enlarge',
 		study: {
 			tag: 'Study',
 			lesson: 'Lesson 2.3 · JOIN',

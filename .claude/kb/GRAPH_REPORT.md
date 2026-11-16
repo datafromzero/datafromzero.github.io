@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 501 nodes, 449 edges, 83 communities (214 isolated nodes).
-- Nodes: agent 7, build plan 9, component 30, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 13, i18n 7, layout 1, module 13, npm-script 18, page 2, research-section 157, rule 10, script 22, skill 1, spec-section 25, starlight-component 5, style 6, symbol 92, template 1, token 5.
-- Edges: defines 92, imports 31, mentions 264, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- 530 nodes, 477 edges, 92 communities (215 isolated nodes).
+- Nodes: agent 7, build plan 9, component 31, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 13, i18n 7, layout 1, module 13, npm-script 18, page 2, research-section 157, rule 10, script 31, skill 1, spec-section 25, starlight-component 5, style 6, symbol 111, template 1, token 5.
+- Edges: defines 111, imports 37, mentions 267, overrides 5, references 24, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -18,50 +18,50 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
 | 4 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:352 |
 | 5 | `S6` Authoring components | spec-section | 17 | SPEC.md:240 |
-| 6 | `design/README.md` | doc | 16 | design/README.md:1 |
+| 6 | `design/README.md` | doc | 17 | design/README.md:1 |
 | 7 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 8 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:157 |
 | 9 | `S5` Content model | spec-section | 11 | SPEC.md:143 |
 | 10 | `CLAUDE.md` | doc | 10 | CLAUDE.md:1 |
 | 11 | `S7` Datasets | spec-section | 10 | SPEC.md:272 |
 | 12 | `S8` Internationalization | spec-section | 10 | SPEC.md:298 |
-| 13 | `src/lib/content-context.ts` | module | 10 | src/lib/content-context.ts:1 |
-| 14 | `src/lib/roadmap.ts` | module | 10 | src/lib/roadmap.ts:1 |
-| 15 | `src/styles/tokens.css` | style | 10 | src/styles/tokens.css:1 |
+| 13 | `pkg:gsap` | dependency | 10 | package.json:39 |
+| 14 | `src/lib/content-context.ts` | module | 10 | src/lib/content-context.ts:1 |
+| 15 | `src/lib/roadmap.ts` | module | 10 | src/lib/roadmap.ts:1 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
 - **C1 site.ts** (16): src/site.ts; S11 Analytics & privacy; D8 Analytics; src/components/project/Consent.astro; R9 Analytics; src/components/project/CookieSettings.astro
-- **C2 tokens.css** (11): src/styles/tokens.css; src/styles/home.css; src/styles/print.css; D9 Theme; DG4 Logo animation (approved — match…; token:--bg --bg
-- **C3 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
-- **C5 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
+- **C2 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C3 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
+- **C4 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
+- **C5 tokens.css** (9): src/styles/tokens.css; src/styles/home.css; src/styles/print.css; D9 Theme; token:--bg --bg; token:--dim --dim
 - **C6 Authoring components** (8): S6 Authoring components; src/components/content/index.ts; D21 Using components in content; M4 Authoring components; R4 Content portability; src/components/content/Exercise.astro
 - **C7 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
 - **C8 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
 - **C9 review-report.ts** (6): scripts/review-report.ts; .github/workflows/review-reminder.yml; npm:review-report npm run review-report; scripts/review-report.ts#Stale; scripts/review-report.ts#isStale; scripts/review-report.ts#staleLessons
-- **C10 Motion scope and budget** (5): D28 Motion scope and budget; agent:frontend-designer frontend-designer; R5 Motion; D22 Homepage motion (superseded by D2…; M9 Motion & speed
-- **C11 spec-reviewer** (5): agent:spec-reviewer spec-reviewer; research/curriculum/01-competitor-map.md; S1 Decision record; S15 Explicitly out of scope (for now); R10 No
-- **C12 README.md** (5): design/README.md; S10 Design & motion; DG2 Visual direction; M2 Design system; src/components/home/Heading.astro
+- **C10 index.ts** (6): src/scripts/home/sections/index.ts; src/scripts/home/sections/index.ts#Loader; src/scripts/home/sections/index.ts#SectionInit; src/scripts/home/sections/index.ts#Step; src/scripts/home/sections/index.ts#loaders; src/scripts/home/sections/index.ts#sections
+- **C11 Motion scope and budget** (5): D28 Motion scope and budget; agent:frontend-designer frontend-designer; R5 Motion; D22 Homepage motion (superseded by D2…; M9 Motion & speed
+- **C12 spec-reviewer** (5): agent:spec-reviewer spec-reviewer; research/curriculum/01-competitor-map.md; S1 Decision record; S15 Explicitly out of scope (for now); R10 No
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C54 to C53, src/lib/content-schemas.ts:97)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D1` (C59 to C30, research/curriculum/02-syllabus-inventory.md:319)
-- `M8` -mentions-> `D24` (C46 to C30, CLAUDE.md:56)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C40, .claude/agents/README.md:39)
-- `DG6` -mentions-> `DG2` (C44 to C12, design/README.md:136)
-- `research/curriculum/00-README.md` -mentions-> `S4` (C35 to C51, research/curriculum/00-README.md:131)
-- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C67 to C2, src/components/starlight/ThemeProvider.astro:2)
-- `M8` -mentions-> `S4` (C46 to C51, CLAUDE.md:60)
-- `S5.2` -mentions-> `D18` (C31 to C27, SPEC.md:217)
-- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C64 to C38, src/components/project/ProjectExtras.astro:3)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C68 to C2, src/components/starlight/ThemeSelect.astro:3)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C16 to C30, .claude/skills/kb/SKILL.md:3)
+- `ctype:career` -specified-by-> `S5.4` (C62 to C61, src/lib/content-schemas.ts:97)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D1` (C67 to C32, research/curriculum/02-syllabus-inventory.md:319)
+- `M8` -mentions-> `D24` (C54 to C32, CLAUDE.md:56)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C28 to C41, .claude/agents/README.md:39)
+- `DG6` -mentions-> `DG2` (C52 to C13, design/README.md:136)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C37 to C59, research/curriculum/00-README.md:131)
+- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C75 to C5, src/components/starlight/ThemeProvider.astro:2)
+- `src/scripts/home/fx/scramble.ts` -mentions-> `DG4` (C84 to C51, src/scripts/home/fx/scramble.ts:9)
+- `M8` -mentions-> `S4` (C54 to C59, CLAUDE.md:60)
+- `S5.2` -mentions-> `D18` (C33 to C29, SPEC.md:217)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C76 to C5, src/components/starlight/ThemeSelect.astro:3)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C18 to C32, .claude/skills/kb/SKILL.md:3)
 
 ## Decisions (SPEC §1)
 

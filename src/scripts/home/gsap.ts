@@ -5,8 +5,12 @@
 // tweens run at the display's refresh rate (120 Hz phones included).
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { CustomEase } from 'gsap/CustomEase';
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, CustomEase);
+// The brand ease: the same curve as `--ease` in home.css (the CSS intro), so a CSS entrance and a GSAP
+// one land identically. Used as 'dfz' by every section.
+CustomEase.create('dfz', '0.16, 1, 0.3, 1');
 // The mobile address bar resizing the viewport must not trigger a refresh while scrolling.
 ScrollTrigger.config({ ignoreMobileResize: true });
 

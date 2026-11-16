@@ -10,7 +10,7 @@
 import { gsap, ScrollTrigger, willChange } from './gsap';
 import { afterNextFrame } from './yield';
 import { nativeScrollTimeline } from './native';
-import type { SectionInit, Step } from './sections';
+import type { Loader, SectionInit, Step } from './sections';
 
 type Ctx = gsap.Context;
 
@@ -20,6 +20,11 @@ const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelect
 interface Job {
 	el: HTMLElement;
 	run: () => void | Step[];
+	/** Section name, to find its effect loader (see sections/index.ts). */
+	name?: string;
+	/** Fetching the section's effect chunks (MorphSVG, MotionPath, Flip, ...), started when the job is near or due. */
+	ready?: Promise<void>;
+	loaded?: boolean;
 }
 
 /** After the CSS intro (about 3 s) the main thread is idle: start building the sections that are still far away. */
@@ -38,8 +43,20 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 	const jobs: Job[] = [];
 	// Resolved lazily: the module is fetched when the first job is due, not before.
 	let mod: Record<string, SectionInit> = {};
+	let loaders: Record<string, Loader> = {};
 	const add = (selector: string, name: string) =>
-		document.querySelectorAll<HTMLElement>(selector).forEach((el) => jobs.push({ el, run: () => mod[name]?.(el, (fn) => cleanups.push(fn)) }));
+		document
+			.querySelectorAll<HTMLElement>(selector)
+			.forEach((el) => jobs.push({ el, name, run: () => mod[name]?.(el, (fn) => cleanups.push(fn)) }));
+	/** Starts fetching the effect chunks a section needs (once). A failed fetch just means that effect is skipped. */
+	const kick = (job: Job) => {
+		if (job.ready) return;
+		const load = job.name ? loaders[job.name] : undefined;
+		job.ready = (load ? load().catch(() => {}) : Promise.resolve()).then(() => {
+			job.loaded = true;
+		});
+	};
+	add('.hero', 'hero');
 	add('h2[data-split=""]:not(.end h2)', 'headings');
 	add('.core', 'core');
 	add('.branch', 'branches');
@@ -66,6 +83,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 				io.unobserve(entry.target);
 				near.add(entry.target as HTMLElement);
 			}
+			if (mod.hero) for (const j of jobs) if (near.has(j.el)) kick(j);
 			void pump();
 		},
 		{ rootMargin: '100% 0px 100% 0px' },
@@ -75,6 +93,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 	const warmTimer = setTimeout(() => {
 		warm = true;
 		void pump();
+		void prefetch();
 	}, Math.max(0, WARM_AT_MS - performance.now()));
 
 	cleanups.push(() => {
@@ -84,27 +103,65 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 		removeEventListener('scroll', onScroll);
 	});
 
+	/**
+	 * Once the intro is over, fetch and evaluate the effect chunks of the sections still far away, one per frame
+	 * slot and only while the reader is not scrolling, so a section reached later finds them ready and no
+	 * chunk is parsed in the middle of a scroll.
+	 */
+	async function prefetch() {
+		try {
+			const m = await modules();
+			mod = m.sections;
+			loaders = m.loaders;
+			for (const job of [...jobs]) {
+				while (!dead && performance.now() - lastScroll < SCROLL_QUIET_MS) await afterNextFrame();
+				if (dead) return;
+				kick(job);
+				await job.ready;
+				await afterNextFrame();
+			}
+		} catch {
+			// Motion is an enhancement: the page is already complete without it.
+		}
+	}
+
+	let modulesPromise: ReturnType<typeof importSections> | undefined;
+	const importSections = () => import('./sections');
+	const modules = () => (modulesPromise ??= importSections());
+
 	async function pump() {
 		if (pumping) return;
 		pumping = true;
 		try {
-			mod = (await import('./sections')).sections;
+			const m = await modules();
+			mod = m.sections;
+			loaders = m.loaders;
 			// the next job: a near one, else (intro over, reader not scrolling) the first in document order
 			const pick = () => {
 				const i = jobs.findIndex((j) => near.has(j.el));
 				return i >= 0 ? i : warm && performance.now() - lastScroll >= SCROLL_QUIET_MS ? 0 : -1;
 			};
+			for (const j of jobs) if (near.has(j.el)) kick(j);
 			while (!dead && jobs.length) {
-				if (pick() < 0) {
+				const next = pick();
+				if (next < 0) {
 					if (!warm) break;
 					await afterNextFrame(); // the reader is scrolling: stay out of the way
 					continue;
+				}
+				// A section that needs effect chunks waits for them here (they were requested as soon as it was near).
+				// Steps of a section (no name) are always ready.
+				const pending = jobs[next];
+				if (pending.name) {
+					kick(pending);
+					await pending.ready;
 				}
 				await afterNextFrame();
 				// A frame slot may hold several light jobs, but never more than a few milliseconds of work.
 				const t0 = performance.now();
 				let i: number;
 				while (!dead && (i = pick()) >= 0 && performance.now() - t0 < SLOT_BUDGET_MS) {
+					if (jobs[i].name && !jobs[i].loaded) break; // its chunks are still on the way: fetch, then come back
 					const [job] = jobs.splice(i, 1);
 					// A section may return later steps (heavy ones are split): each runs in a frame slot of its own,
 					// ahead of the other sections, so a half-built section is completed first.
@@ -125,7 +182,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 						continue;
 					}
 					if (steps?.length) {
-						jobs.unshift(...steps.map((step) => ({ el: job.el, run: step })));
+						jobs.unshift(...steps.map((step) => ({ el: job.el, run: step, loaded: true })));
 						break;
 					}
 				}
