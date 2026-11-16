@@ -10,6 +10,7 @@ import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { redirects } from './src/redirects.ts';
 import { SITE_NAME, SITE_URL } from './src/site.ts';
+import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -18,6 +19,8 @@ export default defineConfig({
 	trailingSlash: 'always',
 	// SPEC §3.3: renamed URLs keep working through redirects.
 	redirects,
+	// SPEC D27: Astro's JS prefetch script is off; Speculation Rules (a JSON block in <head>) replace it.
+	prefetch: false,
 	markdown: {
 		// SPEC §2 / §6: formulas in $…$ and $$…$$, rendered to MathML only (no KaTeX CSS, fonts or JS).
 		// `unified()` keeps the remark/rehype pipeline that these plugins need.
@@ -39,6 +42,7 @@ export default defineConfig({
 			// SPEC §12: broken internal links and anchors fail the build.
 			plugins: [starlightLinksValidator()],
 			favicon: '/favicon.svg',
+			head: [{ tag: 'script', attrs: { type: 'speculationrules' }, content: SPECULATION_RULES }],
 			// Fonts are self-hosted (@fontsource) so no third-party request happens before consent.
 			customCss: [
 				'@fontsource/geist/300.css',
@@ -49,6 +53,7 @@ export default defineConfig({
 				'@fontsource/geist-mono/500.css',
 				'./src/styles/tokens.css',
 				'./src/styles/math.css',
+				'./src/styles/transitions.css',
 				'./src/styles/print.css',
 			],
 			// Code blocks follow the site theme only (never the OS scheme), on gray backgrounds.
