@@ -5,6 +5,7 @@ gsap.registerPlugin(DrawSVGPlugin);
 
 const tall = matchMedia('(prefers-reduced-motion: no-preference) and (scripting: enabled) and (min-height: 600px)');
 
+// DrawSVG end states use 102%: Firefox can measure path length slightly short and leave a gap at 100%.
 /** 02: one scrubbed timeline builds the tree while the sticky stage holds (CSS), or plays in flow on short screens. */
 export function init(section: HTMLElement) {
 	const trunk = section.querySelector<SVGPathElement>('.tree .trunk');
@@ -32,10 +33,10 @@ export function init(section: HTMLElement) {
 
 	const draw = 3;
 	const step = 0.18;
-	tl.to(trunk, { drawSVG: '100%', duration: 1.4, ease: 'power1.inOut' })
+	tl.to(trunk, { drawSVG: '102%', duration: 1.4, ease: 'power1.inOut' })
 		.to(fork, { scale: 1, duration: 0.5, ease: 'back.out(3)' }, '-=0.35')
 		.addLabel('branches', '-=0.1')
-		.to(branches, { drawSVG: '100%', duration: draw, ease: 'power2.inOut', stagger: step }, 'branches');
+		.to(branches, { drawSVG: '102%', duration: draw, ease: 'power2.inOut', stagger: step }, 'branches');
 
 	leaves.forEach((leaf, i) => {
 		const at = `branches+=${draw + step * i - 0.25}`;

@@ -6,12 +6,11 @@ import { yieldToMain } from './yield';
 import { nativeScrollTimeline } from './native';
 
 type Ctx = gsap.Context;
-type SectionModule = { init: (el: HTMLElement, onCleanup: (fn: () => void) => void) => void };
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
-/** Create a section's timelines only when it is within one viewport of the screen. */
-function lazy(ctx: Ctx, selector: string, load: () => Promise<SectionModule>, cleanups: (() => void)[]) {
+/** Create a section's timelines only when it is within one viewport of the screen (one shared, code-split module). */
+function lazy(ctx: Ctx, selector: string, name: string, cleanups: (() => void)[]) {
 	const els = document.querySelectorAll<HTMLElement>(selector);
 	if (!els.length) return;
 	const io = new IntersectionObserver(
@@ -20,10 +19,10 @@ function lazy(ctx: Ctx, selector: string, load: () => Promise<SectionModule>, cl
 				if (!entry.isIntersecting) continue;
 				io.unobserve(entry.target);
 				const el = entry.target as HTMLElement;
-				load()
+				import('./sections')
 					.then(async (m) => {
 						await yieldToMain();
-						ctx.add(() => m.init(el, (fn) => cleanups.push(fn)));
+						ctx.add(() => m.sections[name]?.(el, (fn) => cleanups.push(fn)));
 					})
 					.catch(() => {});
 			}
@@ -78,13 +77,13 @@ export function init() {
 		cleanups.push(() => head.removeEventListener('focusin', onFocus));
 
 		// Section timelines, created on demand and code-split.
-		lazy(ctx, 'h2[data-split=""]:not(.end h2)', () => import('./sections/headings'), cleanups);
-		lazy(ctx, '.core', () => import('./sections/core'), cleanups);
-		lazy(ctx, '.branch', () => import('./sections/branches'), cleanups);
-		lazy(ctx, '#modes', () => import('./sections/modes'), cleanups);
-		lazy(ctx, '.marquee', () => import('./sections/marquee'), cleanups);
-		lazy(ctx, '.end', () => import('./sections/begin'), cleanups);
-		lazy(ctx, '.rule', () => import('./sections/rules'), cleanups);
+		lazy(ctx, 'h2[data-split=""]:not(.end h2)', 'headings', cleanups);
+		lazy(ctx, '.core', 'core', cleanups);
+		lazy(ctx, '.branch', 'branches', cleanups);
+		lazy(ctx, '#modes', 'modes', cleanups);
+		lazy(ctx, '.marquee', 'marquee', cleanups);
+		lazy(ctx, '.end', 'begin', cleanups);
+		lazy(ctx, '.rule', 'rules', cleanups);
 
 		// Fonts change text metrics once: re-measure a single time.
 		document.fonts?.ready.then(() => ScrollTrigger.refresh());
