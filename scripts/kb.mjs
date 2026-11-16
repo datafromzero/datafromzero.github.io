@@ -115,7 +115,7 @@ function buildGraph() {
 	for (const group of ['dependencies', 'devDependencies']) {
 		for (const [n, v] of Object.entries(pkg[group] || {})) {
 			depNames.push(n);
-			addNode(`pkg:${n}`, 'dependency', n, 'package.json', lineOf(pkgLines, `"${n}"`), { version: v, group });
+			addNode(`pkg:${n}`, 'dependency', n, 'package.json', lineOf(pkgLines, `"${n}"`), { group });
 		}
 	}
 	depNames.sort((a, b) => b.length - a.length);
