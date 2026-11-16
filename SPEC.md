@@ -246,8 +246,9 @@ Rules:
 - Components are available in every `.mdx` file **without import lines** (D21). The build fails, naming the
   file and line, on any `import`/`export` in content, any component not in this table, any `<script>`,
   event-handler attribute (`on…=`), `set:html` or `javascript:` URL (in `.md` or `.mdx`), a `Solution` outside an `Exercise`, or math inside a heading.
-- `Term` shows the definition as a native hint popover (hover/focus, dismissed with Esc); without
-  support it is a plain link to the glossary page.
+- `Term` shows the definition as a native popover, with no JS: opened by hover/focus where interest
+  invokers exist (`interestfor`), otherwise by a small "?" button next to the link (`popovertarget`,
+  tap or click). Both dismiss with Esc or an outside click; the link always goes to the glossary page.
 - A literal dollar sign in prose must be written `\$`; otherwise `$…$` is read as math.
 - Exercise ids are permanent (`{lesson-id}-{n}`) so teachers can reference "Exercise sql-joins-2".
 
