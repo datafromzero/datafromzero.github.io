@@ -24,6 +24,10 @@ const uiStrings = [
 	'lesson.reportIssue',
 	'lesson.issueTitle',
 	'lesson.issueBody',
+	'component.exercise',
+	'component.showSolution',
+	'component.openInColab',
+	'component.makeCopy',
 ] as const;
 
 export const collections = {

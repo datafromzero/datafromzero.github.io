@@ -11,6 +11,8 @@ All notable changes to datafromzero are recorded here. The format follows
 - Design system: tokens, Geist fonts, dark default with a light option on docs pages, print styles, logo and favicon.
 - Content model (SPEC §5): schemas and build-time validation for lessons, reference entries,
   glossary terms, careers and stories; lesson header and footer.
+- Authoring components (SPEC §6): `Exercise`, `Solution`, `OpenInColab`, `OpenInSheets` and `Term`,
+  with build errors on misuse; math via `remark-math` and `rehype-katex` (MathML output, no client JavaScript).
 
 ### Changed
 - SPEC §1: decisions D17 (strict content validation), D18 (draft lessons are never deployed),

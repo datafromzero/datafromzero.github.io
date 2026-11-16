@@ -1,6 +1,10 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { unified } from '@astrojs/markdown-remark';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { redirects } from './src/redirects.ts';
 import { SITE_NAME, SITE_URL } from './src/site.ts';
 
@@ -11,6 +15,14 @@ export default defineConfig({
 	trailingSlash: 'always',
 	// SPEC §3.3: renamed URLs keep working through redirects.
 	redirects,
+	markdown: {
+		// SPEC §2 / §6: formulas in $…$ and $$…$$, rendered to MathML only (no KaTeX CSS, fonts or JS).
+		// `unified()` keeps the remark/rehype pipeline that these plugins need.
+		processor: unified({
+			remarkPlugins: [remarkMath, remarkContentRules],
+			rehypePlugins: [[rehypeKatex, { output: 'mathml' }]],
+		}),
+	},
 	integrations: [
 		starlight({
 			title: SITE_NAME,
@@ -31,6 +43,7 @@ export default defineConfig({
 				'@fontsource/geist-mono/400.css',
 				'@fontsource/geist-mono/500.css',
 				'./src/styles/tokens.css',
+				'./src/styles/math.css',
 				'./src/styles/print.css',
 			],
 			// Code blocks follow the site theme only (never the OS scheme), on gray backgrounds.
