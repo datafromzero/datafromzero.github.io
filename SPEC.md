@@ -25,7 +25,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 
 | # | Decision | Choice | Consequence |
 |---|---|---|---|
-| D1 | Source of truth for content | **Single repo** `datafromzero/datafromzero.github.io` | Content, site code, datasets and notebooks live together. Content is **copied** from `johnha912/data-odyssey` (no history carried over) — see §14. |
+| D1 | Source of truth for content | **Single repo** `datafromzero/datafromzero.github.io` | Content, site code, datasets and notebooks live together. Content is **written from scratch** (D24); `johnha912/data-odyssey` is not migrated. |
 | D2 | Domain | **datafromzero.github.io** now; custom domain may be added later | GitHub Pages redirects github.io → custom domain automatically. Never use absolute self-links in content (§3.4). |
 | D3 | Languages | **English at root, Vietnamese under `/vi/`** | `/sql/joins/` and `/vi/sql/joins/`. English URLs never gain a prefix. |
 | D4 | Running code | **Links out** to Google Colab (Python/SQL) and Google Sheets templates (Excel stage) | No in-browser runtime now. Content is authored so one can be added later without edits (§6.4). |
@@ -48,6 +48,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D21 | Using components in content | **Auto-imported, enforced** | `.mdx` files use the §6 components without import lines; the build rejects imports, other components and `<script>` in content (§6). |
 | D22 | Homepage motion | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
 | D23 | Scroll-linked effects | **CSS scroll-driven animations first**, GSAP fallback | Pure scroll-linked effects (progress bar, rail fill) run on the compositor with zero JS where `animation-timeline` is supported; GSAP scrub only as fallback. Triggered choreography stays GSAP. |
+| D24 | Content source | **Written from scratch**, outline first, English first | A researched curriculum map is approved by the owner, then lessons are created as drafts; the owner writes the text and the team adds frontmatter, exercises, notebooks, datasets, links and checks. Vietnamese follows in later PRs (§14). |
 
 ---
 
@@ -396,13 +397,17 @@ datafromzero.github.io/
 
 ---
 
-## 14. Migration from `johnha912/data-odyssey`
+## 14. Content production (replaces migration, D24)
 
-Decision (2026-11-15): build in the existing `datafromzero/datafromzero.github.io` repo and **copy** the content.
-1. Copy the Markdown from `johnha912/data-odyssey` into `src/content/docs/` following §3, adding frontmatter (§5).
-2. Record the source commit hash of `data-odyssey` in the commit message and in `CHANGELOG.md`.
-3. Replace `data-odyssey`'s README with a short notice pointing to https://datafromzero.github.io, then archive that repo.
-4. Tag the first public release `v1.0.0`, enable Zenodo, publish `CITATION.cff`.
+Content is written from scratch; `johnha912/data-odyssey` is not migrated.
+1. **Curriculum map.** Research proposes every lesson per stage (id, slug, title, order, level, duration,
+   objectives, prerequisites, key sources). The owner approves the map once; slugs then become permanent (§3).
+2. **Stubs.** Approved lessons are created as `status: draft` files (never deployed, D18). The build validates
+   ids, prerequisites and cycles from day one.
+3. **Writing.** The owner writes the lesson text. The team adds or completes frontmatter, exercises and
+   solutions, notebooks, Google Sheets templates, datasets (§7), `Term` links and sources, and keeps the build green.
+4. **Publishing.** The owner reviews and sets `status: published`. Vietnamese translations follow in later PRs (§8).
+5. **Release.** Tag `v1.0.0` once the four core stages are published; enable Zenodo; publish `CITATION.cff` (§9).
 
 ## 15. Explicitly out of scope (for now)
 
