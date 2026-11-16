@@ -11,7 +11,7 @@ This README has no `name`, so it is not loaded as an agent.
 | `spec-reviewer` | Opus · high · read-only | Reviews each finished change against SPEC CONTRACT + CLAUDE.md rules | every PR |
 | `site-builder` | Sonnet · medium | Config, schemas, components, CI, quality gates, project pages | 1, 3, 4, 6, 7 |
 | `frontend-designer` | Sonnet · high | Tokens, theme, homepage port with GSAP, a11y, Lighthouse | 2, 5 |
-| `content-migrator` | Sonnet · medium | Migrate lessons from data-odyssey, frontmatter, links | 8 |
+| `content-producer` | Sonnet · high | Lesson stubs, frontmatter, exercises, notebooks, sheets, Term links around the owner's text | 8 |
 | `vi-translator` | Sonnet · high | Vietnamese mirror under `/vi/` and UI strings | after 8 |
 | `qa-runner` | Haiku · low · read-only | Build + checks, reports failures only | every step |
 | `maintainer` | Haiku · medium | Dependency bumps, typos, stale-review lists, triage | ongoing |

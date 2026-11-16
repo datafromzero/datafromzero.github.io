@@ -31,3 +31,5 @@ All notable changes to datafromzero are recorded here. The format follows
 - SPEC §1, §2: decision D22; homepage and story motion may use GSAP `SplitText` and `DrawSVG` besides
   `ScrollTrigger`, with a homepage JavaScript budget of about 90 KB gzipped.
 - SPEC §1: decision D23; pure scroll-linked effects use CSS scroll-driven animations, with GSAP as fallback.
+- SPEC §1, §14: decision D24; content is written from scratch (outline first, English first) instead of
+  migrated from `data-odyssey`; §14 now describes content production.
