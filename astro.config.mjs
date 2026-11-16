@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import mdx from '@astrojs/mdx';
+import starlightLinksValidator from 'starlight-links-validator';
 import AutoImport from 'astro-auto-import';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -35,6 +36,8 @@ export default defineConfig({
 				light: './src/assets/logo/logo-light-bg.svg',
 				alt: '',
 			},
+			// SPEC §12: broken internal links and anchors fail the build.
+			plugins: [starlightLinksValidator()],
 			favicon: '/favicon.svg',
 			// Fonts are self-hosted (@fontsource) so no third-party request happens before consent.
 			customCss: [

@@ -48,7 +48,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    layering for the roadmap map. Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
    (§3.1 `/start/`) in SPEC when they are built.
    Then a small navigation PR: cross-document View Transitions (CSS, ≤150 ms, off for reduced motion) and
-   Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D25/D26.
+   Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D26/D27.
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;
    GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →
@@ -86,7 +86,13 @@ Use the Node version in `.nvmrc` (`nvm use`).
 - `npm run dev` — local dev server
 - `npm run build` — production build to `dist/` (must pass schema + link validation)
 - `npm run preview` — serve the production build locally
-- `npm run check` — all quality gates locally *(added with the quality-gates milestone)*
+- `npm run check` — every blocking gate locally: spelling, markdownlint, knowledge graph, build (schemas + links),
+  prerequisite graph, unit and fixture tests, notebooks (skipped when none or `nbstripout` is missing)
+- Single gates: `npm run spell` · `lint:md` · `check:graph` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
+- `npm run lighthouse` — builds the fixture site (`tests/fixtures/valid`) and runs Lighthouse CI (mobile, perf ≥ 90, a11y ≥ 95);
+  Chrome from `CHROME_PATH`, else `/opt/pw-browsers/chromium` when present
+- `npm run review-report` — lessons whose `reviewed` date is older than 18 months
+- Fixtures live in `tests/fixtures/` (never in `src/content`); invalid cases are one folder per rule with `expect.txt` and `via.txt`
 
 Deploys run from `.github/workflows/deploy.yml` on every push to `main`
 (repo Settings → Pages → Source must be **GitHub Actions**).
