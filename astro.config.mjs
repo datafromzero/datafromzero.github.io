@@ -2,11 +2,11 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { redirects } from './src/redirects.ts';
-import { SITE_NAME } from './src/site.ts';
+import { SITE_NAME, SITE_URL } from './src/site.ts';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://datafromzero.github.io',
+	site: SITE_URL,
 	// SPEC §3.2: every URL ends with a trailing slash.
 	trailingSlash: 'always',
 	// SPEC §3.3: renamed URLs keep working through redirects.
@@ -48,6 +48,9 @@ export default defineConfig({
 			components: {
 				ThemeProvider: './src/components/starlight/ThemeProvider.astro',
 				ThemeSelect: './src/components/starlight/ThemeSelect.astro',
+				// Lesson header and footer (SPEC §5.1); both render nothing on non-lesson pages.
+				PageTitle: './src/components/starlight/PageTitle.astro',
+				Footer: './src/components/starlight/Footer.astro',
 			},
 			// SPEC §8 / D3: English at the root, Vietnamese under /vi/ with the same slugs.
 			defaultLocale: 'root',
