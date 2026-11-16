@@ -16,6 +16,7 @@ export function init(section: HTMLElement) {
 
 	const bands = gsap.utils.toArray<SVGPathElement>('.bands path', mark);
 	const split = SplitText.create(heading, { type: 'words', mask: 'words', wordsClass: 'sw' });
+	if (heading.dataset.label) heading.setAttribute('aria-label', heading.dataset.label);
 	gsap.set(mark.querySelectorAll('.disc, .void'), { svgOrigin: '50 50' });
 
 	gsap

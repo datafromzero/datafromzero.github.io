@@ -40,12 +40,13 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    reviewed, objectives, prerequisites) and footer (sources, cite this lesson, suggest edit, report issue).
 4. **Authoring components** (SPEC §6): `Exercise`, `Solution` (`<details>`), `OpenInColab`, `OpenInSheets`, `Term`.
 5. **Homepage:** port `design/homepage-prototype/index.html` to `src/pages/index.astro` with GSAP from npm;
-   logo animation via `design/logo/logo-animation.js`.
+   logo animation ported to CSS from `design/logo/logo-animation.js` (first paint never waits for GSAP).
 6. **Quality gates** (SPEC §12): links validator, prerequisite-graph check, cspell, markdownlint,
    nbstripout check, Lighthouse CI, Dependabot (monthly, grouped). One build-time graph module
-   (`src/lib/graph.ts`, CLRS ch. 20/22): DFS cycle detection that prints the cycle path, topological-order
+   (`src/lib/graph.ts`, CLRS ch. 20/22, run by `scripts/check-graph.ts` per SPEC §12): DFS cycle detection that prints the cycle path, topological-order
    check against `order`, reverse edges for a "Unlocks next" list in the lesson footer, and longest-path
-   layering for the roadmap map. Zero runtime JS.
+   layering for the roadmap map. Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
+   (§3.1 `/start/`) in SPEC when they are built.
    Then a small navigation PR: cross-document View Transitions (CSS, ≤150 ms, off for reduced motion) and
    Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D24/D25.
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;

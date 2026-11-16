@@ -87,6 +87,7 @@ export const vi: HomeStrings = {
 		{ text: 'Từ số 0 đến đi làm' },
 		{ text: 'Miễn phí', outline: true },
 	],
+	marqueeControl: { pause: 'Dừng', play: 'Chạy' },
 	begin: { label: '04 — Bắt đầu', heading: 'Bắt đầu\n*từ số 0.*', cta: 'Mở bước 01' },
 	footer: {
 		content: 'Nội dung CC BY 4.0',

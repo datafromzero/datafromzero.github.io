@@ -6,7 +6,7 @@ import { yieldToMain } from './yield';
 import { nativeScrollTimeline } from './native';
 
 type Ctx = gsap.Context;
-type SectionModule = { init: (el: HTMLElement) => void };
+type SectionModule = { init: (el: HTMLElement, onCleanup: (fn: () => void) => void) => void };
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
@@ -23,7 +23,7 @@ function lazy(ctx: Ctx, selector: string, load: () => Promise<SectionModule>, cl
 				load()
 					.then(async (m) => {
 						await yieldToMain();
-						ctx.add(() => m.init(el));
+						ctx.add(() => m.init(el, (fn) => cleanups.push(fn)));
 					})
 					.catch(() => {});
 			}
@@ -73,7 +73,9 @@ export function init() {
 			end: 'max',
 			onUpdate: (self) => setHidden(self.direction === 1 && self.scroll() > 240),
 		});
-		head.addEventListener('focusin', () => setHidden(false));
+		const onFocus = () => setHidden(false);
+		head.addEventListener('focusin', onFocus);
+		cleanups.push(() => head.removeEventListener('focusin', onFocus));
 
 		// Section timelines, created on demand and code-split.
 		lazy(ctx, 'h2[data-split=""]:not(.end h2)', () => import('./sections/headings'), cleanups);
@@ -98,7 +100,7 @@ export function init() {
 
 		const gx = gsap.quickTo(dots, 'x', { duration: 1.2, ease: 'power3' });
 		const gy = gsap.quickTo(dots, 'y', { duration: 1.2, ease: 'power3' });
-		// The glow centre eases toward the pointer; only style writes happen per frame.
+		// The glow center eases toward the pointer; only style writes happen per frame.
 		const glow = { x: 0, y: 0 };
 		const apply = () => {
 			dots.style.setProperty('--mx', `${glow.x}px`);

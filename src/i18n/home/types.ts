@@ -44,6 +44,7 @@ export interface HomeStrings {
 		};
 	};
 	marquee: { text: string; outline?: boolean }[];
+	marqueeControl: { pause: string; play: string };
 	begin: { label: string; heading: string; cta: string };
 	footer: { content: string; code: string; github: string; version: string };
 }
