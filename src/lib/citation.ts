@@ -8,7 +8,7 @@ import { readRepoFile } from './repo-files.ts';
 
 interface Cff {
 	title: string;
-	authors: { 'family-names': string; 'given-names': string }[];
+	authors: { name: string }[];
 	version: string;
 	'date-released'?: string | Date;
 	doi?: string;
@@ -39,15 +39,13 @@ export function buildCitation(cff: Cff, packageVersion: string): Citation {
 	const year = released ? released.getUTCFullYear() : FIRST_YEAR;
 	const doi = cff.doi ? String(cff.doi) : null;
 	const link = doi ? `https://doi.org/${doi}` : cff.url;
-	// "Nguyen "John" Ha" -> "Ha, N. "John"": the nickname stays as written.
-	const given = a['given-names'];
-	const initial = given.trim()[0] + '.';
-	const nick = given.match(/"[^"]+"/)?.[0];
-	const apaAuthor = `${a['family-names']}, ${initial}${nick ? ` ${nick}` : ''}`;
-	const apa = `${apaAuthor} (${year}). ${cff.title} (Version ${cff.version}) [Educational website]. ${link}`;
+	// The author is an organization (CFF `name`), cited as a group author in APA.
+	const author = a.name;
+	if (!author) throw new Error('CITATION.cff: authors[0].name is required');
+	const apa = `${author}. (${year}). ${cff.title} (Version ${cff.version}) [Educational website]. ${link}`;
 	const bibtex = [
-		'@misc{ha_datafromzero,',
-		`  author = {${given} ${a['family-names']}},`,
+		'@misc{datafromzero,',
+		`  author = {{${author}}},`,
 		`  title = {${cff.title}},`,
 		`  year = {${year}},`,
 		`  version = {${cff.version}},`,

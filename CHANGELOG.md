@@ -27,6 +27,8 @@ All notable changes to datafromzero are recorded here. The format follows
   GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
 
 ### Changed
+- The author of record is the organization "datafromzero" (citations, copyright, footer); no personal name
+  appears on the site or in the repository documents.
 - SPEC §3.1, §9, §11: wording for the roadmap map, generated citation, single-source changelog and license pages, and `GA_ID`.
 - SPEC §5.1: `order` within a stage must follow the prerequisites; the footer shows "Unlocks next".
 - SPEC §1: decisions D17 (strict content validation), D18 (draft lessons are never deployed),

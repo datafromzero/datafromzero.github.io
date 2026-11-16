@@ -4,7 +4,8 @@ import pkg from '../package.json' with { type: 'json' };
 
 export const SITE_NAME = 'datafromzero';
 export const SITE_URL = 'https://datafromzero.github.io';
-export const AUTHOR_NAME = 'Nguyen "John" Ha';
+/** Author of record for citations and copyright (an organization name, not a person). */
+export const AUTHOR_NAME = 'datafromzero';
 /** GitHub repository that holds the content (edit and issue links). */
 export const GITHUB_REPO = 'datafromzero/datafromzero.github.io';
 export const GITHUB_BRANCH = 'main';

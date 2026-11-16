@@ -17,11 +17,7 @@ data you can reuse.
 - **Versioned.** The curriculum has version numbers and a [changelog](/changelog/), and the whole work can be [cited](/cite/).
 - **Open.** Content is CC BY 4.0, code is MIT, datasets are CC BY 4.0. See the [license](/license/) page.
 
-## Who is behind it
-
-datafromzero is created and maintained by Nguyen "John" Ha.
-
 ## Contact
 
-To report a mistake, ask a question or suggest an improvement, [open an issue](https://github.com/datafromzero/datafromzero.github.io/issues)
-to report a mistake or suggest an improvement.
+To report a mistake, ask a question or suggest an improvement,
+[open an issue](https://github.com/datafromzero/datafromzero.github.io/issues).

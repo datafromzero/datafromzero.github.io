@@ -19,4 +19,4 @@ This repository currently holds the design handoff and the specification. The si
 - Content (lessons, reference, datasets): [CC BY 4.0](LICENSE-CONTENT)
 - Code: [MIT](LICENSE)
 
-© 2026 Nguyen "John" Ha
+© 2026 datafromzero

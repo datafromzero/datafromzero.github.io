@@ -1,6 +1,6 @@
 # datafromzero — Site specification
 
-**Status:** v1.0 (baseline) · **Owner:** Nguyen "John" Ha · **Org:** github.com/datafromzero ·
+**Status:** v1.0 (baseline) · **Owner:** datafromzero · **Org:** github.com/datafromzero ·
 **Site:** https://datafromzero.github.io · **Tagline:** *From A1 to AI*
 
 This document is the long-term contract for the site. It is written to outlive any one build,

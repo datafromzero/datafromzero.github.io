@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 328 nodes, 413 edges, 80 communities (56 isolated nodes).
+- 328 nodes, 414 edges, 80 communities (56 isolated nodes).
 - Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 17, page 2, rule 10, script 21, skill 1, spec-section 25, starlight-component 4, style 6, symbol 87, template 1, token 5.
-- Edges: defines 87, imports 29, mentions 238, overrides 4, references 23, runs 8, specified-by 4, uses-token 15, validated-by 5.
+- Edges: defines 87, imports 29, mentions 239, overrides 4, references 23, runs 8, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,7 +15,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `astro.config.mjs` | config | 35 | astro.config.mjs:1 |
 | 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
-| 3 | `src/site.ts` | module | 17 | src/site.ts:1 |
+| 3 | `src/site.ts` | module | 18 | src/site.ts:1 |
 | 4 | `design/README.md` | doc | 16 | design/README.md:1 |
 | 5 | `S6` Authoring components | spec-section | 15 | SPEC.md:239 |
 | 6 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
