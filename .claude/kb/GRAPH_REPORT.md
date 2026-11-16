@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 325 nodes, 410 edges, 79 communities (56 isolated nodes).
-- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 16, page 2, rule 10, script 20, skill 1, spec-section 25, starlight-component 4, style 6, symbol 86, template 1, token 5.
-- Edges: defines 86, imports 29, mentions 237, overrides 4, references 23, runs 7, specified-by 4, uses-token 15, validated-by 5.
+- 328 nodes, 413 edges, 80 communities (56 isolated nodes).
+- Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 27, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 17, page 2, rule 10, script 21, skill 1, spec-section 25, starlight-component 4, style 6, symbol 87, template 1, token 5.
+- Edges: defines 87, imports 29, mentions 238, overrides 4, references 23, runs 8, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,8 +15,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `astro.config.mjs` | config | 35 | astro.config.mjs:1 |
 | 2 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
-| 3 | `design/README.md` | doc | 16 | design/README.md:1 |
-| 4 | `src/site.ts` | module | 16 | src/site.ts:1 |
+| 3 | `src/site.ts` | module | 17 | src/site.ts:1 |
+| 4 | `design/README.md` | doc | 16 | design/README.md:1 |
 | 5 | `S6` Authoring components | spec-section | 15 | SPEC.md:239 |
 | 6 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 7 | `S12` Quality gates (CI on every PR… | spec-section | 14 | SPEC.md:350 |
@@ -33,7 +33,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 site.ts** (15): src/site.ts; S11 Analytics & privacy; D8 Analytics; src/components/project/Consent.astro; R9 Analytics; src/components/project/CookieSettings.astro
+- **C1 site.ts** (16): src/site.ts; S11 Analytics & privacy; D8 Analytics; src/components/project/Consent.astro; R9 Analytics; src/components/project/CookieSettings.astro
 - **C2 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C3 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
 - **C4 astro.config.mjs** (9): astro.config.mjs; D3 Languages; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C51 to C49, src/lib/content-schemas.ts:97)
+- `ctype:career` -specified-by-> `S5.4` (C52 to C50, src/lib/content-schemas.ts:97)
 - `DG6` -mentions-> `D22` (C43 to C40, design/README.md:131)
 - `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C24 to C35, .claude/agents/README.md:39)
 - `DG6` -mentions-> `DG2` (C43 to C9, design/README.md:136)
-- `S5.2` -mentions-> `D18` (C28 to C27, SPEC.md:216)
-- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C62 to C6, src/components/starlight/ThemeProvider.astro:2)
+- `src/components/starlight/ThemeProvider.astro` -mentions-> `D9` (C63 to C6, src/components/starlight/ThemeProvider.astro:2)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C13 to C15, .claude/skills/kb/SKILL.md:3)
-- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C60 to C34, src/components/project/ProjectExtras.astro:3)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C63 to C6, src/components/starlight/ThemeSelect.astro:3)
+- `S5.2` -mentions-> `D18` (C28 to C25, SPEC.md:216)
+- `src/components/project/ProjectExtras.astro` -mentions-> `S3.1` (C61 to C34, src/components/project/ProjectExtras.astro:3)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `D9` (C64 to C6, src/components/starlight/ThemeSelect.astro:3)
 - `DG5` -mentions-> `DG4` (C13 to C42, design/README.md:111)
-- `S10` -mentions-> `D26` (C9 to C26, SPEC.md:330)
-- `S3.3` -mentions-> `src/redirects.ts` (C47 to C69, SPEC.md:109)
+- `S10` -mentions-> `D26` (C9 to C27, SPEC.md:330)
+- `S3.3` -mentions-> `src/redirects.ts` (C47 to C70, SPEC.md:109)
 
 ## Decisions (SPEC §1)
 
@@ -118,7 +118,7 @@ term: id — file:line
 - analytics: `R9` — CLAUDE.md:29
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:23
-- gsap: `pkg:gsap` — package.json:37
+- gsap: `pkg:gsap` — package.json:38
 - scroll: `DG5` — design/README.md:104
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `src/styles/tokens.css` — src/styles/tokens.css:1
@@ -135,13 +135,13 @@ term: id — file:line
 - colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
 - sheets: `S6` — SPEC.md:239
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:38
+- katex: `pkg:katex` — package.json:39
 - math: `src/styles/math.css` — src/styles/math.css:1
-- mdx: `pkg:@astrojs/mdx` — package.json:31
-- auto-import: `pkg:astro-auto-import` — package.json:36
+- mdx: `pkg:@astrojs/mdx` — package.json:32
+- auto-import: `pkg:astro-auto-import` — package.json:37
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
 - quality gates: `S12` — SPEC.md:350
-- cspell: `pkg:cspell` — package.json:44
+- cspell: `pkg:cspell` — package.json:45
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
 - migration: `S14` — SPEC.md:409
 - license: `R8` — CLAUDE.md:28

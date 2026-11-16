@@ -17,4 +17,9 @@ export const FIRST_YEAR = 2026;
  * no "Cookie settings" link and no added JavaScript anywhere. Set to `G-XXXXXXXXXX` to turn it on.
  */
 export const GA_ID = '';
+/** Event-data retention configured in GA4 (e.g. '14 months'); required before GA_ID is set. */
+export const GA_RETENTION = '';
 export const ANALYTICS_ENABLED = GA_ID !== '';
+if (ANALYTICS_ENABLED && GA_RETENTION === '') {
+	throw new Error('src/site.ts: set GA_RETENTION (the GA4 data retention period) before enabling analytics; /privacy/ must state it.');
+}

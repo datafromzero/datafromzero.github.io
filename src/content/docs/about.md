@@ -19,15 +19,9 @@ data you can reuse.
 
 ## Who is behind it
 
-TODO(owner): a short bio, written in your own words. Keep to what you want readers to know.
-
-## Why this project exists
-
-TODO(owner): your motivation for building datafromzero.
+datafromzero is created and maintained by Nguyen "John" Ha.
 
 ## Contact
 
-TODO(owner): how readers should reach you (email address, social profile, or "use GitHub issues").
-
-You can always [open an issue](https://github.com/datafromzero/datafromzero.github.io/issues)
+To report a mistake, ask a question or suggest an improvement, [open an issue](https://github.com/datafromzero/datafromzero.github.io/issues)
 to report a mistake or suggest an improvement.

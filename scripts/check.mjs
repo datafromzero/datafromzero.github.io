@@ -10,6 +10,7 @@ const steps = [
 	['markdown style (markdownlint)', 'npm', ['run', '--silent', 'lint:md']],
 	['knowledge graph is current', 'npm', ['run', '--silent', 'check:kb']],
 	['build + schema + internal links', 'npm', ['run', '--silent', 'build']],
+	['no owner placeholders on deployed pages', 'npm', ['run', '--silent', 'check:placeholders']],
 	['prerequisite graph', 'npm', ['run', '--silent', 'check:graph']],
 	['unit tests (graph.ts)', 'npm', ['run', '--silent', 'test:unit']],
 	['fixture tests (valid builds, invalid fails)', 'npm', ['run', '--silent', 'test:fixtures']],

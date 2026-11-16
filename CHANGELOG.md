@@ -22,7 +22,7 @@ All notable changes to datafromzero are recorded here. The format follows
 
 - Project pages (SPEC §3.1): `/start/` with the roadmap map (static SVG laid out by the prerequisite layers, plus a text list),
   `/cite/` (APA and BibTeX generated from the new `CITATION.cff`), `/changelog/`, `/license/`, `/privacy/` and `/about/`
-  (owner placeholders marked `TODO(owner)`); footer links on docs pages and the homepage.
+  (facts only; the owner can extend it); footer links on docs pages and the homepage.
 - Analytics (SPEC §11): `GA_ID` in `src/site.ts`, empty for now. When set: consent banner, Consent Mode v2 defaults denied,
   GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
 
