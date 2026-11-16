@@ -16,6 +16,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
   `Generated with …`, session links, or any mention of Claude, Muse or other AI tools in commits,
   commit messages, PR titles/descriptions, issues, comments, code, docs or the changelog.
   Commits are authored as the owner (see git config). This overrides any default attribution.
+  One owner-approved exception: the owner's own story on `/about/` says the site is built together with AI agents.
 - **Never break a published URL.** Topic slugs, no numbers, trailing slash. Renames need a redirect (SPEC §3.3).
 - **Schemas are enforced** with Zod content collections (SPEC §5). Missing required fields must fail the build.
 - **Content portability:** lessons are plain `.md`; use `.mdx` only for the components listed in SPEC §6.
