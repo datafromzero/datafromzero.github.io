@@ -107,7 +107,7 @@ Content is English at the root; Vietnamese lives under `/vi/` (see SPEC §8) —
 
 | Section | Layout | Motion (GSAP) |
 |---|---|---|
-| **Nav** (fixed) | Logo + `datafromzero` wordmark left; Roadmap · Reference · GitHub right (only GitHub on mobile). `mix-blend-mode: difference` | Thin 1 px scroll-progress bar at very top (ScrollTrigger scrub) |
+| **Nav** (fixed) | Logo + `datafromzero` wordmark left; Roadmap · Reference · GitHub right (only GitHub on mobile). `mix-blend-mode: difference` | Thin 1 px scroll-progress bar at very top (CSS scroll-driven, SPEC D23; ScrollTrigger scrub fallback) |
 | **Hero** (100svh) | Faint dot grid background; logo centred with caption `EXCEL → SQL → PYTHON → DA · DE · DS`; headline bottom-left "From spreadsheet / to data career." (2nd line muted); sub-copy + 2 buttons | Dot grid staggers in from centre → logo animation (§4) → headline words rise in from a mask → copy & buttons fade up. On scroll: grid parallax, hero content drifts up and fades. Desktop only: grid follows the mouse slightly |
 | **01 — The core** | "Four steps. No skipped rungs." + vertical track: Excel/Sheets, SQL, Python, Advanced core | A white rail fills top→bottom with scroll (scrub); each step's node lights up and its text goes from 25% → 100% opacity as it is reached |
 | **02 — Then branch** | "One trunk. Five careers." + SVG tree: trunk splits into 5 branches → DA, DE, DS, AE, ML (Data Analyst, Data Engineer, Data Scientist, Analytics Engineer, ML/AI Engineer) | Trunk then branches draw with scroll (scrub), leaf dots pop, labels fade up |
@@ -128,7 +128,7 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
   **Not** on lessons, exercises or reference pages — those stay plain Starlight for speed.
 - **Homepage:** build it as a custom Astro page (its own layout, not the docs layout), port the prototype
   into components, and load GSAP only there (`<script>` inside the page/component so it is bundled per-page).
-- **GSAP:** `npm i gsap` (3.13+; all plugins are free now, but this design needs only `ScrollTrigger`).
+- **GSAP:** `npm i gsap` (3.13+; all plugins are free now). Allowed: `ScrollTrigger`, `SplitText`, `DrawSVG` (SPEC D22).
   Use `gsap.matchMedia()` for reduced-motion and pointer checks, and kill ScrollTriggers on page leave if
   client-side navigation is enabled.
 - **Starlight config:** use `logo/logo-dark-bg.svg` as the site logo (with a light-theme variant
@@ -139,7 +139,7 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
   - **Reference:** book-like, indexed, searchable (Starlight's built-in search), compact.
 - **Math:** DS / Statistics pages need LaTeX — add `remark-math` + `rehype-katex` (and KaTeX CSS).
 - **Fonts:** self-host or use Google Fonts with `display=swap`; preload Geist 400.
-- **Performance budget:** homepage JS (GSAP + ScrollTrigger + page code) ≈ 60–70 KB gzipped; no images
+- **Performance budget:** homepage JS (GSAP + plugins + page code) ≈ 90 KB gzipped max (SPEC D22); no images
   required — everything is SVG/CSS. Content must be fully readable with JS disabled
   (GSAP sets hidden states, CSS never hides content by default — the prototype already works this way).
 

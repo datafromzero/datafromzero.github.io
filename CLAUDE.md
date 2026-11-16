@@ -20,7 +20,8 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Schemas are enforced** with Zod content collections (SPEC §5). Missing required fields must fail the build.
 - **Content portability:** lessons are plain `.md`; use `.mdx` only for the components listed in SPEC §6.
   No other components or raw `<script>` in content.
-- **Motion:** GSAP (`ScrollTrigger` only) on `/` and `/stories/*` only. Respect `prefers-reduced-motion`.
+- **Motion:** GSAP (`ScrollTrigger`, `SplitText`, `DrawSVG` only) on `/` and `/stories/*` only; homepage JS ≈ 90 KB
+  gzipped max (SPEC D22). Respect `prefers-reduced-motion`.
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English. Vietnamese lives under `/vi/` with the same slugs (SPEC §8).
@@ -39,12 +40,20 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    reviewed, objectives, prerequisites) and footer (sources, cite this lesson, suggest edit, report issue).
 4. **Authoring components** (SPEC §6): `Exercise`, `Solution` (`<details>`), `OpenInColab`, `OpenInSheets`, `Term`.
 5. **Homepage:** port `design/homepage-prototype/index.html` to `src/pages/index.astro` with GSAP from npm;
-   logo animation via `design/logo/logo-animation.js`.
+   logo animation ported to CSS from `design/logo/logo-animation.js` (first paint never waits for GSAP).
 6. **Quality gates** (SPEC §12): links validator, prerequisite-graph check, cspell, markdownlint,
-   nbstripout check, Lighthouse CI, Dependabot (monthly, grouped).
+   nbstripout check, Lighthouse CI, Dependabot (monthly, grouped). One build-time graph module
+   (`src/lib/graph.ts`, CLRS ch. 20/22, run by `scripts/check-graph.ts` per SPEC §12): DFS cycle detection that prints the cycle path, topological-order
+   check against `order`, reverse edges for a "Unlocks next" list in the lesson footer, and longest-path
+   layering for the roadmap map. Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
+   (§3.1 `/start/`) in SPEC when they are built.
+   Then a small navigation PR: cross-document View Transitions (CSS, ≤150 ms, off for reduced motion) and
+   Speculation Rules prefetch (moderate eagerness, same-origin, no prerender) — needs SPEC decisions D24/D25.
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;
-   GA4 consent banner.
+   GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
 8. **Content migration** (SPEC §14): copy Markdown from `johnha912/data-odyssey`, add frontmatter, fix links.
+9. **Story: depth-first search** — a `/stories/` page animating DFS discovery/finish times on the real lesson
+   graph (GSAP allowed). Story text by the owner.
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and
