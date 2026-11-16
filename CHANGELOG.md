@@ -27,6 +27,10 @@ All notable changes to datafromzero are recorded here. The format follows
   GA4 loaded only after Accept, "Cookie settings" footer control. Empty: no banner and no added JavaScript.
 
 ### Changed
+- Faster first paint on docs and project pages: font files are no longer inlined as base64 into the
+  render-blocking stylesheet (150 KB to 80 KB), the regular Latin Geist is preloaded, and the consent
+  banner's styles load only when analytics is enabled (`/start/` lab LCP 2.56 s to 1.55 s).
+- The weekly external link check resolves root-relative links locally instead of reporting them as errors.
 - SPEC §1, §2, §10, §12: decision D28 (supersedes D22); any GSAP plugin, each effect loaded on demand, on the
   homepage, stories and project pages; budget measured as JavaScript before first paint. Build plan item 9 is now
   "Motion & speed" (the DFS story was dropped).

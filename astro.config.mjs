@@ -14,6 +14,13 @@ import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
 
 // https://astro.build/config
 export default defineConfig({
+	// Fonts stay separate files: inlined as base64 they bloated the render-blocking stylesheet
+	// (rarely used subsets included) and could not be cached or skipped via unicode-range.
+	vite: {
+		build: {
+			assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
+		},
+	},
 	site: SITE_URL,
 	// SPEC §3.2: every URL ends with a trailing slash.
 	trailingSlash: 'always',
@@ -69,6 +76,7 @@ export default defineConfig({
 			},
 			// SPEC D9: dark by default, dark/light picker only.
 			components: {
+				Head: './src/components/starlight/Head.astro',
 				ThemeProvider: './src/components/starlight/ThemeProvider.astro',
 				ThemeSelect: './src/components/starlight/ThemeSelect.astro',
 				// Lesson header and footer (SPEC §5.1); both render nothing on non-lesson pages.
