@@ -85,6 +85,7 @@ export default defineConfig({
 				},
 			],
 		}),
-		mdx(),
+		// Starlight enables MDX optimize when it registers MDX itself; keep the same output.
+		mdx({ optimize: true }),
 	],
 });

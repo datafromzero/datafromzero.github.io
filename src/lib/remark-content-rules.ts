@@ -7,6 +7,7 @@ interface MdxNode {
 	name?: string | null;
 	children?: MdxNode[];
 	value?: string;
+	attributes?: { type: string; name?: string; value?: unknown }[];
 	position?: { start: { line: number } };
 }
 
@@ -37,6 +38,18 @@ function checkSpec6(node: MdxNode, file: string) {
 				`${where(file, node)}: <${name}> is not an allowed component (SPEC §6). Allowed: ${[...ALLOWED].join(', ')}.`,
 			);
 		}
+		// Script can also arrive through attributes: set:html, event handlers or javascript: URLs.
+		for (const attr of node.attributes ?? []) {
+			if (attr.type !== 'mdxJsxAttribute' || !attr.name) {
+				if (attr.type === 'mdxJsxExpressionAttribute')
+					throw new Error(`${where(file, node)}: spread attributes are not allowed in content (SPEC §6).`);
+				continue;
+			}
+			if (attr.name === 'set:html' || attr.name === 'set:text' || /^on/i.test(attr.name))
+				throw new Error(`${where(file, node)}: the "${attr.name}" attribute is not allowed in content (SPEC §6).`);
+			if (typeof attr.value === 'string' && /^\s*javascript:/i.test(attr.value))
+				throw new Error(`${where(file, node)}: javascript: URLs are not allowed in content (SPEC §6).`);
+		}
 		if (name === null || name === undefined) return; // fragments are harmless
 		if (name.includes('.') || name.includes(':')) {
 			throw new Error(`${where(file, node)}: <${name}> is not an allowed component (SPEC §6).`);
@@ -46,9 +59,14 @@ function checkSpec6(node: MdxNode, file: string) {
 		if (/<\s*script[\s>/]/i.test(node.value)) {
 			throw new Error(`${where(file, node)}: <script> is not allowed in content (SPEC §6).`);
 		}
-		const m = /<\s*([A-Z][A-Za-z0-9]*)[\s>/]/.exec(node.value);
-		if (m && !ALLOWED.has(m[1])) {
-			throw new Error(`${where(file, node)}: <${m[1]}> is not an allowed component (SPEC §6).`);
+		if (/<[^>]*\son[a-z]+\s*=/i.test(node.value)) {
+			throw new Error(`${where(file, node)}: event handler attributes (on…=) are not allowed in content (SPEC §6).`);
+		}
+		if (/(?:href|src|action|formaction)\s*=\s*["']?\s*javascript:/i.test(node.value)) {
+			throw new Error(`${where(file, node)}: javascript: URLs are not allowed in content (SPEC §6).`);
+		}
+		for (const m of node.value.matchAll(/<\s*([A-Z][A-Za-z0-9]*)[\s>/]/g)) {
+			if (!ALLOWED.has(m[1])) throw new Error(`${where(file, node)}: <${m[1]}> is not an allowed component (SPEC §6).`);
 		}
 	}
 }

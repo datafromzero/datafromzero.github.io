@@ -25,6 +25,6 @@ All notable changes to datafromzero are recorded here. The format follows
 - SPEC §8: `translated_from_version` required on every typed Vietnamese page.
 - SPEC §9: "Cite this lesson" takes its year from `reviewed`; no generated access date.
 - SPEC §1, §6: decision D21; components are auto-imported in `.mdx`, and the build rejects imports,
-  other components, `<script>` and math in headings; `Term` uses a native hint popover; literal
+  other components, `<script>`, event handlers, `set:html`, `javascript:` URLs and math in headings; `Term` uses a native hint popover; literal
   dollar signs are written `\$`.
 - SPEC §13: repository layout updated for `src/lib/`, `src/site.ts` and the component folders.

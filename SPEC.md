@@ -244,8 +244,8 @@ The only components content may use. Each must degrade to readable static HTML w
 Rules:
 - No other components or raw `<script>` in content. New components are added here first (MINOR change).
 - Components are available in every `.mdx` file **without import lines** (D21). The build fails, naming the
-  file and line, on any `import`/`export` in content, any component not in this table, any `<script>`
-  (in `.md` or `.mdx`), a `Solution` outside an `Exercise`, or math inside a heading.
+  file and line, on any `import`/`export` in content, any component not in this table, any `<script>`,
+  event-handler attribute (`on…=`), `set:html` or `javascript:` URL (in `.md` or `.mdx`), a `Solution` outside an `Exercise`, or math inside a heading.
 - `Term` shows the definition as a native hint popover (hover/focus, dismissed with Esc); without
   support it is a plain link to the glossary page.
 - A literal dollar sign in prose must be written `\$`; otherwise `$…$` is read as math.
