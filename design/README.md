@@ -114,7 +114,7 @@ Content is English at the root; Vietnamese lives under `/vi/` (see SPEC §8) —
 | **03 — Two ways in** | "Learn in order. Look it up later." Two panels: **Study** (white panel, lesson mock, progress pips) and **Reference** (dark, book-index mock with a formula) | Panels reveal with a bottom-up clip-path wipe; content rises; progress pips grow |
 | **Marquee** | Large alternating solid/outlined words: Free · Open source · CC BY 4.0 · Mobile-first · Zero to job-ready | Infinite horizontal loop; speeds up with scroll velocity, eases back |
 | **04 — Begin** | Small logo, "Start / at zero.", one big button | Logo assembles with scroll (disc → void → layers). Button is magnetic on desktop (pointer: fine only) |
-| **Footer** | Mono: © 2026 Nguyen "John" Ha · Content CC BY 4.0 · Code MIT · version + DOI · Cookie settings · GitHub link | — |
+| **Footer** | Mono: © 2026 datafromzero · Content CC BY 4.0 · Code MIT · version + DOI · Cookie settings · GitHub link | — |
 
 Every section heading uses the same word-by-word mask reveal when it enters the viewport.
 
