@@ -128,7 +128,7 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
   **Not** on lessons, exercises or reference pages — those stay plain Starlight for speed.
 - **Homepage:** build it as a custom Astro page (its own layout, not the docs layout), port the prototype
   into components, and load GSAP only there (`<script>` inside the page/component so it is bundled per-page).
-- **GSAP:** `npm i gsap` (3.13+; all plugins are free now). Allowed: `ScrollTrigger`, `SplitText`, `DrawSVG` (SPEC D22).
+- **GSAP:** `npm i gsap` (3.13+; all plugins are free now). Any plugin, each effect loaded on demand (SPEC D28).
   Use `gsap.matchMedia()` for reduced-motion and pointer checks, and kill ScrollTriggers on page leave if
   client-side navigation is enabled.
 - **Starlight config:** use `logo/logo-dark-bg.svg` as the site logo (with a light-theme variant
@@ -139,7 +139,7 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
   - **Reference:** book-like, indexed, searchable (Starlight's built-in search), compact.
 - **Math:** DS / Statistics pages need LaTeX — add `remark-math` + `rehype-katex` (and KaTeX CSS).
 - **Fonts:** self-host or use Google Fonts with `display=swap`; preload Geist 400.
-- **Performance budget:** homepage JS (GSAP + plugins + page code) ≈ 90 KB gzipped max (SPEC D22); no images
+- **Performance budget:** JS before first paint ≈ 3 KB gzipped, effects loaded on demand (SPEC D28); no images
   required — everything is SVG/CSS. Content must be fully readable with JS disabled
   (GSAP sets hidden states, CSS never hides content by default — the prototype already works this way).
 

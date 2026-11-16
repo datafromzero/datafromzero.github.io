@@ -20,8 +20,9 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Schemas are enforced** with Zod content collections (SPEC §5). Missing required fields must fail the build.
 - **Content portability:** lessons are plain `.md`; use `.mdx` only for the components listed in SPEC §6.
   No other components or raw `<script>` in content.
-- **Motion:** GSAP (`ScrollTrigger`, `SplitText`, `DrawSVG` only) on `/` and `/stories/*` only; homepage JS ≈ 90 KB
-  gzipped max (SPEC D22). Respect `prefers-reduced-motion`.
+- **Motion:** GSAP, any plugin, on `/`, `/stories/*` and project pages only; effects load on demand after first paint
+  (deferred chunks); JS before first paint ≈ 3 KB gzipped; frame budget in SPEC §12 (`npm run perf`) (SPEC D28).
+  Respect `prefers-reduced-motion`.
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English. Vietnamese lives under `/vi/` with the same slugs (SPEC §8).
@@ -55,8 +56,9 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    the owner writes the text; `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
    links and sources → the owner publishes. English first; `vi-translator` follows. Lesson content PRs always
    wait for the owner.
-9. **Story: depth-first search** — a `/stories/` page animating DFS discovery/finish times on the real lesson
-   graph (GSAP allowed). Story text by the owner.
+9. **Motion & speed** (SPEC D28): frame-budget pass (done, `npm run perf`), then the full GSAP plugin set on the
+   homepage, `/start/` (animated roadmap map over the static SVG) and project pages, each effect loaded on demand;
+   budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS.
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and

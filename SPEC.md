@@ -46,12 +46,13 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D19 | Dataset page frontmatter | **Deferred** until the first dataset | The build rejects pages under `datasets/` (other than the index) until §5.4 defines their fields. |
 | D20 | Citation access date | **Reader adds it** | Pages are static, so "Cite this lesson" cannot know when it was read; a note asks the reader to add their access date (§9). |
 | D21 | Using components in content | **Auto-imported, enforced** | `.mdx` files use the §6 components without import lines; the build rejects imports, other components and `<script>` in content (§6). |
-| D22 | Homepage motion | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
+| D22 | Homepage motion (superseded by D28) | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
 | D23 | Scroll-linked effects | **CSS scroll-driven animations first**, GSAP fallback | Pure scroll-linked effects (progress bar, rail fill) run on the compositor with zero JS where `animation-timeline` is supported; GSAP scrub only as fallback. Triggered choreography stays GSAP. |
 | D24 | Content source | **Written from scratch**, outline first, English first | A researched curriculum map is approved by the owner, then lessons are created as drafts; the owner writes the text and the team adds frontmatter, exercises, notebooks, datasets, links and checks. Vietnamese follows in later PRs (§14). |
 | D25 | Prerequisite graph | **Order follows prerequisites; footer shows Unlocks next** | Within a stage, `order` is a topological order of `prerequisites`; cycles and duplicate ids fail the check. Each lesson lists the published lessons it unlocks, computed at build time (§5.1, §12). |
 | D26 | Page transitions | **Cross-document View Transitions, CSS only** | `@view-transition { navigation: auto; }` with a root cross-fade of 120 ms (≤ 150 ms), declared only inside `prefers-reduced-motion: no-preference` so reduced-motion readers get none. No named per-element morphs, no JavaScript, no change to first paint. Chrome/Edge 126+ and Safari 18.2+ animate; Firefox navigates normally. |
 | D27 | Prefetch | **Speculation Rules `prefetch`, moderate eagerness; never prerender** | One JSON `<script type="speculationrules">` (`src/lib/speculation-rules.ts`) in every page head: same-origin links only, excluding `#` links, `target=_blank`, `download`, `rel=external` and file paths. Astro's own prefetch script is off (`prefetch: false`), so every page ships one fewer script. Prerender is forbidden: it would run page code, and later analytics (§11), before the visit. Chromium only; Safari and Firefox navigate normally, so no request is spent on pages that may not be read. |
+| D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand**, on `/`, `/stories/*` and project pages; lessons, reference and datasets stay zero-JS | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. |
 
 ---
 
@@ -65,7 +66,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | Schemas | Astro content collections + Zod | Build fails on invalid frontmatter |
 | Search | Starlight built-in (Pagefind) | Static, no external service |
 | Math | `remark-math` + `rehype-katex` (KaTeX, MathML output for accessibility) | Formulas in `$…$` / `$$…$$` |
-| Motion | GSAP 3.13+ (`ScrollTrigger`, `SplitText`, `DrawSVG` only) | Homepage and `/stories/` only (§10); homepage JS ≈ 90 KB gzipped max (D22) |
+| Motion | GSAP 3.13+ (any plugin, each effect loaded on demand, D28) | Homepage, `/stories/` and project pages (§10); JS before first paint ≈ 3 KB gzipped (D28) |
 | Hosting | GitHub Pages via GitHub Actions | Deploy on push to `main` |
 
 ---
@@ -325,7 +326,8 @@ Notebooks are cleared of outputs before commit (CI check).
 ## 10. Design & motion
 
 - Tokens, typography and logo rules: see `design/README.md` §2–3. Dark is default; docs pages get a light toggle; `@media print` forces black-on-white, hides nav/buttons, prints link URLs.
-- **GSAP is allowed only on `/` and `/stories/*`.** Never on lessons, reference, datasets or project pages.
+- **GSAP is allowed on `/`, `/stories/*` and project pages** (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`,
+  `/privacy/`), any plugin, each effect loaded on demand (D28). Never on lessons, reference or datasets.
 - Every animation respects `prefers-reduced-motion`; all content is visible with JS disabled.
 - Page-to-page navigation uses CSS-only cross-document View Transitions (D26) and Speculation Rules prefetch (D27); neither adds executable JS to lesson pages.
 - Study pages (lessons): wide line-height, max ~70ch, one idea per section.
@@ -361,7 +363,16 @@ Notebooks are cleared of outputs before commit (CI check).
 | Accessibility + performance | Lighthouse CI on `/`, one lesson, one reference page | Yes if a budget is missed |
 
 **Budgets:** Lighthouse mobile ≥ 90 (performance), ≥ 95 (accessibility). Lesson pages ship no
-framework JS beyond Starlight's own. Homepage JS ≈ 90 KB gzip max (D22).
+framework JS beyond Starlight's own. JavaScript before first paint ≈ 3 KB gzipped on motion pages; effects load on demand (D28).
+**Motion performance budget:** every frame of motion fits 8.3 ms of main-thread work (120 Hz). Per-frame
+work is O(1) and writes only `transform` and `opacity`; sizes are measured once and on ScrollTrigger's
+refresh; section setup runs one section per task after a presented frame: sections near the viewport first (also while
+scrolling, in small slots), the rest after the intro while the reader is idle; a section that fails to build is
+reverted and the others continue; `will-change`
+exists only while its animation is active. Measured with `npm run perf` (dev only, noisy, not a CI gate):
+Chromium, CPU throttled 4×, 390×844 and 1280×800, intro, scroll, pointer and a docs page. Targets at 4×:
+no long animation frame above 50 ms after the intro, scroll p95 main-thread frame at or under 16.7 ms
+(a proxy for 8.3 ms on a real phone), docs pages with zero layout, style and paint work while scrolling.
 **Accessibility target:** WCAG 2.2 AA (contrast, keyboard navigation, alt text, MathML).
 
 **Maintenance:** Dependabot monthly, grouped; Node LTS upgraded once a year; Astro/Starlight major upgrades
