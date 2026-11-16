@@ -13,8 +13,13 @@ All notable changes to datafromzero are recorded here. The format follows
   glossary terms, careers and stories; lesson header and footer.
 - Authoring components (SPEC §6): `Exercise`, `Solution`, `OpenInColab`, `OpenInSheets` and `Term`,
   with build errors on misuse; math via `remark-math` and `rehype-katex` (MathML output, no client JavaScript).
+- Quality gates (SPEC §12): prerequisite graph check (`scripts/check-graph.ts`, cycles and `order`),
+  `starlight-links-validator`, cspell, markdownlint, Lighthouse CI, fixture tests, `npm run check`;
+  workflows `ci.yml`, `link-check.yml` and `review-reminder.yml`; Dependabot (monthly, grouped).
+- Lesson footer: **Unlocks next** lists the lessons that require this one (SPEC §5.1).
 
 ### Changed
+- SPEC §5.1: `order` within a stage must follow the prerequisites; the footer shows "Unlocks next".
 - SPEC §1: decisions D17 (strict content validation), D18 (draft lessons are never deployed),
   D19 (dataset page frontmatter deferred) and D20 (readers add the citation access date).
 - SPEC §5: ids are kebab-case and unique across all types; types follow folders; id references

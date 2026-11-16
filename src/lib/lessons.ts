@@ -1,5 +1,6 @@
 import { getCollection } from 'astro:content';
-import { classify, type Lesson } from './content-schemas.ts';
+import { classify, STAGES, type Lesson } from './content-schemas.ts';
+import { unlocks } from './graph.ts';
 
 export interface LessonLink {
 	id: string;
@@ -20,4 +21,16 @@ export async function lessonLinks(ids: string[], locale: string | undefined): Pr
 			matches.find((d) => classify(d.id).locale === null)!;
 		return { id, title: entry.data.title, href: `${prefix}/${classify(entry.id).path}/` };
 	});
+}
+
+/** Lessons that list `id` as a prerequisite ("unlocks next"), drafts excluded, in the reader's locale. */
+export async function unlockedLessons(id: string, locale: string | undefined): Promise<LessonLink[]> {
+	const docs = await getCollection('docs');
+	const nodes = docs
+		.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null)
+		.map((d) => {
+			const l = d.data as Lesson;
+			return { id: l.id, kind: 'lesson' as const, file: d.id, stage: l.stage, order: l.order, status: l.status, prerequisites: l.prerequisites };
+		});
+	return lessonLinks(unlocks(nodes, STAGES).get(id) ?? [], locale);
 }

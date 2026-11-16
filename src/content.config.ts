@@ -16,6 +16,7 @@ const uiStrings = [
 	'lesson.reviewed',
 	'lesson.objectives',
 	'lesson.prerequisites',
+	'lesson.unlocks',
 	'lesson.deprecated',
 	'lesson.sources',
 	'lesson.cite',

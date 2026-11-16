@@ -185,8 +185,11 @@ replaced_by: null             # lesson id, required when status = deprecated
 - A deprecated lesson shows a notice linking to `replaced_by` (§3.3).
 
 Rendered at the top of every lesson: **level · duration · last reviewed**, then **Objectives** and
-**Before this lesson** (prerequisite links). Rendered at the bottom: **Sources**, **Cite this lesson**,
-**Suggest an edit**, **Report an issue**, prev/next.
+**Before this lesson** (prerequisite links). Rendered at the bottom: **Unlocks next** (the lessons that list
+this one in `prerequisites`, drafts excluded, in the reader's language, computed at build time without
+JavaScript; hidden when empty), **Sources**, **Cite this lesson**, **Suggest an edit**, **Report an issue**, prev/next.
+- Inside one stage, `order` must be a topological order of `prerequisites`: a prerequisite in the same stage
+  has a smaller `order`. Prerequisite cycles fail the check (`scripts/check-graph.ts`, §12).
 
 ### 5.2 Reference entry (`src/content/docs/reference/{area}/{slug}.md`)
 
@@ -387,7 +390,8 @@ datafromzero.github.io/
 ├─ public/                    # favicon.svg, logo files, og-image
 ├─ datasets/                  # §7
 ├─ notebooks/                 # §7
-├─ scripts/                   # graph check, dataset builders, migration scripts
+├─ scripts/                   # graph check, review report, dataset builders, migration scripts
+├─ tests/                     # unit tests and fixtures (valid/ and invalid/ cases; never deployed)
 ├─ .github/workflows/         # deploy, ci, link-check, review-reminder
 ├─ design/                   # handoff: design README, logo files, homepage prototype (reference only)
 ├─ CITATION.cff  CHANGELOG.md  CONTRIBUTING.md  SPEC.md (this file)

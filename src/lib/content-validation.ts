@@ -7,6 +7,7 @@
 import type { Loader } from 'astro/loaders';
 import { docsLoader } from '@astrojs/starlight/loaders';
 import { classify, schemaByKind, type Classified } from './content-schemas.ts';
+import { referenceErrors, type GraphNode } from './graph.ts';
 
 type Data = Record<string, unknown>;
 
@@ -55,6 +56,22 @@ interface Entry {
 	filePath?: string;
 }
 
+function toNode(e: Entry, kind: GraphNode['kind'], file: string): GraphNode {
+	const d = e.data;
+	return {
+		id: String(d.id),
+		kind,
+		file,
+		stage: d.stage as string | undefined,
+		order: d.order as number | undefined,
+		status: d.status as string | undefined,
+		prerequisites: d.prerequisites as string[] | undefined,
+		replaced_by: d.replaced_by as string | null | undefined,
+		see_also: d.see_also as string[] | undefined,
+		used_in: d.used_in as string[] | undefined,
+	};
+}
+
 type Issue = { path: PropertyKey[]; message: string };
 
 function validateEntries(entries: Entry[]): string[] {
@@ -94,45 +111,18 @@ function validateEntries(entries: Entry[]): string[] {
 		if (other) errors.push(`  - ${fileOf(e)}: id "${key}" is already used by ${fileOf(other)}; ids must be unique`);
 		else byId.set(key, e);
 	}
-	const lessonIds = new Map<string, Entry>();
-	for (const { e, c } of english) if (c.kind === 'lesson') lessonIds.set(String(e.data.id), e);
-	// see_also may point to reference entries and glossary terms only (SPEC §5.2).
-	const seeAlsoIds = new Set<string>();
-	for (const { e, c } of english) if (c.kind === 'reference' || c.kind === 'glossary') seeAlsoIds.add(String(e.data.id));
+	// Id references, drafts and replacements are shared with scripts/check-graph.ts (graph.ts).
+	errors.push(
+		...referenceErrors(
+			english.flatMap(({ e, c }) =>
+				c.kind === 'lesson' || c.kind === 'reference' || c.kind === 'glossary' ? [toNode(e, c.kind, fileOf(e))] : [],
+			),
+		),
+	);
 
 	for (const { e, c } of typed) {
 		const file = fileOf(e);
 		const d = e.data;
-		const missing = (field: string, ids: unknown, known: Map<string, Entry> | Set<string>, what: string) => {
-			for (const ref of (ids as string[] | undefined) ?? []) {
-				if (!(known instanceof Set ? known.has(ref) : known.has(ref)))
-					errors.push(`  - ${file}: \`${field}\` references "${ref}", which is not an existing ${what} id`);
-			}
-		};
-		if (c.kind === 'lesson') {
-			missing('prerequisites', d.prerequisites, lessonIds, 'lesson');
-			if (d.status !== 'draft') {
-				for (const ref of (d.prerequisites as string[]) ?? [])
-					if (lessonIds.get(ref)?.data.status === 'draft')
-						errors.push(`  - ${file}: lesson "${String(d.id)}" (${String(d.status)}) lists draft lesson "${ref}" in \`prerequisites\`; publish it first`);
-				const r = d.replaced_by as string | null | undefined;
-				if (r && lessonIds.get(r)?.data.status === 'draft')
-					errors.push(`  - ${file}: lesson "${String(d.id)}" (${String(d.status)}) has \`replaced_by\` "${r}", which is a draft lesson`);
-			}
-			if (d.status === 'deprecated') {
-				if (!d.replaced_by) errors.push(`  - ${file}: \`replaced_by\` is required when status is "deprecated"`);
-			}
-			if (d.replaced_by) missing('replaced_by', [d.replaced_by], lessonIds, 'lesson');
-			if (d.replaced_by && d.replaced_by === d.id)
-				errors.push(`  - ${file}: \`replaced_by\` cannot point to the lesson itself`);
-		}
-		if (c.kind === 'reference') {
-			missing('see_also', d.see_also, seeAlsoIds, 'reference or glossary');
-			missing('used_in', d.used_in, lessonIds, 'lesson');
-			for (const ref of (d.used_in as string[] | undefined) ?? [])
-				if (lessonIds.get(ref)?.data.status === 'draft')
-					errors.push(`  - ${file}: \`used_in\` lists draft lesson "${ref}"; drafts are never deployed (SPEC D18)`);
-		}
 		if (c.locale === 'vi') {
 			const twin = english.find((x) => x.c.path === c.path);
 			if (!twin) {

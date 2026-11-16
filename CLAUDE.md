@@ -86,7 +86,13 @@ Use the Node version in `.nvmrc` (`nvm use`).
 - `npm run dev` — local dev server
 - `npm run build` — production build to `dist/` (must pass schema + link validation)
 - `npm run preview` — serve the production build locally
-- `npm run check` — all quality gates locally *(added with the quality-gates milestone)*
+- `npm run check` — every blocking gate locally: spelling, markdownlint, knowledge graph, build (schemas + links),
+  prerequisite graph, unit and fixture tests, notebooks (skipped when none or `nbstripout` is missing)
+- Single gates: `npm run spell` · `lint:md` · `check:graph` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
+- `npm run lighthouse` — builds the fixture site (`tests/fixtures/valid`) and runs Lighthouse CI (mobile, perf ≥ 90, a11y ≥ 95);
+  Chrome from `CHROME_PATH`, else `/opt/pw-browsers/chromium` when present
+- `npm run review-report` — lessons whose `reviewed` date is older than 18 months
+- Fixtures live in `tests/fixtures/` (never in `src/content`); invalid cases are one folder per rule with `expect.txt` and `via.txt`
 
 Deploys run from `.github/workflows/deploy.yml` on every push to `main`
 (repo Settings → Pages → Source must be **GitHub Actions**).
