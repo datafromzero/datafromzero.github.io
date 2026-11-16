@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 336 nodes, 429 edges, 80 communities (55 isolated nodes).
+- 336 nodes, 430 edges, 80 communities (55 isolated nodes).
 - Nodes: agent 7, build plan 9, component 29, config 10, content 7, content-type 5, decision 28, dependency 16, design-section 11, doc 7, i18n 7, layout 1, module 13, npm-script 18, page 2, rule 10, script 22, skill 1, spec-section 25, starlight-component 4, style 6, symbol 92, template 1, token 5.
-- Edges: defines 92, imports 29, mentions 248, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
+- Edges: defines 92, imports 29, mentions 249, overrides 4, references 23, runs 9, specified-by 4, uses-token 15, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -144,7 +144,7 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:45
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
-- migration: `S14` — SPEC.md:418
+- migration: `S14` — SPEC.md:420
 - license: `R8` — CLAUDE.md:29
 - changelog: `S9` — SPEC.md:310
 - zenodo: `S1` — SPEC.md:24
@@ -154,9 +154,9 @@ term: id — file:line
 - marquee: `src/components/home/Marquee.astro` — src/components/home/Marquee.astro:1
 - tokens: `DG2:design-tokens` — design/README.md:37
 - font: `src/styles/fonts-vi.css` — src/styles/fonts-vi.css:1
-- agents: `agent:content-producer` — .claude/agents/content-producer.md:1
+- agents: `agent:spec-reviewer` — .claude/agents/spec-reviewer.md:1
 - build plan: `npm:build` — package.json:13
-- out of scope: `S15` — SPEC.md:430
+- out of scope: `S15` — SPEC.md:432
 - career: `ctype:career` — src/lib/content-schemas.ts:97
 - story: `ctype:story` — src/lib/content-schemas.ts:97
 - stage: `src/lib/content-schemas.ts#STAGES` — src/lib/content-schemas.ts:8

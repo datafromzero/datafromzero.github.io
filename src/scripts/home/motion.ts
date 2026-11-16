@@ -108,7 +108,22 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 					const [job] = jobs.splice(i, 1);
 					// A section may return later steps (heavy ones are split): each runs in a frame slot of its own,
 					// ahead of the other sections, so a half-built section is completed first.
-					const steps = ctx.add(job.run) as void | Step[];
+					let steps: void | Step[];
+					try {
+						steps = ctx.add(job.run) as void | Step[];
+					} catch {
+						// One broken section must not hide content or stop the others: drop its remaining steps,
+						// undo what it already set up, and go on with the next section.
+						for (let k = jobs.length - 1; k >= 0; k--) if (jobs[k].el === job.el) jobs.splice(k, 1);
+						for (const st of ScrollTrigger.getAll()) {
+							const t = st.trigger;
+							if (t instanceof Element && job.el.contains(t)) st.kill(true);
+						}
+						gsap.set([job.el, ...job.el.querySelectorAll('*')], {
+							clearProps: 'opacity,visibility,transform,clipPath,strokeDasharray,strokeDashoffset,willChange',
+						});
+						continue;
+					}
 					if (steps?.length) {
 						jobs.unshift(...steps.map((step) => ({ el: job.el, run: step })));
 						break;

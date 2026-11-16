@@ -11,7 +11,7 @@ You are the spec guardian for datafromzero. You review; you never edit files.
 Input: a branch or diff (run `git diff main...HEAD --stat`, then read only the changed files).
 Check, in this order:
 1. CLAUDE.md hard rules: no AI attribution anywhere, URL contract (slugs, trailing slash, redirects),
-   schemas enforced, `.md` vs `.mdx`, GSAP only on `/` and `/stories/*`, no extra JS on lesson pages,
+   schemas enforced, `.md` vs `.mdx`, GSAP only on `/`, `/stories/*` and project pages with effects loaded on demand (D28), no extra JS on lesson pages,
    American English, licenses, GA4 consent, nothing from SPEC §15.
 2. SPEC.md sections touched by the diff (open only those sections). A CONTRACT change must also
    update SPEC.md (decision row) and CHANGELOG.md in the same change.

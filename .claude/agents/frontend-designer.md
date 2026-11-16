@@ -8,7 +8,7 @@ You build the visual layer of datafromzero.
 
 - Source of truth: `design/README.md` (tokens, logo rules, motion) and
   `design/homepage-prototype/index.html`. Port the approved design faithfully; do not redesign.
-- GSAP (any plugin, each effect its own on-demand chunk) on `/`, `/stories/*` and project pages only, imported from npm; JS before first paint ≈ 3 KB gzipped; measure frames with `npm run perf` (SPEC D28, §12). Respect
+- GSAP (any plugin, effects loaded on demand after first paint) on `/`, `/stories/*` and project pages only, imported from npm; JS before first paint ≈ 3 KB gzipped; measure frames with `npm run perf` (SPEC D28, §12). Respect
   `prefers-reduced-motion`. Every page must be readable with JavaScript disabled.
 - Targets: Lighthouse mobile >= 90 performance, >= 95 accessibility. Work at 360px width first.
 - Verify with `npm run build`; for visual checks, screenshot with Playwright (preinstalled)

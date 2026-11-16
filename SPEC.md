@@ -52,7 +52,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D25 | Prerequisite graph | **Order follows prerequisites; footer shows Unlocks next** | Within a stage, `order` is a topological order of `prerequisites`; cycles and duplicate ids fail the check. Each lesson lists the published lessons it unlocks, computed at build time (§5.1, §12). |
 | D26 | Page transitions | **Cross-document View Transitions, CSS only** | `@view-transition { navigation: auto; }` with a root cross-fade of 120 ms (≤ 150 ms), declared only inside `prefers-reduced-motion: no-preference` so reduced-motion readers get none. No named per-element morphs, no JavaScript, no change to first paint. Chrome/Edge 126+ and Safari 18.2+ animate; Firefox navigates normally. |
 | D27 | Prefetch | **Speculation Rules `prefetch`, moderate eagerness; never prerender** | One JSON `<script type="speculationrules">` (`src/lib/speculation-rules.ts`) in every page head: same-origin links only, excluding `#` links, `target=_blank`, `download`, `rel=external` and file paths. Astro's own prefetch script is off (`prefetch: false`), so every page ships one fewer script. Prerender is forbidden: it would run page code, and later analytics (§11), before the visit. Chromium only; Safari and Firefox navigate normally, so no request is spent on pages that may not be read. |
-| D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand**, on `/`, `/stories/*` and project pages; lessons, reference and datasets stay zero-JS | Each effect is its own chunk, loaded when its section nears the viewport; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. |
+| D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand**, on `/`, `/stories/*` and project pages; lessons, reference and datasets stay zero-JS | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. |
 
 ---
 
@@ -366,7 +366,9 @@ Notebooks are cleared of outputs before commit (CI check).
 framework JS beyond Starlight's own. JavaScript before first paint ≈ 3 KB gzipped on motion pages; effects load on demand (D28).
 **Motion performance budget:** every frame of motion fits 8.3 ms of main-thread work (120 Hz). Per-frame
 work is O(1) and writes only `transform` and `opacity`; sizes are measured once and on ScrollTrigger's
-refresh; section setup runs in its own task after a presented frame, never while scrolling; `will-change`
+refresh; section setup runs one section per task after a presented frame: sections near the viewport first (also while
+scrolling, in small slots), the rest after the intro while the reader is idle; a section that fails to build is
+reverted and the others continue; `will-change`
 exists only while its animation is active. Measured with `npm run perf` (dev only, noisy, not a CI gate):
 Chromium, CPU throttled 4×, 390×844 and 1280×800, intro, scroll, pointer and a docs page. Targets at 4×:
 no long animation frame above 50 ms after the intro, scroll p95 main-thread frame at or under 16.7 ms

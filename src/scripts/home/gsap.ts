@@ -5,7 +5,6 @@
 // tweens run at the display's refresh rate (120 Hz phones included).
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { afterNextFrame } from './yield';
 
 gsap.registerPlugin(ScrollTrigger);
 // The mobile address bar resizing the viewport must not trigger a refresh while scrolling.
@@ -35,13 +34,16 @@ export function initEarly<T extends gsap.core.Timeline>(tl: T): T {
 
 /**
  * What `invalidateOnRefresh` is for (tween values that depend on size, such as SVG path lengths), but
- * without leaving the re-initialization to the first frame of the next scroll: after a refresh the timeline
- * is invalidated and initialized early again in a setup slot. Returns the function that stops listening.
+ * without leaving the re-initialization to the first frame of the next scroll. Like ScrollTrigger's own
+ * option, the timeline is reverted before it is invalidated, so start values are recorded from the original
+ * state and not from wherever the scrub stopped; it is then initialized again at the same progress.
+ * Runs inside the refresh (rare: resize, orientation, zoom, fonts). Returns the function that stops listening.
  */
 export function initAgainOnRefresh(tl: gsap.core.Timeline): () => void {
 	const again = () => {
-		tl.invalidate();
-		void afterNextFrame().then(() => initEarly(tl));
+		const at = tl.progress();
+		tl.revert({ kill: false }).invalidate();
+		tl.progress(1, true).progress(at, true);
 	};
 	ScrollTrigger.addEventListener('refresh', again);
 	return () => ScrollTrigger.removeEventListener('refresh', again);
