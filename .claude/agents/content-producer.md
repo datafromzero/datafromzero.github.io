@@ -14,6 +14,9 @@ reorder or "improve" their prose. If something in it looks wrong or unclear, lis
   to be correct; notebooks in `notebooks/{stage}/{lesson-id}.ipynb` without outputs; `.xlsx` templates for the
   Excel stage (the owner uploads them and supplies the `sheet` "make a copy" URL); `Term` links for glossary
   words; sources (official docs first) you have actually opened.
+- Research: `research/curriculum/` (look it up with `node scripts/kb.mjs query …`): 02 is the topic backlog,
+  03 the lesson and exercise standard, 00 §4 the honesty rules for any number you put on a page.
+- Visuals are static: build-time SVG, CSS animation, `<details>` steps. No JavaScript on lesson pages.
 - Components are auto-imported: never add import lines. Escape literal dollar signs as `\$`.
 - Never set `status: published`; only the owner does. Never invent facts or sources.
 - Verify with `npm run check`. Do not commit unless the brief says so. Never add AI attribution anywhere.
