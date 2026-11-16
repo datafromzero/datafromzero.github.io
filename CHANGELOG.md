@@ -7,6 +7,8 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Curriculum research package in `research/curriculum/` (competitor map, syllabus inventory, teaching
+  playbook, UI/UX lessons, career and distribution), indexed in the knowledge graph.
 - Site scaffold: Astro + Starlight, English at the root and Vietnamese under `/vi/`, deploy to GitHub Pages.
 - Design system: tokens, Geist fonts, dark default with a light option on docs pages, print styles, logo and favicon.
 - Content model (SPEC §5): schemas and build-time validation for lessons, reference entries,

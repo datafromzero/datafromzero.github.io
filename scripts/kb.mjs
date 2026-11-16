@@ -57,6 +57,7 @@ function buildGraph() {
 		...walk('.github').filter((f) => /\.ya?ml$/.test(f)),
 		...walk('.claude').filter((f) => f.endsWith('.md') && !f.startsWith('.claude/kb/')),
 		...(existsSync(join(ROOT, 'design/README.md')) ? ['design/README.md'] : []),
+		...walk('research').filter((f) => f.endsWith('.md')),
 	].filter((f, i, a) => a.indexOf(f) === i);
 	const fileSet = new Set(files);
 	const agentOf = (f) => (/^\.claude\/agents\/(?!README)[^/]+\.md$/.test(f) ? f.split('/').pop().replace(/\.md$/, '') : null);
@@ -218,6 +219,29 @@ function buildGraph() {
 
 	// ---- SPEC.md
 	const owner = new Map(); // file -> (lineNo) => node id
+	// ---- research package (research/**/*.md): one node per ## / ### heading, searchable by its text
+	for (const f of files.filter((x) => x.startsWith('research/') && x.endsWith('.md'))) {
+		const rl = lines.get(f) || [];
+		const secs = [];
+		const base = 'R:' + f.replace(/^research\//, '').replace(/\.md$/, '');
+		let parent = base, fence = false;
+		rl.forEach((l, i) => {
+			if (/^```/.test(l)) fence = !fence;
+			const h = !fence && l.match(/^(#{2,3})\s+(.*)$/);
+			if (!h) return;
+			const label = clean(h[2]);
+			const id = h[1] === '##' ? `${base}#${slug(label)}` : `${parent}:${slug(label)}`;
+			if (h[1] === '##') parent = id;
+			if (nodes.has(id)) return;
+			secs.push({ id, line: i + 1 });
+			addNode(id, 'research-section', label, f, i + 1, {});
+		});
+		secs.forEach((s, i) => {
+			s.end = i + 1 < secs.length ? secs[i + 1].line - 1 : rl.length;
+			nodes.get(s.id).end = s.end;
+			nodes.get(s.id).text = clip(clean(nodes.get(s.id).label + ' ' + rl.slice(s.line, s.end).join(' ')), 1500);
+		});
+	}
 	const spec = lines.get('SPEC.md') || [];
 	const secs = [];
 	let fence = false;

@@ -56,7 +56,9 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →
    the owner writes the text; `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
    links and sources → the owner publishes. English first; `vi-translator` follows. Lesson content PRs always
-   wait for the owner.
+   wait for the owner. Research source: `research/curriculum/` (02 syllabus inventory = topic backlog,
+   03 teaching playbook = lesson standard; its §4 honesty rules bind any number on the site). Lesson visuals
+   are static (build-time SVG, CSS, `<details>`), never JS; no progress tracking (D15).
 9. **Motion & speed** (SPEC D28): frame-budget pass (done, `npm run perf`), then the full GSAP plugin set on the
    homepage, `/start/` (animated roadmap map over the static SVG) and project pages, each effect loaded on demand;
    budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS.
