@@ -1,5 +1,5 @@
 // 03: a Study or Reference panel enlarges on activation. The grid changes its columns once (one layout), then
-// Flip animates each panel from its old box with transforms only (scaleX/x); the content is counter-scaled
+// Flip animates each panel from its old box with transforms only (scale and x); the content is counter-scaled
 // so text never stretches. The section height never changes, so nothing below it moves (SPEC §12).
 // The button is a real <button aria-pressed>; without this module it stays hidden and both panels are
 // the plain two-column layout.
@@ -31,10 +31,12 @@ export function init(section: HTMLElement): () => void {
 	const counter = () => {
 		for (const p of panels) {
 			const sx = Number(gsap.getProperty(p, 'scaleX')) || 1;
-			gsap.set(contentOf(p), { scaleX: 1 / sx, transformOrigin: '0% 0%' });
+			const sy = Number(gsap.getProperty(p, 'scaleY')) || 1;
+			gsap.set(contentOf(p), { scaleX: 1 / sx, scaleY: 1 / sy, transformOrigin: '0% 0%' });
 		}
 	};
-	const restoreContent = () => gsap.set(panels.flatMap(contentOf), { clearProps: 'scaleX,transformOrigin' });
+	// back to scale 1 without clearing the whole transform (the entrance may still own `y`)
+	const restoreContent = () => gsap.set(panels.flatMap(contentOf), { scaleX: 1, scaleY: 1 });
 
 	const toggle = (panel: HTMLElement) => {
 		const open = !panel.classList.contains('is-open');
