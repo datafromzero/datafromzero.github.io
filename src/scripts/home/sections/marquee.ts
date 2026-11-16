@@ -134,8 +134,10 @@ export function init(marquee: HTMLElement, onCleanup: (fn: () => void) => void) 
 	if (!toggle) return;
 	toggle.hidden = false;
 	const render = () => {
-		toggle.setAttribute('aria-pressed', String(userPaused));
-		toggle.textContent = userPaused ? (toggle.dataset.play ?? '') : (toggle.dataset.pause ?? '');
+		const label = userPaused ? (toggle.dataset.play ?? '') : (toggle.dataset.pause ?? '');
+		toggle.textContent = label;
+		// The label states the action; no aria-pressed, which would contradict it (WCAG 4.1.2).
+		toggle.setAttribute('aria-label', `${label} ${toggle.dataset.what ?? ''}`.trim());
 	};
 	const onClick = () => {
 		userPaused = !userPaused;

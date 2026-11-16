@@ -86,7 +86,7 @@ export const en: HomeStrings = {
 			],
 			note: 'Example numbers.',
 		},
-		control: { pause: 'Pause', play: 'Play' },
+		control: { pause: 'Pause', play: 'Play', what: 'tool cycle' },
 	},
 	marquee: [
 		{ text: 'Free' },
@@ -96,7 +96,7 @@ export const en: HomeStrings = {
 		{ text: 'Zero to job-ready' },
 		{ text: 'Free', outline: true },
 	],
-	marqueeControl: { pause: 'Pause', play: 'Play' },
+	marqueeControl: { pause: 'Pause', play: 'Play', what: 'marquee' },
 	begin: { label: '04 — Begin', heading: 'Start\n*at zero.*', cta: 'Open step 01' },
 	footer: {
 		content: 'Content CC BY 4.0',

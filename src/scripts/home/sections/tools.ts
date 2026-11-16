@@ -45,8 +45,10 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void) 
 	let timer = 0;
 	const render = () => {
 		if (!toggle) return;
-		toggle.setAttribute('aria-pressed', String(stopped));
-		toggle.textContent = (stopped ? toggle.dataset.play : toggle.dataset.pause) ?? '';
+		const label = (stopped ? toggle.dataset.play : toggle.dataset.pause) ?? '';
+		toggle.textContent = label;
+		// The label states the action; no aria-pressed, which would contradict it (WCAG 4.1.2).
+		toggle.setAttribute('aria-label', `${label} ${toggle.dataset.what ?? ''}`.trim());
 	};
 	const sync = () => {
 		clearInterval(timer);

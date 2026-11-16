@@ -19,7 +19,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 5 | `S12` Quality gates (CI on every PR… | spec-section | 17 | SPEC.md:359 |
 | 6 | `S6` Authoring components | spec-section | 17 | SPEC.md:242 |
-| 7 | `D30` Vietnamese paused | decision | 16 | SPEC.md:56 |
+| 7 | `D30` Vietnamese paused | decision | 16 | SPEC.md:57 |
 | 8 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 9 | `D28` Motion scope and budget | decision | 14 | SPEC.md:55 |
 | 10 | `S5.1` Lesson (`src/content/docs/{st… | spec-section | 13 | SPEC.md:159 |
@@ -95,8 +95,8 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D26 | Page transitions | Cross-document View Transitions, CSS only | SPEC.md:53 |
 | D27 | Prefetch | Speculation Rules `prefetch`, moderate eagerness; never prerender | SPEC.md:54 §11 |
 | D28 | Motion scope and budget | Full GSAP plugin set, each effect loaded on demand, on the homepage `… | SPEC.md:55 §12 §5.4 |
-| D30 | Vietnamese paused | English only for now; Vietnamese and other languages later, when the… | SPEC.md:56 §5 §8 |
-| D29 | Curriculum map | Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; o… | SPEC.md:57 §14 |
+| D29 | Curriculum map | Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; o… | SPEC.md:56 §14 |
+| D30 | Vietnamese paused | English only for now; Vietnamese and other languages later, when the… | SPEC.md:57 §5 §8 |
 
 ## CONTRACT sections
 

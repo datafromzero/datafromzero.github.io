@@ -45,10 +45,10 @@ export interface HomeStrings {
 			note: string;
 		};
 		/** The auto-cycle's pause / play button (WCAG 2.2.2), shown only while the script cycles the tabs. */
-		control: { pause: string; play: string };
+		control: { pause: string; play: string; what: string };
 	};
 	marquee: { text: string; outline?: boolean }[];
-	marqueeControl: { pause: string; play: string };
+	marqueeControl: { pause: string; play: string; what: string };
 	begin: { label: string; heading: string; cta: string };
 	footer: { content: string; code: string; github: string; version: string };
 }
