@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 741 nodes, 647 edges, 94 communities (373 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 31, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 409, overrides 5, references 24, runs 9, specified-by 4, uses-token 22, validated-by 5.
+- 744 nodes, 649 edges, 94 communities (376 isolated nodes).
+- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 34, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 31, mentions 408, overrides 5, references 24, runs 9, specified-by 4, uses 3, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,7 +17,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/site.ts` | module | 25 | src/site.ts:1 |
 | 3 | `design/README.md` | doc | 22 | design/README.md:1 |
 | 4 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
-| 5 | `.claude/HANDOFF.md` | doc | 20 | .claude/HANDOFF.md:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 19 | .claude/HANDOFF.md:1 |
 | 6 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:363 |
 | 7 | `S6` Authoring components | spec-section | 19 | SPEC.md:245 |
 | 8 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
@@ -39,29 +39,29 @@ Label propagation; each community is named by its top-degree node.
 - **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
 - **C5 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
 - **C6 Tech stack** (8): S2 Tech stack; S4 Information architecture; agent:content-producer content-producer; research/curriculum/01-competitor-map.md; S3 URL contract; research/curriculum/00-README.md
-- **C7 Authoring components** (8): S6 Authoring components; src/components/content/index.ts; D21 Using components in content; M4 Authoring components; R4 Content portability; src/components/content/Exercise.astro
-- **C8 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
-- **C9 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
-- **C10 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C11 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
-- **C12 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
+- **C7 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
+- **C8 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
+- **C9 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
+- **C10 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
+- **C11 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
+- **C12 tokens.css** (7): src/styles/tokens.css; src/styles/print.css; token:--bg --bg; token:--dim --dim; token:--fg --fg; token:--line --line
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `D1` -mentions-> `D24` (C58 to C15, SPEC.md:28)
-- `ctype:career` -specified-by-> `S5.4` (C68 to C67, src/lib/content-schemas.ts:96)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C58 to C2, research/curriculum/02-syllabus-inventory.md:319)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C25 to C49, .claude/agents/README.md:39)
-- `S5.2` -mentions-> `D18` (C43 to C37, SPEC.md:222)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C79 to C80, src/components/starlight/ThemeSelect.astro:3)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C83 to C78, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C25 to C58, .claude/skills/kb/SKILL.md:3)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C35 to C36, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C36 to C45, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C61 to C12, design/README.md:198)
-- `M6` -mentions-> `D27` (C41 to C38, CLAUDE.md:55)
+- `D1` -mentions-> `D24` (C57 to C14, SPEC.md:28)
+- `ctype:career` -specified-by-> `S5.4` (C67 to C66, src/lib/content-schemas.ts:96)
+- `src/components/content/Solution.astro` -mentions-> `src/lib/remark-content-rules.ts` (C32 to C85, src/components/content/Solution.astro:3)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C57 to C2, research/curriculum/02-syllabus-inventory.md:319)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C50, .claude/agents/README.md:39)
+- `S5.2` -mentions-> `D18` (C44 to C38, SPEC.md:222)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C78 to C79, src/components/starlight/ThemeSelect.astro:3)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C77, src/layouts/HomeLayout.astro:39)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C26 to C57, .claude/skills/kb/SKILL.md:3)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C36 to C37, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C37 to C46, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C60 to C11, design/README.md:198)
 
 ## Decisions (SPEC §1)
 
@@ -149,7 +149,7 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:49
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
-- migration: `S14` — SPEC.md:432
+- migration: `S14` — SPEC.md:433
 - license: `R8` — CLAUDE.md:33
 - changelog: `S9` — SPEC.md:319
 - zenodo: `S1` — SPEC.md:24

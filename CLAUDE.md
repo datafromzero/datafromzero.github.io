@@ -57,7 +57,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;
    GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →
-   the owner writes the text; `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
+   the owner writes the text or asks for a team draft that the owner edits and approves (D24); `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
    links and sources → the owner publishes. English only for now (D30; `vi-translator` stays, unused). Lesson content PRs always
    wait for the owner. Research source: `research/curriculum/` (02 syllabus inventory = topic backlog,
    03 teaching playbook = lesson standard; its §4 honesty rules bind any number on the site). Lesson visuals
