@@ -9,6 +9,14 @@ All notable changes to datafromzero are recorded here. The format follows
 ### Added
 - Analytics on (SPEC §11, D8): Google Analytics 4 property `G-0TNDBK1ZJX`, loaded only after the visitor accepts the
   consent banner (Consent Mode v2, defaults denied). Event data is kept for 2 months, as `/privacy/` now states.
+- First dataset, `cafe-sales` v1 (SPEC §7, D29): three fictional Bay Area cafes, January to June 2026, prices in US
+  dollars and cents. Five tables (stores 3, customers 150, products 16, orders 1,800, order lines 3,287) as CSV,
+  one `.xlsx` workbook and a DuckDB load script, with `README.md` and `schema.yaml`. Synthetic and deterministic:
+  `scripts/build-cafe-sales.py` rebuilds it, and `--check` confirms the CSV files match. Rigged on purpose: one
+  walk-in order without a customer, one canceled order, one extra-zero quantity, a store that opens in April, a
+  product never sold, tied prices and referral links. Not released until `v1.0.0`.
+- Practice workbooks for Excel lessons in `sheets/excel/`, built from the dataset by `scripts/build-lesson-sheets.py`;
+  the first is for `excel-grid-and-tidy-layout` (draft).
 - Homepage hero: the sub-copy and the two buttons are removed; the bottom taskbar already carries "Start learning".
 - Career quiz at `/career-quiz/` (SPEC D33, from the research in issue #32): ten original questions about how you
   like to work, each answer giving 2 points to the career it fits best and 1 to a close second. The result is a
@@ -90,6 +98,8 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC §1 D24 and §14: the owner may ask the team for a draft lesson text, which the owner edits and approves before
+  publishing; the first is `excel-grid-and-tidy-layout`.
 - Homepage: the 02 tree now shows four careers (DA, DE, DS, ML; SPEC D32) on evenly spaced branches, and the meta
   description says four data careers.
 - SPEC §1 decision D32 (owner decision, amends D29), §3.1, §4, §5.1, §13: four career branches. Analytics Engineer is

@@ -48,7 +48,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D21 | Using components in content | **Auto-imported, enforced** | `.mdx` files use the §6 components without import lines; the build rejects imports, other components and `<script>` in content (§6). |
 | D22 | Homepage motion (superseded by D28) | **GSAP `ScrollTrigger` + `SplitText` + `DrawSVG`**, ≈ 90 KB gzipped JS | Richer motion on `/` and `/stories/*` only; Lighthouse mobile must stay ≥ 90 performance and ≥ 95 accessibility. |
 | D23 | Scroll-linked effects | **CSS scroll-driven animations first**, GSAP fallback | Pure scroll-linked effects (progress bar, rail fill) run on the compositor with zero JS where `animation-timeline` is supported; GSAP scrub only as fallback. Triggered choreography stays GSAP. |
-| D24 | Content source | **Written from scratch**, outline first, English first | A researched curriculum map is approved by the owner, then lessons are created as drafts; the owner writes the text and the team adds frontmatter, exercises, notebooks, datasets, links and checks. Vietnamese follows in later PRs (§14). |
+| D24 | Content source | **Written from scratch**, outline first, English first | A researched curriculum map is approved by the owner, then lessons are created as drafts; the owner writes the text, or (amended 2026-11-17, owner request) asks the team for a draft text that the owner edits and approves, and the team adds frontmatter, exercises, notebooks, datasets, links and checks. A lesson stays `status: draft` until the owner publishes it. Vietnamese follows in later PRs (§14). |
 | D25 | Prerequisite graph | **Order follows prerequisites; footer shows Unlocks next** | Within a stage, `order` is a topological order of `prerequisites`; cycles and duplicate ids fail the check. Each lesson lists the published lessons it unlocks, computed at build time (§5.1, §12). |
 | D26 | Page transitions | **Cross-document View Transitions, CSS only** | `@view-transition { navigation: auto; }` with a root cross-fade of 120 ms (≤ 150 ms), declared only inside `prefers-reduced-motion: no-preference` so reduced-motion readers get none. No named per-element morphs, no JavaScript, no change to first paint. Chrome/Edge 126+ and Safari 18.2+ animate; Firefox navigates normally. |
 | D27 | Prefetch | **Speculation Rules `prefetch`, moderate eagerness; never prerender** | One JSON `<script type="speculationrules">` (`src/lib/speculation-rules.ts`) in every page head: same-origin links only, excluding `#` links, `target=_blank`, `download`, `rel=external` and file paths. Astro's own prefetch script is off (`prefetch: false`), so every page ships one fewer script. Prerender is forbidden: it would run page code, and later analytics (§11), before the visit. Chromium only; Safari and Firefox navigate normally, so no request is spent on pages that may not be read. |
@@ -418,6 +418,7 @@ datafromzero.github.io/
 ├─ public/                    # favicon.svg, logo files, og-image
 ├─ datasets/                  # §7
 ├─ notebooks/                 # §7
+├─ sheets/excel/              # practice workbooks for Excel lessons ({lesson-id}.xlsx), built from datasets/
 ├─ scripts/                   # graph check, review report, dataset builders, migration scripts
 ├─ tests/                     # unit tests and fixtures (valid/ and invalid/ cases; never deployed)
 ├─ .github/workflows/         # deploy, ci, link-check, review-reminder
@@ -436,7 +437,8 @@ Content is written from scratch; `johnha912/data-odyssey` is not migrated.
    objectives, prerequisites, key sources). The owner approves the map once; slugs then become permanent (§3).
 2. **Stubs.** Approved lessons are created as `status: draft` files (never deployed, D18). The build validates
    ids, prerequisites and cycles from day one.
-3. **Writing.** The owner writes the lesson text. The team adds or completes frontmatter, exercises and
+3. **Writing.** The owner writes the lesson text, or asks the team for a draft text that the owner edits and
+   approves (D24). The team adds or completes frontmatter, exercises and
    solutions, notebooks, Google Sheets templates, datasets (§7), `Term` links and sources, and keeps the build green.
 4. **Publishing.** The owner reviews and sets `status: published`. Vietnamese translations follow in later PRs (§8).
 5. **Release.** Tag `v1.0.0` once the four core stages are published; enable Zenodo; publish `CITATION.cff` (§9).
