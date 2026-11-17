@@ -9,7 +9,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { redirects } from './src/redirects.ts';
-import { SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
+import { OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
 import { buildSidebar } from './src/lib/sidebar.ts';
 
@@ -52,7 +52,15 @@ export default defineConfig({
 			// SPEC §12: broken internal links and anchors fail the build.
 			plugins: [starlightLinksValidator()],
 			favicon: '/favicon.svg',
-			head: [{ tag: 'script', attrs: { type: 'speculationrules' }, content: SPECULATION_RULES }],
+			head: [
+				{ tag: 'script', attrs: { type: 'speculationrules' }, content: SPECULATION_RULES },
+				// The link-preview card (Starlight already sets twitter:card to summary_large_image).
+				{ tag: 'meta', attrs: { property: 'og:image', content: OG_IMAGE.url } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{ tag: 'meta', attrs: { property: 'og:image:alt', content: OG_IMAGE.alt } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: OG_IMAGE.url } },
+			],
 			// Fonts are self-hosted (@fontsource) so no third-party request happens before consent.
 			customCss: [
 				'@fontsource/geist/300.css',

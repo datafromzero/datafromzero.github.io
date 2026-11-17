@@ -41,7 +41,7 @@ structures, algorithms, and a thousand other things.
 
 ## Starting from zero
 
-So I started small, with a few SQL and Python bootcamp courses on Coursera. I loved them. Once my
+So I started small, with a few SQL and Python courses on bootcamp sites. I loved them. Once my
 queries felt solid, I applied to teach data analytics and machine learning, drawing on the predictive
 analytics from my master's.
 

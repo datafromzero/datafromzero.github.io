@@ -4,6 +4,11 @@ import pkg from '../package.json' with { type: 'json' };
 
 export const SITE_NAME = 'datafromzero';
 export const SITE_URL = 'https://datafromzero.github.io';
+/** The link-preview card for every page (og:image, 1200×630), made from design/og/card.html by scripts/build-og.mjs. */
+export const OG_IMAGE = {
+	url: `${SITE_URL}/og.png`,
+	alt: 'datafromzero: From A1 to AI. A free, open roadmap for learning data from zero.',
+};
 /** Author of record for citations and copyright (an organization name, not a person). */
 export const AUTHOR_NAME = 'datafromzero';
 /** GitHub repository that holds the content (edit and issue links). */

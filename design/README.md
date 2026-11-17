@@ -246,3 +246,10 @@ glass (`--tb-glass`, `--tb-edge`, `--tb-sheen`, blur 14px; a solid sheet without
 - [ ] Site name `datafromzero` comes from a single config value
 - [ ] Everything in SPEC.md §12 passes in CI
 - [ ] Lighthouse mobile performance ≥ 90 on the homepage
+
+## Link preview card
+
+`public/og.png` (1200×630) is the `og:image` and `twitter:image` of every page (`OG_IMAGE` in `src/site.ts`): black with
+the dot grid, the logo and wordmark, "From A1 to AI." with A1 drawn as a selected spreadsheet cell, the one-line
+description and the path in mono. Edit `design/og/card.html`, then run `node scripts/build-og.mjs` (needs Playwright)
+and commit the PNG.
