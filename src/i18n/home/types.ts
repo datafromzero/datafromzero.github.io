@@ -18,9 +18,6 @@ export interface HomeStrings {
 		 * the word `A1` gets the selection box, and a last word starting with `AI` gets the 1 → I reel.
 		 */
 		lockup: string;
-		sub: string;
-		ctaStart: string;
-		ctaExample: string;
 		scroll: string;
 		/** Name shown in the bottom taskbar while this section is on screen (SPEC D31); `short` below too. */
 		short: string;

@@ -7,10 +7,11 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Homepage hero: the sub-copy and the two buttons are removed; the bottom taskbar already carries "Start learning".
 - Career quiz at `/career-quiz/` (SPEC D33, from the research in issue #32): ten original questions about how you
   like to work, each answer giving 2 points to the career it fits best and 1 to a close second. The result is a
   suggested direction with the reason, a close second and the shared-core line (ties go to more 2-point answers,
-  then an honest tie); never percentages. One small scoring script on that page only (under 1 KB gzipped, no
+  then an honest tie); never percentages. One small scoring script on that page only (under 4 KB gzipped, no
   library, no storage, sends nothing); without JavaScript every question is shown with "How to score it yourself"
   and every answer's points. Carries the O*NET 31.0 Database CC BY 4.0 credit and a link to the free Mini Interest
   Profiler on My Next Move. Listed in the taskbar shortcuts.
