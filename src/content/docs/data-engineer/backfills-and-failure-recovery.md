@@ -1,7 +1,7 @@
 ---
 id: data-engineer-backfills-and-failure-recovery
 title: Backfills, reruns and recovering from failure
-description: Rerun history safely with catchup and backfill, and recover from a failed run without duplicating data.
+description: Rerun history safely with catchup and backfill, recover from a failed run without duplicates and write a blameless incident note.
 stage: data-engineer
 order: 90
 level: advanced
@@ -10,7 +10,8 @@ objectives:
   - Explain the data interval of a scheduled run
   - Backfill a date range safely
   - Recover from a mid-pipeline failure without duplicates
-  - Alert on a failure and write a short incident note
+  - 'Triage a failed check: data, pipeline or definition'
+  - Alert the people who use the data and write a blameless incident note with cause, impact and fix
 prerequisites:
   - data-engineer-orchestration-with-airflow
   - data-engineer-incremental-loads-idempotency

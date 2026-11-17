@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-staging-intermediate-marts
+id: data-engineer-staging-intermediate-marts
 title: Staging, intermediate and mart layers
 description: Layer models into staging, intermediate and marts, with one grain stated per model.
-stage: analytics-engineer
-order: 30
+stage: data-engineer
+order: 110
 level: intermediate
 duration: 30
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Build a mart for one business area
   - State the grain of every model in a comment
 prerequisites:
-  - analytics-engineer-dbt-project-and-first-model
+  - data-engineer-dbt-project-and-first-model
   - core-designing-a-star-schema
 datasets:
   - cafe-sales

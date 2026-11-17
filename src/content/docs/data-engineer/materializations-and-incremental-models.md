@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-materializations-and-incremental-models
+id: data-engineer-materializations-and-incremental-models
 title: Views, tables and incremental models
 description: Choose between view, table and incremental materializations by cost and freshness, and write a safe incremental model.
-stage: analytics-engineer
-order: 40
+stage: data-engineer
+order: 120
 level: advanced
 duration: 30
 objectives:
@@ -12,7 +12,8 @@ objectives:
   - Explain full-refresh and when to use it
   - Estimate the cost trade-off of each choice
 prerequisites:
-  - analytics-engineer-staging-intermediate-marts
+  - data-engineer-staging-intermediate-marts
+  - data-engineer-incremental-loads-idempotency
   - sql-create-table-constraints
 datasets:
   - cafe-sales

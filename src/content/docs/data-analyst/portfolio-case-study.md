@@ -3,7 +3,7 @@ id: data-analyst-portfolio-case-study
 title: Writing a case study a hiring manager reads in two minutes
 description: 'Package a project as a case study: business problem first, evidence, limits and one change you made beyond the brief.'
 stage: data-analyst
-order: 120
+order: 130
 level: intermediate
 duration: 25
 objectives:

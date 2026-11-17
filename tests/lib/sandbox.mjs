@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const FIXTURES = join(REPO, 'tests', 'fixtures');
 // Lesson stage folders (STAGES in src/lib/content-schemas.ts) and the reference folder.
-const CONTENT_DIRS = new Set(['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'analytics-engineer', 'ml-engineer', 'reference']);
+const CONTENT_DIRS = new Set(['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer', 'reference']);
 const SKIP = new Set(['node_modules', 'dist', '.astro', '.git', 'tests', '.lighthouseci']);
 
 export function createSandbox() {

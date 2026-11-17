@@ -59,7 +59,7 @@ decided to build this site together with AI agents.
 
 datafromzero is the roadmap I wish I'd had when I walked out of that café: free, in order, and built
 for people who start with spreadsheets, not code. It goes from Excel and Google Sheets to SQL and
-Python, then an advanced core, and finally five data careers, with exercises and practice data you
+Python, then an advanced core, and finally four data careers, with exercises and practice data you
 can reuse, written to be read on a phone.
 
 Whether you haven't started yet, have just begun, or are already on your way, I hope you find your
