@@ -1,11 +1,13 @@
-// The bottom taskbar (SPEC D31): the only script on project, lesson and reference pages, under 1 KB gzipped.
+// The bottom bar (SPEC D31, D35): the only script on project, lesson and reference pages, under 1 KB gzipped.
 // No library and no animation here: the motion is CSS transitions (none under reduced motion).
-// - the shortcuts sheet: aria-expanded, inert while closed; Esc, a second tap, a link or an outside click
-//   closes it, and Esc returns focus to the button;
+// - the sheet: aria-expanded, inert while closed; Esc, a second tap, a link or an outside click closes it, and
+//   Esc returns focus to the button. The tabs inside it are radio inputs and need no script, except that the
+//   Course list scrolls to the current lesson;
 // - the theme switch: Starlight's own state (data-theme on <html>, localStorage `starlight-theme`), so the
 //   homepage and the docs agree; dark unless the reader chose light;
-// - back-to-top is dimmed near the top;
-// - on the homepage, the label names the section on screen ([data-tb-name]).
+// - back-to-top (desktop) is dimmed near the top;
+// - the small label line names the section on screen: the homepage's sections ([data-tb-name]) or a docs page's
+//   h2s, behind the lesson code; the same section is marked in the sheet's first tab.
 const d = document;
 const root = d.documentElement;
 const bar = d.querySelector<HTMLElement>('.tb');
@@ -15,7 +17,7 @@ if (bar) {
 	const sheet = d.getElementById('tb-sheet')!;
 	const theme = bar.querySelector<HTMLButtonElement>('.tb-theme')!;
 	const top = bar.querySelector<HTMLElement>('.tb-top')!;
-	const label = bar.querySelector<HTMLElement>('.tb-label')!;
+	const kick = bar.querySelector<HTMLElement>('.tb-kick')!;
 	let open = false;
 
 	const set = (o: boolean) => {
@@ -23,8 +25,18 @@ if (bar) {
 		bar.classList.toggle('open', o);
 		btn.setAttribute('aria-expanded', String(o));
 		sheet.inert = !o;
-		if (o) sheet.querySelector('a')?.focus({ preventScroll: true });
+		if (o) {
+			sheet.querySelector<HTMLElement>(':checked, a')?.focus({ preventScroll: true });
+			show();
+		}
 	};
+	// Course tab: the current lesson sits a third of the way down the list when the sheet opens or the tab changes.
+	const show = () => {
+		const c = sheet.querySelector<HTMLElement>('[aria-current=page]');
+		// offsetParent is null while the Course pane is hidden.
+		if (c?.offsetParent) c.offsetParent.scrollTop = c.offsetTop - 120;
+	};
+	sheet.addEventListener('change', show);
 	set(false);
 	btn.addEventListener('click', () => set(!open));
 	sheet.addEventListener('click', (e) => {
@@ -73,11 +85,17 @@ if (bar) {
 		}),
 	);
 
+	// The current section is the last one whose top is above a line a fifth down the screen. The observer's
+	// region is the strip above that line, so it fires exactly when a section top crosses it, either way.
+	const hs = [...d.querySelectorAll<HTMLElement>('[data-tb-name], .sl-markdown-content h2')];
+	const links = [...sheet.querySelectorAll<HTMLAnchorElement>('.tb-on a')];
 	const io = new IntersectionObserver(
-		(entries) => {
-			for (const e of entries) if (e.isIntersecting) label.textContent = (e.target as HTMLElement).dataset.tbName!;
+		() => {
+			const h = hs.filter((x) => x.getBoundingClientRect().top < innerHeight / 5).pop();
+			kick.textContent = [kick.dataset.c, h && (h.dataset.tbName ?? h.textContent)].filter(Boolean).join(' · ');
+			links.forEach((a) => a.setAttribute('aria-current', a.hash.slice(1) === h?.id ? 'location' : 'false'));
 		},
-		{ rootMargin: '-45% 0px -50% 0px' },
+		{ rootMargin: '0px 0px -80% 0px' },
 	);
-	d.querySelectorAll('[data-tb-name]').forEach((s) => io.observe(s));
+	hs.forEach((h) => io.observe(h));
 }

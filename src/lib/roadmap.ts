@@ -90,3 +90,13 @@ export function groupRoadmap(lessons: MapLesson[], landings: ReadonlySet<string>
 			})),
 	}));
 }
+
+/**
+ * The lesson to read after `id` (SPEC D35): the next one by `order` in the same stage, else the first lesson of the
+ * next stage that has lessons, in roadmap order. `undefined` after the last lesson or for an unknown id.
+ */
+export function nextLesson(stages: readonly RoadmapStage[], id: string): RoadmapLesson | undefined {
+	const all = stages.flatMap((s) => s.lessons);
+	const i = all.findIndex((l) => l.id === id);
+	return i < 0 ? undefined : all[i + 1];
+}

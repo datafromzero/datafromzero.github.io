@@ -1,88 +1,140 @@
 ---
-// The bottom taskbar on every page (SPEC D31): a floating glass bar with the shortcuts menu (left), and
-// "Start learning", the light / dark switch and back-to-top (right). The project pages (changelog, cite,
-// license, privacy, GitHub) live in the page footer, so the menu does not repeat them. Ported from the approved mockup.
+// The bottom bar on every page (SPEC D31, D35): a floating glass bar with two controls. Left, the menu button: a
+// two-line label (small mono line "E8 · current section", then the lesson or page title) that opens the sheet.
+// Right, the primary button: "Next E9 →" on a lesson, "Learn →" to /start/ everywhere else. The sheet has two tabs,
+// "This lesson" (the page's own headings) and "Course" (the published lessons by stage), and a bottom row with Home,
+// Start here, Career quiz and the light / dark switch. Phones get no other navigation: Starlight's header menu button
+// and its "On this page" bar are hidden below the widths where they appear (CSS at the end of this file).
 // One small script (scripts/taskbar.ts, < 1 KB gzipped) and CSS transitions only: no GSAP, no library.
-// Without script the menu is a <details> toggle (the sheet opens through :has()), the theme switch is hidden
-// and back-to-top is a plain anchor. The label is the page title; on the homepage the script swaps it for the
-// name of the section on screen (elements with data-tb-name).
+// Without script the menu is a <details> toggle (the sheet opens through :has()), the tabs are radio inputs, the
+// theme switch is hidden and back-to-top is a plain anchor.
 import { getCollection } from 'astro:content';
 import { projectHref, siteUi } from '../../i18n/site-ui';
 import { classify, type Lesson } from '../../lib/content-schemas.ts';
-import { ROADMAP_STAGES } from '../../lib/roadmap.ts';
+import { groupRoadmap, nextLesson, type MapLesson } from '../../lib/roadmap.ts';
 
 interface Props {
 	lang: string;
-	/** Text beside the menu button: the page title, or the homepage's first section name. */
+	/** Second line of the menu button: the page title (the site name on the homepage). */
 	label: string;
 	/** In-page anchor of the top of the page (back-to-top without script). */
 	top: string;
-	/** Homepage only: its section anchors, listed in the sheet under "On this page". */
+	/** The page's own headings (docs pages: the h2s; homepage: its sections), the sheet's first tab. */
 	sections?: { href: string; name: string }[];
+	/** Lessons: the code (E8) that starts the small line, and the lesson id that picks "Next". */
+	lesson?: { id: string; code?: string };
+	/** First text of the small line when it is not the lesson code (homepage: the first section's name). */
+	kick?: string;
 }
-const { lang, label, top, sections = [] } = Astro.props;
+const { lang, label, top, sections = [], lesson, kick } = Astro.props;
 const ui = siteUi(lang);
 const t = ui.taskbar;
-const n = ui.nav;
 const path = Astro.url.pathname.replace(/index\.html$/, '');
 const start = projectHref(lang, 'start');
-// One shortcut per stage that has published lessons, to its first lesson (drafts never appear, SPEC D18).
+// The course: published English lessons by stage (drafts never appear, SPEC D18).
 const docs = await getCollection('docs');
-const stageLinks = ROADMAP_STAGES.flatMap((s) => {
-	const first = docs
-		.filter((d) => {
-			const c = classify(d.id);
-			const l = d.data as Lesson;
-			return c.kind === 'lesson' && c.locale === null && l.status === 'published' && l.stage === s.id;
-		})
-		.sort((a, b) => (a.data as Lesson).order - (b.data as Lesson).order)[0];
-	return first ? [[`/${classify(first.id).path}/`, s.title]] : [];
-});
-const big = [
+const published: MapLesson[] = docs
+	.filter((d) => {
+		const c = classify(d.id);
+		return c.kind === 'lesson' && c.locale === null && (d.data as Lesson).status === 'published';
+	})
+	.map((d) => {
+		const l = d.data as Lesson;
+		return { id: l.id, title: d.data.title, stage: l.stage, order: l.order, href: `/${classify(d.id).path}/`, prerequisites: [], status: l.status };
+	});
+const stages = groupRoadmap(published, new Set());
+const filled = stages.filter((s) => s.lessons.length > 0);
+const openStage = filled.find((s) => s.lessons.some((l) => l.id === lesson?.id))?.id ?? filled[0]?.id;
+const next = lesson && nextLesson(stages, lesson.id);
+// Right-hand button: Next on a lesson (the roadmap after the last one), "Learn" on every other page.
+const primary = next
+	? { href: next.href, text: `${t.next} ${next.code}`, aria: `${t.next}: ${next.code} ${next.title}` }
+	: lesson
+		? { href: start, text: t.roadmap }
+		: { href: start, text: t.learn, short: t.learnShort };
+const tabbed = sections.length > 0;
+const current = (href: string) => (href === path ? 'page' : undefined);
+const foot = [
 	[lang === 'vi' ? '/vi/' : '/', t.home],
 	[start, t.start],
-	...stageLinks,
 	[projectHref(lang, 'career-quiz'), t.quiz],
-	[projectHref(lang, 'about'), n.about],
 ];
-const current = (href: string) => (href === path ? 'page' : undefined);
+const kicker = kick ?? lesson?.code ?? '';
 ---
 
 <div class="tb-gap" aria-hidden="true"></div>
 <nav class="tb" aria-label={t.label}>
 	<div class="tb-card">
 		<div class="tb-sheet" id="tb-sheet">
-			<div>
-				<div class={sections.length > 0 ? 'tb-in' : 'tb-in tb-solo'}>
-					<ul class="tb-big" aria-label={t.main}>
-						{big.map(([href, text]) => <li class="tb-mask"><a href={href} aria-current={current(href)}>{text}</a></li>)}
-					</ul>
+			<div class:list={[!tabbed && 'tb-solo']}>
+				{
+					tabbed ? (
+						<div class="tb-tabs" role="radiogroup" aria-label={t.tabs}>
+							<input class="tb-r" type="radio" name="tb-tab" id="tb-t1" checked />
+							<label for="tb-t1">{lesson ? t.thisLesson : t.thisPage}</label>
+							<input class="tb-r" type="radio" name="tb-tab" id="tb-t2" />
+							<label for="tb-t2">{t.course}</label>
+						</div>
+					) : (
+						<p class="tb-head">{t.course}</p>
+					)
+				}
+				<div class="tb-panes">
 					{
-						sections.length > 0 && (
-							<div class="tb-small">
-								<div>
-									<span class="tb-grp" id="tb-on">{t.onPage}</span>
-									<ul aria-labelledby="tb-on">
-										{sections.map((s) => <li><a href={s.href}>{s.name}</a></li>)}
-									</ul>
-								</div>
+						tabbed && (
+							<div class="tb-pane tb-p1">
+								<ul class="tb-on">
+									{sections.map((x) => <li><a href={x.href}>{x.name}</a></li>)}
+								</ul>
 							</div>
 						)
 					}
+					<div class="tb-pane tb-p2">
+						{
+							filled.map((s) => (
+								<details class="tb-stage" open={s.id === openStage}>
+									<summary>{s.title}<span class="tb-n">{s.lessons.length}</span></summary>
+									<ul>
+										{s.lessons.map((l) => (
+											<li><a href={l.href} aria-current={l.id === lesson?.id ? 'page' : undefined}><span class="tb-code">{l.code}</span><span>{l.title}</span></a></li>
+										))}
+									</ul>
+								</details>
+							))
+						}
+						<ul class="tb-soon">
+							{stages.filter((s) => s.lessons.length === 0).map((s) => <li>{s.title} · {t.soon}</li>)}
+						</ul>
+					</div>
+				</div>
+				<div class="tb-foot">
+					{foot.map(([href, text]) => <a href={href} aria-current={current(href)}>{text}</a>)}
+					<button class="tb-icon tb-theme tb-js" type="button" aria-label={t.toLight} data-light={t.toLight} data-dark={t.toDark}>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+							<circle cx="12" cy="12" r="8.5"></circle>
+							<path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"></path>
+						</svg>
+					</button>
 				</div>
 			</div>
 		</div>
 		<div class="tb-row">
 			<button class="tb-menu tb-js" type="button" aria-expanded="false" aria-controls="tb-sheet">
 				<span class="tb-burger" aria-hidden="true"><i></i><i></i></span>
-				<span class="tb-label">{label}</span>
+				<span class="tb-label">
+					<span class="tb-kick" data-c={lesson?.code}>{kicker}</span>
+					<span class="tb-title">{label}</span>
+				</span>
 				<span class="tb-sr">, {t.shortcuts}</span>
 			</button>
 			<noscript>
 				<details class="tb-fallback">
 					<summary class="tb-menu">
 						<span class="tb-burger" aria-hidden="true"><i></i><i></i></span>
-						<span class="tb-label">{label}</span>
+						<span class="tb-label">
+							<span class="tb-kick">{kicker}</span>
+							<span class="tb-title">{label}</span>
+						</span>
 						<span class="tb-sr">, {t.shortcuts}</span>
 					</summary>
 				</details>
@@ -92,16 +144,10 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 					}
 				</style>
 			</noscript>
-			<a class="tb-learn" href={start}>
-				<span class="tb-long">{t.learn}</span><span class="tb-short">{t.learnShort}</span>
+			<a class="tb-learn" href={primary.href} aria-label={primary.aria}>
+				<span class={primary.short ? 'tb-long' : undefined}>{primary.text}</span>{primary.short && <span class="tb-short">{primary.short}</span>}
 				<span class="tb-arr" aria-hidden="true">→</span>
 			</a>
-			<button class="tb-icon tb-theme tb-js" type="button" aria-label={t.toLight} data-light={t.toLight} data-dark={t.toDark}>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-					<circle cx="12" cy="12" r="8.5"></circle>
-					<path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"></path>
-				</svg>
-			</button>
 			<a class="tb-icon tb-top" href={top} aria-label={t.top}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 					<path d="M6 14l6-6 6 6"></path>
@@ -119,7 +165,7 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 	/* Colors come from the site tokens (src/styles/tokens.css); only the glass tints are the bar's own. */
 	:global(:root) {
 		--tb-space: calc(88px + env(safe-area-inset-bottom, 0px));
-		--tb-glass: rgba(18, 18, 18, 0.72);
+		--tb-glass: rgba(18, 18, 18, 0.84);
 		--tb-edge: rgba(255, 255, 255, 0.09);
 		--tb-chip: rgba(255, 255, 255, 0.07);
 		/* small labels on the dark glass need more than --mute for AA (13px text) */
@@ -127,7 +173,7 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 		--tb-ease: cubic-bezier(0.16, 1, 0.3, 1);
 	}
 	:global(:root[data-theme='light']) {
-		--tb-glass: rgba(250, 250, 250, 0.78);
+		--tb-glass: rgba(250, 250, 250, 0.9);
 		--tb-edge: rgba(0, 0, 0, 0.08);
 		--tb-chip: rgba(0, 0, 0, 0.06);
 		--tb-label: var(--mute);
@@ -202,27 +248,26 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 	/* Without script the <noscript> wrapper is the row's first flex item (Astro does not scope it). Never
 	   change its display: with script its content is raw text that must stay hidden. */
 	.tb-row :global(noscript) {
+		flex: 1 1 0;
 		min-width: 0;
-		margin-right: auto;
 	}
 	.tb-menu {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		min-width: 0;
-		height: 44px;
-		margin: 0 auto 0 0;
+		flex: 1 1 0;
+		height: 48px;
+		margin: 0;
 		padding: 0 12px;
 		border: 0;
 		border-radius: 10px;
 		background: none;
 		color: var(--fg);
 		font: inherit;
+		text-align: start;
 		cursor: pointer;
 		list-style: none;
-	}
-	.tb-fallback .tb-menu {
-		margin: 0;
 	}
 	.tb-menu::-webkit-details-marker {
 		display: none;
@@ -230,12 +275,27 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 	.tb-menu:hover {
 		background: var(--tb-chip);
 	}
+	/* Two lines: the small mono line (code and current section) over the title. Both end in an ellipsis when too long. */
 	.tb-label {
+		display: grid;
+		flex: 1;
+		min-width: 0;
+	}
+	.tb-label > * {
 		overflow: hidden;
-		font: 500 15px/1.2 var(--font-sans);
-		letter-spacing: -0.01em;
 		white-space: nowrap;
 		text-overflow: ellipsis;
+	}
+	.tb-kick {
+		color: var(--tb-label);
+		font: 500 11px/1.35 var(--font-mono);
+	}
+	.tb-kick:empty::before {
+		content: '\200b';
+	}
+	.tb-title {
+		font: 500 15px/1.3 var(--font-sans);
+		letter-spacing: -0.01em;
 	}
 	.tb-sr {
 		position: absolute;
@@ -363,101 +423,189 @@ const current = (href: string) => (href === path ? 'page' : undefined);
 	.tb-fallback[open] .tb-burger i:nth-child(2) {
 		transform: translateY(-3px) rotate(-45deg);
 	}
-	.tb-in {
-		display: grid;
-		grid-template-columns: 1.3fr 1fr;
-		gap: 22px;
-		max-height: calc(100svh - 120px - env(safe-area-inset-bottom, 0px));
-		overflow-y: auto;
-		padding: 22px 22px 10px;
-		border-bottom: 1px solid var(--tb-edge);
-	}
-	.tb-big li,
-	.tb-small li {
+	/* Tabs: radio inputs and labels, switched with :has(); no script. The radios are visually hidden but focusable
+	   (arrow keys move between tabs); the focus ring is drawn on the label. */
+	.tb-tabs {
+		position: relative;
 		display: flex;
+		gap: 4px;
+		margin: 12px 12px 0;
+		padding: 3px;
+		border-radius: 12px;
+		background: var(--tb-chip);
 	}
-	.tb-big a {
-		display: inline-flex;
+	/* One list only (no headings): a plain heading instead of a one-button control. */
+	.tb-head {
+		margin: 0;
+		padding: 16px 16px 0;
+		font: 500 14px/1 var(--font-sans);
+	}
+	.tb-r {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.tb-tabs label {
+		display: grid;
+		flex: 1;
+		place-items: center;
+		min-height: 44px;
+		border-radius: 9px;
+		font: 500 14px/1 var(--font-sans);
+		color: var(--tb-label);
+		cursor: pointer;
+	}
+	.tb-r:checked + label {
+		background: var(--fg);
+		color: var(--bg);
+	}
+	.tb-r:focus-visible + label {
+		outline: 2px solid var(--fg);
+		outline-offset: 2px;
+	}
+	.tb-panes {
+		position: relative;
+		max-height: calc(100svh - 250px - env(safe-area-inset-bottom, 0px));
+		overflow-y: auto;
+		padding: 8px 12px 8px;
+	}
+	/* Without :has() every pane shows, stacked. */
+	@supports selector(:has(a)) {
+		.tb-pane {
+			display: none;
+		}
+		.tb-sheet > div:has(#tb-t1:checked) .tb-p1,
+		.tb-sheet > div:has(#tb-t2:checked) .tb-p2,
+		.tb-solo .tb-pane {
+			display: block;
+		}
+	}
+	.tb-pane a {
+		display: flex;
 		align-items: center;
 		gap: 10px;
 		min-height: 44px;
-		font: 500 clamp(28px, 4.4vw, 38px) / 1.12 var(--font-sans);
-		letter-spacing: -0.035em;
+		padding: 6px 10px;
+		border-radius: 10px;
+		font: 400 15px/1.3 var(--font-sans);
 	}
-	.tb .tb-big a:not([aria-current]) {
-		color: var(--mute);
+	.tb-pane a:hover {
+		background: var(--tb-chip);
 	}
-	.tb .tb-big a:hover {
-		color: var(--fg);
+	/* The current section or lesson: a bar on the leading edge, so it reads differently from hover. */
+	.tb-pane a[aria-current='page'],
+	.tb-pane a[aria-current='location'] {
+		background: var(--tb-chip);
+		box-shadow: inset 3px 0 0 var(--fg);
+		font-weight: 500;
 	}
-	.tb-big a[aria-current]::before {
-		content: '';
-		width: 9px;
-		height: 9px;
-		background: var(--fg);
-	}
-	.tb-mask {
-		overflow: hidden;
-	}
-	.tb-mask > a {
-		transform: translateY(110%);
-		transition: transform 0.6s var(--tb-ease);
-	}
-	.tb.open .tb-mask > a,
-	.tb:has(.tb-fallback[open]) .tb-mask > a {
-		transform: none;
-	}
-	.tb.open .tb-mask:nth-child(2) > a {
-		transition-delay: 0.04s;
-	}
-	.tb.open .tb-mask:nth-child(3) > a {
-		transition-delay: 0.08s;
-	}
-	.tb.open .tb-mask:nth-child(4) > a {
-		transition-delay: 0.12s;
-	}
-	.tb.open .tb-mask:nth-child(5) > a {
-		transition-delay: 0.16s;
-	}
-	.tb-in.tb-solo {
-		grid-template-columns: 1fr;
-	}
-	.tb-small {
-		display: grid;
-		align-content: start;
-		gap: 14px;
-	}
-	.tb-grp {
-		display: block;
+	.tb-code {
+		flex: none;
+		min-width: 2.4em;
 		color: var(--tb-label);
-		font: 500 13px/1 var(--font-sans);
+		font: 500 12px/1 var(--font-mono);
 	}
-	.tb-small a {
+	.tb-stage summary {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 44px;
+		padding: 0 10px;
+		border-radius: 10px;
+		font: 500 15px/1 var(--font-sans);
+		cursor: pointer;
+		list-style: none;
+	}
+	.tb-stage summary::-webkit-details-marker {
+		display: none;
+	}
+	.tb-stage summary::after {
+		content: '';
+		width: 7px;
+		height: 7px;
+		margin-inline-start: auto;
+		border: solid currentColor;
+		border-width: 0 1.6px 1.6px 0;
+		transform: rotate(45deg) translate(-2px, -2px);
+		transition: transform 0.3s var(--tb-ease);
+	}
+	.tb-stage[open] summary::after {
+		transform: rotate(-135deg);
+	}
+	.tb-stage summary:hover {
+		background: var(--tb-chip);
+	}
+	.tb-n {
+		color: var(--tb-label);
+		font: 500 12px/1 var(--font-mono);
+	}
+	.tb-soon {
+		padding: 6px 10px 2px;
+		color: var(--tb-label);
+		font: 400 13px/2 var(--font-sans);
+	}
+	.tb-foot {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 6px 6px 6px 8px;
+		border-top: 1px solid var(--tb-edge);
+	}
+	.tb-foot a {
 		display: flex;
 		align-items: center;
 		min-height: 44px;
-		font-size: 15px;
+		padding: 0 10px;
+		border-radius: 10px;
+		font: 500 14px/1 var(--font-sans);
 	}
-	.tb-small a[aria-current] {
+	.tb-foot a:hover {
+		background: var(--tb-chip);
+	}
+	.tb-foot a[aria-current] {
 		text-decoration: underline;
-		text-underline-offset: 3px;
+		text-underline-offset: 4px;
 	}
-	.tb-small a:hover {
-		text-decoration: underline;
-		text-underline-offset: 3px;
+	.tb-foot .tb-icon {
+		margin-inline-start: auto;
 	}
-	@media (max-width: 560px) {
-		.tb-in {
-			grid-template-columns: 1fr;
-			gap: 16px;
-			padding: 18px 18px 8px;
+	@media (min-width: 560px) {
+		.tb-pane ul {
+			columns: 2;
+			column-gap: 8px;
 		}
-		.tb-small {
-			grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+		.tb-pane li {
+			break-inside: avoid;
+		}
+		.tb-pane .tb-soon {
+			columns: 1;
+		}
+	}
+	/* One navigation on phones (SPEC D35): the bottom bar replaces Starlight's header menu button (sidebar toggle,
+	   below 50rem) and its "On this page" bar (below 72rem). The space they took goes back to the page. */
+	@media (max-width: 49.99rem) {
+		:global(.sl-menu-button) {
+			display: none;
+		}
+		:global(:root[data-has-sidebar] .header) {
+			padding-inline-end: var(--sl-nav-pad-x);
+		}
+		.tb-top {
+			display: none;
+		}
+	}
+	@media (max-width: 71.99rem) {
+		:global(mobile-starlight-toc) {
+			display: none;
+		}
+		:global(:root) {
+			--sl-mobile-toc-height: 0rem;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.tb *,
+		.tb *::before,
+		.tb *::after,
 		.tb-sheet {
 			transition: none !important;
 		}

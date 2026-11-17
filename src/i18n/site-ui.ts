@@ -6,12 +6,17 @@ export type UiLang = 'en' | 'vi';
 export interface SiteUi {
 	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
 	consent: { label: string; text: string; privacy: string; accept: string; decline: string };
-	/** The bottom taskbar on every page (SPEC D31). */
+	/** The bottom taskbar on every page (SPEC D31, D35). */
 	taskbar: {
 		label: string;
 		shortcuts: string;
-		main: string;
-		onPage: string;
+		tabs: string;
+		thisLesson: string;
+		thisPage: string;
+		course: string;
+		soon: string;
+		next: string;
+		roadmap: string;
 		home: string;
 		start: string;
 		quiz: string;
@@ -34,9 +39,14 @@ const en: SiteUi = {
 	},
 	taskbar: {
 		label: 'Taskbar',
-		shortcuts: 'shortcuts',
-		main: 'Main',
-		onPage: 'On this page',
+		shortcuts: 'menu',
+		tabs: 'Menu section',
+		thisLesson: 'This lesson',
+		thisPage: 'This page',
+		course: 'Course',
+		soon: 'coming soon',
+		next: 'Next',
+		roadmap: 'Roadmap',
 		home: 'Home',
 		start: 'Start here',
 		quiz: 'Career quiz',
@@ -59,9 +69,14 @@ const vi: SiteUi = {
 	},
 	taskbar: {
 		label: 'Thanh công cụ',
-		shortcuts: 'lối tắt',
-		main: 'Chính',
-		onPage: 'Trên trang này',
+		shortcuts: 'trình đơn',
+		tabs: 'Mục trình đơn',
+		thisLesson: 'Bài này',
+		thisPage: 'Trang này',
+		course: 'Khóa học',
+		soon: 'sắp có',
+		next: 'Tiếp',
+		roadmap: 'Lộ trình',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',
 		quiz: 'Trắc nghiệm nghề',

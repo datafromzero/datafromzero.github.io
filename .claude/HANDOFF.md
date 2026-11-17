@@ -23,7 +23,9 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   - 03 "Same question. Three tools."
   - 04 "A short history of data" (card slider with a line icon per card; short sourced summaries).
   - 05 "Pick a direction" (four career cards with canvas 3D figures, link to the quiz).
-- **Bottom taskbar** on every page (D31): shortcuts menu, Start learning, light/dark, back to top.
+- **Bottom taskbar** on every page (D31, D35): a menu button labeled with the lesson code and the section being read,
+  and `Next E9 →` on lessons (`Learn →` elsewhere). Its sheet has two tabs, This lesson and Course, plus Home, Start
+  here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
 - **Curriculum (D29, D32):** 159 lessons in 8 stages, all `status: draft` (never deployed):
@@ -57,9 +59,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   A Vietnamese terminology research prompt was given to the owner earlier; no result has arrived.
 - **Homepage accessibility score is 97, not 100:** the 01 steps are dimmed to 25% until reached, which fails the
   contrast audit. It is the approved design; change it only if the owner asks.
-- **Two menus on phones** on inner pages: Starlight's top menu (page list) and the taskbar menu (shortcuts).
-  The owner was told and has not asked to merge them.
-- **Taskbar shortcuts** add a stage automatically once it has a published lesson (`src/components/taskbar/Taskbar.astro`).
+- **Course tab** lists every published lesson by stage automatically (`src/components/taskbar/Taskbar.astro`, D35).
+- **Consent banner** sits above the open taskbar sheet on a first visit, before the reader chooses (z-index 100).
 - **Design prototype:** `design/homepage-prototype/index.html` is the original approved prototype and no longer
   matches the homepage; `design/README.md` §4–§5 describe the current design.
 

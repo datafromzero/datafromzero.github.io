@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupRoadmap, lessonCode, ROADMAP_STAGES, type MapLesson } from '../src/lib/roadmap.ts';
+import { groupRoadmap, lessonCode, nextLesson, ROADMAP_STAGES, type MapLesson } from '../src/lib/roadmap.ts';
 
 const lesson = (id: string, o: Partial<MapLesson> = {}): MapLesson => ({
 	id,
@@ -59,5 +59,22 @@ describe('groupRoadmap', () => {
 		// 'x' is not on the roadmap (a draft), so it is not listed.
 		assert.deepEqual(sql.lessons[2].needs, ['S2']);
 		assert.deepEqual(g.find((s) => s.id === 'excel')!.lessons.map((l) => l.code), ['E1']);
+	});
+});
+
+describe('nextLesson', () => {
+	const stages = groupRoadmap(
+		[lesson('a', { stage: 'excel', order: 10 }), lesson('b', { stage: 'excel', order: 20 }), lesson('c', { stage: 'python', order: 10 })],
+		new Set(),
+	);
+	test('the next lesson in the same stage', () => {
+		assert.equal(nextLesson(stages, 'a')?.id, 'b');
+	});
+	test('the first lesson of the next stage that has lessons (empty stages are skipped)', () => {
+		assert.equal(nextLesson(stages, 'b')?.id, 'c');
+	});
+	test('nothing after the last lesson or for an unknown id', () => {
+		assert.equal(nextLesson(stages, 'c'), undefined);
+		assert.equal(nextLesson(stages, 'nope'), undefined);
 	});
 });

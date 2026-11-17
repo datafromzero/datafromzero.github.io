@@ -147,7 +147,7 @@ this table is authoritative where they disagree.
 | Section | Layout | Motion (GSAP) |
 |---|---|---|
 | **Nav** (fixed) | Logo + `datafromzero` wordmark left; Roadmap · Example (→ section 03) · GitHub right (only GitHub on mobile). `mix-blend-mode: difference` | Thin 1 px scroll-progress bar at very top (CSS scroll-driven, SPEC D23; ScrollTrigger scrub fallback) |
-| **Hero** (100svh) | Faint dot grid background; centred **lockup**: the logo and the wordmark "From A1 to AI." side by side (stacked up to 640 px wide). The wordmark is the page's only `<h1>` (accessible name "From A1 to AI."). The last word is "A" plus a one-line reel that rests on "I". No caption, no separate headline, no sub-copy or buttons: the bottom taskbar carries "Start learning" | CSS first: dot grid staggers in from centre → logo animation (§4) → the wordmark's words rise from a mask → the reel rolls 1 → λ → Σ → 3 → 2 → I and the "." slides with it (transforms only; the reel's width is the I's, so CLS stays 0). Without JS or before GSAP, the CSS alone plays this and ends on "From A1 to AI.". GSAP (deferred chunk) adds an Excel-style selection box (2 px border, square fill handle) that lands on "A1" and slides to "AI" in sync with the roll; a chunk that arrives after the roll only fades the box in on "AI". Reduced motion: final state, no box. On scroll: grid parallax, hero content drifts up and fades. Desktop only: grid follows the mouse slightly |
+| **Hero** (100svh) | Faint dot grid background; centred **lockup**: the logo and the wordmark "From A1 to AI." side by side (stacked up to 640 px wide). The wordmark is the page's only `<h1>` (accessible name "From A1 to AI."). The last word is "A" plus a one-line reel that rests on "I". No caption, no separate headline, no sub-copy or buttons: the bottom taskbar carries "Learn →" | CSS first: dot grid staggers in from centre → logo animation (§4) → the wordmark's words rise from a mask → the reel rolls 1 → λ → Σ → 3 → 2 → I and the "." slides with it (transforms only; the reel's width is the I's, so CLS stays 0). Without JS or before GSAP, the CSS alone plays this and ends on "From A1 to AI.". GSAP (deferred chunk) adds an Excel-style selection box (2 px border, square fill handle) that lands on "A1" and slides to "AI" in sync with the roll; a chunk that arrives after the roll only fades the box in on "AI". Reduced motion: final state, no box. On scroll: grid parallax, hero content drifts up and fades. Desktop only: grid follows the mouse slightly |
 | **01 — The core** | "Four steps. No skipped rungs." + vertical track: Excel/Sheets, SQL, Python, Advanced core | A white rail fills top→bottom with scroll (scrub); each step's node lights up and its text goes from 25% → 100% opacity as it is reached |
 | **02 — Then branch** | "One trunk. Four careers." + SVG tree: trunk splits into 4 branches → DA, DE, DS, ML (Data Analyst, Data Engineer, Data Scientist, ML/AI Engineer; SPEC D32), leaves evenly spaced over four label columns | Trunk then branches draw with scroll (scrub), leaf dots pop, labels fade up; once drawn, small lights travel down the branches (MotionPath, paused off screen) |
 | **03 — One idea, three tools** (`#tools`) | "Same question. Three tools." (2nd part muted). The question "Which store sold the most in March?", then the Excel (`SUMIFS`), SQL and Python solutions beside one result table (Riverside $1,284.50 · Old Quarter $1,102.75 · Harbor $968.20, "Example numbers."). Code in Geist Mono, wrapping (no horizontal scroll); one column on phones. Without JS: the three solutions stacked, each under its tool name | A script (no GSAP, also with reduced motion) turns the solutions into a real ARIA tab list (roving tabindex, ←/→/Home/End); panels share one cell, so switching never moves the page. GSAP (deferred): the underline slides (Flip, transforms only), the code fades up, the result rows pulse. The tabs cycle every 3.6 s while the section is on screen, stop for good on any interaction (click, key, focus, hover), and have a Pause / Play button (WCAG 2.2.2). Reduced motion: no cycle, no animation |
@@ -157,25 +157,31 @@ this table is authoritative where they disagree.
 
 Every section heading uses the same word-by-word mask reveal when it enters the viewport.
 
-### 5a. Bottom taskbar (every page, SPEC D31)
+### 5a. Bottom taskbar (every page, SPEC D31, D35)
 
 Approved mockup (owner, 2026-11), built as `src/components/taskbar/Taskbar.astro`: a floating, rounded
 glass bar (16px radius, blur 16px, max-width 720px, centered on the content column, 16px from the bottom plus
-the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop.
+the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop. Mobile navigation
+is one bar (D35): Starlight's header menu button and "On this page" bar are hidden on phones.
 
-- **Left:** a menu icon (two bars that cross into ×; owner change 2026-11-17) and a label in Geist 500, 15px: the page title, or on the
-  homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 History · 05 Directions). It opens the
-  shortcuts sheet, which grows upward from the bar: big links (Home, Start here, Career quiz, About), then small groups
-  (On this page, homepage only; Project: Changelog, Cite, License, Privacy, GitHub ↗). Esc, a second tap, a
-  link or an outside click closes it.
-- **Right:** "Start learning →" (solid; "Learn" at 420px or less) to `/start/`, the light / dark switch (a
-  half-filled circle) and back to top (a chevron, dimmed in the first 200px).
-- Glass tints: dark `rgba(18,18,18,.72)`, edge `rgba(255,255,255,.09)`, chip `rgba(255,255,255,.07)`; light
-  `rgba(250,250,250,.78)`, edge `rgba(0,0,0,.08)`, chip `rgba(0,0,0,.06)`; shadow `0 10px 40px rgba(0,0,0,.18)`
+- **Left:** the menu button, a menu icon (two bars that cross into ×) and a two-line label: a small mono line (Geist Mono
+  500, 11px, muted) and the page title (Geist 500, 15px), both with an ellipsis. On a lesson the small line is `E8 · current
+  section` and follows the scroll (the page's h2s); on the homepage it is the section on screen (Home · The core ·
+  Careers · Three tools · History · Directions) over the site name; elsewhere it is the current h2 or empty.
+- **Right:** a solid primary button: "Next E9 →" on a lesson (next published lesson in the stage, else the next
+  stage's first, else "Roadmap" to `/start/`), "Learn →" to `/start/` everywhere else (short label at 420px or less).
+  Back to top (a chevron, dimmed in the first 200px) shows from 50rem up only; the light / dark switch moved into the sheet.
+- **Sheet:** grows upward from the bar. A segmented control with two tabs, This lesson (This page off lessons: the
+  page's h2s, current one marked with a bar on the leading edge) and Course (stages with published lessons as `<details>`
+  of `E1 Title` rows, current lesson marked and scrolled into view; stages without lessons as muted "SQL · coming soon"
+  lines). Rows are at least 44px. A bottom row holds Home, Start here, Career quiz and the light / dark switch (a
+  half-filled circle). Esc, a second tap, a link or an outside click closes it.
+- Glass tints: dark `rgba(18,18,18,.84)`, edge `rgba(255,255,255,.09)`, chip `rgba(255,255,255,.07)`; light
+  `rgba(250,250,250,.9)`, edge `rgba(0,0,0,.08)`, chip `rgba(0,0,0,.06)`; shadow `0 10px 40px rgba(0,0,0,.18)`
   (the one shadow on the site, from the mockup). Targets 44px.
-- Motion: CSS transitions only (the sheet's rows 0fr → 1fr, .55s expo.out; big links rise from masks); none
-  with reduced motion. No GSAP. Without JavaScript the menu is a `<details>` toggle and the theme switch is
-  hidden. Hidden in print.
+- Motion: CSS transitions only (the sheet's rows 0fr → 1fr, .55s expo.out); none with reduced motion. No GSAP.
+  Without JavaScript the menu is a `<details>` toggle, the tabs are radio inputs switched with `:has()` and the
+  theme switch is hidden. Hidden in print.
 - Space: a spacer after the footer keeps the last content (footer, pagination) clear of the bar, and the hero's
   bottom padding includes the bar's height, so the hero copy and buttons sit just above it.
 
