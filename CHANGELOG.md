@@ -7,6 +7,8 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Analytics on (SPEC §11, D8): Google Analytics 4 property `G-0TNDBK1ZJX`, loaded only after the visitor accepts the
+  consent banner (Consent Mode v2, defaults denied). Event data is kept for 2 months, as `/privacy/` now states.
 - Homepage hero: the sub-copy and the two buttons are removed; the bottom taskbar already carries "Start learning".
 - Career quiz at `/career-quiz/` (SPEC D33, from the research in issue #32): ten original questions about how you
   like to work, each answer giving 2 points to the career it fits best and 1 to a close second. The result is a

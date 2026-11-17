@@ -47,7 +47,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## Open items and owner decisions still pending
 
-- **Google Analytics:** off. Needs `GA_ID` and `GA_RETENTION` in `src/site.ts` from the owner (SPEC §11).
+- **Google Analytics:** on since 2026-11-17 (`G-0TNDBK1ZJX`, retention 2 months, consent first). If the owner changes
+  the retention in GA4, update `GA_RETENTION` in `src/site.ts` so `/privacy/` stays true.
 - **Vietnamese:** paused (D30). `src/content/i18n/vi.json` is kept; `/vi/` URLs redirect to English.
   A Vietnamese terminology research prompt was given to the owner earlier; no result has arrived.
 - **Homepage accessibility score is 97, not 100:** the 01 steps are dimmed to 25% until reached, which fails the
