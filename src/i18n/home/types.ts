@@ -18,9 +18,6 @@ export interface HomeStrings {
 		 * the word `A1` gets the selection box, and a last word starting with `AI` gets the 1 → I reel.
 		 */
 		lockup: string;
-		sub: string;
-		ctaStart: string;
-		ctaExample: string;
 		scroll: string;
 		/** Name shown in the bottom taskbar while this section is on screen (SPEC D31); `short` below too. */
 		short: string;
@@ -79,8 +76,37 @@ export interface HomeStrings {
 		primary: string;
 		second: string;
 	};
-	marquee: { text: string; outline?: boolean }[];
-	marqueeControl: { pause: string; play: string; what: string };
-	begin: { short: string; label: string; heading: string; cta: string };
+	/**
+	 * 05: the four careers (SPEC D32), from the owner-approved mockup. Without script every career's details are
+	 * shown in full; with script the cards open one detail panel at a time, with a looping figure.
+	 */
+	careers: {
+		short: string;
+		label: string;
+		heading: string;
+		/** Text on each closed card, after its line ("See the path"). */
+		more: string;
+		/** The steps every path starts with, shown as chips before the career's own name. */
+		path: string[];
+		/** Accessible name of the path chips. */
+		pathLabel: string;
+		cta: string;
+		careers: {
+			/** Stable key: da, de, ds, ml (the figure to draw). */
+			key: 'da' | 'de' | 'ds' | 'ml';
+			/** Small mono label on the card ("01 · Data Analyst"). */
+			label: string;
+			name: string;
+			/** One line on the card. */
+			line: string;
+			/** Caption under the figure (script only; the figure is decorative). */
+			figure: string;
+			/** What the career does day to day. */
+			does: string[];
+			portfolio: string;
+		}[];
+		/** The quiz teaser below the cards. */
+		unsure: { heading: string; text: string; cta: string };
+	};
 	footer: { content: string; code: string; github: string; version: string };
 }

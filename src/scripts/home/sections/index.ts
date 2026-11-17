@@ -6,8 +6,6 @@ import { init as core } from './core';
 import { init as branches, load as loadBranches } from './branches';
 import { init as tools, load as loadTools } from './tools';
 import { init as history, load as loadHistory } from './history';
-import { init as marquee, load as loadMarquee } from './marquee';
-import { init as begin, load as loadBegin } from './begin';
 import { init as hero, load as loadHero } from './hero';
 
 /** A later piece of a section's setup, run in a frame slot of its own (keeps every task short). */
@@ -22,13 +20,11 @@ export type SectionInit = (el: HTMLElement, onCleanup: (fn: () => void) => void)
  */
 export type Loader = () => Promise<unknown>;
 
-export const sections: Record<string, SectionInit> = { hero, headings, rules, core, branches, tools, history, marquee, begin };
+export const sections: Record<string, SectionInit> = { hero, headings, rules, core, branches, tools, history };
 export const loaders: Record<string, Loader> = {
 	hero: loadHero,
 	branches: loadBranches,
 	tools: loadTools,
 	history: loadHistory,
-	marquee: loadMarquee,
-	begin: loadBegin,
 };
 

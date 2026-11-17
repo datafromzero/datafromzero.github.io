@@ -9,6 +9,7 @@
  *   warm    the same scroll a second time, once every section timeline exists (steady state)
  *   pointer pointer sweep over the hero (desktop only)
  *   history the 04 slider: Next and Previous buttons, ←/→ keys and a drag back and forth, once it is built
+ *   careers the 05 career figures: each card opened in turn (DA, DE, DS, ML), its canvas loop left running 2.5 s
  *   docs    the same scroll on a docs page (must stay free of JS work)
  * for 390x844 mobile and 1280x800 desktop. Per window it prints the rAF frame-time distribution
  * (p50, p95, p99, max, frames over 16.7 ms and 8.3 ms), Long Animation Frames with script
@@ -139,6 +140,15 @@ async function scrollThrough(cdp, page, profile, maxMs = 60000) {
 	}
 }
 
+/** Opens each career card in turn (section 05) and lets its figure loop run on the GSAP ticker. */
+async function driveCareers(page) {
+	for (const k of ['de', 'ds', 'ml', 'da']) {
+		// a DOM click: the page stays where it is, so the figure stays on screen
+		await page.evaluate((id) => document.querySelector(`#careers button[aria-controls="${id}"]`)?.click(), `cr-${k}`);
+		await sleep(2500);
+	}
+}
+
 /** Drives the history slider (section 04): buttons, keys, then a slow drag each way that snaps to a card. */
 async function driveHistory(cdp, page) {
 	const box = await page.evaluate(() => {
@@ -185,6 +195,7 @@ const SCENARIOS = {
 	warm: { path: '/', profiles: ['mobile', 'desktop'] }, // second pass over a page whose sections are all initialized
 	pointer: { path: '/', profiles: ['desktop'] },
 	history: { path: '/', profiles: ['mobile', 'desktop'] },
+	careers: { path: '/', profiles: ['mobile', 'desktop'] },
 	docs: { path: '/changelog/', profiles: ['mobile', 'desktop'] },
 };
 
@@ -258,7 +269,7 @@ async function run(browser, base, profileName, scenarioName, trace) {
 		await page.goto(base + scenario.path, { waitUntil: 'load' });
 		if (scenarioName !== 'docs') {
 			// The intro finishes at about 3 s and the motion chunk loads when idle: wait for both.
-			await page.waitForFunction(() => performance.getEntriesByType('resource').some((r) => /motion|sections|gsap/i.test(r.name)) || document.querySelector('.marquee-toggle:not([hidden])'), null, { timeout: 15000 }).catch(() => {});
+			await page.waitForFunction(() => performance.getEntriesByType('resource').some((r) => /motion|sections|gsap/i.test(r.name)), null, { timeout: 15000 }).catch(() => {});
 		}
 		await sleep(4500);
 		if (scenarioName === 'history') {
@@ -267,8 +278,15 @@ async function run(browser, base, profileName, scenarioName, trace) {
 				scrollTo({ top: g.getBoundingClientRect().top + scrollY - (innerHeight - g.offsetHeight) / 2, behavior: 'instant' });
 			});
 			await page.waitForFunction(() => document.querySelector('#history .gallery.is-live'), null, { timeout: 15000 }).catch(() => {});
-			// The marquee below may be on screen and loops every frame: hold it, so the window measures the slider alone.
-			await page.evaluate(() => document.querySelector('.marquee-toggle:not([hidden])')?.click());
+			await sleep(1500);
+		}
+		if (scenarioName === 'careers') {
+			// the cards and the figure on screen: the panel's stage centered, the cards just above it
+			await page.evaluate(() => {
+				const s = document.querySelector('#careers .cr-stage');
+				scrollTo({ top: s.getBoundingClientRect().top + scrollY - Math.max(0, (innerHeight - s.offsetHeight) / 2), behavior: 'instant' });
+			});
+			await page.waitForFunction(() => document.querySelector('#careers .cr-stage canvas') && document.querySelector('#careers button.cr-card'), null, { timeout: 15000 }).catch(() => {});
 			await sleep(1500);
 		}
 		if (scenarioName === 'warm') {
@@ -282,6 +300,7 @@ async function run(browser, base, profileName, scenarioName, trace) {
 		traceStart = trace ? Date.now() : 0;
 		if (scenarioName === 'pointer') await sweepPointer(cdp, profile);
 		else if (scenarioName === 'history') await driveHistory(cdp, page);
+		else if (scenarioName === 'careers') await driveCareers(page);
 		else await scrollThrough(cdp, page, profile);
 		await sleep(400);
 	}

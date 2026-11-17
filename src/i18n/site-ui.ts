@@ -14,6 +14,7 @@ export interface SiteUi {
 		onPage: string;
 		home: string;
 		start: string;
+		quiz: string;
 		learn: string;
 		learnShort: string;
 		toLight: string;
@@ -38,6 +39,7 @@ const en: SiteUi = {
 		onPage: 'On this page',
 		home: 'Home',
 		start: 'Start here',
+		quiz: 'Career quiz',
 		learn: 'Start learning',
 		learnShort: 'Learn',
 		toLight: 'Switch to light theme',
@@ -62,6 +64,7 @@ const vi: SiteUi = {
 		onPage: 'Trên trang này',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',
+		quiz: 'Trắc nghiệm nghề',
 		learn: 'Bắt đầu học',
 		learnShort: 'Học',
 		toLight: 'Chuyển sang giao diện sáng',

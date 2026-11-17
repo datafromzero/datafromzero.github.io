@@ -31,7 +31,7 @@ interface Job {
 	run: () => void | Step[];
 	/** Section name, to find its effect loader (see sections/index.ts). */
 	name?: string;
-	/** Fetching the section's effect chunks (MorphSVG, MotionPath, Flip, ...), started when the job is near or due. */
+	/** Fetching the section's effect chunks (MotionPath, Flip, Draggable, ...), started when the job is near or due. */
 	ready?: Promise<void>;
 	loaded?: boolean;
 }
@@ -66,13 +66,11 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 		});
 	};
 	add('.hero', 'hero');
-	add('h2[data-split=""]:not(.end h2)', 'headings');
+	add('h2[data-split=""]', 'headings');
 	add('.core', 'core');
 	add('.branch', 'branches');
 	add('#tools', 'tools');
 	add('#history', 'history');
-	add('.marquee', 'marquee');
-	add('.end', 'begin');
 	add('.rule', 'rules');
 	// document order, so the nearest section is built first when nothing is urgent
 	jobs.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
@@ -224,7 +222,7 @@ export function init() {
 		// Hero drifts away as the page scrolls (design/README.md §5): one scrubbed timeline. Its layers are
 		// promoted once the intro is over and only while the hero is on screen, so the scrub never repaints
 		// them (and promotion does not land in the middle of the CSS entrance).
-		const heroLayers = [$('.dots'), $('.hero-inner'), $('.stage')].filter((e): e is HTMLElement => !!e);
+		const heroLayers = [$('.dots'), $('.stage')].filter((e): e is HTMLElement => !!e);
 		let heroActive = false;
 		let introDone = false;
 		const armHero = () => willChange(heroLayers, heroActive && introDone ? 'transform, opacity' : null);
@@ -251,7 +249,6 @@ export function init() {
 				},
 			})
 			.to('.dots', { yPercent: 12, scale: 1.06 }, 0)
-			.to('.hero-inner', { yPercent: -14, opacity: 0.2 }, 0)
 			.to('.stage', { yPercent: -10, scale: 0.88, opacity: 0.4 }, 0)
 			.to('.scroll-hint', { opacity: 0, duration: 0.15 }, 0);
 
@@ -354,33 +351,6 @@ export function init() {
 		hero.addEventListener('pointermove', onMove, { passive: true });
 		hero.addEventListener('pointerleave', onLeave);
 
-		// Magnetic buttons.
-		const off: (() => void)[] = [];
-		document.querySelectorAll<HTMLElement>('.magnet, .ctas .btn').forEach((m) => {
-			const qx = gsap.quickTo(m, 'x', { duration: 0.6, ease: 'elastic.out(1,.4)' });
-			const qy = gsap.quickTo(m, 'y', { duration: 0.6, ease: 'elastic.out(1,.4)' });
-			let r: DOMRect | null = null;
-			const enter = () => (r = m.getBoundingClientRect());
-			const move = (e: PointerEvent) => {
-				if (!r) r = m.getBoundingClientRect();
-				qx((e.clientX - r.left - r.width / 2) * 0.35);
-				qy((e.clientY - r.top - r.height / 2) * 0.35);
-			};
-			const leave = () => {
-				r = null;
-				qx(0);
-				qy(0);
-			};
-			m.addEventListener('pointerenter', enter);
-			m.addEventListener('pointermove', move, { passive: true });
-			m.addEventListener('pointerleave', leave);
-			off.push(() => {
-				m.removeEventListener('pointerenter', enter);
-				m.removeEventListener('pointermove', move);
-				m.removeEventListener('pointerleave', leave);
-			});
-		});
-
 		return () => {
 			hero.removeEventListener('pointermove', onMove);
 			hero.removeEventListener('pointerleave', onLeave);
@@ -389,7 +359,6 @@ export function init() {
 			dots.classList.remove('is-near');
 			willChange(layers, null);
 			spot.remove();
-			off.forEach((fn) => fn());
 		};
 	});
 }
