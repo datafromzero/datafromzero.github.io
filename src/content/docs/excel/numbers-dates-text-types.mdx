@@ -1,0 +1,460 @@
+---
+id: excel-numbers-dates-text-types
+title: Numbers are not numbers until you check
+description: Tell the stored value from the displayed one, and catch text-numbers, text-dates and locale separators before they corrupt a total.
+stage: excel
+order: 40
+level: beginner
+duration: 25
+objectives:
+  - Compare the formula-bar value with the displayed value of a cell
+  - Detect numbers and dates stored as text with ISNUMBER and a left-aligned check
+  - Check imported dates for a day-month swap by looking for a day above 12
+  - Explain how regional settings change separators and CSV parsing
+prerequisites:
+  - excel-first-formulas
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: IS functions (ISNUMBER)'
+    url: https://support.microsoft.com/en-us/office/is-functions-0f2d7971-6019-40a0-a171-f2d869135665
+  - title: 'Microsoft Support: COUNT function'
+    url: https://support.microsoft.com/en-us/office/count-function-a59cd7fc-b623-4d93-87a4-d23bf411294c
+  - title: 'Microsoft Support: SUM function'
+    url: https://support.microsoft.com/en-us/office/sum-function-043e1c7d-7726-4e80-8f32-07b23e057f89
+  - title: 'Microsoft Support: VALUE function'
+    url: https://support.microsoft.com/en-us/office/value-function-257d0108-07dc-437d-ae1c-bc2d3953d8c2
+  - title: 'Microsoft Support: Convert numbers stored as text to numbers in Excel'
+    url: https://support.microsoft.com/en-us/excel/convert-numbers-stored-as-text-to-numbers-in-excel
+  - title: 'Microsoft Support: Sort data in a range or table'
+    url: https://support.microsoft.com/en-us/office/sort-data-in-a-range-or-table-62d0b95d-2a90-4610-a6ae-2e545c4a4654
+  - title: 'Microsoft Support: Excel status bar options'
+    url: https://support.microsoft.com/en-us/excel/excel-status-bar-options
+  - title: 'Microsoft Support: Change the character used to separate thousands or decimals'
+    url: https://support.microsoft.com/en-us/office/change-the-character-used-to-separate-thousands-or-decimals-c093b545-71cb-4903-b205-aebb9837bd1e
+  - title: 'Microsoft Support: Import or export text (.txt or .csv) files'
+    url: https://support.microsoft.com/en-us/office/import-or-export-text-txt-or-csv-files-5250ac4c-663c-47ce-937b-339e391393ba
+  - title: 'Google Docs Editors Help: Change spreadsheet locale and settings'
+    url: https://support.google.com/docs/answer/58515
+  - title: 'Google Docs Editors Help: Google Sheets function list'
+    url: https://support.google.com/docs/table/25273
+status: draft
+---
+
+This lesson works the same in Microsoft Excel and in Google Sheets. Where the two apps differ, both
+ways are shown.
+
+**Your practice file:** download
+[`excel-numbers-dates-text-types.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-numbers-dates-text-types.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds three exports of orders from **cafe-sales**, the small chain of three cafes we use through
+the whole roadmap: Campus in January, Old Town in February and Harbor in April. They are messy on
+purpose, the way real exports are. Each one is what you would get if a till wrote a CSV file with
+day/month/year dates, a computer set to month/day/year opened it, and the result was saved as an
+`.xlsx` file: the types and dates in the file are exactly what that computer made of them.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. Write the formula that counts how many cells in `D2:D115` hold a number.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=COUNT(D2:D115)`. `COUNT` counts only cells that hold numbers.
+
+   </details>
+
+2. In `=AVERAGE(C2:C20)` the cell C7 is empty. Does `AVERAGE` treat it as a 0?
+
+   <details>
+   <summary>Answer</summary>
+
+   No. An empty cell inside the range is skipped, so the average is taken over the cells that hold
+   numbers. A real 0 is counted; an empty cell is not.
+
+   </details>
+
+## The question
+
+The Campus manager sends you the January export of the till and says the month closed at **114 orders
+and \$1,518.75**. You add up the `total_usd` column with `=SUM(D2:D115)` and get **923.75**.
+
+> Which number is right? And can we trust the dates in this file?
+
+Here is the top of `raw_export_campus_jan`.
+
+| order_id | ordered_on | payment_method | total_usd |
+|---|---|---|---|
+| 1001 | 01/01/2026 | mobile | 14.00 |
+| 1003 | 01/01/2026 | mobile | 12.50 |
+| 1005 | 02/01/2026 | mobile | 3.75 |
+| 1008 | 02/01/2026 | card | 11.00 |
+| 1010 | 02/01/2026 | card | 14.25 |
+| 1011 | 02/01/2026 | card | 6.50 |
+
+Some of these cells are numbers and some are text. In a table like this one you cannot tell, and that
+is the whole problem. By the end of this lesson you will know three checks that tell, you will have
+found where the missing money went, and you will be able to say why the dates are not safe.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="nd-anatomy-title nd-anatomy-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="nd-anatomy-title">Three cells that look alike</title>
+<desc id="nd-anatomy-desc">A table with three columns: a number shown with two decimals, a number with decimals hidden, and text. Rows: what the cell shows (14.25, 14, 14.25, with the text on the left), what the formula bar shows (14.25 in all three), ISNUMBER (TRUE, TRUE, FALSE) and what SUM adds (14.25, 14.25, 0).</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Cells that look alike are not</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="88" y="30" width="82" height="40" />
+<rect x="170" y="30" width="86" height="40" />
+<rect x="256" y="30" width="94" height="40" />
+<rect x="88" y="70" width="82" height="34" />
+<rect x="170" y="70" width="86" height="34" />
+<rect x="256" y="70" width="94" height="34" />
+<rect x="88" y="104" width="82" height="34" />
+<rect x="170" y="104" width="86" height="34" />
+<rect x="256" y="104" width="94" height="34" />
+<rect x="88" y="138" width="82" height="34" />
+<rect x="170" y="138" width="86" height="34" />
+<rect x="256" y="138" width="94" height="34" />
+<rect x="88" y="172" width="82" height="34" />
+<rect x="170" y="172" width="86" height="34" />
+<rect x="256" y="172" width="94" height="34" />
+</g>
+<rect x="256" y="30" width="94" height="176" fill="none" stroke="currentColor" stroke-width="2" />
+<text x="129.0" y="54" text-anchor="middle" font-weight="600" font-size="11">number</text>
+<text x="213.0" y="47" text-anchor="middle" font-weight="600" font-size="11">number,</text>
+<text x="213.0" y="62" text-anchor="middle" font-weight="600" font-size="10">decimals hidden</text>
+<text x="303.0" y="54" text-anchor="middle" font-weight="600" font-size="11">text</text>
+<text x="10" y="91" font-size="11">cell shows</text>
+<text x="10" y="125" font-size="11">formula bar</text>
+<text x="10" y="159" font-size="11">ISNUMBER</text>
+<text x="10" y="193" font-size="11">SUM adds</text>
+<text x="162" y="91" text-anchor="end">14.25</text>
+<text x="248" y="91" text-anchor="end">14</text>
+<text x="264" y="91" text-anchor="start">14.25</text>
+<text x="129.0" y="125" text-anchor="middle">14.25</text>
+<text x="213.0" y="125" text-anchor="middle">14.25</text>
+<text x="303.0" y="125" text-anchor="middle">14.25</text>
+<text x="129.0" y="159" text-anchor="middle" font-weight="700">TRUE</text>
+<text x="213.0" y="159" text-anchor="middle" font-weight="700">TRUE</text>
+<text x="303.0" y="159" text-anchor="middle" font-weight="700">FALSE</text>
+<text x="129.0" y="193" text-anchor="middle" font-weight="700">14.25</text>
+<text x="213.0" y="193" text-anchor="middle" font-weight="700">14.25</text>
+<text x="303.0" y="193" text-anchor="middle" font-weight="700">0</text>
+<text x="10" y="228">numbers sit on the right of a cell, text on the left</text>
+<text x="10" y="246">the formula bar shows what is stored, not what shows</text>
+<text x="10" y="264">a SUM skips text: that cell adds nothing</text>
+</svg>
+<svg viewBox="0 0 360 254" width="360" role="img" aria-labelledby="nd-dates-title nd-dates-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="nd-dates-title">Dates that look alike</title>
+<desc id="nd-dates-desc">Three rows of an export. Order 1005 shows 02/01/2026, right-aligned, ISNUMBER TRUE: stored as February 1. Order 1087 shows 12/01/2026, ISNUMBER TRUE: stored as December 1. Order 1095 shows 13/01/2026, left-aligned, ISNUMBER FALSE: text. The file is day, month, year.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Dates that look alike are not</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="30" width="60" height="26" />
+<rect x="70" y="30" width="90" height="26" />
+<rect x="160" y="30" width="78" height="26" />
+<rect x="238" y="30" width="112" height="26" />
+<rect x="10" y="56" width="60" height="30" />
+<rect x="70" y="56" width="90" height="30" />
+<rect x="160" y="56" width="78" height="30" />
+<rect x="238" y="56" width="112" height="30" />
+<rect x="10" y="86" width="60" height="30" />
+<rect x="70" y="86" width="90" height="30" />
+<rect x="160" y="86" width="78" height="30" />
+<rect x="238" y="86" width="112" height="30" />
+<rect x="10" y="116" width="60" height="30" />
+<rect x="70" y="116" width="90" height="30" />
+<rect x="160" y="116" width="78" height="30" />
+<rect x="238" y="116" width="112" height="30" />
+</g>
+<text x="16" y="47" font-weight="600" font-size="11">order_id</text>
+<text x="76" y="47" font-weight="600" font-size="11">ordered_on</text>
+<text x="166" y="47" font-weight="600" font-size="11">ISNUMBER</text>
+<text x="244" y="47" font-weight="600" font-size="11">what it is</text>
+<text x="16" y="76">1005</text>
+<text x="152" y="76" text-anchor="end">02/01/2026</text>
+<text x="166" y="76" font-weight="700">TRUE</text>
+<text x="244" y="76" font-size="11">stored as Feb 1</text>
+<text x="16" y="106">1087</text>
+<text x="152" y="106" text-anchor="end">12/01/2026</text>
+<text x="166" y="106" font-weight="700">TRUE</text>
+<text x="244" y="106" font-size="11">stored as Dec 1</text>
+<text x="16" y="136">1095</text>
+<text x="78" y="136" text-anchor="start">13/01/2026</text>
+<text x="166" y="136" font-weight="700">FALSE</text>
+<text x="244" y="136" font-size="11">text, not a date</text>
+<text x="10" y="170">the file is day/month/year: 13 cannot be a month</text>
+<text x="10" y="188">a computer set to month/day read the first part</text>
+<text x="10" y="206">as the month, wherever it could</text>
+<text x="10" y="224">02/01 meant January 2 and became February 1</text>
+<text x="10" y="242">12/01 meant January 12 and became December 1</text>
+</svg>
+</figure>
+
+A cell has two values: the one it **shows** and the one it **stores**. The formula bar shows what is
+stored. A number format only changes how the stored number is drawn: 14.25 shown with no decimals
+reads 14, but every formula still uses 14.25.
+
+A **text-number** looks like a number but is text, so `SUM`, `AVERAGE` and a sort treat it as text:
+`SUM` ignores text, and `COUNT` does not count it. Dates are numbers underneath, a count of days,
+and a column sorts and filters as dates only when every date is stored that way. A **text-date**
+looks like a date and is text.
+
+Three checks, none of which trusts your eyes:
+
+- **`=ISNUMBER(D2)`** gives TRUE for a number or a real date and FALSE for text. It does not convert
+  anything, so even a number in quotation marks counts as text.
+- **`COUNT` against `COUNTA`** on a column. `COUNT` counts the numbers, `COUNTA` counts every
+  filled cell. If they differ, the difference is the number of text cells.
+- **Look for a day above 12.** In an imported date such as 13/01/2026 the first number cannot be a
+  month, so the file writes the day first. A date whose first two numbers are both 12 or less is
+  ambiguous and can be silently swapped.
+
+By default numbers sit on the right of a cell and text on the left, so a column with both sides is a
+warning sign. Treat it as a clue, not proof: alignment can be changed by formatting. `ISNUMBER` is the
+test.
+
+## Worked example
+
+Question: **what did Campus really take in January, and can we trust the dates?** Open the practice
+file and follow along.
+
+1. **Copy the data to `calc`.** Select everything on `raw_export_campus_jan`, copy it, and paste it in
+   cell **A1** of `calc`.
+   *Why:* the raw sheet stays as it arrived, and every check below is made on the copy.
+
+2. **Compare what a cell shows with what it stores.** Click **D2**: the cell shows `14.00` on the
+   left, and the formula bar shows `14.00`. Click **D5**: the cell shows `11.00` on the right, and the
+   formula bar shows `11`. Then try it yourself in a spare cell on `calc`: type `14.25`, press the
+   Decrease Decimal button twice, and the cell shows 14 while the formula bar still shows 14.25.
+   *Why:* D5 is a number drawn with two decimals, and D2 is text that happens to look the same. The
+   side of the cell and the formula bar already tell the two apart, but you cannot check 114 cells
+   by eye.
+
+3. **Test every cell.** Type `is_number` in **E1** and `=ISNUMBER(D2)` in **E2**. Fill down to **E115**.
+   E2 to E4 say FALSE and E5 says TRUE.
+   *Why:* `ISNUMBER` gives a yes or no for each row, so the problem becomes a column you can scan.
+
+4. **Count them.** To the right, in **G1** type `check` and in **H1** `value`, then fill in:
+
+   | G | H | Result |
+   |---|---|---:|
+   | `numbers_in_total` | `=COUNT(D2:D115)` | 73 |
+   | `filled_in_total` | `=COUNTA(D2:D115)` | 114 |
+   | `sum_as_it_stands` | `=SUM(D2:D115)` | 923.75 |
+
+   *Why:* `COUNTA` agrees with the manager's 114 orders, so no row is missing. `COUNT` finds only 73
+   numbers, so **41** of the totals are text, and `SUM` skips them.
+
+5. **Convert, in a new column.** Type `total_number` in **F1** and `=VALUE(D2)` in **F2**. Fill down to
+   **F115**. In **G5** type `real_total`, in **H5** `=SUM(F2:F115)`. It shows **1518.75**.
+   *Why a new column:* the original stays visible, so you can compare. `VALUE` turns text that looks
+   like a number into a number, and leaves a real number as it is. In Excel you can also select the
+   text cells and choose **Convert to Number** from the error indicator (the small warning symbol)
+   that appears beside them. That changes the cells in place, so use it on a copy.
+
+6. **Check the total.** The manager said \$1,518.75, and the converted column gives **1518.75**. The
+   difference from the first sum, 595.00, is exactly what the 41 text totals add up to. All 41 are
+   `mobile` orders.
+
+7. **Now the dates.** In **G6** type `real_dates` and in **H6** `=COUNT(B2:B115)`: **46**. In **G7** type
+   `filled_dates` and in **H7** `=COUNTA(B2:B115)`: **114**. So **68** dates are text. Scroll to
+   them: the first is `13/01/2026` on row 48, the last is `31/01/2026` on row 115.
+   *Why this matters:* a day above 12 cannot be a month, so this file writes the day first. Yet 46
+   cells were turned into real dates, which means the computer that opened the file read those the
+   other way round.
+
+8. **Find the swap.** In **G8** type `earliest_real_date` with `=MIN(B2:B115)` in **H8**, and in **G9**
+   `latest_real_date` with `=MAX(B2:B115)` in **H9**. If a cell shows a five-digit number, format it as
+   a date. The earliest is January 1, 2026. The latest is **December 1, 2026**.
+   *Why:* this is a January export, so every date must fall in January. A date in December proves the
+   swap: `12/01/2026` meant January 12 and was read as December 1. Of the 46 real dates, 44 are wrong.
+   The two on January 1 are right only by luck, because day and month are both 1.
+
+Answer: **the right total is \$1,518.75** (the converted column), and **the dates are not safe**: 68 are
+text, 46 are real dates, and 44 of those are the wrong day. Do not sort, filter or group this
+export by date.
+
+<details>
+<summary>Explain it in your own words: why did you count the text cells before you converted anything?</summary>
+
+Because the counts tell you how big the problem is and where it sits, and the same counts prove the
+fix afterwards. If the converted column had given a count of 73 again, the conversion would have
+done nothing. Fixing first and measuring later leaves you guessing.
+
+</details>
+
+<Aside type="note" title="Why did the dates swap? Regional settings">
+A CSV file stores only characters. Whoever opens it decides what `02/01/2026`, `1.500` or `1,500`
+mean, using the settings of their own computer. Microsoft says that opening a CSV directly makes
+Excel use its current default data format settings to read each column.
+
+| The characters | Read as "dot decimal, comma thousands" | Read as "comma decimal, dot thousands" |
+|---|---|---|
+| `1.500` | 1.5 | 1500 |
+| `1,500` | 1500 | 1.5 |
+| `1.500,25` | not a number | 1500.25 |
+
+Do not guess which setting your computer uses. Check it. Excel on Windows uses the separators of the
+Windows regional settings, unless you clear **Use system separators** under **File > Options >
+Advanced**. Google Sheets keeps a locale for each spreadsheet, under **File > Settings > General >
+Locale**, and changing it changes the default currency, date and number formats for everyone using that
+file. To bring a CSV into Excel under your control, use **Data > From Text/CSV**: you pick the
+delimiter and see a preview before anything is loaded. The safest dates in a shared file are written
+year first, such as `2026-01-13`, which nobody can read the wrong way round.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-numbers-dates-text-types-1">
+
+**Can we trust the dates in the Old Town February export?** Use `raw_export_oldtown_feb`. The manager
+says February closed at 103 orders and \$1,162.00. Expected output: the number of text dates, the
+earliest and latest real date, how many real dates are wrong, and one sentence.
+
+The first steps are done for you:
+
+1. The data is copied to the sheet `calc_ex1`.
+2. The amounts are fine, with the checks already in **H2:H4** of `calc_ex1`: `=COUNT(D2:D104)` and `=COUNTA(D2:D104)` both give 103, and
+   `=SUM(D2:D104)` gives 1162.00, the manager's figure.
+
+Now finish it: check the dates.
+
+<details>
+<summary>Hint</summary>
+
+Do steps 7 and 8 of the worked example on column B. This export has 103 rows, so the data runs from
+row 2 to row 104. Which month must every date be in?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`=COUNT(B2:B104)` counts the real dates and `=COUNTA(B2:B104)` counts every filled date, so their
+difference is the number of text dates. Then `=MIN(B2:B104)` and `=MAX(B2:B104)` show whether any
+real date falls outside February.
+
+</details>
+
+<Solution>
+
+1. `=COUNT(B2:B104)` gives **38** real dates and `=COUNTA(B2:B104)` gives 103, so **65** dates are
+   text. The text dates run up to `28/02/2026`: a day above 12, so the file writes the day first.
+2. `=MIN(B2:B104)` is **January 2, 2026** (shown `01/02/2026`) and `=MAX(B2:B104)` is
+   **December 2, 2026** (shown `12/02/2026`). A February export cannot hold either.
+3. The 38 real dates are February 1 to 12 read as month first. Only the 3 orders on February 2 come out
+   right, because day and month are both 2. The other **35** are wrong.
+
+Answer: **the amounts are clean, the dates are not.** 65 are text, 35 of the 38 real dates are the
+wrong day, so the date column cannot be used as it is. Ask for a new export with dates written
+year first, such as `2026-02-13`.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-numbers-dates-text-types-2">
+
+**Audit the Harbor April export.** Use `raw_export_harbor_apr`. The manager says April closed at
+123 orders and \$1,596.50. Do not change the raw sheet: work on the blank sheet `calc_ex2`.
+
+Before you type anything, write on `calc_ex2` what your result should look like. Then build it from a
+blank sheet, and finish with a one-line verdict.
+
+<details>
+<summary>Hint</summary>
+
+Run the three checks from the worked example on the amounts and on the dates. Then look at the earliest
+and latest real date: which month must they be in?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"A small table: the number of text amounts, the true total, the number of text
+dates, the earliest and latest real date, and one sentence saying whether the export can be used as it
+is."* The export has 123 orders, so the data runs from row 2 to row 124.
+
+</details>
+
+<Solution>
+
+On `calc_ex2`, with the data copied in and a `=VALUE(D2)` column added:
+
+| check | formula | result |
+|---|---|---:|
+| numbers in total_usd | `=COUNT(D2:D124)` | 61 |
+| filled in total_usd | `=COUNTA(D2:D124)` | 123 |
+| sum as it stands | `=SUM(D2:D124)` | 735.00 |
+| real total after `VALUE` | `=SUM` of the new column | 1596.50 |
+| real dates | `=COUNT(B2:B124)` | 51 |
+| filled dates | `=COUNTA(B2:B124)` | 123 |
+| earliest real date | `=MIN(B2:B124)` | January 4, 2026 |
+| latest real date | `=MAX(B2:B124)` | December 4, 2026 |
+
+Verdict: **do not use it as it is.** 62 of the 123 totals are text, all of them card payments: left alone
+they drop \$861.50 and `SUM` shows 735.00. After `VALUE` the total is 1596.50, which matches the manager. The
+dates are worse: 72 are text, the 51 real dates run from January 4 to December 4 in an April export,
+and only the 7 orders on April 4 are right by luck. The amounts can be repaired on your copy. The dates
+cannot be trusted, so do not filter or group by date until you get a new export with dates written
+year first, such as `2026-04-12`.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a cell shows 14, but the formula bar shows 14.25. Which value does `SUM` use?
+
+   <details>
+   <summary>Answer</summary>
+
+   14.25. The formula bar shows what is stored, and every formula works with the stored value. The
+   display only changes how it is drawn.
+
+   </details>
+
+<Exercise id="excel-numbers-dates-text-types-3">
+
+**Spot the flaw.** A colleague opens the Campus January export and writes: *"I selected the `total_usd`
+values (D2 to D115) and the status bar says Count: 114, so all 114 amounts are numbers. The dates look fine too:
+02/01/2026, 03/01/2026 and so on. I can read every one of them."* What two things went wrong, and how
+would you find the cause?
+
+<Solution>
+
+1. **The Count is not a test for numbers.** The status bar's Count counts the cells that are filled,
+   text included, and Excel offers a separate Numerical Count that counts only cells holding
+   numbers. 114 means 114 filled cells. `=COUNT(D2:D115)` gives 73, so 41 amounts are text.
+2. **Readable is not right.** The cell shows how a date is drawn, not what it is. `02/01/2026` in row 4 is
+   stored as February 1, and the earliest and latest real dates (`MIN` and `MAX`) are January 1 and
+   December 1, outside a January export. A day above 12, such as `13/01/2026`, which is text, shows that
+   the file writes the day first.
+
+Count the numbers with `COUNT` against `COUNTA`, and test the dates with `ISNUMBER`, `MIN` and `MAX`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can tell the value a cell stores from the value it shows, find numbers and dates
+stored as text with ISNUMBER and `COUNT` against `COUNTA`, spot a day-month swap by looking for a day above
+12, and say why a total or a date column cannot be trusted until it is checked.*
+Test: Exercise excel-numbers-dates-text-types-2, done from a blank sheet without opening the
+hints.
+
+The pattern to remember: **check the type before you trust the total.** Count what is a number, count
+what is filled, and compare. Your next lesson, "Tables, sorting and filtering", sorts and filters
+columns that you now know how to test.

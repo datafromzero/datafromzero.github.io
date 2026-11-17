@@ -5,63 +5,63 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 744 nodes, 649 edges, 94 communities (376 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 34, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 408, overrides 5, references 24, runs 9, specified-by 4, uses 3, uses-token 22, validated-by 5.
+- 776 nodes, 746 edges, 90 communities (381 isolated nodes).
+- Nodes: agent 8, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 15, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 31, mentions 441, overrides 5, references 24, runs 10, specified-by 4, uses 66, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
 | 1 | `astro.config.mjs` | config | 37 | astro.config.mjs:1 |
-| 2 | `src/site.ts` | module | 25 | src/site.ts:1 |
-| 3 | `design/README.md` | doc | 22 | design/README.md:1 |
-| 4 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
-| 5 | `.claude/HANDOFF.md` | doc | 19 | .claude/HANDOFF.md:1 |
-| 6 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:363 |
-| 7 | `S6` Authoring components | spec-section | 19 | SPEC.md:245 |
-| 8 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
-| 9 | `D31` Bottom taskbar | decision | 18 | SPEC.md:58 |
-| 10 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
-| 11 | `D30` Vietnamese paused | decision | 17 | SPEC.md:57 |
-| 12 | `DG5` Homepage (see `homepage-proto… | design-section | 15 | design/README.md:140 |
-| 13 | `S5` Content model | spec-section | 15 | SPEC.md:148 |
-| 14 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
-| 15 | `D28` Motion scope and budget | decision | 14 | SPEC.md:55 |
+| 2 | `src/site.ts` | module | 26 | src/site.ts:1 |
+| 3 | `src/components/content/Solution.astro` | component | 24 | src/components/content/Solution.astro:1 |
+| 4 | `src/components/content/Exercise.astro` | component | 23 | src/components/content/Exercise.astro:1 |
+| 5 | `src/components/content/OpenInSheets.astro` | component | 23 | src/components/content/OpenInSheets.astro:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 22 | .claude/HANDOFF.md:1 |
+| 7 | `design/README.md` | doc | 22 | design/README.md:1 |
+| 8 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
+| 9 | `D30` Vietnamese paused | decision | 19 | SPEC.md:57 |
+| 10 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:363 |
+| 11 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
+| 12 | `D31` Bottom taskbar | decision | 18 | SPEC.md:58 |
+| 13 | `S6` Authoring components | spec-section | 18 | SPEC.md:245 |
+| 14 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
+| 15 | `.claude/MISTAKES.md` | doc | 16 | .claude/MISTAKES.md:1 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
-- **C2 site.ts** (16): src/site.ts; D30 Vietnamese paused; S8 Internationalization; D3 Languages (paused by D30); R7 Language; src/site.ts#ANALYTICS_ENABLED
-- **C3 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
-- **C5 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
-- **C6 Tech stack** (8): S2 Tech stack; S4 Information architecture; agent:content-producer content-producer; research/curriculum/01-competitor-map.md; S3 URL contract; research/curriculum/00-README.md
-- **C7 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
-- **C8 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
-- **C9 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C10 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
-- **C11 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
-- **C12 tokens.css** (7): src/styles/tokens.css; src/styles/print.css; token:--bg --bg; token:--dim --dim; token:--fg --fg; token:--line --line
+- **C1 HANDOFF.md** (35): .claude/HANDOFF.md; design/README.md; .claude/MISTAKES.md; CLAUDE.md; D32 Four career branches; S14 Content production (replaces migr…
+- **C2 Solution** (25): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/ai-draft-and-verify.mdx; src/content/docs/excel/cell-references.mdx
+- **C3 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
+- **C4 site.ts** (16): src/site.ts; D30 Vietnamese paused; S8 Internationalization; D3 Languages (paused by D30); R7 Language; src/site.ts#ANALYTICS_ENABLED
+- **C5 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C6 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
+- **C7 tokens.css** (10): src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/print.css; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; token:--bg --bg
+- **C8 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
+- **C9 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
+- **C10 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
+- **C11 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
+- **C12 astro.config.mjs** (7): astro.config.mjs; DG3 The logo; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex; pkg:remark-math remark-math
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `D1` -mentions-> `D24` (C57 to C14, SPEC.md:28)
-- `ctype:career` -specified-by-> `S5.4` (C67 to C66, src/lib/content-schemas.ts:96)
-- `src/components/content/Solution.astro` -mentions-> `src/lib/remark-content-rules.ts` (C32 to C85, src/components/content/Solution.astro:3)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C57 to C2, research/curriculum/02-syllabus-inventory.md:319)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C50, .claude/agents/README.md:39)
-- `S5.2` -mentions-> `D18` (C44 to C38, SPEC.md:222)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C78 to C79, src/components/starlight/ThemeSelect.astro:3)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C77, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C26 to C57, .claude/skills/kb/SKILL.md:3)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C36 to C37, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C37 to C46, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C60 to C11, design/README.md:198)
+- `ctype:career` -specified-by-> `S5.4` (C61 to C59, src/lib/content-schemas.ts:96)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C1 to C4, research/curriculum/02-syllabus-inventory.md:319)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C67 to C1, scripts/check-placeholders.mjs:2)
+- `S5.2` -mentions-> `D18` (C40 to C1, SPEC.md:222)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C19 to C57, research/curriculum/00-README.md:134)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C74 to C75, src/components/starlight/ThemeSelect.astro:3)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C77 to C73, src/layouts/HomeLayout.astro:39)
+- `M8` -mentions-> `S4` (C1 to C57, CLAUDE.md:65)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C81 to C33, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C33 to C42, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C53 to C35, design/README.md:198)
+- `M6` -mentions-> `D27` (C37 to C34, CLAUDE.md:57)
 
 ## Decisions (SPEC §1)
 
@@ -121,10 +121,10 @@ term: id — file:line
 - dataset: `S7` — SPEC.md:277
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
 - consent: `src/components/project/Consent.astro` — src/components/project/Consent.astro:1
-- analytics: `R9` — CLAUDE.md:34
+- analytics: `R9` — CLAUDE.md:36
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
-- motion: `R5` — CLAUDE.md:25
-- gsap: `pkg:gsap` — package.json:39
+- motion: `R5` — CLAUDE.md:27
+- gsap: `pkg:gsap` — package.json:40
 - scroll: `DG5` — design/README.md:140
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
@@ -141,24 +141,24 @@ term: id — file:line
 - colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
 - sheets: `R:curriculum/02-syllabus-inventory#1-stage-1-spreadsheets-and-the-bi-layer:1-5-google-sheets-what-transfers-what-is-sheets-only` — research/curriculum/02-syllabus-inventory.md:51
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:40
+- katex: `pkg:katex` — package.json:41
 - math: `src/styles/math.css` — src/styles/math.css:1
-- mdx: `pkg:@astrojs/mdx` — package.json:33
-- auto-import: `pkg:astro-auto-import` — package.json:38
+- mdx: `pkg:@astrojs/mdx` — package.json:34
+- auto-import: `pkg:astro-auto-import` — package.json:39
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
-- quality gates: `M6` — CLAUDE.md:49
-- cspell: `pkg:cspell` — package.json:46
-- markdownlint: `pkg:markdownlint-cli2` — package.json:22
+- quality gates: `M6` — CLAUDE.md:51
+- cspell: `pkg:cspell` — package.json:47
+- markdownlint: `pkg:markdownlint-cli2` — package.json:23
 - migration: `S14` — SPEC.md:433
-- license: `R8` — CLAUDE.md:33
-- changelog: `S9` — SPEC.md:319
-- zenodo: `S1` — SPEC.md:24
+- license: `R8` — CLAUDE.md:35
+- changelog: `CHANGELOG.md` — CHANGELOG.md:1
+- zenodo: `S9` — SPEC.md:319
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
 - hero: `src/components/home/Hero.astro` — src/components/home/Hero.astro:1
 - tokens: `src/styles/tokens.css` — src/styles/tokens.css:1
 - font: `DG2:design-tokens` — design/README.md:37
-- agents: `agent:spec-reviewer` — .claude/agents/spec-reviewer.md:1
+- agents: `agent:content-producer` — .claude/agents/content-producer.md:1
 - build plan: `R:curriculum/00-README#3-how-each-package-file-maps-to-build-decisions:04-ui-ux-lessons-site-build` — research/curriculum/00-README.md:84
 - out of scope: `R:curriculum/00-README#4-evidence-and-confidence:what-remains-unverified-or-out-of-scope` — research/curriculum/00-README.md:121
 - career: `src/lib/career-quiz-score.ts#Career` — src/lib/career-quiz-score.ts:10
@@ -168,10 +168,10 @@ term: id — file:line
 - lesson header: `R:curriculum/03-teaching-playbook#2-the-canonical-lesson-template-seven-sections` — research/curriculum/03-teaching-playbook.md:43
 - footer: `src/components/starlight/Footer.astro` — src/components/starlight/Footer.astro:1
 - nvmrc: `.nvmrc` — .nvmrc:1
+- OpenInSheets: `src/components/content/OpenInSheets.astro` — src/components/content/OpenInSheets.astro:1
 - Authoring components: `S6` — SPEC.md:245
-- Content model: `S5` — SPEC.md:148
 - Internationalization: `S8` — SPEC.md:303
-- Design & motion: `S10` — SPEC.md:335
+- Content model: `S5` — SPEC.md:148
 
 ## Suggested questions
 

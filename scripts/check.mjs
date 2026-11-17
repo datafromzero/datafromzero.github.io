@@ -9,6 +9,7 @@ const steps = [
 	['spelling (cspell)', 'npm', ['run', '--silent', 'spell']],
 	['markdown style (markdownlint)', 'npm', ['run', '--silent', 'lint:md']],
 	['knowledge graph is current', 'npm', ['run', '--silent', 'check:kb']],
+	['lesson rules from the mistakes log', 'npm', ['run', '--silent', 'check:lessons']],
 	['build + schema + internal links', 'npm', ['run', '--silent', 'build']],
 	['no owner placeholders on deployed pages', 'npm', ['run', '--silent', 'check:placeholders']],
 	['prerequisite graph', 'npm', ['run', '--silent', 'check:graph']],

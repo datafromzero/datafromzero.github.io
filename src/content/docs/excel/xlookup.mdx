@@ -1,0 +1,465 @@
+---
+id: excel-xlookup
+title: Bring in a value by key with XLOOKUP
+description: Pull a price or attribute from another table by code, handle codes that are not found, and see lookup as the spreadsheet join.
+stage: excel
+order: 80
+level: beginner
+duration: 25
+objectives:
+  - Write an XLOOKUP with an exact match
+  - Keep the lookup table fixed with absolute references
+  - Return a readable not-found result instead of an error
+  - Verify a lookup column by reconciling an extended total
+prerequisites:
+  - excel-cell-references
+  - excel-tables-sort-filter
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+  - title: 'Google Docs Editors Help: XLOOKUP'
+    url: https://support.google.com/docs/answer/12405947
+  - title: 'Microsoft Support: How to correct a #N/A error'
+    url: https://support.microsoft.com/en-us/office/how-to-correct-a-n-a-error-a9708411-f82e-4e1b-8a7e-28c28311b993
+status: draft
+---
+
+This lesson works the same in Microsoft Excel and in Google Sheets. Where the two apps differ, both
+ways are shown.
+
+**Your practice file:** download
+[`excel-xlookup.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-xlookup.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds real-looking (but invented) data from **cafe-sales**, the small chain of three cafes we use
+through the whole roadmap. This time the data comes in separate tables that share a code.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+TODO(owner): In `calc_ex3` the lookup is stored as `_xlfn.XLOOKUP`, the file-format name of `XLOOKUP`, which I could not open in Excel. Check that Excel shows it as `XLOOKUP`, with 3.25 in F2 and `#N/A` further down. Also check the Excel and Google Sheets
+steps in this lesson once in the real apps: they are written from the official help pages, not from
+a live session.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In E2 you multiply the amount in D2 by a tax rate that sits in H1. Write the formula so it still
+   works when you fill it down to E3, E4 and so on.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=D2*$H$1`. The dollar signs lock H1 on both the row and the column, so every filled-down copy still
+   points at the tax rate. D2 is free to move to D3, D4 and so on.
+
+   </details>
+
+2. You sort only column B of a list and leave the other columns where they are. What have you done to
+   the list?
+
+   <details>
+   <summary>Answer</summary>
+
+   You broke its rows. Every value in B now sits next to the wrong values from the other columns.
+   Sort the whole table, and the rows move together. A lookup depends on this: the code and the value
+   you want must stay in the same row.
+
+   </details>
+
+3. What must be true of the first row of a list before you can turn it into a Table?
+
+   <details>
+   <summary>Answer</summary>
+
+   It holds one header row with a name for each column, and below it there are no blank rows, merged
+   cells or totals mixed into the data.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> What did we sell in total from January to June? I only trust the number if it matches the till's
+> own report.
+
+The till gives you two tables. First, `raw_order_items`: one row per product line, with the product
+**code** but no price. Second, `raw_products`: one row per product, with its code and its price.
+
+| order_item_id | order_id | product_id | quantity | discount_usd |
+|---|---:|---:|---:|---:|
+| 5001 | 1001 | 10 | 1 | 0.00 |
+| 5002 | 1001 | 6 | 1 | 0.00 |
+| 5003 | 1001 | 1 | 2 | 0.00 |
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+
+The amount of a line is `quantity × unit_price_usd − discount_usd`, but the price lives in the other
+table. By the end of this lesson you will bring it into every line by its code, and you will prove the
+total against the `raw_till_report` sheet instead of trusting your formulas.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 232" width="360" role="img" aria-labelledby="pair-title pair-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="pair-title">Two tables paired on a key</title>
+<desc id="pair-desc">On the left, three order lines with product codes 10, 6 and 1. On the right, the products table with codes 1, 6 and 10 and their prices 3.00, 4.75 and 3.25. Arrows pair each line with the product that has the same code, not the product in the same position. The price then fills the empty price column of each line.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">XLOOKUP pairs rows by the key</text>
+<text x="6" y="46" opacity="0.8" font-size="11">calc: the order lines</text>
+<text x="204" y="46" opacity="0.8" font-size="11">raw_products: lookup table</text>
+<rect x="70" y="80" width="86" height="78" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="6" y="54" width="64" height="26" />
+<rect x="70" y="54" width="86" height="26" />
+<rect x="204" y="54" width="64" height="26" />
+<rect x="268" y="54" width="86" height="26" />
+<rect x="6" y="80" width="64" height="26" />
+<rect x="70" y="80" width="86" height="26" />
+<rect x="204" y="80" width="64" height="26" />
+<rect x="268" y="80" width="86" height="26" />
+<rect x="6" y="106" width="64" height="26" />
+<rect x="70" y="106" width="86" height="26" />
+<rect x="204" y="106" width="64" height="26" />
+<rect x="268" y="106" width="86" height="26" />
+<rect x="6" y="132" width="64" height="26" />
+<rect x="70" y="132" width="86" height="26" />
+<rect x="204" y="132" width="64" height="26" />
+<rect x="268" y="132" width="86" height="26" />
+<rect x="204" y="158" width="64" height="26" />
+<rect x="268" y="158" width="86" height="26" />
+</g>
+<text x="11" y="71" font-weight="600" font-size="10">product_id</text>
+<text x="74" y="71" font-weight="600" font-size="10">unit_price_usd</text>
+<text x="209" y="71" font-weight="600" font-size="10">product_id</text>
+<text x="272" y="71" font-weight="600" font-size="10">unit_price_usd</text>
+<text x="12" y="97">10</text>
+<text x="150" y="97" text-anchor="end" font-weight="600">3.25</text>
+<text x="12" y="123">6</text>
+<text x="150" y="123" text-anchor="end" font-weight="600">4.75</text>
+<text x="12" y="149">1</text>
+<text x="150" y="149" text-anchor="end" font-weight="600">3.00</text>
+<text x="210" y="97">1</text>
+<text x="348" y="97" text-anchor="end">3.00</text>
+<text x="210" y="123">6</text>
+<text x="348" y="123" text-anchor="end">4.75</text>
+<text x="210" y="149">10</text>
+<text x="348" y="149" text-anchor="end">3.25</text>
+<text x="279" y="175" text-anchor="middle" opacity="0.6">...</text>
+<defs><marker id="pair-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" /></marker></defs>
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M156 93 L204 145" marker-end="url(#pair-arrow)" />
+<path d="M156 119 L204 119" marker-end="url(#pair-arrow)" />
+<path d="M156 145 L204 93" marker-end="url(#pair-arrow)" />
+</g>
+<text x="8" y="208" font-weight="600">Match on the code; the price comes back.</text>
+<text x="8" y="226" opacity="0.8" font-size="11">Line 5003 has quantity 2: its amount is 2 × 3.00 = 6.00.</text>
+</svg>
+<svg viewBox="0 0 360 230" width="360" role="img" aria-labelledby="nomatch-title nomatch-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="nomatch-title">The same lookup with and without a not-found result</title>
+<desc id="nomatch-desc">Three orders. Orders 1334 and 1336 have customers 9 and 70, so both lookups return bronze and silver. Order 1335 has no customer: the lookup without a fourth argument returns the error N/A, the lookup with the text no card returns no card. The error would break any total built on that column.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">One row has no match</text>
+<text x="148" y="46" opacity="0.8" font-size="11">default</text>
+<text x="248" y="46" opacity="0.8" font-size="11">with "no card"</text>
+<rect x="8" y="106" width="344" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="8" y="54" width="58" height="26" />
+<rect x="66" y="54" width="80" height="26" />
+<rect x="146" y="54" width="100" height="26" />
+<rect x="246" y="54" width="106" height="26" />
+<rect x="8" y="80" width="58" height="26" />
+<rect x="66" y="80" width="80" height="26" />
+<rect x="146" y="80" width="100" height="26" />
+<rect x="246" y="80" width="106" height="26" />
+<rect x="8" y="106" width="58" height="26" />
+<rect x="66" y="106" width="80" height="26" />
+<rect x="146" y="106" width="100" height="26" />
+<rect x="246" y="106" width="106" height="26" />
+<rect x="8" y="132" width="58" height="26" />
+<rect x="66" y="132" width="80" height="26" />
+<rect x="146" y="132" width="100" height="26" />
+<rect x="246" y="132" width="106" height="26" />
+</g>
+<text x="14" y="71" font-weight="600" font-size="11">order_id</text>
+<text x="72" y="71" font-weight="600" font-size="11">customer_id</text>
+<text x="152" y="71" font-weight="600" font-size="11">loyalty_tier</text>
+<text x="252" y="71" font-weight="600" font-size="11">loyalty_tier</text>
+<text x="14" y="97">1334</text>
+<text x="72" y="97">9</text>
+<text x="152" y="97">bronze</text>
+<text x="252" y="97">bronze</text>
+<text x="14" y="123">1335</text>
+<text x="152" y="123" font-weight="600">#N/A</text>
+<text x="252" y="123" font-weight="600">no card</text>
+<text x="14" y="149">1336</text>
+<text x="72" y="149">70</text>
+<text x="152" y="149">silver</text>
+<text x="252" y="149">silver</text>
+<text x="8" y="182" font-weight="600">Order 1335 is a walk-in: nothing to look up.</text>
+<text x="8" y="200" opacity="0.8" font-size="11">The left result is an error that spreads into every total.</text>
+<text x="8" y="216" opacity="0.8" font-size="11">The right result is a readable flag you can count.</text>
+</svg>
+</figure>
+
+A **lookup** takes a **key** (here the product code), finds the row that has the same key in another
+table, and brings back a value from that row. It pairs rows by the key, not by position: line 5001 is
+the first line, but its product, code 10, sits far below code 1 in the products table. This is the
+spreadsheet version of a **join**, which you will meet again in SQL: two tables, one key, and some
+rows that may find no partner. The second picture shows such a row, and the two things a formula can
+do about it.
+
+## Worked example
+
+Question: **what do all the order lines add up to, and does it match the till report?** Open the
+practice file and follow along.
+
+1. **Say what one row is, and write the expected output.** On `calc`, click **I1** and type: *"One row
+   per order line, a unit price and an amount on every row, and one total that equals the
+   `raw_till_report` total."* *Why:* one row is one product line, and a total that is computed from
+   a lookup is only worth something if you know in advance what it must equal.
+
+2. **Copy the lines to `calc`.** Go to `raw_order_items`, click the small square at the top left of the
+   grid to select everything, copy, click **A1** on `calc`, and paste. *Why:* the raw sheet is never
+   changed. The new columns go next to the lines they belong to, on your copy.
+
+3. **Name the key and the two lists.** The key is `product_id`, column **C** of the lines. Where do
+   you look for it? In `raw_products`, column **A**, rows 2 to 17. What do you want back? The price,
+   column **D**, same rows. *Why exact:* one product code has exactly one price. A near match would
+   bring back the price of another product and still look like a price. That is why `XLOOKUP`
+   matches exactly unless you ask otherwise (its `match_mode` argument defaults to 0, exact).
+
+4. **Write the lookup.** In **F1** type `unit_price_usd`. In **F2** type:
+
+   ```text
+   =XLOOKUP(C2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17)
+   ```
+
+   Read it as: *find C2 in the codes, bring back the price at the same position.* The result for the
+   first line is **3.25** (a croissant). *Why the dollar signs:* when you fill the formula down,
+   `C2` should become `C3`, `C4` and so on, but the products table must stay where it is. The dollar
+   signs lock it. Without them the lookup table slides down with the formula (see *Check yourself*).
+
+5. **Fill it down.** Double-click the small square at the bottom right corner of F2: the formula
+   fills down to row **3288**, the last line. *Why:* the whole column needs the formula, not only the
+   cells you looked at.
+
+6. **Work out the amount.** In **G1** type `amount_usd` and in **G2** type `=D2*F2-E2`, then fill down.
+   *Why:* that is the rule from the dataset: quantity times price, minus the discount on the line.
+
+7. **Verify.** Do three checks, in this order.
+   - *By eye:* line 5002 has code 6. In `raw_products`, code 6 is Cold Brew at 4.75, so the amount is
+     4.75. Line 5003 has code 1 (Espresso, 3.00) and quantity 2, so its amount is **6.00**. Both match
+     your column. The three lines of order 1001 add up to 3.25 + 4.75 + 6.00 = **14.00**.
+   - *Every row has a price:* `=COUNT(F2:F3288)` gives **3287**, the number of lines.
+   - *The total:* `=SUM(G2:G3288)` gives **22,754.25**. On `raw_till_report` the till says the same:
+     3287 lines and a total of 22754.25.
+
+   *Why reconcile:* a lookup that picks the wrong row, or misses a row, still fills the column with
+   numbers. A total that equals an independent control total is the proof.
+
+   **Excel and Google Sheets:** the formula is the same in both, and its fourth argument has a
+   different name. Excel calls it `if_not_found`, Google Sheets calls it `missing_value`. Both default
+   to `#N/A`. Google's `lookup_range` must be a single row or a single column.
+
+<details>
+<summary>Explain it in your own words: why did we lock the products range but not C2?</summary>
+
+Because the two ranges play different roles. C2 is the code of *this* line, so it must move to the next
+line when you fill down. The products table is the same for every line, so it must stay put. Locked
+means "the same for every row", free means "one per row".
+
+</details>
+
+<Aside type="caution" title="XLOOKUP needs a recent Excel">
+Microsoft's help page says `XLOOKUP` is not available in Excel 2016 and Excel 2019. If you type it
+there and get `#NAME?`, your version is too old. The next lesson, *Reading VLOOKUP and INDEX with
+MATCH*, shows the older formulas that do the same job. Excel 2021, Excel 2024, Microsoft 365 and
+Google Sheets all have `XLOOKUP`.
+</Aside>
+
+<Aside type="tip" title="One line to look at">
+One line in the file has a quantity of 20, where 2 was meant: line 6952, 20 turkey sandwiches in
+order 2075. It is included in the total of 22,754.25, so the till total and yours agree, and the line
+is still worth a second look. Matching a control total proves your formula, not the data.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-xlookup-1">
+
+**What loyalty tier does each order belong to, and how many orders are in each tier?** On `calc_ex1`, which
+holds a copy of `raw_orders` (1,800 orders), fill a `loyalty_tier` column with the tier from `raw_customers`.
+Expected output: one row per order, a tier on every row, and a visible flag, not an error, on any
+order without a customer, plus a check that the tiers add up to the number of orders.
+
+The first steps are done for you:
+
+1. One row is one order. The key is `customer_id`, column **B** of the orders.
+2. The key list is `raw_customers`, column **A**, rows 2 to 151, and the value to bring back is the
+   tier, column **D**. `calc_ex1` already holds a copy of `raw_orders`, and the new column is **G**, with its header.
+
+Now finish it: write the lookup in **G2**, fill it down, and check it.
+
+<details>
+<summary>Hint</summary>
+
+One order has no customer. What should its row show? Decide that first, then look at what the fourth
+argument of `XLOOKUP` is for.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The formula has the shape `=XLOOKUP(B2, key list, tier list, "no card")` with both lists locked. To
+check, count how many cells equal each tier with `=COUNTIF(G2:G1801,"bronze")` and so on, and add
+the counts up.
+
+</details>
+
+<Solution>
+
+In **G2**:
+
+```text
+=XLOOKUP(B2,raw_customers!$A$2:$A$151,raw_customers!$D$2:$D$151,"no card")
+```
+
+Fill down to row **1801**. The tiers are **bronze 1,044**, **silver 582**, **gold 173** and **no card 1**:
+1,044 + 582 + 173 + 1 = **1,800**, the number of orders.
+
+The one unmatched row is order **1335** (row 336): a walk-in without a loyalty card, so `customer_id`
+is empty and there is nothing to find. Without the fourth argument that one cell shows `#N/A`, and
+any `SUM` or `AVERAGE` over a column built from it would fail too. With `"no card"` the row is flagged
+in words, and you can count it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-xlookup-2">
+
+**Price a delivery partner's list.** A delivery partner sent `raw_delivery_lines`: one row per line
+(`delivery_ref`, `item_code`, `quantity`) for Harbor, June 8 to 14. Prices are in `raw_products`. Do not
+change the raw sheet. Build the result on `calc_ex2`.
+
+Before you type a formula, write one sentence on `calc_ex2` saying what the result should look like: how many
+rows, what each row shows, and what happens to a line whose code is not on our menu. Then build it.
+The partner's note says that 41 of the 43 lines are on our menu, and that they come to **\$364.75**.
+Your total must match it, and you should be able to say why two lines are left out.
+
+<details>
+<summary>Hint</summary>
+
+Give every code a "not on menu" flag first and see which lines it flags. Is the count what you expected?
+Compare a flagged code with the same number in the products table: what is different about the cell
+itself, not about the number?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"43 rows, one per delivery line, with a price and an amount on every line that is on
+our menu, the words `not on menu` on the others, and a total for the lines on the menu."* Eight of the
+flagged lines are not really missing. Their codes were typed as text, or with a trailing space, and a
+lookup treats the text `"6"` and the number 6 as different. `VALUE` turns text into a number and `TRIM`
+removes stray spaces.
+
+</details>
+
+<Solution>
+
+1. **First try:** `=XLOOKUP(raw_delivery_lines!B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17,"not on menu")`
+   flags **10** lines, not the 2 you would expect. Their total on the other 33 lines is only
+   **297.00**.
+2. **Why:** `item_code` is a number on most rows, but on 6 rows it is text (`"14"`, `"3"`, `"5"`, `"11"`,
+   `"8"`, `"2"`) and on 2 rows it is text with a trailing space (`"3 "` and `"4 "`). These sit on the left
+   of their cells. `=ISNUMBER(raw_delivery_lines!B5)` is `FALSE` for them. The other 2 flagged
+   lines are real: code **17** is not on the menu (lines D-013 and D-034).
+3. **Fix on `calc_ex2`**, in row 2 and then filled down to row 44:
+   - **A2:** `=raw_delivery_lines!A2`
+   - **B2:** `=VALUE(TRIM(raw_delivery_lines!B2))`, the cleaned code as a real number
+   - **C2:** `=XLOOKUP(B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17,"not on menu")`
+   - **D2:** `=IF(ISNUMBER(C2),raw_delivery_lines!C2*C2,0)`, an amount only where there is a price
+4. **Check.** `=COUNT(C2:C44)` gives **41** lines with a price, `=COUNTIF(C2:C44,"not on menu")` gives
+   **2**, and 41 + 2 = **43**. `=SUM(D2:D44)` gives **364.75**, equal to the partner's note.
+
+The first try was **67.75 too low**, with 8 lines wrongly flagged. The `IF(ISNUMBER(...))` in D keeps the text
+`not on menu` from breaking the multiplication.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: write the formula that brings the product name for the code in C2, from
+   `raw_products` (codes in A2:A17, names in B2:B17), so that it survives being filled down.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=XLOOKUP(C2,raw_products!$A$2:$A$17,raw_products!$B$2:$B$17)`. The code is free to move, the two
+   ranges are locked, and the match is exact because it is the default.
+
+   </details>
+
+<Exercise id="excel-xlookup-3">
+
+**Spot the flaw.** A colleague's file is in `calc_ex3`: it has a price lookup in F2, filled down, and a total in I2. The formula in F2 has no dollar signs:
+
+```text
+=XLOOKUP(C2,raw_products!A2:A17,raw_products!D2:D17)
+```
+
+They fill it down and check the first two lines by eye: 3.25 and 4.75, both right. But `=SUM(G2:G3288)`
+shows `#N/A`. "The data must be dirty," they say. What went wrong?
+
+<details>
+<summary>Hint</summary>
+
+Click a cell far down column F and read its formula. Is it the same as F2 apart from the row number?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+In row 3 the lookup range is A3:A18 instead of A2:A17. Which product code is no longer inside it?
+
+</details>
+
+<Solution>
+
+The data is fine, the formula is not. Without dollar signs the two ranges move down with the formula.
+In row 3 the lookup table is A3:A18, so product 1 is no longer in it, and the third line (code 1,
+Espresso) shows `#N/A`. By row 18 the ranges point at empty cells below the table. Only **6 of 3,287**
+lines get a price, and the other **3,281** show `#N/A`, and `SUM` passes the error on to the total.
+
+The first two rows were right only by luck: their codes were still inside the sliding range. Checking
+the first rows by eye is not enough; check one row far down too.
+
+To find it, click a cell far down column F and press **F2** (Excel): the colored outlines show the
+lookup range, far from the products table. The fix is `$A$2:$A$17` and `$D$2:$D$17`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can bring a value into one table from another by its key, show a readable flag
+where the key is missing, and prove the lookup column by reconciling a total.*
+Test: Exercise excel-xlookup-2, done from the blank `calc_ex2` sheet without opening the hints.
+
+The pattern to remember: **find the key, match it exactly, decide what an unmatched row shows, then
+reconcile a total.** In SQL this becomes a `JOIN`, and the unmatched rows are what a `LEFT JOIN` keeps.

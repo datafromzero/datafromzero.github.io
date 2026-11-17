@@ -1,0 +1,431 @@
+---
+id: excel-formula-errors-and-auditing
+title: Formula errors and auditing
+description: 'Read #N/A, #VALUE! and #REF!, trace where a number comes from, and triage a copied formula that fails.'
+stage: excel
+order: 120
+level: intermediate
+duration: 25
+objectives:
+  - Identify the cause behind common error values
+  - Trace precedents and dependents of a cell
+  - Step through a formula with Evaluate Formula
+  - 'Triage a failing formula: separator mismatch, copied function name, unparsed CSV'
+prerequisites:
+  - excel-xlookup
+  - excel-cell-references
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: Display the relationships between formulas and cells'
+    url: https://support.microsoft.com/en-us/office/display-the-relationships-between-formulas-and-cells-a59bef2b-3701-46bf-8ff1-d3518771d507
+  - title: 'Microsoft Support: Evaluate a nested formula one step at a time'
+    url: https://support.microsoft.com/en-us/office/evaluate-a-nested-formula-one-step-at-a-time-59a201ae-d1dc-4b15-8586-a70aa409b8a7
+  - title: 'Microsoft Support: How to correct a #N/A error'
+    url: https://support.microsoft.com/en-us/office/how-to-correct-a-n-a-error-a9708411-f82e-4e1b-8a7e-28c28311b993
+  - title: 'Microsoft Support: How to correct a #VALUE! error'
+    url: https://support.microsoft.com/en-us/office/how-to-correct-a-value-error-15e1b616-fbf2-4147-9c0b-0a11a20e409e
+  - title: 'Microsoft Support: How to correct a #REF! error'
+    url: https://support.microsoft.com/en-us/office/how-to-correct-a-ref-error-822c8e46-e610-4d02-bf29-ec4b8c5ff4be
+  - title: 'Microsoft Support: How to correct a #NAME? error'
+    url: https://support.microsoft.com/en-us/office/how-to-correct-a-name-error-b6d54e31-a743-4d7d-9b61-40002a7b4286
+  - title: 'Microsoft Support: IFERROR function'
+    url: https://support.microsoft.com/en-us/office/iferror-function-c526fd07-caeb-47b8-8bb6-63f3e417f611
+  - title: 'Microsoft Support: IFNA function'
+    url: https://support.microsoft.com/en-us/office/ifna-function-6626c961-a569-42fc-a49d-79b4951fd461
+  - title: 'Google Docs Editors Help: Google Sheets function list'
+    url: https://support.google.com/docs/table/25273
+  - title: "Microsoft Learn: Formula errors when list separator isn't set correctly"
+    url: https://learn.microsoft.com/en-us/office/troubleshoot/excel/formula-errors
+  - title: 'Microsoft Support: Import or export text (.txt or .csv) files'
+    url: https://support.microsoft.com/en-us/office/import-or-export-text-txt-or-csv-files-5250ac4c-663c-47ce-937b-339e391393ba
+status: draft
+---
+
+This lesson is mostly about Microsoft Excel, because the two auditing tools you will learn, Trace
+Precedents and Evaluate Formula, are Excel features. Where Google Sheets differs, the lesson says so.
+
+**Your practice file:** download
+[`excel-formula-errors-and-auditing.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-formula-errors-and-auditing.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds real-looking (but invented) data from **cafe-sales**, the small chain of three cafes we use
+through the whole roadmap. This time some of the formulas in it are broken on purpose.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+TODO(owner): Four things to check by hand:
+(1) I could only recalculate the workbook in LibreOffice, which is more lenient than Excel about a
+number typed as text. In Excel, `raw_model` must show `#N/A` in exactly three price cells (E8, E19 and
+E31), `raw_error_zoo` must show five different errors, and `calc_ex3!I2` must read 238.25 (LibreOffice shows 244.25). (2) The Office Watch article on formulas in
+different languages, listed as a source in the curriculum map, returned HTTP 500 when I tried it, so I
+left it out of `sources`. The claim in the triage table that some Excel languages translate function
+names, and the example `BUSCARV`, rest on your research notes (03 section 8.4): re-verify them against
+a page that opens before you publish. (3) Check the menu names for Text to Columns and for Google Sheets, and that Evaluate Formula shows the
+text code as `"1"` with quotation marks.
+(4) I did not find a Trace Precedents or Evaluate Formula equivalent in Google's help pages that I opened.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In `raw_products` the codes are in A2:A17 and the prices in D2:D17. Write the formula that brings the
+   price for the code in B2 and shows "not on menu" instead of an error.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=XLOOKUP(B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17,"not on menu")`. The fourth argument is
+   what shows when the code is not found.
+
+   </details>
+
+2. You wrote `=B2*C2` in D2 and filled it down. What does the formula in D3 say?
+
+   <details>
+   <summary>Answer</summary>
+
+   `=B3*C3`. A reference that is not locked moves one row with the formula.
+
+   </details>
+
+3. In a lookup, what does `#N/A` mean?
+
+   <details>
+   <summary>Answer</summary>
+
+   "Not found": the key you asked for is not in the list you searched.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> The old price model shows `#N/A` for the total. Where does that come from? And can you fix it so I can
+> trust the number?
+
+Here is the top of the model, the sheet `raw_model`, and its summary cells. Forty order lines, a lookup that
+brings the price, an amount per line, and a total.
+
+| order_item_id | product_id | quantity | discount_usd | unit_price_usd | amount_usd |
+|---|---:|---:|---:|---:|---:|
+| 5001 | 10 | 1 | 0.00 | 3.25 | 3.25 |
+| 5002 | 6 | 1 | 0.00 | 4.75 | 4.75 |
+| … | | | | | |
+| 5007 | 1 | 1 | 0.00 | #N/A | #N/A |
+
+| lines | 40 |
+|---|---:|
+| total_usd | #N/A |
+| avg_per_line_usd | #N/A |
+
+By the end of this lesson you will find the cause of the error in a couple of minutes, without
+guessing, repair it on a copy, and say what hiding the error with `IFERROR` would have cost.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 358" width="360" role="img" aria-labelledby="chain-title chain-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="chain-title">A chain of formulas with one broken link</title>
+<desc id="chain-desc">Boxes joined by arrows show where a number comes from. Cell B8 holds the product code 1 typed as text. It feeds the price lookup in E8, which returns N/A. That feeds the amount in F8, the total in I2 and the average in I3, which all show N/A. Healthy inputs join the chain on the right: the products table, the quantity and discount, the 40 amounts, and the line count. B8 is marked as the cause; two more text codes sit in B19 and B31.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">Follow the arrows back to the cause</text>
+<rect x="10" y="40" width="196" height="32" fill="none" stroke="currentColor" stroke-width="3" />
+<text x="18" y="61" font-weight="600" font-size="11">B8   product_id  "1" (text)</text>
+<rect x="10" y="96" width="196" height="32" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="18" y="117" font-size="11">E8   unit_price_usd  #N/A</text>
+<rect x="10" y="152" width="196" height="32" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="18" y="173" font-size="11">F8   amount_usd  #N/A</text>
+<rect x="10" y="208" width="196" height="32" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="18" y="229" font-size="11">I2   total_usd  #N/A</text>
+<rect x="10" y="264" width="196" height="32" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="18" y="285" font-size="11">I3   avg_per_line_usd  #N/A</text>
+<rect x="228" y="96" width="124" height="32" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-dasharray="4 3" />
+<text x="234" y="117" opacity="0.8" font-size="10">raw_products A2:D17</text>
+<path d="M228 112 H209" fill="none" stroke="currentColor" stroke-opacity="0.6" marker-end="url(#chain-arrow)" />
+<rect x="228" y="152" width="124" height="32" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-dasharray="4 3" />
+<text x="234" y="173" opacity="0.8" font-size="10">C8, D8 (fine)</text>
+<path d="M228 168 H209" fill="none" stroke="currentColor" stroke-opacity="0.6" marker-end="url(#chain-arrow)" />
+<rect x="228" y="208" width="124" height="32" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-dasharray="4 3" />
+<text x="234" y="229" opacity="0.8" font-size="10">F2:F41 (40 amounts)</text>
+<path d="M228 224 H209" fill="none" stroke="currentColor" stroke-opacity="0.6" marker-end="url(#chain-arrow)" />
+<rect x="228" y="264" width="124" height="32" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-dasharray="4 3" />
+<text x="234" y="285" opacity="0.8" font-size="10">I1: lines = 40</text>
+<path d="M228 280 H209" fill="none" stroke="currentColor" stroke-opacity="0.6" marker-end="url(#chain-arrow)" />
+<defs><marker id="chain-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" /></marker></defs>
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M108.0 72 V95" marker-end="url(#chain-arrow)" />
+<path d="M108.0 128 V151" marker-end="url(#chain-arrow)" />
+<path d="M108.0 184 V207" marker-end="url(#chain-arrow)" />
+<path d="M108.0 240 V263" marker-end="url(#chain-arrow)" />
+</g>
+<text x="10" y="316" font-weight="600" font-size="11">B8 is the cause: its code is text, not a number.</text>
+<text x="10" y="334" opacity="0.8" font-size="11">Two more text codes sit in B19 and B31.</text>
+<text x="10" y="350" opacity="0.8" font-size="11">Trace Precedents walks up the chain, Trace Dependents down.</text>
+</svg>
+</figure>
+
+Every formula is a link in a chain. **Precedents** are the cells a formula reads from, **dependents** are
+the cells that read from it. An error travels down the chain: one broken cell makes everything below it
+show the same error. So the cell where you *see* the error is almost never the cell where it *starts*.
+Auditing means walking back up the arrows until you reach a cell that shows an error even though all its
+inputs are fine. That is the cause.
+
+The error value itself tells you where to start looking:
+
+| Error | What it says | First look |
+|---|---|---|
+| `#N/A` | The formula can't find what it was asked to look for. | A lookup: is the key in the list, with the same type and no stray spaces? |
+| `#VALUE!` | Something is wrong in how the formula is typed or in the cells it reads. | Text or a stray space where a number should be. |
+| `#REF!` | The formula points to a cell that is no longer valid. | A deleted row or column, or a column number beyond the table in a `VLOOKUP`. |
+| `#DIV/0!` | The formula divides by zero. | The cell it divides by. |
+| `#NAME?` | Excel does not know a name used in the formula. | A misspelled function name, or a name that was never defined. |
+
+## Worked example
+
+Question: **why does `total_usd` show `#N/A`, and what is the right total?** Open `raw_model` and follow
+along. Do not change it: it is raw data.
+
+1. **Write the expected output.** On `calc`, click **K1** and type: *"One total for 40 lines that equals
+   the sum of 40 line amounts, with no error on the way."* *Why:* a repaired formula only counts if you
+   knew beforehand what a good answer looks like.
+
+2. **Read the error, not the formula.** `#N/A` means the formula can't find what it was asked to look for,
+   and Microsoft's help says the most common cause is a lookup function. The total is a plain `SUM`,
+   so the `SUM` is not the problem. The lookup is in column E. *Why:* the error type narrows the
+   search before you click anything.
+
+3. **Trace precedents.** Click **I2** (the total). On the **Formulas** tab, in the **Formula Auditing**
+   group, click **Trace Precedents**: an arrow points from the range of amounts. Click a red amount, such
+   as **F8**, and click **Trace Precedents** again: the arrows lead to C8, D8 and E8. Microsoft's help
+   says that blue arrows point to cells with no errors and red arrows point to cells that cause errors.
+   Click **E8** and again **Trace Precedents**: it reads from **B8** and the products table. B8 holds
+   only a value, so the trail ends there. **Trace Dependents** does the same in the other direction: on
+   B8 it first shows E8, and each further click goes one step down, to F8, then I2 and I3. Click
+   **Remove Arrows** when you are done. *Why:* the cause is
+   the first cell, going up, whose own inputs are fine. Pressing **F2** in a cell with a formula also
+   shows its inputs in color.
+
+4. **Evaluate the formula.** Click **E8**, then **Formulas**, **Formula Auditing**, **Evaluate
+   Formula**. The part of the formula in the box that is underlined is the next to be worked out. Click
+   **Evaluate**: `B8` turns into `"1"`, with quotation marks, which is how a text value is written. Keep
+   clicking **Evaluate** until the last step: `#N/A`. *Why:* you see what the formula really receives.
+   The code `1` is in the products table, but this `"1"` is text, and a lookup treats text and a
+   number as different.
+
+5. **Find every culprit.** The same typing problem may be elsewhere. On `calc`, in **A2**, type
+   `=ISTEXT(raw_model!B2)` and fill down to row 41. Three rows show `TRUE`: rows **8**, **19** and **31**
+   (order items 5007, 5018 and 5030). Row 19 is a different kind of text: `"11 "`, with a trailing
+   space. *Why:* `#N/A` hides how many cells are wrong. The total fails if only one is.
+
+6. **Repair on `calc`, never on the raw sheet.** In `calc`:
+   - **B2:** `=VALUE(TRIM(raw_model!B2))`, the code as a real number (this works on text, on text
+     with a trailing space and on numbers);
+   - **C2:** `=XLOOKUP(B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17)`;
+   - **D2:** `=raw_model!C2*C2-raw_model!D2`;
+   - fill all three down to row 41, then **D43:** `=SUM(D2:D41)`.
+
+   The total is **247.75** and the average per line is 247.75 ÷ 40 = **6.19**.
+
+7. **Verify.** `=COUNT(D2:D41)` gives **40**: every line has a number. And the sum has a second route.
+   The three repaired lines are 5007 (an Espresso, 3.00), 5018 (a Blueberry Muffin, 3.50) and 5030
+   (an Espresso, 3.00), together **9.50**. The other 37 lines add up to **238.25**, and 238.25 + 9.50 =
+   **247.75**.
+
+8. **Know what `IFERROR` would have done.** Wrap the price in `=IFERROR(...,0)` and the `#N/A` is gone,
+   and the total reads **238.25**: no error, but **9.50** (nearly 4 percent) short, and nothing on the
+   screen says so. `IFERROR` catches every error value, not only the one you expect. Microsoft's help
+   says hiding errors is not recommended, because an error is often a sign that something needs to be
+   fixed, not hidden.
+
+**Google Sheets:** `IFERROR` and `IFNA` both exist in Sheets (`IFNA` catches only `#N/A`, which makes it
+the safer one). Trace Precedents and Evaluate Formula are Excel tools, so in Sheets take the formula
+apart yourself: put each piece in its own helper cell, and read the value of each piece.
+
+<details>
+<summary>Explain it in your own words: why did we trace the arrows back to B8 instead of fixing the formula in I2?</summary>
+
+Because the formula in I2 was correct: it adds 40 amounts. It only showed the error it inherited. A fix
+at the place where the error appears, such as hiding it, leaves the cause where it is and the number wrong.
+The cause is upstream, in the first cell that shows an error although its own inputs are fine.
+
+</details>
+
+<Aside type="caution" title="Three more ways a copied formula fails">
+A formula copied from a web page or a colleague can fail before any data is involved. Check these
+three before you suspect the data:
+
+| What you see | Likely cause | The check | The fix |
+|---|---|---|---|
+| A message "We found a problem with this formula" as soon as you press Enter | The separator between arguments. Excel expects the **list separator** of your computer's regional settings. Microsoft says the comma is the default for US English. | Retype the formula with the other separator, comma or semicolon. | Use the separator your Excel accepts, or change it in Windows Region settings or in **File**, **Options**, **Advanced**, **Editing options**, **Use system separators**. Same formula, other separator. |
+| `#NAME?` on a formula copied from a page written for another language | A function name that your Excel does not know. Some languages of Excel use translated function names, such as `BUSCARV` for `VLOOKUP` in Spanish. | Read the function name: is it one you can find in an English list? | Retype it with the English name. |
+| `0` or an empty result, and no error, on data that was pasted | A CSV that was never split into columns: each whole line sits in one cell. | Click a cell: if you see commas inside it, nothing was split. | Open the original file with **Data**, **From Text/CSV** and pick the delimiter, or split a copy of the pasted text into columns. |
+
+The list separator also decides the delimiter Excel uses when it opens or saves a `.csv` file, so one
+setting can cause both the first and the third problem on the same computer.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-formula-errors-and-auditing-1">
+
+**Name the five errors.** The sheet `raw_error_zoo` has five cells in column B, each failing in a different
+way. For each one, write the error, the cause in one sentence, and the fix. Expected output: a table of
+five rows (the cell, the error, the cause and the fix). Fill in rows 3 to 6 of the table in `calc_ex1`.
+
+`calc_ex1` has the table with its first row done for you: **B2** shows `#N/A`. Its formula looks up code 99, which is not in the
+products table: the key is not in the list. Fix: use a real code, or give the lookup a not-found result.
+
+Now finish it for **B3**, **B4**, **B5** and **B6**.
+
+<details>
+<summary>Hint</summary>
+
+Read each formula, not the message: what does it ask for, and what does the cell hand it? For B4 look at
+the formula bar. What replaced one of the cell addresses?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+**B3** shows `#VALUE!`: the formula multiplies the cell C3 by 2, and C3 holds the text `n/a`, not a number.
+Now do B4, B5 and B6 the same way: formula, input cells, cause.
+
+</details>
+
+<Solution>
+
+| Cell | Error | Cause | Fix |
+|---|---|---|---|
+| B2 | `#N/A` | Code 99 is not in the products table. | Use a real code, or add a not-found result. |
+| B3 | `#VALUE!` | `=C3*2` multiplies text (`n/a`) by a number. | Put a number in C3, or test first: `=IF(ISNUMBER(C3),C3*2,"no price")`. |
+| B4 | `#REF!` | `=SUM(C4,#REF!,E4)`: the formula once used a cell in a column that has since been deleted, and its address was replaced by `#REF!`. | Undo the deletion right away (Ctrl+Z). If it is too late, rebuild the formula from the cells that are left, `=SUM(C4,E4)`, and prefer a range such as `=SUM(C4:E4)`, which shrinks when a column is deleted. |
+| B5 | `#DIV/0!` | `=C5/D5` divides by D5, which is 0. | Decide what zero lines should show: `=IF(D5=0,"no lines",C5/D5)`. |
+| B6 | `#NAME?` | `BUSCARV` is not an English Excel function name. | Retype it as `VLOOKUP` (or use `XLOOKUP`): `=VLOOKUP(2,raw_products!$A$2:$D$17,4,FALSE)` gives 3.5. |
+
+Microsoft's help pages give the same causes: for `#REF!`, a deleted row or column, with Undo as the first
+fix and a range such as `=SUM(B2:D2)` as protection; for `#NAME?`, mostly a typo in a function name.
+Note that none of the fixes is `IFERROR`.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-formula-errors-and-auditing-2">
+
+**Triage three failing formulas.** On `calc_ex2`, try each of these. Do not change the raw sheets.
+
+1. Type `=XLOOKUP(5002;raw_model!A2:A41;raw_model!F2:F41)`. It uses semicolons between the arguments.
+2. Type `=BUSCARV(5002,raw_model!A2:F41,6,FALSE)`. It was copied from a Spanish tutorial.
+3. On `raw_pasted_orders`, a colleague pasted twelve orders and wrote `=COUNTIF(C2:C13,2)` to count the
+   orders of store 2 (Campus). It shows `0`. Fix it on a copy: select A1:A13, copy, paste into `calc_ex2!K1`
+   and work there.
+
+Before you start, write one sentence on `calc_ex2` saying what you will hand back: for each of the three, the
+cause in one sentence and the fix in one line, plus the real number of Campus orders among the twelve. Then
+build it.
+
+<details>
+<summary>Hint</summary>
+
+Look at what each one produces: a message when you press Enter, an error value, or a number with no
+error. They are three different causes from the table in *Three more ways a copied formula fails*. For the
+third, click a cell of the pasted data.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three lines, one per formula: its cause and its fix, and the number of Campus orders in the
+twelve pasted orders."* The first one depends on your Excel's regional settings. If it is accepted, your
+Excel uses semicolons and the commas are what would fail. The third does not fail loudly at all.
+
+</details>
+
+<Solution>
+
+1. **Separators.** In an Excel that expects commas, pressing Enter shows "We found a problem with this
+   formula", because the semicolon is not its list separator (Microsoft's page: an error occurs when you
+   use a symbol that is not the list separator of the Windows regional settings). Fix: retype with commas,
+   `=XLOOKUP(5002,raw_model!A2:A41,raw_model!F2:F41)`, which returns **4.75**. If Excel accepted the
+   semicolons, your Excel expects semicolons: same formula, and commas would be the ones to fail.
+2. **A function name from another language.** `#NAME?`: Excel does not know `BUSCARV`. Fix: retype with the
+   English name, `=VLOOKUP(5002,raw_model!A2:F41,6,FALSE)`, which returns **4.75**.
+3. **A CSV that was never split.** Each pasted line, such as
+   `1001,15,2,2026-01-01 08:02:00,completed,mobile`, sits whole in column A, so column C is empty and
+   `COUNTIF` finds no 2 and returns `0`, with no error. Fix: split the commas into columns (with the
+   original file, **Data**, **From Text/CSV** and the comma as delimiter; with only the pasted lines, copy
+   them to `calc_ex2!K1` and split them there, never on the raw sheet: Text to Columns in Excel, **Data**,
+   **Split text to columns** in Sheets). The six fields fill K to P, so `store_id` is in column M and
+   `=COUNTIF(M2:M13,2)` gives **7**:
+   orders 1001, 1003, 1005, 1008, 1010, 1011 and 1012. The other 5 are Old Town.
+
+Only the third one gave no error, which makes it the most dangerous.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: where do you start when a total shows an error, and why not at the total?
+
+   <details>
+   <summary>Answer</summary>
+
+   Start at the first cell in the chain, going up, that shows an error although its own inputs are fine
+   (Trace Precedents shows you where to go). An error travels down the chain, so the total only shows
+   what it inherited.
+
+   </details>
+
+<Exercise id="excel-formula-errors-and-auditing-3">
+
+**Spot the flaw.** A colleague opens `raw_model`, sees `#N/A`, and changes the price formula in all 40
+rows to `=IFERROR(VLOOKUP(B2,raw_products!$A$2:$D$17,4,FALSE),0)` (their file is `calc_ex3`). "Fixed. The total is
+238.25 and there are no errors anywhere." What went wrong?
+
+<details>
+<summary>Hint</summary>
+
+The total no longer shows an error. How many of its 40 prices came back as 0 instead of a price?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Compare 238.25 with the right total from the worked example, and find out what the difference is made of.
+
+</details>
+
+<Solution>
+
+The right total is **247.75**. The `#N/A` was a symptom of three product codes typed as text (rows 8, 19
+and 31): the lookup could not find them. `IFERROR` replaced the three missing prices with 0, so the
+total silently left out **9.50**, nearly 4 percent, and the average per line came out as 5.96 instead of
+6.19. The message went away, and the problem stayed.
+
+The honest fix is upstream: turn the three codes into numbers (`=VALUE(TRIM(...))`). If a not-found result
+is really wanted, use a visible flag, such as the fourth argument of `XLOOKUP`, and count the flags.
+`IFERROR` catches all error values, so use it only when you have already found and accepted the cause, and
+prefer `IFNA`, which catches only `#N/A`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can name the cause behind an error value, trace a bad number back to the cell where it
+starts, repair it upstream without hiding it, and tell a separator, a function-name or a CSV problem apart.*
+Test: Exercise excel-formula-errors-and-auditing-2, done from a blank `calc` sheet without opening the
+hints.
+
+The pattern to remember: **read the error, walk back to the first bad cell, fix it there, then reconcile.**
+The same habit works in SQL and in pandas, where a wrong number travels down a query or a pipeline the
+same way.
