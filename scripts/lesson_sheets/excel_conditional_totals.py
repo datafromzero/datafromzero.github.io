@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from openpyxl import Workbook
 
 from .common import raw_sheet, save
@@ -47,6 +49,32 @@ def build() -> None:
         cell.number_format = "@"
 
     # The three-sheet habit: raw data stays untouched, work happens in calc, results go to output.
+    # The worked example uses calc. Each exercise has its own sheet, so nothing is left over from the example.
     wb.create_sheet("calc")
+
+    # Exercise 1: the first steps are done for you (the conditions are typed in cells A3:B7).
+    ws = wb.create_sheet("calc_ex1")
+    for i, (label, value) in enumerate(
+        [("store", "Campus"), ("category", "tea"), ("status", "completed"),
+         ("from (included)", date(2026, 4, 1)), ("until (not included)", date(2026, 5, 1))],
+        start=3,
+    ):
+        ws.cell(i, 1, label)
+        cell = ws.cell(i, 2, value)
+        if isinstance(value, date):
+            cell.number_format = "yyyy-mm-dd"
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 14
+    # Exercise 2: a blank start.
+    wb.create_sheet("calc_ex2")
+    # Exercise 3: the colleague's flawed formula, ready to read.
+    ws = wb.create_sheet("calc_ex3")
+    ws["A1"] = "colleague's formula: Campus, March, completed"
+    ws["B1"] = (
+        '=SUMIFS(raw_sales_lines!J:J,raw_sales_lines!C:C,"Campus",raw_sales_lines!D:D,"completed",'
+        'raw_sales_lines!B:B,">="&DATE(2026,3,1),raw_sales_lines!B:B,"<="&DATE(2026,3,31))'
+    )
+    ws.column_dimensions["A"].width = 44
+    ws.column_dimensions["B"].width = 14
     wb.create_sheet("output")
     save(wb, "excel-conditional-totals")

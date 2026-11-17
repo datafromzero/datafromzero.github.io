@@ -85,6 +85,29 @@ def build() -> None:
     ws.freeze_panes = "A2"
 
     # The three-sheet habit: raw data stays untouched, work happens in calc, results go to output.
+    # The worked example uses calc. Each exercise has its own sheet, so nothing is left over from the example.
     wb.create_sheet("calc")
+
+    # Exercise 1: the first steps are done for you (raw_orders is copied, the new column G has its header).
+    ws = wb.create_sheet("calc_ex1")
+    raw_sheet(ws, read("orders"))
+    ws["G1"] = "loyalty_tier"
+    ws["G1"].font = Font(bold=True)
+    ws.column_dimensions["G"].width = 14
+    # Exercise 2: a blank start.
+    wb.create_sheet("calc_ex2")
+    # Exercise 3: the colleague's flawed file (the lookup ranges have no dollar signs).
+    ws = wb.create_sheet("calc_ex3")
+    items = read("order_items")
+    raw_sheet(ws, items)
+    ws["F1"], ws["G1"] = "unit_price_usd", "amount_usd"
+    ws["F1"].font = ws["G1"].font = Font(bold=True)
+    for k in range(2, len(items) + 2):
+        ws[f"F{k}"] = f"=_xlfn.XLOOKUP(C{k},raw_products!A{k}:A{k + 15},raw_products!D{k}:D{k + 15})"
+        ws[f"G{k}"] = f"=D{k}*F{k}-E{k}"
+    ws["I1"], ws["I2"] = "total_usd", f"=SUM(G2:G{len(items) + 1})"
+    ws["I1"].font = Font(bold=True)
+    for col, width in (("F", 15), ("G", 12), ("I", 12)):
+        ws.column_dimensions[col].width = width
     wb.create_sheet("output")
     save(wb, "excel-xlookup")

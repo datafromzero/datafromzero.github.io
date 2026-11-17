@@ -84,6 +84,27 @@ def build() -> None:
     ws.freeze_panes = "A2"
 
     # The three-sheet habit: raw data stays untouched, work happens in calc, results go to output.
+    # The worked example uses calc. Each exercise has its own sheet, so nothing is left over from the example.
     wb.create_sheet("calc")
+
+    # Exercise 1: the first steps are done for you (a store_id in B2 and the colleague's VLOOKUP in C2).
+    ws = wb.create_sheet("calc_ex1")
+    ws.append(["", "store_id", "colleague's VLOOKUP", "XLOOKUP", "INDEX with MATCH"])
+    ws.append(["", 3, "=VLOOKUP(B2,raw_stores!$A$2:$D$4,3,FALSE)"])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for col, width in (("B", 10), ("C", 40), ("D", 40), ("E", 40)):
+        ws.column_dimensions[col].width = width
+    # Exercise 2: a blank start.
+    wb.create_sheet("calc_ex2")
+    # Exercise 3: the colleague's test of price_c on four codes that are all in the old menu.
+    ws = wb.create_sheet("calc_ex3")
+    ws.append(["code tested", "price_c formula"])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for k, code in enumerate((1, 3, 10, 15), start=2):
+        ws.append([code, f"=VLOOKUP(A{k},raw_old_menu!$A$2:$D$14,4)"])
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 18
     wb.create_sheet("output")
     save(wb, "excel-legacy-lookups")

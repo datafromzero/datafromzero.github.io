@@ -97,6 +97,47 @@ def build() -> None:
     ws.column_dimensions["A"].width = 60
 
     # The three-sheet habit: raw data stays untouched, work happens in calc, results go to output.
+    # The worked example uses calc. Each exercise has its own sheet, so nothing is left over from the example.
     wb.create_sheet("calc")
+
+    # Exercise 1: the first row of the table is done for you.
+    ws = wb.create_sheet("calc_ex1")
+    ws.append(["cell", "error", "cause", "fix"])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    ws.append(
+        ["B2", "#N/A", "Code 99 is not in the products table: the key is not in the list.",
+         "Use a real code, or give the lookup a not-found result."]
+    )
+    for col, width in (("A", 8), ("B", 10), ("C", 60), ("D", 60)):
+        ws.column_dimensions[col].width = width
+    # Exercise 2: a blank start.
+    wb.create_sheet("calc_ex2")
+    # Exercise 3: the colleague's file: the same model with the price lookup wrapped in IFERROR.
+    ws = wb.create_sheet("calc_ex3")
+    ws.append(["order_item_id", "product_id", "quantity", "discount_usd", "unit_price_usd", "amount_usd"])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for k, line in enumerate(model_lines(), start=2):
+        ws.append(
+            [
+                line["order_item_id"],
+                line["product_id"],
+                line["quantity"],
+                line["discount_usd"],
+                f"=IFERROR(VLOOKUP(B{k},raw_products!$A$2:$D$17,4,FALSE),0)",
+                f"=C{k}*E{k}-D{k}",
+            ]
+        )
+        if isinstance(line["product_id"], str):
+            ws.cell(k, 2).number_format = "@"
+    ws["H1"], ws["I1"] = "lines", f"=COUNTA(A2:A{MODEL_LINES + 1})"
+    ws["H2"], ws["I2"] = "total_usd", f"=SUM(F2:F{MODEL_LINES + 1})"
+    ws["H3"], ws["I3"] = "avg_per_line_usd", "=I2/I1"
+    for cell in ("H1", "H2", "H3"):
+        ws[cell].font = Font(bold=True)
+    ws["I3"].number_format = "0.00"
+    ws.column_dimensions["E"].width = 15
+    ws.column_dimensions["H"].width = 18
     wb.create_sheet("output")
     save(wb, "excel-formula-errors-and-auditing")
