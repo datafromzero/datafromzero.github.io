@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1558 nodes, 2114 edges, 75 communities (1088 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 814, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 49, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 1843, overrides 5, references 24, runs 9, specified-by 4, uses 33, uses-token 22, validated-by 5.
+- 1565 nodes, 2134 edges, 75 communities (1089 isolated nodes).
+- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 814, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 56, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 31, mentions 1845, overrides 5, references 24, runs 9, specified-by 4, uses 51, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,7 +15,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `.claude/worktrees/agent-a4d6f48b987824c39/.claude/kb/GRAPH_REPORT.md` | doc | 108 | .claude/worktrees/agent-a4d6f48b987824c39/.claude/kb/GRAPH_REPORT.md:1 |
 | 2 | `.claude/worktrees/agent-a680e036f6ec6db1c/.claude/kb/GRAPH_REPORT.md` | doc | 108 | .claude/worktrees/agent-a680e036f6ec6db1c/.claude/kb/GRAPH_REPORT.md:1 |
-| 3 | `.claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md` | doc | 106 | .claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md:1 |
+| 3 | `.claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md` | doc | 108 | .claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md:1 |
 | 4 | `.claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/kb/GRAPH_REPORT.md` | doc | 105 | .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/kb/GRAPH_REPORT.md:1 |
 | 5 | `.claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md` | doc | 75 | .claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md:1 |
 | 6 | `.claude/worktrees/agent-a4d6f48b987824c39/SPEC.md` | doc | 75 | .claude/worktrees/agent-a4d6f48b987824c39/SPEC.md:1 |
@@ -38,7 +38,7 @@ Label propagation; each community is named by its top-degree node.
 - **C3 Bottom taskbar** (28): D31 Bottom taskbar; D9 Theme; src/styles/home.css; src/styles/tokens.css; S10 Design & motion; D23 Scroll-linked effects
 - **C4 CHANGELOG.md** (26): .claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md; .claude/worktrees/agent-a4d6f48b987824c39/CHANGELOG.md; .claude/worktrees/agent-a680e036f6ec6db1c/CHANGELOG.md; .claude/worktrees/agent-ab8507f0ea327573f/CHANGELOG.md; src/site.ts; S9 Versioning, citation, changelog
 - **C5 SPEC.md** (20): .claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md; .claude/worktrees/agent-a4d6f48b987824c39/SPEC.md; .claude/worktrees/agent-a680e036f6ec6db1c/SPEC.md; .claude/worktrees/agent-ab8507f0ea327573f/SPEC.md; package.json; D5 Versioning & citation
-- **C6 Solution** (14): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/cell-references.mdx; src/content/docs/excel/conditional-totals.mdx
+- **C6 Solution** (20): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/ai-draft-and-verify.mdx; src/content/docs/excel/cell-references.mdx
 - **C7 career-quiz.ts** (14): src/lib/career-quiz.ts; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER; src/lib/career-quiz.ts#MINI_IP_URL; src/lib/career-quiz.ts#ONET_CREDIT; src/lib/career-quiz.ts#QUESTIONS
 - **C8 CLAUDE.md** (13): CLAUDE.md; scripts/kb.mjs; D18 Draft lessons; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/skills/kb/SKILL.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/skills/kb/SKILL.md; .claude/worktrees/agent-a680e036f6ec6db1c/.claude/skills/kb/SKILL.md
 - **C9 Vietnamese paused** (13): D30 Vietnamese paused; S15 Explicitly out of scope (for now); CHANGELOG.md; agent:spec-reviewer spec-reviewer; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/agents/spec-reviewer.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/agents/spec-reviewer.md
@@ -54,7 +54,6 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/scripts/home/fx/select.ts` -mentions-> `DG5` (C69 to C28, src/scripts/home/fx/select.ts:2)
 - `DG2:light-theme-every-page-the-homepage-included` -mentions-> `DG5` (C3 to C28, design/README.md:54)
 - `DG5` -mentions-> `src/i18n/home/en.ts` (C28 to C3, design/README.md:143)
-- `src/components/content/Solution.astro` -mentions-> `src/lib/remark-content-rules.ts` (C6 to C63, src/components/content/Solution.astro:3)
 - `src/components/home/Hero.astro` -mentions-> `DG5` (C1 to C28, src/components/home/Hero.astro:2)
 - `src/lib/citation.ts` -mentions-> `package.json` (C32 to C5, src/lib/citation.ts:3)
 - `src/scripts/home/motion.ts` -mentions-> `DG5` (C70 to C28, src/scripts/home/motion.ts:222)
@@ -62,6 +61,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `DG4` -mentions-> `DG5` (C1 to C28, design/README.md:131)
 - `DG5` -mentions-> `DG4` (C28 to C1, design/README.md:150)
 - `DG6` -mentions-> `DG5` (C47 to C28, design/README.md:190)
+- `M8` -mentions-> `D24` (C2 to C1, CLAUDE.md:59)
 
 ## Decisions (SPEC §1)
 
