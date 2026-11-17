@@ -129,8 +129,9 @@ All notable changes to datafromzero are recorded here. The format follows
   CSS only (GSAP stays on the homepage, D28).
 - Sidebar: lesson codes sit in their own muted mono column beside the title, so wrapped titles line up and "E1" no
   longer reads as part of the title.
-- Taskbar: off lessons the primary button is "Start E1 →" (the first published lesson) instead of "Learn →" to
-  `/start/`, which the sheet already links; the menu label drops its empty first line so the title sits level with the icon.
+- Taskbar: the primary button reads "Start here →" (to `/start/`) on the homepage and other pages, and "Start E1 →"
+  (the first published lesson) on `/start/` itself, so it never points at the page you are on; the menu label drops its
+  empty first line so the title sits level with the icon.
 - Homepage footer: two centered rows (the license line, then the project links) instead of items pushed to both sides.
 - SPEC D35 (owner decision): one navigation on phones. The bottom bar is now two controls: a menu button with a
   two-line label (the lesson code and current section, over the title) and a primary button, "Next E9" on a lesson
