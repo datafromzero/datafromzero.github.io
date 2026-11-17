@@ -1,11 +1,14 @@
 import { getCollection } from 'astro:content';
 import { classify, STAGES, type Lesson } from './content-schemas.ts';
 import { unlocks } from './graph.ts';
+import { lessonCode } from './roadmap.ts';
 
 export interface LessonLink {
 	id: string;
 	title: string;
 	href: string;
+	/** Short code such as E8 (src/lib/roadmap.ts). */
+	code?: string;
 }
 
 /** Lesson links for the given ids, in the reader's locale (`vi` pages link under /vi/). */
@@ -19,7 +22,8 @@ export async function lessonLinks(ids: string[], locale: string | undefined): Pr
 		const entry =
 			matches.find((d) => classify(d.id).locale === (locale === 'vi' ? 'vi' : null)) ??
 			matches.find((d) => classify(d.id).locale === null)!;
-		return { id, title: entry.data.title, href: `${prefix}/${classify(entry.id).path}/` };
+		const l = entry.data as Lesson;
+		return { id, title: entry.data.title, href: `${prefix}/${classify(entry.id).path}/`, code: lessonCode(l.stage, l.order) };
 	});
 }
 

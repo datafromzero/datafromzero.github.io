@@ -109,6 +109,10 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC D34, §3.1, §5.1: docs-style navigation. The sidebar lists Get started, then each stage's lessons in study
+  order with codes (E1 … E22), then the project pages last. Every lesson shows its code in the header, in Before this
+  lesson and in Unlocks next. `/start/` shows the stages as cards that open on their lesson lists, replacing the SVG
+  map and the repeated text list.
 - Taskbar menu (owner request): the project links (changelog, cite, license, privacy, GitHub) are no longer repeated
   in the menu, since every page footer has them; the homepage "On this page" entries and the scrolling label drop their
   section numbers ("The core", not "01 The core").

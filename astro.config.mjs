@@ -11,6 +11,7 @@ import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { redirects } from './src/redirects.ts';
 import { SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
+import { buildSidebar } from './src/lib/sidebar.ts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -39,6 +40,8 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: SITE_NAME,
+			// Get started, then the lessons by stage with their codes, then the project pages (src/lib/sidebar.ts).
+			sidebar: buildSidebar(process.argv.includes('dev')),
 			// design/README.md §3: white mark on black by default, black mark on white for the light
 			// theme. The wordmark is the site title rendered beside the mark.
 			logo: {
