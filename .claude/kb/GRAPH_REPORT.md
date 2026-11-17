@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 747 nodes, 649 edges, 94 communities (379 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 37, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 408, overrides 5, references 24, runs 9, specified-by 4, uses 3, uses-token 22, validated-by 5.
+- 763 nodes, 664 edges, 94 communities (390 isolated nodes).
+- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 53, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 31, mentions 408, overrides 5, references 24, runs 9, specified-by 4, uses 18, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -37,31 +37,31 @@ Label propagation; each community is named by its top-degree node.
 - **C2 site.ts** (16): src/site.ts; D30 Vietnamese paused; S8 Internationalization; D3 Languages (paused by D30); R7 Language; src/site.ts#ANALYTICS_ENABLED
 - **C3 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
-- **C5 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
-- **C6 Tech stack** (8): S2 Tech stack; S4 Information architecture; agent:content-producer content-producer; research/curriculum/01-competitor-map.md; S3 URL contract; research/curriculum/00-README.md
-- **C7 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
-- **C8 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
-- **C9 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C10 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
-- **C11 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
-- **C12 tokens.css** (7): src/styles/tokens.css; src/styles/print.css; token:--bg --bg; token:--dim --dim; token:--fg --fg; token:--line --line
+- **C5 Solution** (9): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/cleaning-workflow.mdx; src/content/docs/excel/date-functions.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx
+- **C6 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
+- **C7 Tech stack** (8): S2 Tech stack; S4 Information architecture; agent:content-producer content-producer; research/curriculum/01-competitor-map.md; S3 URL contract; research/curriculum/00-README.md
+- **C8 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
+- **C9 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
+- **C10 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
+- **C11 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
+- **C12 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `D1` -mentions-> `D24` (C57 to C14, SPEC.md:28)
+- `D1` -mentions-> `D24` (C57 to C15, SPEC.md:28)
 - `ctype:career` -specified-by-> `S5.4` (C67 to C66, src/lib/content-schemas.ts:96)
-- `src/components/content/Solution.astro` -mentions-> `src/lib/remark-content-rules.ts` (C32 to C85, src/components/content/Solution.astro:3)
 - `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C57 to C2, research/curriculum/02-syllabus-inventory.md:319)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C26 to C50, .claude/agents/README.md:39)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C27 to C50, .claude/agents/README.md:39)
 - `S5.2` -mentions-> `D18` (C44 to C38, SPEC.md:222)
 - `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C78 to C79, src/components/starlight/ThemeSelect.astro:3)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C77, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C26 to C57, .claude/skills/kb/SKILL.md:3)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C27 to C57, .claude/skills/kb/SKILL.md:3)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C36 to C37, src/lib/repo-files.ts:4)
 - `D5` -mentions-> `S9` (C37 to C46, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C60 to C11, design/README.md:198)
+- `DG6` -mentions-> `DG2` (C60 to C12, design/README.md:198)
+- `M6` -mentions-> `D27` (C42 to C39, CLAUDE.md:55)
 
 ## Decisions (SPEC §1)
 
