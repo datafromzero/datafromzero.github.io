@@ -1,0 +1,528 @@
+---
+id: excel-conditional-totals
+title: Conditional totals with SUMIFS and COUNTIFS
+description: Total, count and average only the rows that meet your conditions, and avoid the argument-order trap between SUMIF and SUMIFS.
+stage: excel
+order: 70
+level: beginner
+duration: 25
+objectives:
+  - Write COUNTIFS and SUMIFS with one and with several conditions
+  - Use AVERAGEIFS for a conditional average
+  - Match criteria with comparison operators and wildcards
+  - Reconcile a conditional total against a filtered list
+prerequisites:
+  - excel-if-logic
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: SUMIFS function'
+    url: https://support.microsoft.com/en-us/office/sumifs-function-c9e748f5-7ea7-455d-9406-611cebce642b
+  - title: 'Microsoft Support: SUMIF function'
+    url: https://support.microsoft.com/en-us/office/sumif-function-169b8c99-c05c-4483-a712-1697a653039b
+  - title: 'Microsoft Support: COUNTIFS function'
+    url: https://support.microsoft.com/en-us/excel/functions/countifs-function
+  - title: 'Microsoft Support: AVERAGEIFS function'
+    url: https://support.microsoft.com/en-us/office/averageifs-function-48910c45-1fc0-4389-a028-f7c5c3001690
+  - title: 'Microsoft Support: SUBTOTAL function'
+    url: https://support.microsoft.com/en-us/office/subtotal-function-7b027003-f060-4ade-9040-e478765b9939
+  - title: 'Google Docs Editors Help: SUMIFS'
+    url: https://support.google.com/docs/answer/3238496
+  - title: 'Google Docs Editors Help: SUMIF'
+    url: https://support.google.com/docs/answer/3093583
+  - title: 'Google Docs Editors Help: SUBTOTAL'
+    url: https://support.google.com/docs/answer/3093649
+status: draft
+---
+
+This lesson works the same in Microsoft Excel and in Google Sheets. Where the two apps differ, both
+ways are shown.
+
+**Your practice file:** download
+[`excel-conditional-totals.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-conditional-totals.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds real-looking (but invented) data from **cafe-sales**, the small chain of three cafes we use
+through the whole roadmap. This time the data is one row per product line, the way a till exports it.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+TODO(owner): Also check the Excel and Google Sheets
+steps in this lesson once in the real apps: they are written from the official help pages, not from
+a live session.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. The quantity is in cell G2. Write a formula that shows "bulk" when it is 3 or more and "single"
+   otherwise.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=IF(G2>=3,"bulk","single")`. The test comes first, then what to show when it is true, then what to
+   show when it is false. Text goes in quotation marks.
+
+   </details>
+
+2. You wrote `=B1*C2` in D2 and filled it down. B1 holds a tax rate and must not move. What do you
+   change?
+
+   <details>
+   <summary>Answer</summary>
+
+   Lock B1 with dollar signs: `=$B$1*C2`. Now the filled-down copies still point at B1, while C2 moves
+   to C3, C4 and so on.
+
+   </details>
+
+3. After you filter a long list, which function totals only the rows you can still see?
+
+   <details>
+   <summary>Answer</summary>
+
+   `SUBTOTAL`, for example `=SUBTOTAL(109,J2:J3288)`. A plain `SUM` would add the hidden rows too.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> How much coffee did Campus sell in March, and how many coffee lines is that? Count completed
+> orders only. And what was the average line?
+
+Here is the top of `raw_sales_lines`, the order list from the till. One row is one **product line**:
+an order with three products has three rows.
+
+| order_id | ordered_at | store_name | status | category | product_name | quantity | unit_price_usd | discount_usd | line_amount_usd |
+|---|---|---|---|---|---|---:|---:|---:|---:|
+| 1001 | 2026-01-01 08:02 | Campus | completed | bakery | Croissant | 1 | 3.25 | 0.00 | 3.25 |
+| 1001 | 2026-01-01 08:02 | Campus | completed | coffee | Cold Brew | 1 | 4.75 | 0.00 | 4.75 |
+| 1001 | 2026-01-01 08:02 | Campus | completed | coffee | Espresso | 2 | 3.00 | 0.00 | 6.00 |
+
+`line_amount_usd` is `quantity × unit_price_usd − discount_usd`, already worked out for you.
+
+By the end of this lesson you will answer the question with three formulas that update when the data
+changes, and you will prove the numbers with a second route instead of trusting them.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 322" width="360" role="img" aria-labelledby="pass-title pass-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="pass-title">Six order lines and the three conditions</title>
+<desc id="pass-desc">Six lines from the cafe-sales order list. Three of them are for Campus, coffee and completed at the same time; they are marked yes, and their line amounts 4.75, 6.00 and 9.50 add up to 20.25. The other three are skipped.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">Only rows that pass every condition count</text>
+<text x="36" y="44" opacity="0.8" font-size="11">= Campus</text>
+<text x="112" y="44" opacity="0.8" font-size="11">= coffee</text>
+<text x="174" y="44" opacity="0.8" font-size="11">= completed</text>
+<text x="256" y="44" opacity="0.8" font-size="11">add up</text>
+<rect x="30" y="102" width="328" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="30" y="128" width="328" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="30" y="206" width="328" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="30" y="50" width="76" height="26" />
+<rect x="106" y="50" width="62" height="26" />
+<rect x="168" y="50" width="82" height="26" />
+<rect x="250" y="50" width="108" height="26" />
+<rect x="30" y="76" width="76" height="26" />
+<rect x="106" y="76" width="62" height="26" />
+<rect x="168" y="76" width="82" height="26" />
+<rect x="250" y="76" width="108" height="26" />
+<rect x="30" y="102" width="76" height="26" />
+<rect x="106" y="102" width="62" height="26" />
+<rect x="168" y="102" width="82" height="26" />
+<rect x="250" y="102" width="108" height="26" />
+<rect x="30" y="128" width="76" height="26" />
+<rect x="106" y="128" width="62" height="26" />
+<rect x="168" y="128" width="82" height="26" />
+<rect x="250" y="128" width="108" height="26" />
+<rect x="30" y="154" width="76" height="26" />
+<rect x="106" y="154" width="62" height="26" />
+<rect x="168" y="154" width="82" height="26" />
+<rect x="250" y="154" width="108" height="26" />
+<rect x="30" y="180" width="76" height="26" />
+<rect x="106" y="180" width="62" height="26" />
+<rect x="168" y="180" width="82" height="26" />
+<rect x="250" y="180" width="108" height="26" />
+<rect x="30" y="206" width="76" height="26" />
+<rect x="106" y="206" width="62" height="26" />
+<rect x="168" y="206" width="82" height="26" />
+<rect x="250" y="206" width="108" height="26" />
+</g>
+<text x="36" y="67" font-weight="600" font-size="11">store_name</text>
+<text x="112" y="67" font-weight="600" font-size="11">category</text>
+<text x="174" y="67" font-weight="600" font-size="11">status</text>
+<text x="256" y="67" font-weight="600" font-size="11">line_amount_usd</text>
+<text x="36" y="93" opacity="0.45">Campus</text>
+<text x="112" y="93" opacity="0.45">bakery</text>
+<text x="174" y="93" opacity="0.45">completed</text>
+<text x="350" y="93" text-anchor="end" opacity="0.45">3.25</text>
+<text x="25" y="93" text-anchor="end" opacity="0.45" font-size="11">skip</text>
+<text x="36" y="119" font-weight="600">Campus</text>
+<text x="112" y="119" font-weight="600">coffee</text>
+<text x="174" y="119" font-weight="600">completed</text>
+<text x="350" y="119" text-anchor="end" font-weight="600">4.75</text>
+<text x="25" y="119" text-anchor="end" font-weight="600" font-size="11">yes</text>
+<text x="36" y="145" font-weight="600">Campus</text>
+<text x="112" y="145" font-weight="600">coffee</text>
+<text x="174" y="145" font-weight="600">completed</text>
+<text x="350" y="145" text-anchor="end" font-weight="600">6.00</text>
+<text x="25" y="145" text-anchor="end" font-weight="600" font-size="11">yes</text>
+<text x="36" y="171" opacity="0.45">Old Town</text>
+<text x="112" y="171" opacity="0.45">bakery</text>
+<text x="174" y="171" opacity="0.45">completed</text>
+<text x="350" y="171" text-anchor="end" opacity="0.45">3.25</text>
+<text x="25" y="171" text-anchor="end" opacity="0.45" font-size="11">skip</text>
+<text x="36" y="197" opacity="0.45">Old Town</text>
+<text x="112" y="197" opacity="0.45">food</text>
+<text x="174" y="197" opacity="0.45">completed</text>
+<text x="350" y="197" text-anchor="end" opacity="0.45">9.25</text>
+<text x="25" y="197" text-anchor="end" opacity="0.45" font-size="11">skip</text>
+<text x="36" y="223" font-weight="600">Campus</text>
+<text x="112" y="223" font-weight="600">coffee</text>
+<text x="174" y="223" font-weight="600">completed</text>
+<text x="350" y="223" text-anchor="end" font-weight="600">9.50</text>
+<text x="25" y="223" text-anchor="end" font-weight="600" font-size="11">yes</text>
+<path d="M30 240 H358" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="30" y="258" font-weight="600">COUNTIFS gives 3 (rows marked yes)</text>
+<text x="30" y="276" font-weight="600">SUMIFS gives 4.75 + 6.00 + 9.50 = 20.25</text>
+<text x="10" y="298" opacity="0.8" font-size="11">Six lines from the order list. The date condition is left out to fit.</text>
+</svg>
+<svg viewBox="0 0 360 258" width="360" role="img" aria-labelledby="buckets-title buckets-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="buckets-title">Campus, March: the lines in four buckets</title>
+<desc id="buckets-desc">The 218 completed Campus lines from March fall into four category buckets: coffee 112 lines and 706.25 dollars, tea 30 lines and 185.75 dollars, bakery 50 lines and 260.00 dollars, food 26 lines and 288.75 dollars. The buckets add up to the total of 1,440.75 dollars.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">The same lines, sorted into buckets</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="36" width="340" height="34" />
+</g>
+<text x="180" y="58" text-anchor="middle" font-weight="600">Campus, March, completed: 218 lines, &#36;1,440.75</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<path d="M180 70 L50 104" />
+<path d="M180 70 L140 104" />
+<path d="M180 70 L230 104" />
+<path d="M180 70 L320 104" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="104" width="80" height="86" />
+<rect x="100" y="104" width="80" height="86" />
+<rect x="190" y="104" width="80" height="86" />
+<rect x="280" y="104" width="80" height="86" />
+</g>
+<text x="50" y="126" text-anchor="middle" font-weight="600">coffee</text>
+<text x="50" y="148" text-anchor="middle">112 lines</text>
+<text x="50" y="168" text-anchor="middle">&#36;706.25</text>
+<text x="140" y="126" text-anchor="middle" font-weight="600">tea</text>
+<text x="140" y="148" text-anchor="middle">30 lines</text>
+<text x="140" y="168" text-anchor="middle">&#36;185.75</text>
+<text x="230" y="126" text-anchor="middle" font-weight="600">bakery</text>
+<text x="230" y="148" text-anchor="middle">50 lines</text>
+<text x="230" y="168" text-anchor="middle">&#36;260.00</text>
+<text x="320" y="126" text-anchor="middle" font-weight="600">food</text>
+<text x="320" y="148" text-anchor="middle">26 lines</text>
+<text x="320" y="168" text-anchor="middle">&#36;288.75</text>
+<text x="10" y="214" opacity="0.8" font-size="11">Each bucket: one COUNTIFS and one SUMIFS</text>
+<text x="10" y="232" font-weight="600">112 + 30 + 50 + 26 = 218 lines</text>
+<text x="10" y="250" font-weight="600">706.25 + 185.75 + 260.00 + 288.75 = 1,440.75</text>
+</svg>
+</figure>
+
+A **conditional total** looks at every row, keeps only the rows that pass **every** condition, and then
+counts, adds or averages what is left:
+
+- `COUNTIFS` counts the rows that pass.
+- `SUMIFS` adds the cells of one column, for the rows that pass.
+- `AVERAGEIFS` averages those cells.
+
+Each condition is a **pair**: one column to look at and one test for it. A row counts only when it
+passes all the pairs. The second picture shows the same idea from the other side: one bucket per
+category, each with its own count and sum, and the buckets add up to the whole.
+
+## Worked example
+
+Question: **how many coffee lines did Campus sell in March (completed orders only), what do they add
+up to, and what is the average line?** Open the practice file and follow along on the `calc` sheet.
+
+1. **Say what one row is, and write the expected output.** Click cell **A1** and type: *"Three
+   numbers for Campus, coffee, March, completed orders: how many lines, their total in dollars, the
+   average line."* *Why:* one row is one product line, so we are counting lines, not orders. A
+   formula with a typo still returns a number, so the sentence is what you check the number against.
+
+2. **Type the conditions in cells.** In **A3:B7** type these pairs:
+
+   | A | B |
+   |---|---|
+   | store | Campus |
+   | category | coffee |
+   | status | completed |
+   | from (included) | 2026-03-01 |
+   | until (not included) | 2026-04-01 |
+
+   *Why:* to answer the same question for another store or month you change a cell, not a formula.
+   Check that the two dates sit on the right side of the cell: that means they are real dates. Each
+   order's `ordered_at` has a time of day, and "until April 1, not included" keeps all of March 31.
+
+3. **Count the lines with COUNTIFS.** In **B9** type:
+
+   ```text
+   =COUNTIFS(raw_sales_lines!C:C,$B$3,raw_sales_lines!E:E,$B$4,raw_sales_lines!D:D,$B$5,raw_sales_lines!B:B,">="&$B$6,raw_sales_lines!B:B,"<"&$B$7)
+   ```
+
+   Read it in pairs: store column is `B3`; category column is `B4`; status column is `B5`; time
+   column is at or after `B6`; time column is before `B7`. The result is **112**.
+   *Why:* the `>=` and `<` sit inside quotation marks and are joined to the date cell with `&`. Whole
+   columns such as `C:C` work because row 1 holds the headers, which never pass the tests. The dollar
+   signs lock the condition cells, so you can copy the formula to another cell without the references
+   sliding.
+
+4. **Add the amounts with SUMIFS.** In **B10** type the same pairs, with the column to add in front:
+
+   ```text
+   =SUMIFS(raw_sales_lines!J:J,raw_sales_lines!C:C,$B$3,raw_sales_lines!E:E,$B$4,raw_sales_lines!D:D,$B$5,raw_sales_lines!B:B,">="&$B$6,raw_sales_lines!B:B,"<"&$B$7)
+   ```
+
+   The result is **706.25**. *Why the column to add comes first:* in `SUMIFS` the sum range is the
+   first argument, then the pairs. Older workbooks use `SUMIF`, which takes one condition and puts the
+   sum range last. Microsoft's help page warns about exactly this difference. For one condition:
+
+   | Function | One condition, summing `line_amount_usd` for coffee |
+   |---|---|
+   | `SUMIF` (range, criteria, sum range) | `=SUMIF(raw_sales_lines!E:E,"coffee",raw_sales_lines!J:J)` |
+   | `SUMIFS` (sum range, range, criteria) | `=SUMIFS(raw_sales_lines!J:J,raw_sales_lines!E:E,"coffee")` |
+
+   Both return **10,807** for all coffee lines in the file. Only the position of the column to add
+   changed. `AVERAGEIFS` follows the `SUMIFS` order: the column to average comes first.
+
+5. **Average with AVERAGEIFS.** In **B11** use the same pairs, starting with `raw_sales_lines!J:J`
+   again. The result is **6.3058**, which is **\$6.31** with two decimals.
+   *Why not divide B10 by B9?* You can, and it must give the same number. `AVERAGEIFS` is one formula
+   instead of two, and it cannot be broken by someone moving B9. If no row passes, Excel returns
+   `#DIV/0!` (Microsoft's help page says so): an average of nothing has no value.
+
+6. **Try three other kinds of criteria** on the whole list, in any empty cell:
+
+   | Criteria | Formula | Result |
+   |---|---|---:|
+   | A comparison | `=COUNTIFS(raw_sales_lines!G:G,">=3")` lines with 3 or more units | 482 |
+   | A comparison on money | `=COUNTIFS(raw_sales_lines!I:I,">0")` lines with a discount | 168 |
+   | A wildcard | `=COUNTIFS(raw_sales_lines!F:F,"*Latte*")` product names that contain "Latte" | 635 |
+   | Exact text | `=COUNTIFS(raw_sales_lines!F:F,"Latte")` product named exactly "Latte" | 420 |
+
+   *Why:* `*` stands for any run of characters and `?` for exactly one, so `"*Latte*"` finds both
+   Latte (420 lines) and Chai Latte (215 lines). To search for a real `*` or `?`, put `~` in front of it.
+   - **Excel:** the wildcards are documented on the `SUMIFS` and `COUNTIFS` pages.
+   - **Google Sheets:** Google documents the wildcards on its `SUMIF` page, not on `SUMIFS`. Use them
+     in `SUMIFS` and `COUNTIFS` only after you have checked the result, as in the next two steps.
+
+7. **Verify with buckets.** A conditional total is right only if the pieces add up to the whole. Copy
+   the `SUMIFS` from step 4 into three more cells and, in each copy, type the category text instead of
+   `$B$4`: `"tea"`, `"bakery"` and `"food"`. With coffee from step 4, the four sums are **706.25**,
+   **185.75**, **260.00** and **288.75**, and they add up to **1,440.75**. Now remove the category pair
+   and run it once more for the whole store: **1,440.75**.
+   The buckets add up to the whole, so no category was lost or counted twice.
+
+8. **Verify with a filtered list.** Make a copy of `raw_sales_lines` and work on the copy (**Excel:**
+   right-click the tab, **Move or Copy**, **Create a copy**; **Google Sheets:** right-click the tab,
+   **Duplicate**). Never filter the raw sheet. On the copy, filter `store_name` to Campus, `category`
+   to coffee, `status` to completed and `ordered_at` to March 2026
+   (**Excel:** **Data**, **Filter**; **Google Sheets:** **Data**, **Create a filter**). In a cell below the
+   list, type `=SUBTOTAL(109,J2:J3288)`: it shows **706.25**, the same as step 4. `SUBTOTAL(103,A2:A3288)`
+   counts the visible lines: **112**, the same as step 3. Both apps leave filtered-out rows out of
+   `SUBTOTAL` whatever the function number; 109 also leaves out rows you hid by hand.
+   *Why a second route:* `SUMIFS` never complains. If a condition does not match, you get a smaller
+   number, or zero, and nothing on the screen tells you.
+
+   Check the three results against your sentence in A1: **112 lines, \$706.25, \$6.31 average.**
+
+<details>
+<summary>Explain it in your own words: why did we run two checks in steps 7 and 8, when the formulas in steps 3 to 5 already gave numbers?</summary>
+
+Because a conditional formula does not fail loudly. A wrong spelling in a condition, or a label that
+is not exactly the same, makes some rows drop out and the total comes out smaller, but it is still a
+perfectly normal-looking number. Only a second route, such as buckets that must add up or a filtered
+list that must show the same total, can tell you it is wrong.
+
+</details>
+
+<Aside type="tip" title="One more look at the data">
+The canceled order is a good example of why the `status` pair matters. Campus has one canceled coffee
+line in March, a Mocha for \$5.00. Without the status pair, step 3 gives 113 and step 4 gives 711.25:
+a number that looks fine and is \$5.00 too high.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-conditional-totals-1">
+
+**How many tea lines did Campus sell in April (completed orders only), what do they add up to, and
+what is the average line?** Use `raw_sales_lines` and the `calc` sheet. Expected output: three numbers,
+lines, total in dollars, average line, and a check that the four categories add up to the store's April
+total.
+
+The first steps are done for you:
+
+1. One row is one product line, so we count lines.
+2. The conditions are typed in cells: store `Campus`, category `tea`, status `completed`, from
+   `2026-04-01` (included), until `2026-05-01` (not included).
+
+Now finish it: write the three formulas, then run the buckets check.
+
+<details>
+<summary>Hint</summary>
+
+Copy the three formulas from steps 3 to 5 of the worked example. Which cells hold the conditions now?
+For the check, which pair do you drop to get the store's whole April total?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`COUNTIFS` pairs: store column with the store cell, category column with the category cell, status
+column with the status cell, `ordered_at` with `">="&` the from cell, and `ordered_at` with `"<"&` the
+until cell. `SUMIFS` and `AVERAGEIFS` take `raw_sales_lines!J:J` in front of the same pairs. For the
+check, run the `SUMIFS` four times with coffee, tea, bakery and food.
+
+</details>
+
+<Solution>
+
+1. `COUNTIFS`: **33** lines.
+2. `SUMIFS`: **196.75**.
+3. `AVERAGEIFS`: **5.9621**, which is **\$5.96** with two decimals.
+
+Check with buckets, completed Campus lines in April: coffee 85 lines and 571.50, tea 33 lines and
+196.75, bakery 35 lines and 183.75, food 28 lines and 300.00. The four add up to **181 lines** and
+**1,252.00**. The same formulas without the category pair also give 181 lines and 1,252.00, so
+nothing was lost.
+
+Answer: **33 tea lines, \$196.75, average \$5.96.**
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-conditional-totals-2">
+
+**What did Harbor sell in bakery in June?** The Harbor manager sent a second export, `raw_june_export`:
+all June lines of the three stores, in the same columns as `raw_sales_lines`. Do not change it, it is
+raw data. Work on the `calc` sheet.
+
+Before you type a formula, write one sentence on `calc` saying what the result should look like: which
+numbers, for which store, category and month, and what check will prove them. Then build it. Expected
+output: the number of completed bakery lines, their total, their average, and how many of those lines
+had a discount.
+
+<details>
+<summary>Hint</summary>
+
+Do the buckets check from step 7 of the worked example first, and compare the number of numeric
+amounts with the number of lines (`COUNT` against `COUNTA`). Something in this export is not what it
+looks like.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Four numbers for Harbor bakery in June, completed orders: lines, total, average, and
+the number of discounted lines. The four categories of Harbor must add up to Harbor's June total."*
+There are two problems, both invisible at first glance: a category label that is not exactly
+`bakery`, and amounts that are text instead of numbers. Fix them in helper columns on `calc`, not in
+the raw sheet.
+
+</details>
+
+<Solution>
+
+1. **First try.** `COUNTIFS` for Harbor, bakery, completed gives **41** and `SUMIFS` gives **238.75**.
+   No error, but both are wrong.
+2. **Buckets check.** The four category sums for Harbor in June add up to **1,436.75**, while the same
+   `SUMIFS` without the category pair gives **1,453.50**. A gap of **16.75** means some Harbor lines are in
+   no bucket. Filter the category column on the raw sheet: next to `bakery` there is a second entry that
+   looks the same: `bakery` followed by a stray space. It sits on 3 lines worth 16.75. (A wildcard
+   `"bakery*"` would catch them, but fixing the label is cleaner.)
+3. **Type check.** `=COUNT(raw_june_export!J2:J645)` gives **642**, but `=COUNTA(raw_june_export!J2:J645)`
+   gives **644**. Two amounts are text (they sit on the left of their cells), 6.50 and 3.25. A text
+   cell adds nothing to `SUMIFS`.
+4. **Fix in `calc`.** In `calc!A2` type `=TRIM(raw_june_export!E2)` and in `calc!B2`
+   `=VALUE(raw_june_export!J2)`, then fill both down to row 645. `TRIM` removes the stray space and
+   `VALUE` turns text into a number (and leaves numbers alone). Rerun the formulas with
+   `calc!A:A` as the category range and `calc!B:B` as the amount range, keeping the store, status and
+   discount ranges on the raw sheet. All the ranges are whole columns, so they line up.
+5. **Result:** **44 completed bakery lines**, **\$265.25**, average **\$6.03** (6.0284), **4** lines with a
+   discount (`raw_june_export!I:I` with `">0"`).
+6. **Check again.** The four categories now add up to **1,463.25**, which equals Harbor's June total
+   (196 lines), and `COUNT` on `calc!B2:B645` gives **644**, equal to the number of lines.
+
+The first try counted 3 lines too few and added 26.50 dollars too little (16.75 for the label,
+9.75 for the two text amounts).
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in `SUMIFS`, which argument comes first, and how does `SUMIF` differ?
+
+   <details>
+   <summary>Answer</summary>
+
+   In `SUMIFS` the range to add comes first, then one pair of range and criteria for each condition.
+   `SUMIF` takes its single range and criteria first and the range to add last, and that last part is
+   optional.
+
+   </details>
+
+<Exercise id="excel-conditional-totals-3">
+
+**Spot the flaw.** A colleague wants the completed Campus total for March and writes:
+
+```text
+=SUMIFS(raw_sales_lines!J:J,raw_sales_lines!C:C,"Campus",raw_sales_lines!D:D,"completed",raw_sales_lines!B:B,">="&DATE(2026,3,1),raw_sales_lines!B:B,"<="&DATE(2026,3,31))
+```
+
+It returns 1,376.00. "I checked the dates: the first of March to the thirty-first." What went wrong, and
+how would you catch it?
+
+<details>
+<summary>Hint</summary>
+
+Look at the last pair of conditions. Which day does `DATE(2026,3,31)` stand for, and at what time of that day?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Every `ordered_at` has a time, for example 2026-03-31 08:15. Is that on or before 2026-03-31 at midnight? Then check how many lines the formula counts for March and compare with the filtered list.
+
+</details>
+
+<Solution>
+
+The right answer is **1,440.75**. `ordered_at` is a date **and a time**. `DATE(2026,3,31)` means March 31
+at midnight, so `"<="` throws out every order taken during the day on March 31: **11 lines worth
+64.75** (1,440.75 − 64.75 = 1,376.00). The formula counts 207 lines instead of 218.
+
+Fix: end the range before the next month starts, `"<"&DATE(2026,4,1)`, so the whole of March 31 is
+inside. You catch it with a second route: the filtered list shows 218 completed Campus lines for March,
+and a quick look at the last day shows March 31 lines that the formula never saw.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can count, total and average only the rows that meet several conditions, and
+prove the result against a second route such as buckets that add up or a filtered list.*
+Test: Exercise excel-conditional-totals-2, done from a blank `calc` sheet without opening the hints.
+
+The pattern to remember: **keep the rows that pass every condition, add up what is left, then
+reconcile.** It comes back as PivotTables in this stage, and in SQL as `WHERE` with `SUM`, and as
+`GROUP BY`.

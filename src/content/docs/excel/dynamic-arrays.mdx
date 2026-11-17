@@ -1,0 +1,531 @@
+---
+id: excel-dynamic-arrays
+title: Spilling results with FILTER, SORT and UNIQUE
+description: 'Return a whole list of results from one formula with FILTER, SORT and UNIQUE, and fix a #SPILL! error.'
+stage: excel
+order: 190
+level: intermediate
+duration: 25
+objectives:
+  - Write FILTER, SORT and UNIQUE formulas
+  - Explain how a spill range grows and shrinks
+  - 'Fix a #SPILL! error'
+  - Combine UNIQUE with XLOOKUP or SUMIFS for a small report
+prerequisites:
+  - excel-xlookup
+  - excel-tables-sort-filter
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: Dynamic array formulas and spilled array behavior'
+    url: https://support.microsoft.com/en-us/office/dynamic-array-formulas-and-spilled-array-behavior-205c6b06-03ba-4151-89a1-87a7eb36e531
+  - title: 'Microsoft Support: How to correct a #SPILL! error'
+    url: https://support.microsoft.com/en-us/excel/how-to-correct-a-spill-error
+  - title: 'Microsoft Support: FILTER function'
+    url: https://support.microsoft.com/en-us/office/filter-function-f4f7cb66-82eb-4767-8f7c-4877ad80c759
+  - title: 'Microsoft Support: SORT function'
+    url: https://support.microsoft.com/en-us/excel/functions/sort-function
+  - title: 'Microsoft Support: UNIQUE function'
+    url: https://support.microsoft.com/en-us/office/unique-function-c5ab87fd-30a3-4ce9-9d1a-40204fb85e1e
+  - title: 'Google Docs Editors Help: Google Sheets function list'
+    url: https://support.google.com/docs/table/25273
+  - title: 'Google Docs Editors Help: FILTER'
+    url: https://support.google.com/docs/answer/3093197
+  - title: 'Google Docs Editors Help: SORT'
+    url: https://support.google.com/docs/answer/3093150
+  - title: 'Google Docs Editors Help: UNIQUE'
+    url: https://support.google.com/docs/answer/10522653
+status: draft
+---
+
+This lesson works in Microsoft 365 and in Google Sheets. Older versions of Excel do not have these
+functions (see the note after the worked example). Where the two apps differ, both ways are shown.
+
+**Your practice file:** download
+[`excel-dynamic-arrays.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-dynamic-arrays.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds real-looking (but invented) data from **cafe-sales**, the small chain of three cafes we use
+through the whole roadmap.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+TODO(owner): Also check the Excel and Google Sheets
+steps in this lesson once in the real apps: they are written from the official help pages, not from
+a live session, and the formulas that use `FILTER`, `SORT` and `UNIQUE` could not be recalculated in
+the tool I had (an older LibreOffice). I computed their results with a script instead. One claim has no
+official Google page behind it: that Google Sheets refuses to overwrite data and names the blocking cell
+in its error message. It comes from help articles by other authors. Please confirm it in Sheets or cut it.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In `raw_products` the codes are in A2:A17 and the prices in D2:D17. Write the formula that brings the
+   price for the code in B2, so that it survives being filled down.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=XLOOKUP(B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17)`. One cell, one result: B2 moves, the
+   two ranges are locked.
+
+   </details>
+
+2. You have a list of orders in a sheet. In your own words, what does a filter do to the rows that do not
+   match, and what does it do to the original list?
+
+   <details>
+   <summary>Answer</summary>
+
+   It hides the rows that do not match, in place. The data is not deleted and not copied: the list is the
+   same list, with some rows out of sight. Today's formulas do the opposite: they leave the list alone and
+   write the matching rows somewhere else.
+
+   </details>
+
+3. You sort only one column of a list. What happens to the rows?
+
+   <details>
+   <summary>Answer</summary>
+
+   They come apart: every value in the sorted column ends up next to the wrong values from the other
+   columns. Sort the whole table.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Send me every Campus order paid in cash in June, newest first, as a list that stays up to date. And
+> next to it, a small table: what did Campus sell in June in each category?
+
+You have two sheets: `raw_orders`, one row per order (`order_id`, `customer_id`, `store_id`,
+`ordered_at`, `status`, `payment_method`), and `raw_sales_lines`, one row per product line with its
+`category` and `line_amount_usd`.
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38 | completed | mobile |
+| 1003 | 61 | 2 | 2026-01-01 15:47 | completed | mobile |
+
+Campus is `store_id` 2. By the end of this lesson one formula will write the whole list, a second pair
+of formulas will write the small table, and you will have broken the first on purpose to see the error
+and fix it.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 270" width="360" role="img" aria-labelledby="spill-title spill-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="spill-title">One formula that fills a whole block of cells</title>
+<desc id="spill-desc">A sheet with the column names order_id, customer_id, store_id and ordered_at typed in row 1. The formula sits in cell A2 only. It returns ten rows, so the cells A2 to D11 are filled by it: orders 2797, 2781 and 2764 at the top, the oldest, 2515, at the bottom. A shaded rectangle marks the spill range.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One formula in A2 fills the block</text>
+<text font-family="monospace" x="28" y="40" opacity="0.9" font-size="11">=SORT(FILTER(raw_orders!A2:D1801, ...), 4, -1)</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="28" y="50" width="60" height="26" />
+<rect x="88" y="50" width="80" height="26" />
+<rect x="168" y="50" width="62" height="26" />
+<rect x="230" y="50" width="112" height="26" />
+</g>
+<text x="33" y="67" font-weight="600" font-size="11">order_id</text>
+<text x="93" y="67" font-weight="600" font-size="11">customer_id</text>
+<text x="173" y="67" font-weight="600" font-size="11">store_id</text>
+<text x="235" y="67" font-weight="600" font-size="11">ordered_at</text>
+<rect x="28" y="76" width="314" height="130" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-opacity="0.8" stroke-dasharray="5 3" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="28" y="76" width="60" height="26" />
+<rect x="88" y="76" width="80" height="26" />
+<rect x="168" y="76" width="62" height="26" />
+<rect x="230" y="76" width="112" height="26" />
+<rect x="28" y="102" width="60" height="26" />
+<rect x="88" y="102" width="80" height="26" />
+<rect x="168" y="102" width="62" height="26" />
+<rect x="230" y="102" width="112" height="26" />
+<rect x="28" y="128" width="60" height="26" />
+<rect x="88" y="128" width="80" height="26" />
+<rect x="168" y="128" width="62" height="26" />
+<rect x="230" y="128" width="112" height="26" />
+<rect x="28" y="154" width="60" height="26" />
+<rect x="88" y="154" width="80" height="26" />
+<rect x="168" y="154" width="62" height="26" />
+<rect x="230" y="154" width="112" height="26" />
+<rect x="28" y="180" width="60" height="26" />
+<rect x="88" y="180" width="80" height="26" />
+<rect x="168" y="180" width="62" height="26" />
+<rect x="230" y="180" width="112" height="26" />
+</g>
+<rect x="28" y="76" width="60" height="26" fill="none" stroke="currentColor" stroke-width="3" />
+<text x="23" y="93" text-anchor="end" opacity="0.7" font-size="10">2</text>
+<text x="33" y="93" font-weight="600" font-size="11">2797</text>
+<text x="93" y="93" font-weight="600" font-size="11">117</text>
+<text x="173" y="93" font-weight="600" font-size="11">2</text>
+<text x="235" y="93" font-weight="600" font-size="11">2026-06-30 12:10</text>
+<text x="23" y="119" text-anchor="end" opacity="0.7" font-size="10">3</text>
+<text x="33" y="119" font-size="11">2781</text>
+<text x="93" y="119" font-size="11">109</text>
+<text x="173" y="119" font-size="11">2</text>
+<text x="235" y="119" font-size="11">2026-06-29 08:05</text>
+<text x="23" y="145" text-anchor="end" opacity="0.7" font-size="10">4</text>
+<text x="33" y="145" font-size="11">2764</text>
+<text x="93" y="145" font-size="11">114</text>
+<text x="173" y="145" font-size="11">2</text>
+<text x="235" y="145" font-size="11">2026-06-27 16:13</text>
+<text x="23" y="171" text-anchor="end" opacity="0.7" font-size="10">5</text>
+<text x="33" y="171" opacity="0.7">...</text>
+<text x="23" y="197" text-anchor="end" opacity="0.7" font-size="10">11</text>
+<text x="33" y="197" font-size="11">2515</text>
+<text x="93" y="197" font-size="11">66</text>
+<text x="173" y="197" font-size="11">2</text>
+<text x="235" y="197" font-size="11">2026-06-07 10:56</text>
+<text x="10" y="228" font-weight="600" font-size="11">Only A2 holds the formula (thick border).</text>
+<text x="10" y="244" opacity="0.85" font-size="11">The shaded block is its result: 10 orders match, so 10 rows.</text>
+</svg>
+<svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="blocked-title blocked-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="blocked-title">The same formula when a cell is in the way</title>
+<desc id="blocked-desc">The same sheet, but cell A6 holds the letter x. The formula cell A2 shows the error SPILL exclamation mark. A dashed outline shows the range A2 to D11 where the ten rows would go; A6 is marked as the cell that blocks them.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A cell in the way: #SPILL!</text>
+<text font-family="monospace" x="28" y="40" opacity="0.9" font-size="11">=SORT(FILTER(raw_orders!A2:D1801, ...), 4, -1)</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="28" y="50" width="60" height="26" />
+<rect x="88" y="50" width="80" height="26" />
+<rect x="168" y="50" width="62" height="26" />
+<rect x="230" y="50" width="112" height="26" />
+</g>
+<text x="33" y="67" font-weight="600" font-size="11">order_id</text>
+<text x="93" y="67" font-weight="600" font-size="11">customer_id</text>
+<text x="173" y="67" font-weight="600" font-size="11">store_id</text>
+<text x="235" y="67" font-weight="600" font-size="11">ordered_at</text>
+<rect x="28" y="76" width="314" height="130" fill="none" stroke="currentColor" stroke-opacity="0.8" stroke-dasharray="5 3" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.3">
+<rect x="28" y="76" width="60" height="26" />
+<rect x="88" y="76" width="80" height="26" />
+<rect x="168" y="76" width="62" height="26" />
+<rect x="230" y="76" width="112" height="26" />
+<rect x="28" y="102" width="60" height="26" />
+<rect x="88" y="102" width="80" height="26" />
+<rect x="168" y="102" width="62" height="26" />
+<rect x="230" y="102" width="112" height="26" />
+<rect x="28" y="128" width="60" height="26" />
+<rect x="88" y="128" width="80" height="26" />
+<rect x="168" y="128" width="62" height="26" />
+<rect x="230" y="128" width="112" height="26" />
+<rect x="28" y="154" width="60" height="26" />
+<rect x="88" y="154" width="80" height="26" />
+<rect x="168" y="154" width="62" height="26" />
+<rect x="230" y="154" width="112" height="26" />
+<rect x="28" y="180" width="60" height="26" />
+<rect x="88" y="180" width="80" height="26" />
+<rect x="168" y="180" width="62" height="26" />
+<rect x="230" y="180" width="112" height="26" />
+</g>
+<text x="23" y="93" text-anchor="end" opacity="0.7" font-size="10">2</text>
+<text x="23" y="119" text-anchor="end" opacity="0.7" font-size="10">3</text>
+<text x="23" y="145" text-anchor="end" opacity="0.7" font-size="10">4</text>
+<text x="23" y="171" text-anchor="end" opacity="0.7" font-size="10">5</text>
+<text x="23" y="197" text-anchor="end" opacity="0.7" font-size="10">6</text>
+<text x="33" y="93" font-weight="600" font-size="11">#SPILL!</text>
+<rect x="28" y="180" width="60" height="26" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="3" />
+<text x="33" y="197" font-weight="600" font-size="11">x</text>
+<text x="93" y="197" font-weight="600" font-size="11">&lt;- in the way</text>
+<text x="185.0" y="220" text-anchor="middle" opacity="0.7" font-size="10">... down to row 11</text>
+<text x="10" y="242" font-weight="600" font-size="11">Dashed: where the 10 rows want to go (A2:D11).</text>
+<text x="10" y="258" opacity="0.85" font-size="11">Clear A6 and the block fills in by itself.</text>
+</svg>
+</figure>
+
+Until now a formula returned one value in one cell. A **dynamic array** formula returns a whole block
+of values. You type it in **one** cell, and the block fills the cells below and beside it: this block is
+the **spill range**. Its size is not something you set. It is the size of the result, so it grows when
+more rows match and shrinks when fewer do.
+
+Three functions do most of the work:
+
+- `FILTER` keeps the rows that pass a test, like the conditions of `SUMIFS`, but it returns the rows
+  instead of adding them up.
+- `SORT` puts the rows in order.
+- `UNIQUE` removes repeats, so each value appears once.
+
+A spill needs free cells. If something is in the way, the formula shows `#SPILL!` (second picture)
+instead of overwriting it.
+
+## Worked example
+
+Question: **which Campus orders were paid in cash in June, newest first, and what did Campus sell in
+each category?** Open the practice file and follow along on the `calc` sheet.
+
+1. **Say what one row is, and write the expected output.** Click **G7** and type: *"A list with one row
+   per order (order_id, customer_id, store_id, ordered_at), only Campus cash orders from June, newest
+   first; and one row per category with Campus's June sales, adding up to the store's June total."*
+   *Why:* a formula that returns a block can be wrong in size or in order and still look tidy. The
+   sentence tells you what to check it against.
+
+2. **Type the conditions in cells.** In **G1:H5** type these pairs: `store_id` and `2`; `payment` and
+   `cash`; `from (included)` and `2026-06-01`; `until (not included)` and `2026-07-01`; `store_name` and
+   `Campus`. *Why:* to ask the same question for another store or month, you change a cell, not a formula.
+   The two dates are real dates (right-aligned), as in the lesson on conditional totals.
+   Also type the four column names in **A1:D1**: `order_id`, `customer_id`, `store_id` and `ordered_at`.
+
+3. **Filter the orders.** In **A2** type:
+
+   ```text
+   =FILTER(raw_orders!A2:D1801,(raw_orders!C2:C1801=H1)*(raw_orders!F2:F1801=H2)*(raw_orders!D2:D1801>=H3)*(raw_orders!D2:D1801<H4),"no orders")
+   ```
+
+   Read it as: *from these four columns, keep the rows where all four tests are true; if none is,
+   say "no orders".* Ten rows appear, in the order of the data (the oldest, order 2515, first).
+   *Why the tests are multiplied:* each test gives TRUE or FALSE for every row, and TRUE times FALSE is
+   0. A row survives only if every test is TRUE. Microsoft's help page shows exactly this: multiply
+   for "and", add for "or". *Why the tests can use column F even though F is not returned:* the first
+   argument says which columns come back, the second says which rows. They only need the same number of
+   rows. *Why the last argument:* if no row passes, Excel returns `#CALC!` unless you give a fallback.
+
+   **Google Sheets:** each test is its own argument, there is no multiplying, and with no match the
+   result is `#N/A`, so wrap it in `IFNA`:
+
+   ```text
+   =IFNA(FILTER(raw_orders!A2:D1801,raw_orders!C2:C1801=H1,raw_orders!F2:F1801=H2,raw_orders!D2:D1801>=H3,raw_orders!D2:D1801<H4),"no orders")
+   ```
+
+4. **Sort it, newest first.** Wrap the formula in `SORT`, with the column to sort by (the 4th of the
+   four returned, `ordered_at`) and the direction:
+
+   ```text
+   =SORT(FILTER(...),4,-1)
+   ```
+
+   Excel: `1` is ascending and `-1` is descending. **Google Sheets:** `=SORT(IFNA(FILTER(...),"no orders"),4,FALSE)`,
+   where `TRUE` is ascending and `FALSE` is descending. Now order **2797** (June 30, 12:10) is at the top.
+   *Why `SORT` goes outside:* sorting the whole result is one more step on a result that already exists.
+
+5. **Verify.** *Is it ten?* `=COUNT(A2:A100)` counts the order numbers that came back: **10**. Then a
+   second route that does not use `FILTER` at all:
+
+   ```text
+   =COUNTIFS(raw_orders!C:C,H1,raw_orders!F:F,H2,raw_orders!D:D,">="&H3,raw_orders!D:D,"<"&H4)
+   ```
+
+   It also gives **10**. The top row is 2797 and the bottom one is 2515: newest first, as asked.
+
+6. **Watch it grow and shrink.** Change **H3** to `2026-05-01` and **H4** to `2026-06-01`. The block now
+   fills **29** rows: the formula in A2 was not touched. Change them back and it shrinks to 10, and the
+   cells that are no longer needed are empty again. Click any cell inside the block other than A2: the
+   formula bar shows the formula greyed out, because only the first cell of a spill is editable.
+   *Why this matters:* a list built by hand has the size it had on the day you made it. A spilled
+   list always has the size of the question.
+
+7. **Break it on purpose.** Back in June, click **A6** and type `x`. Cell **A2** now shows `#SPILL!`:
+   the ten rows need A2:D11 and A6 is not empty. Click A2: a dashed border shows where the result
+   wants to go, and Excel's error button offers **Select Obstructing Cells**, which jumps to A6.
+   Delete the `x` and the block fills in again. *Why:* Microsoft's help lists the causes of `#SPILL!`:
+   something is in the spill range, the range runs past the edge of the sheet, a merged cell is in it, or
+   the formula is inside an Excel Table (spilled formulas are not supported there). In every case the
+   formula is fine and the cells are not. Google Sheets also stops when a result would run into data, and
+   names the cell that is in the way. Clear it, and the result fills in.
+
+8. **Build the small table with `UNIQUE` and `SUMIFS`.** In **J1** type the heading `category`, and in
+   **J2**:
+
+   ```text
+   =SORT(UNIQUE(FILTER(raw_sales_lines!E2:E3288,(raw_sales_lines!C2:C3288=H5)*(raw_sales_lines!D2:D3288="completed")*(raw_sales_lines!B2:B3288>=H3)*(raw_sales_lines!B2:B3288<H4))))
+   ```
+
+   It lists each category of the Campus June lines once, in alphabetical order: **bakery, coffee, food,
+   tea**. In **K1** type `sales_usd` and in **K2**:
+
+   ```text
+   =SUMIFS(raw_sales_lines!J:J,raw_sales_lines!E:E,J2,raw_sales_lines!C:C,$H$5,raw_sales_lines!D:D,"completed",raw_sales_lines!B:B,">="&$H$3,raw_sales_lines!B:B,"<"&$H$4)
+   ```
+
+   then fill it down to **K5**. The sales are **369.50**, **705.00**, **363.50** and **152.75**. *Why the
+   dollar signs:* J2 moves down the list, the conditions must not. *Why `UNIQUE` first:* you get the
+   list of categories from the data, so a new category appears by itself. The `SUMIFS` column does
+   not grow by itself: if the list ever got longer, you would have to fill it further down.
+   **Google Sheets:** `=SORT(UNIQUE(FILTER(raw_sales_lines!E2:E3288,raw_sales_lines!C2:C3288=H5,raw_sales_lines!D2:D3288="completed",raw_sales_lines!B2:B3288>=H3,raw_sales_lines!B2:B3288<H4)),1,TRUE)`
+   in J2; `SORT` needs all its arguments there.
+
+   Verify: `=SUM(K2:K5)` gives **1,590.75**. The same `SUMIFS` without the category pair also gives
+   **1,590.75**, the store's June total: the four rows add up to the whole.
+
+<details>
+<summary>Explain it in your own words: why did we type the formula in one cell and not in ten?</summary>
+
+Because the formula decides how many cells it needs. If you wrote it into ten cells by hand, you would
+have chosen the size on the day you wrote it, and a different month would leave empty rows or cut off
+real ones. With one formula, the data decides the size: more matching orders mean a longer block.
+
+</details>
+
+<Aside type="caution" title="Which Excel has these functions?">
+Microsoft's help pages for `FILTER`, `SORT` and `UNIQUE` list Excel for Microsoft 365, Excel 2021 and
+Excel 2024 (and the Excel mobile apps). They do not list Excel 2019 or Excel 2016. Google Sheets has all
+three functions. Keep a spilled block outside an Excel Table, because spilled array formulas are not
+supported inside one.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-dynamic-arrays-1">
+
+**List Harbor's mobile orders from May, oldest first.** Use `raw_orders` and the `calc` sheet. Expected
+output: one row per order with `order_id`, `customer_id`, `store_id` and `ordered_at`, only for Harbor
+(`store_id` 3), only paid by `mobile`, only from May 2026, with the oldest order first, and a check that
+the number of rows is right.
+
+The first steps are done for you:
+
+1. One row is one order, and the four columns to return are `A2:D1801` of `raw_orders`.
+2. The conditions are typed in cells: `H1` is `3`, `H2` is `mobile`, `H3` is `2026-05-01` and `H4` is
+   `2026-06-01` (not included).
+
+Now finish it: write the formula in **A2**, sort it, and check the row count a second way.
+
+<details>
+<summary>Hint</summary>
+
+The four tests of the worked example are the same four, with other cells. What changes in `SORT` when
+you want the oldest first instead of the newest first?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`=SORT(FILTER(raw_orders!A2:D1801,(...)*(...)*(...)*(...),"no orders"),4,1)`: fill the four tests with the
+store column and `H1`, the payment column and `H2`, the date column and `H3`, and the date column and
+`H4`. For the check, use a `COUNTIFS` with the same four pairs.
+
+</details>
+
+<Solution>
+
+```text
+=SORT(FILTER(raw_orders!A2:D1801,(raw_orders!C2:C1801=H1)*(raw_orders!F2:F1801=H2)*(raw_orders!D2:D1801>=H3)*(raw_orders!D2:D1801<H4),"no orders"),4,1)
+```
+
+In Google Sheets: `=SORT(IFNA(FILTER(raw_orders!A2:D1801,raw_orders!C2:C1801=H1,raw_orders!F2:F1801=H2,raw_orders!D2:D1801>=H3,raw_orders!D2:D1801<H4),"no orders"),4,TRUE)`.
+
+The block has **32** rows. The first is order **2068** (customer 123, May 1, 07:38) and the last is order
+**2447** (customer 14, May 31, 16:26). Check: `=COUNT(A2:A100)` gives 32, and
+`=COUNTIFS(raw_orders!C:C,H1,raw_orders!F:F,H2,raw_orders!D:D,">="&H3,raw_orders!D:D,"<"&H4)` gives 32.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-dynamic-arrays-2">
+
+**Report Harbor's sales by category.** The Harbor manager sent `raw_harbor_export`: every Harbor line
+(April to June), in the same columns as `raw_sales_lines`. Do not change it, it is raw data. Work on the
+`calc` sheet.
+
+Before you type a formula, write one sentence on `calc` saying what the result should look like: how many
+rows, what each row shows, and what the rows must add up to. Then build it. Expected output: one row per
+category with its sales, and the sales add up to the sum of the whole `line_amount_usd` column.
+
+<details>
+<summary>Hint</summary>
+
+Build the list of categories with `UNIQUE` straight from the raw column and count the rows. Is it the
+number of categories you expected? Google's help for `UNIQUE` suggests a reason when rows look the same but
+are not treated as the same.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Four rows, one per category, each with its Harbor sales, and the four add up to the
+total of the amount column."* `UNIQUE` on the raw column returns six rows, not four: two labels carry a
+trailing space. Clean a copy of the column on `calc` with `TRIM`, and build the list and the sums from the
+copy.
+
+</details>
+
+<Solution>
+
+1. **First try.** `=UNIQUE(raw_harbor_export!E2:E646)` returns **6** values, not 4: `coffee`, `tea`,
+   `bakery`, `food`, and also `tea` and `bakery` with a stray space after them (2 and 1 lines). They look
+   identical, but `UNIQUE` treats them as different. A `SUMIFS` on `tea` would leave out the lines
+   with a stray space after `tea`.
+2. **Clean a copy, in `calc`.** In **A1** type `category_clean`, in **A2**
+   `=TRIM(raw_harbor_export!E2)`, and fill down to row **646** (645 lines).
+3. **List and sum.** In **G2**: `=SORT(UNIQUE(A2:A646))`, which gives **bakery, coffee, food, tea**. In
+   **H2**: `=SUMIFS(raw_harbor_export!J:J,A:A,G2)`, filled down to **H5**. (In Google Sheets, `SORT` needs
+   its other two arguments: `=SORT(UNIQUE(A2:A646),1,TRUE)`.) All the lines in this export are
+   completed, so no status pair is needed.
+4. **Result:** bakery **729.00** (135 lines), coffee **2,164.50** (313), food **1,041.25** (90), tea
+   **671.50** (107).
+5. **Check.** `=SUM(H2:H5)` gives **4,606.25**, and `=SUM(raw_harbor_export!J2:J646)` also gives
+   **4,606.25**. Without the cleaning, `tea` would show 663.50 and `bakery` 718.50, and two more rows
+   would carry 8.00 and 10.50.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `#SPILL!` mean, and how do you find the cause?
+
+   <details>
+   <summary>Answer</summary>
+
+   Something is in the way of the result: a cell in the spill range is not empty (or the range holds a
+   merged cell, or runs past the edge of the sheet, or the formula is inside a Table). Click the cell
+   with the error: a dashed border shows the intended range, and **Select Obstructing Cells** takes you to
+   the blocking cell. The formula itself is fine.
+
+   </details>
+
+<Exercise id="excel-dynamic-arrays-3">
+
+**Spot the flaw.** A colleague wants Campus cash orders from June and writes:
+
+```text
+=FILTER(raw_orders!A2:D1801,((raw_orders!C2:C1801=2)+(raw_orders!F2:F1801="cash"))*(raw_orders!D2:D1801>=DATE(2026,6,1)),"no orders")
+```
+
+It returns a long list: **146** rows. "That is a lot of cash orders for one small cafe," they say, and send
+it on. What went wrong?
+
+<details>
+<summary>Hint</summary>
+
+Look at the `store_id` column of the result. Is it all 2? Then look at the sign between the two tests.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`+` adds the TRUE and FALSE of the two tests, so a row survives if either one is TRUE. What does `*` do instead?
+
+</details>
+
+<Solution>
+
+The right number is **10**. The `+` between the store test and the payment test means "or", so the formula
+keeps June orders that were taken at Campus **or** paid in cash: 10 that are both, 21 cash orders at the
+other two stores, and 115 Campus orders paid by card or mobile (10 + 21 + 115 = 146). For "and", multiply:
+`(C=2)*(F="cash")*(D>=DATE(2026,6,1))`.
+
+The sheet showed the problem as soon as someone looked: the `store_id` column of the result is not all
+2. A second route, `COUNTIFS`, gives 10, and the difference with 146 is the proof. A list that is longer
+than you expected is a reason to check, not to send.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write one formula that returns a filtered, sorted or de-duplicated list, say why
+its block grew or shrank, fix a `#SPILL!`, and check the list against a second route.*
+Test: Exercise excel-dynamic-arrays-2, done from a blank `calc` sheet without opening the hints.
+
+The pattern to remember: **one formula, one question, and a block the size of the answer.** It is the
+spreadsheet version of `WHERE` and `SELECT DISTINCT` in SQL, and of boolean filtering in pandas.

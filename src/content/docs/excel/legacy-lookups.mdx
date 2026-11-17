@@ -1,0 +1,486 @@
+---
+id: excel-legacy-lookups
+title: Reading VLOOKUP and INDEX with MATCH
+description: Read inherited workbooks that use VLOOKUP, HLOOKUP or INDEX with MATCH, and know the approximate-match trap.
+stage: excel
+order: 90
+level: intermediate
+duration: 20
+objectives:
+  - Translate a VLOOKUP into the equivalent XLOOKUP
+  - Read an INDEX with MATCH formula piece by piece
+  - Explain the approximate-match trap and why it returns wrong near-matches
+  - Spot a hard-coded column number that breaks when a column is inserted
+prerequisites:
+  - excel-xlookup
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: VLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/vlookup-function-0bbc8083-26fe-4963-8ab8-93a18ad188a1
+  - title: 'Microsoft Support: HLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/hlookup-function-a3034eec-b719-4ba3-bb65-e1ad662ed95f
+  - title: 'Microsoft Support: MATCH function'
+    url: https://support.microsoft.com/en-us/office/match-function-e8dffd45-c762-47d6-bf89-533f4a37673a
+  - title: 'Microsoft Support: INDEX function'
+    url: https://support.microsoft.com/en-us/office/index-function-a5dcf0dd-996d-40a4-a822-b56b061328bd
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+  - title: 'Google Docs Editors Help: VLOOKUP'
+    url: https://support.google.com/docs/answer/3093318
+status: draft
+---
+
+This lesson works the same in Microsoft Excel and in Google Sheets. Where the two apps differ, both
+ways are shown.
+
+**Your practice file:** download
+[`excel-legacy-lookups.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-legacy-lookups.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds real-looking (but invented) data from **cafe-sales**, the small chain of three cafes we use
+through the whole roadmap. This time it also holds a sheet left behind by a colleague.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+TODO(owner): Also check the Excel and Google Sheets
+steps in this lesson once in the real apps: they are written from the official help pages, not from
+a live session. The formulas in `raw_inherited` are plain `VLOOKUP`, `INDEX` and `MATCH`, so they
+calculate on opening in both apps.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In `raw_products` the codes are in A2:A17 and the prices in D2:D17. Write the formula that brings the
+   price for the code in B2, so that it survives being filled down.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=XLOOKUP(B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17)`. B2 is free to move down with each
+   row, and both ranges are locked.
+
+   </details>
+
+2. What does a lookup show when the code is not in the table, and how do you change that?
+
+   <details>
+   <summary>Answer</summary>
+
+   `#N/A`. Give the fourth argument, for example `"not on menu"`, and the row shows those words instead.
+
+   </details>
+
+3. You fill a formula down and check only the first row. It is right. Why is that not enough?
+
+   <details>
+   <summary>Answer</summary>
+
+   Because a reference that is not locked slides as you fill down, and the cells further down may
+   point at the wrong place. One correct cell is not yet a correct column: check a row far down too.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> A colleague left me this price sheet, `raw_inherited`. It has four price columns that should all show
+> the same price. Can I trust them? And can you write the one we use now?
+
+The sheet has twelve order lines (`order_item_id`, `product_id`, `quantity`, `discount_usd`) and four
+columns of formulas. Here are the formulas of row 2:
+
+| Column | Formula in row 2 |
+|---|---|
+| `price_a` | `=VLOOKUP(B2,raw_products!$A$2:$D$17,4,FALSE)` |
+| `price_b` | `=INDEX(raw_products!$D$2:$D$17,MATCH(B2,raw_products!$A$2:$A$17,0))` |
+| `price_c` | `=VLOOKUP(B2,raw_old_menu!$A$2:$D$14,4)` |
+| `price_d` | `=VLOOKUP(B2,raw_menu_v2!$A$2:$E$17,4,FALSE)` |
+
+By the end of this lesson you will read each of these formulas aloud, rewrite one as `XLOOKUP`, and
+know which two warning signs to look for in any workbook you inherit.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 334" width="360" role="img" aria-labelledby="anatomy-title anatomy-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="anatomy-title">The same lookup written three ways</title>
+<desc id="anatomy-desc">The formula that finds the code in B2 and brings back the price, written as VLOOKUP, as INDEX with MATCH and as XLOOKUP. Four numbered parts appear in each: 1 what to find, 2 where to look, 3 what to bring back, 4 exact match.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">One lookup, three spellings</text>
+<text x="10" y="44" font-weight="600" font-size="11">VLOOKUP (old)</text>
+<text x="10" y="64" font-family="monospace" xml:space="preserve">=VLOOKUP(</text>
+<text x="74.8" y="64" font-family="monospace" xml:space="preserve">B2</text>
+<path d="M74.8 69 H89.2" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="82.0" cy="84" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="82.0" y="88" font-size="11" font-weight="700" text-anchor="middle">1</text>
+<text x="89.2" y="64" font-family="monospace" xml:space="preserve">,</text>
+<text x="96.4" y="64" font-family="monospace" xml:space="preserve">&#36;A&#36;2:&#36;D&#36;17</text>
+<path d="M96.4 69 H168.4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="132.4" cy="84" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="132.4" y="88" font-size="11" font-weight="700" text-anchor="middle">2</text>
+<text x="168.4" y="64" font-family="monospace" xml:space="preserve">,</text>
+<text x="175.6" y="64" font-family="monospace" xml:space="preserve">4</text>
+<path d="M175.6 69 H182.8" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="179.2" cy="84" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="179.2" y="88" font-size="11" font-weight="700" text-anchor="middle">3</text>
+<text x="182.8" y="64" font-family="monospace" xml:space="preserve">,</text>
+<text x="190" y="64" font-family="monospace" xml:space="preserve">FALSE</text>
+<path d="M190 69 H226" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="208.0" cy="84" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="208.0" y="88" font-size="11" font-weight="700" text-anchor="middle">4</text>
+<text x="226" y="64" font-family="monospace" xml:space="preserve">)</text>
+<text x="10" y="112" font-weight="600" font-size="11">INDEX with MATCH (old)</text>
+<text x="10" y="132" font-family="monospace" xml:space="preserve">=INDEX(</text>
+<text x="60.4" y="132" font-family="monospace" xml:space="preserve">&#36;D&#36;2:&#36;D&#36;17</text>
+<path d="M60.4 137 H132.4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="96.4" cy="152" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="96.4" y="156" font-size="11" font-weight="700" text-anchor="middle">3</text>
+<text x="132.4" y="132" font-family="monospace" xml:space="preserve">,MATCH(</text>
+<text x="182.8" y="132" font-family="monospace" xml:space="preserve">B2</text>
+<path d="M182.8 137 H197.2" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="190.0" cy="152" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="190.0" y="156" font-size="11" font-weight="700" text-anchor="middle">1</text>
+<text x="197.2" y="132" font-family="monospace" xml:space="preserve">,</text>
+<text x="204.4" y="132" font-family="monospace" xml:space="preserve">&#36;A&#36;2:&#36;A&#36;17</text>
+<path d="M204.4 137 H276.4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="240.4" cy="152" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="240.4" y="156" font-size="11" font-weight="700" text-anchor="middle">2</text>
+<text x="276.4" y="132" font-family="monospace" xml:space="preserve">,</text>
+<text x="283.6" y="132" font-family="monospace" xml:space="preserve">0</text>
+<path d="M283.6 137 H290.8" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="287.2" cy="152" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="287.2" y="156" font-size="11" font-weight="700" text-anchor="middle">4</text>
+<text x="290.8" y="132" font-family="monospace" xml:space="preserve">))</text>
+<text x="10" y="180" font-weight="600" font-size="11">XLOOKUP (current)</text>
+<text x="10" y="200" font-family="monospace" xml:space="preserve">=XLOOKUP(</text>
+<text x="74.8" y="200" font-family="monospace" xml:space="preserve">B2</text>
+<path d="M74.8 205 H89.2" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="82.0" cy="220" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="82.0" y="224" font-size="11" font-weight="700" text-anchor="middle">1</text>
+<text x="89.2" y="200" font-family="monospace" xml:space="preserve">,</text>
+<text x="96.4" y="200" font-family="monospace" xml:space="preserve">&#36;A&#36;2:&#36;A&#36;17</text>
+<path d="M96.4 205 H168.4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="132.4" cy="220" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="132.4" y="224" font-size="11" font-weight="700" text-anchor="middle">2</text>
+<text x="168.4" y="200" font-family="monospace" xml:space="preserve">,</text>
+<text x="175.6" y="200" font-family="monospace" xml:space="preserve">&#36;D&#36;2:&#36;D&#36;17</text>
+<path d="M175.6 205 H247.6" fill="none" stroke="currentColor" stroke-width="1.5" />
+<circle cx="211.6" cy="220" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /><text x="211.6" y="224" font-size="11" font-weight="700" text-anchor="middle">3</text>
+<text x="247.6" y="200" font-family="monospace" xml:space="preserve">)</text>
+<text x="10" y="244" opacity="0.8" font-size="11">4: nothing to type, exact is the default</text>
+<text x="10" y="272" font-size="12">1 = what to find</text>
+<text x="10" y="288" font-size="12">2 = where to look for it</text>
+<text x="10" y="304" font-size="12">3 = what to bring back: a column number, or a range</text>
+<text x="10" y="320" font-size="12">4 = exact match: FALSE, 0, or the XLOOKUP default</text>
+</svg>
+<svg viewBox="0 0 360 350" width="360" role="img" aria-labelledby="traps-title traps-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="traps-title">Two traps in an inherited lookup</title>
+<desc id="traps-desc">Trap one: a list without code 2 and a VLOOKUP with no fourth argument. Asking for code 2 lands on the row above, code 1, and returns its price 3.00 with no error, although the real price of code 2 is 3.50. Trap two: a column number typed as 4 points at the price column before a column is inserted and at the category column after it.</desc>
+<text x="10" y="22" font-size="14" font-weight="600">Trap 1: the last argument is missing</text>
+<rect x="8" y="62" width="150" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="8" y="36" width="66" height="26" />
+<rect x="74" y="36" width="84" height="26" />
+<rect x="8" y="62" width="66" height="26" />
+<rect x="74" y="62" width="84" height="26" />
+<rect x="8" y="88" width="66" height="26" />
+<rect x="74" y="88" width="84" height="26" />
+<rect x="8" y="114" width="66" height="26" />
+<rect x="74" y="114" width="84" height="26" />
+</g>
+<text x="13" y="53" font-weight="600" font-size="10">product_id</text>
+<text x="79" y="53" font-weight="600" font-size="10">unit_price_usd</text>
+<text x="13" y="79">1</text>
+<text x="150" y="79" text-anchor="end">3.00</text>
+<text x="13" y="105">3</text>
+<text x="150" y="105" text-anchor="end">4.50</text>
+<text x="13" y="131">4</text>
+<text x="150" y="131" text-anchor="end">4.50</text>
+<text x="172" y="52" font-weight="600" font-size="11">VLOOKUP(2,list,2)</text>
+<text x="172" y="70" font-size="11">no code 2 in the list,</text>
+<text x="172" y="86" font-size="11">so it takes the row above:</text>
+<text x="172" y="102" font-size="11">code 1 (shaded)</text>
+<text x="172" y="122" font-weight="600" font-size="11">returns 3.00, no error</text>
+<text x="172" y="138" opacity="0.8" font-size="11">real price of code 2: 3.50</text>
+<text x="10" y="176" font-size="14" font-weight="600">Trap 2: a column number typed in</text>
+<text x="8" y="196" opacity="0.8" font-size="11">Before: the 4 in the formula means unit_price_usd</text>
+<rect x="184" y="214" width="54" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="28.0" y="210" text-anchor="middle" opacity="0.8" font-size="10">1</text>
+<text x="86.0" y="210" text-anchor="middle" opacity="0.8" font-size="10">2</text>
+<text x="154.0" y="210" text-anchor="middle" opacity="0.8" font-size="10">3</text>
+<text x="211.0" y="210" text-anchor="middle" opacity="0.8" font-size="10">4</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="8" y="214" width="40" height="26" />
+<rect x="48" y="214" width="76" height="26" />
+<rect x="124" y="214" width="60" height="26" />
+<rect x="184" y="214" width="54" height="26" />
+</g>
+<text x="13" y="231">1</text>
+<text x="53" y="231">Espresso</text>
+<text x="129" y="231">coffee</text>
+<text x="189" y="231">3.00</text>
+<text x="8" y="262" opacity="0.8" font-size="11">After a column is inserted: the same 4 means category</text>
+<rect x="180" y="280" width="60" height="26" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="28.0" y="276" text-anchor="middle" opacity="0.8" font-size="10">1</text>
+<text x="86.0" y="276" text-anchor="middle" opacity="0.8" font-size="10">2</text>
+<text x="152.0" y="276" text-anchor="middle" opacity="0.8" font-size="10">3</text>
+<text x="210.0" y="276" text-anchor="middle" opacity="0.8" font-size="10">4</text>
+<text x="267.0" y="276" text-anchor="middle" opacity="0.8" font-size="10">5</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="8" y="280" width="40" height="26" />
+<rect x="48" y="280" width="76" height="26" />
+<rect x="124" y="280" width="56" height="26" />
+<rect x="180" y="280" width="60" height="26" />
+<rect x="240" y="280" width="54" height="26" />
+</g>
+<text x="13" y="297">1</text>
+<text x="53" y="297">Espresso</text>
+<text x="129" y="297">regular</text>
+<text x="185" y="297">coffee</text>
+<text x="245" y="297">3.00</text>
+<text x="8" y="326" font-weight="600" font-size="11">The formula still works. It now returns "coffee" where</text>
+<text x="8" y="342" font-weight="600" font-size="11">it used to return a price.</text>
+</svg>
+</figure>
+
+All three formulas in the first picture do the same job, and each has the same four parts: what to find,
+where to look, what to bring back, and whether the match must be exact. They only write the parts in a
+different order. `XLOOKUP` is the one to write today, but the other two are in countless files, and
+you will be asked to read them. (`HLOOKUP` is `VLOOKUP` turned on its side: it searches the top row of
+a table and brings back a value from a row number you give.)
+
+The second picture shows the two warning signs that make an old lookup silently wrong, and neither shows
+an error. Both are explained in the worked example and used in *On your own*.
+
+## Worked example
+
+Question: **is `price_a` right, and what are the same formula as `XLOOKUP` and as `INDEX` with `MATCH`?**
+Open `raw_inherited` and follow along. Do not change it: it is raw data.
+
+1. **Read the `VLOOKUP` in four parts.** Click `price_a` in row 2 and read
+   `=VLOOKUP(B2,raw_products!$A$2:$D$17,4,FALSE)` from left to right:
+   - `B2`: what to find, the product code of this line;
+   - `raw_products!$A$2:$D$17`: where to look. `VLOOKUP` always searches the **first column** of this
+     table, here column A, and the table must include the column you want back;
+   - `4`: bring back the **4th column** of the table, counting from its first column. Column D is the
+     fourth, and it holds `unit_price_usd`;
+   - `FALSE`: the match must be exact.
+
+   *Why read it in this order:* the four parts are always there. Once you can name them you can read
+   any lookup, in any file, in any order. In Google Sheets the same formula has the same four parts,
+   called `search_key`, `range`, `index` and `is_sorted`.
+
+2. **Write the `XLOOKUP` twin.** In `calc!A2` type:
+
+   ```text
+   =XLOOKUP(raw_inherited!B2,raw_products!$A$2:$A$17,raw_products!$D$2:$D$17)
+   ```
+
+   and fill down to row 13. The table of `VLOOKUP` splits into two ranges: the column to search, and the
+   column to bring back. The `4` is gone, and so is `FALSE`: exact is what `XLOOKUP` does unless you
+   say otherwise. *Why this is better:* a column number is a number someone typed, and Excel will not
+   keep it in step with the table. A range is attached to its column.
+
+3. **Read the `INDEX` with `MATCH`, inside out.** Read `price_b`:
+   `=INDEX(raw_products!$D$2:$D$17,MATCH(B2,raw_products!$A$2:$A$17,0))`. The inner part is `MATCH`:
+   it returns the **position** of B2 in the list of codes. For code 6, `MATCH` returns 6, because 6 is
+   the sixth code in the list. The outer part is `INDEX`: it returns the item at that position in the list
+   of prices. The sixth price is **4.75**. *Why two functions:* the first finds where, the second says
+   what is there. The final `0` of `MATCH` means exact. If you leave it out, `MATCH` assumes `1`, which
+   expects a sorted list and returns the largest value that does not exceed the one you ask for.
+
+4. **Check that the readings agree.** In `calc!B2` type
+   `=AND(raw_inherited!E2=A2,raw_inherited!F2=A2)` and fill down to row 13. Every row shows `TRUE`: the
+   `VLOOKUP`, the `INDEX` with `MATCH` and your `XLOOKUP` return the same price on all 12 lines.
+   *Why:* three formulas written three ways that agree are a stronger proof than one formula you
+   believe.
+
+5. **Know the two warning signs.** Two details in a lookup never produce an error, and both
+   have the same effect: a wrong price that looks like a price.
+   - **The last argument is missing.** `VLOOKUP` and `HLOOKUP` default to an *approximate* match when
+     you leave it out. Microsoft's page says: *"If you don't specify anything, the default value will
+     always be TRUE or approximate match."* Google Sheets does the same with `is_sorted`. An approximate
+     match expects the first column to be **sorted**, and when the code is not there it returns the row
+     of the closest code that does not exceed it (Microsoft's `MATCH` page spells the rule out). It gives
+     `#N/A` only if your code is smaller than the first one in the list.
+   - **A column number typed into the formula.** The `4` does not follow the price column. If someone
+     inserts a column into the table, the same `4` points at a different column.
+
+   *Why these two:* an error value is loud. These two are quiet, so they are the first things to
+   check in an inherited workbook.
+
+<details>
+<summary>Explain it in your own words: why does a missing last argument not show an error, even when the code is not in the list?</summary>
+
+Because approximate match is not "find it or fail". It is "find the closest row that does not go
+above". Unless your code is smaller than every code in the list, there is always such a row, so a price
+comes back, only it is the price of a neighbor.
+
+</details>
+
+<Aside type="tip" title="Which one do you write?">
+Write `XLOOKUP`. Keep `VLOOKUP` and `INDEX` with `MATCH` for reading, and for files that must open in an
+older Excel: Microsoft's page says `XLOOKUP` is not available in Excel 2016 and Excel 2019, while
+`INDEX` with `MATCH` works there. Google Sheets has all of them.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-legacy-lookups-1">
+
+**Translate a store lookup.** A colleague's report has this formula, where B2 holds a `store_id`:
+
+```text
+=VLOOKUP(B2,raw_stores!$A$2:$D$4,3,FALSE)
+```
+
+`raw_stores` has the columns `store_id`, `store_name`, `city` and `opened_on`. Write the same lookup as an
+`XLOOKUP` and as an `INDEX` with `MATCH`, and say what each returns for `store_id` 3 and for 4. Expected
+output: two formulas, and two results.
+
+The first steps are done for you:
+
+1. What to find: `B2`. Where to look: the first column of the table, `raw_stores!$A$2:$A$4`.
+2. What to bring back: the third column of the table, counting from column A.
+
+Now finish it: name the column to bring back, write both formulas, and try 3 and 4 in B2 on `calc`.
+
+<details>
+<summary>Hint</summary>
+
+Which column is the third one counted from column A? In `XLOOKUP` and in `INDEX`, you point at that
+column directly, with a range.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The third column is `city`, which is `raw_stores!$C$2:$C$4`. `XLOOKUP` takes the find cell, the column to
+search and this column. `INDEX` takes this column and a `MATCH` of the find cell in `raw_stores!$A$2:$A$4`
+with `0` at the end.
+
+</details>
+
+<Solution>
+
+```text
+=XLOOKUP(B2,raw_stores!$A$2:$A$4,raw_stores!$C$2:$C$4)
+=INDEX(raw_stores!$C$2:$C$4,MATCH(B2,raw_stores!$A$2:$A$4,0))
+```
+
+For `store_id` 3 both return **Alameda** (Harbor), and so does the original `VLOOKUP`. For 4 there is no
+such store, so all three return `#N/A`. Give `XLOOKUP` a fourth argument, such as `"no such store"`, to
+show words instead.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-legacy-lookups-2">
+
+**Audit the other two price columns.** In `raw_inherited`, `price_c` and `price_d` were not checked in
+the worked example. Their lookup tables are `raw_old_menu` (an old copy of the menu) and `raw_menu_v2`
+(the menu after someone added a column). Do not change the raw sheets. Work on `calc`.
+
+Before you start, write one sentence on `calc` saying what the result should look like: how many lines,
+what you show for each, and what you say about each of the two columns. Then build it. Expected output:
+for each of the 12 lines, the right price, and a one-line verdict for each of `price_c` and `price_d`: right
+or wrong, and why.
+
+<details>
+<summary>Hint</summary>
+
+Look for the two warning signs of step 5 in the two formulas. Then compare each column with your
+`XLOOKUP` from the worked example, line by line. Open `raw_old_menu` and `raw_menu_v2` and compare them
+with `raw_products`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Twelve lines, each with the right price from `raw_products`, and two sentences: one
+for `price_c` and one for `price_d`, each saying if the column is right and the reason."* `price_c` has no
+last argument, and `raw_old_menu` has fewer rows than `raw_products`. `price_d` counts a column number
+in a table that has one more column than the formula's author expected.
+
+</details>
+
+<Solution>
+
+The right prices are your `XLOOKUP` column from the worked example (**83.50** is the total of the twelve
+amounts, quantity times price minus discount).
+
+- **`price_c` is wrong on 6 lines of 12.** The formula has no last argument, so it is an approximate
+  match, and `raw_old_menu` does not have codes 6, 8 and 14 (it is older than those items). Each missing
+  code lands on the row above: code 6 (Cold Brew, 4.75) shows **5.00**, the price of code 5 (Mocha);
+  code 8 (Chai Latte, 4.75) shows **3.25**, the price of Green Tea; code 14 (Avocado Toast, 8.50) shows
+  **4.25**, the price of the Bagel. The lines are 5002, 5006, 5040, 5046, 5058 and 5095. The twelve
+  amounts add up to **69.75** instead of 83.50: **13.75 too low**, with no error anywhere. Fix: look in
+  the full `raw_products`, and use `XLOOKUP` (or add `FALSE`, which gives `#N/A` for a code the list
+  does not have, an honest answer).
+- **`price_d` is wrong on all 12 lines.** The table `raw_menu_v2` has a new `size` column before
+  `category` and `unit_price_usd`, so the typed `4` now points at `category`: each line shows a word
+  (`bakery`, `coffee`, `tea`, `food`) where a price should be, and any amount built on it would be
+  `#VALUE!`. Fix: bring back `raw_menu_v2!$E$2:$E$17` with `XLOOKUP`, which follows the column, instead
+  of counting to a number.
+- **`price_a` and `price_b` are right** on all 12 lines: they match your `XLOOKUP`.
+
+Check: in `calc`, compare each column with your `XLOOKUP` price. `price_a` and `price_b` agree on 12
+of 12, `price_c` on 6 of 12, `price_d` on 0 of 12.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which argument of `VLOOKUP` sets exact or approximate, and what happens if you
+   leave it out?
+
+   <details>
+   <summary>Answer</summary>
+
+   The last one: `range_lookup` in Excel (`is_sorted` in Google Sheets). `FALSE` means exact. Left out, it
+   means approximate (`TRUE`), which needs a sorted first column and returns the closest row that does
+   not go above, instead of `#N/A`.
+
+   </details>
+
+<Exercise id="excel-legacy-lookups-3">
+
+**Spot the flaw.** A colleague inherits `price_c`, tests it on four codes, 1, 3, 10 and 15, and gets
+the right price each time. "It works: no errors and the right prices." What went wrong with the test?
+
+<details>
+<summary>Hint</summary>
+
+Which codes did the colleague test? Is there one that the old menu does not have?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Try `=VLOOKUP(99,raw_old_menu!$A$2:$D$14,4)` yourself. Does it say `#N/A`?
+
+</details>
+
+<Solution>
+
+All four codes are in `raw_old_menu`, so the test only tried the cases where an approximate match and
+an exact match agree. A good test includes a code that is **not** in the list. Try 99, a code that
+does not exist: `=VLOOKUP(99,raw_old_menu!$A$2:$D$14,4)` returns **5.50**, the price of the last row
+(code 16), instead of `#N/A`. And codes 6, 8 and 14, which the menu lacks, return the price of the row
+above, as in the previous exercise.
+
+Test a lookup with one code that is present, one that is absent and one that is outside the range. An
+exact match with `FALSE` (or `XLOOKUP`) says `#N/A` for the absent ones, which is the honest answer.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read a VLOOKUP or an INDEX with MATCH piece by piece, rewrite it as an
+XLOOKUP, and spot a missing exact-match argument or a typed column number before I trust the numbers.*
+Test: Exercise excel-legacy-lookups-2, done from a blank `calc` sheet without opening the hints.
+
+The pattern to remember: **read the four parts, then look for the two quiet traps.** An inherited
+lookup is trusted only after it has been tested with a code that is not in the list.
