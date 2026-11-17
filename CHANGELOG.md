@@ -115,6 +115,8 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- About page (owner request): the story no longer names a course platform ("a few SQL and Python courses on bootcamp
+  sites").
 - Consent (SPEC §11, owner request): the banner is now a glass card like the one on johnha.info, with a cookie icon,
   "Your privacy choices", Reject all and Accept all side by side, and Customize for an Analytics switch. It floats
   above the bottom taskbar (bottom-left of the content on wide screens) and steps aside while the taskbar menu is
