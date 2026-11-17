@@ -1,0 +1,820 @@
+---
+// Starlight 0.43.1's Search.astro, copied (the default cannot take content inside its dialog) with two changes:
+// a "where to begin" block inside the dialog, shown only while the field is empty, and the restyle in the
+// final <style is:global> block, outside any CSS layer at the end (SPEC D36). Markup, script and Starlight's own styles are
+// otherwise untouched, so Pagefind, Ctrl+K and the focus handling work exactly as before. On a Starlight upgrade,
+// diff this file against node_modules/@astrojs/starlight/components/Search.astro.
+import { Icon } from '@astrojs/starlight/components';
+import project from 'virtual:starlight/project-context';
+import { projectHref, siteUi } from '../../i18n/site-ui';
+import { firstLesson } from '../../lib/lessons.ts';
+
+const lang = Astro.locals.starlightRoute.locale === 'vi' ? 'vi' : 'en';
+const ui = siteUi(lang);
+const lesson = await firstLesson();
+// Drafts never appear: only a published lesson is offered.
+const begin = [
+	{ href: projectHref(lang, 'start'), code: '→', text: ui.taskbar.start },
+	...(lesson ? [{ href: lesson.href, code: lesson.code ?? '→', text: lesson.title }] : []),
+	{ href: projectHref(lang, 'career-quiz'), code: '→', text: ui.taskbar.quiz },
+];
+
+const pagefindTranslations = {
+	placeholder: Astro.locals.t('search.label'),
+	...Object.fromEntries(
+		Object.entries(Astro.locals.t.all())
+			.filter(([key]) => key.startsWith('pagefind.'))
+			.map(([key, value]) => [key.replace('pagefind.', ''), value])
+	),
+};
+
+const dataAttributes: DOMStringMap = { 'data-translations': JSON.stringify(pagefindTranslations) };
+if (project.trailingSlash === 'never') dataAttributes['data-strip-trailing-slash'] = '';
+---
+
+<site-search class={Astro.props.class} {...dataAttributes}>
+	<button
+		data-open-modal
+		disabled
+		aria-label={Astro.locals.t('search.label')}
+		aria-keyshortcuts="Control+K"
+	>
+		<Icon name="magnifier" />
+		<span class="sl-hidden md:sl-block" aria-hidden="true">{Astro.locals.t('search.label')}</span>
+		<kbd class="sl-hidden md:sl-flex" style="display: none">
+			<kbd>{Astro.locals.t('search.ctrlKey')}</kbd><kbd>K</kbd>
+		</kbd>
+	</button>
+
+	<dialog style="padding: 0" aria-label={Astro.locals.t('search.label')}>
+		<div class="dialog-frame sl-flex">
+			{/* TODO: Make the layout of this button flexible to accommodate different word lengths. Currently hard-coded for English: “Cancel” */}
+			<button data-close-modal class="sl-flex md:sl-hidden">
+				{Astro.locals.t('search.cancelLabel')}
+			</button>
+			{import.meta.env.DEV ? (
+				<div style="margin: auto; text-align: center; white-space: pre-line" dir="ltr">
+					<p>{Astro.locals.t('search.devWarning')}</p>
+				</div>
+			) : (
+				<div class="search-container"><div id="starlight__search" /></div>
+			)}
+			<nav class="dfz-begin" aria-label={ui.search.begin}>
+				<p class="dfz-begin-h">{ui.search.begin}</p>
+				<ul>
+					{begin.map((b) => <li><a href={b.href}><span class="dfz-begin-code" aria-hidden="true">{b.code}</span><span>{b.text}</span></a></li>)}
+				</ul>
+			</nav>
+		</div>
+	</dialog>
+</site-search>
+
+{/**
+ * This is intentionally inlined to avoid briefly showing an invalid shortcut.
+ * Purposely using the deprecated `navigator.platform` property to detect Apple devices, as the
+ * user agent is spoofed by some browsers when opening the devtools.
+ */}
+<script is:inline>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script>
+
+<script>
+	import { pagefindUserConfig } from 'virtual:starlight/pagefind-config';
+
+	class SiteSearch extends HTMLElement {
+		constructor() {
+			super();
+			const openBtn = this.querySelector<HTMLButtonElement>('button[data-open-modal]')!;
+			const closeBtn = this.querySelector<HTMLButtonElement>('button[data-close-modal]')!;
+			const dialog = this.querySelector('dialog')!;
+			const dialogFrame = this.querySelector('.dialog-frame')!;
+
+			/** Close the modal if a user clicks on a link or outside of the modal. */
+			const onClick = (event: MouseEvent) => {
+				const isLink = 'href' in (event.target || {});
+				if (
+					isLink ||
+					(document.body.contains(event.target as Node) &&
+						!dialogFrame.contains(event.target as Node))
+				) {
+					closeModal();
+				}
+			};
+
+			const openModal = (event?: MouseEvent) => {
+				dialog.showModal();
+				document.body.toggleAttribute('data-search-modal-open', true);
+				this.querySelector('input')?.focus();
+				event?.stopPropagation();
+				window.addEventListener('click', onClick);
+			};
+
+			const closeModal = () => dialog.close();
+
+			openBtn.addEventListener('click', openModal);
+			openBtn.disabled = false;
+			closeBtn.addEventListener('click', closeModal);
+
+			dialog.addEventListener('close', () => {
+				document.body.toggleAttribute('data-search-modal-open', false);
+				window.removeEventListener('click', onClick);
+			});
+
+			// Listen for `ctrl + k` and `cmd + k` keyboard shortcuts.
+			window.addEventListener('keydown', (e) => {
+				if ((e.metaKey === true || e.ctrlKey === true) && e.key === 'k') {
+					dialog.open ? closeModal() : openModal();
+					e.preventDefault();
+				}
+			});
+
+			let translations = {};
+			try {
+				translations = JSON.parse(this.dataset.translations || '{}');
+			} catch {}
+
+			const shouldStrip = this.dataset.stripTrailingSlash !== undefined;
+			const stripTrailingSlash = (path: string) => path.replace(/(.)\/(#.*)?$/, '$1$2');
+			const formatURL = shouldStrip ? stripTrailingSlash : (path: string) => path;
+
+			if (import.meta.env.DEV) return;
+			const onIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
+			onIdle(async () => {
+				// @ts-expect-error — Missing types for @pagefind/default-ui package.
+				const { PagefindUI } = await import('@pagefind/default-ui');
+				new PagefindUI({
+					...pagefindUserConfig,
+					element: '#starlight__search',
+					baseUrl: import.meta.env.BASE_URL,
+					bundlePath: import.meta.env.BASE_URL.replace(/\/$/, '') + '/pagefind/',
+					showImages: false,
+					translations,
+					showSubResults: true,
+					processResult: (result: { url: string; sub_results: Array<{ url: string }> }) => {
+						result.url = formatURL(result.url);
+						result.sub_results = result.sub_results.map((sub_result) => {
+							sub_result.url = formatURL(sub_result.url);
+							return sub_result;
+						});
+					},
+				});
+			});
+		}
+	}
+	customElements.define('site-search', SiteSearch);
+</script>
+
+<style>
+	/* cspell:disable */
+	@layer starlight.core {
+		site-search {
+			display: contents;
+		}
+		button[data-open-modal] {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			border: 0;
+			background-color: transparent;
+			color: var(--sl-color-gray-1);
+			cursor: pointer;
+			height: 2.5rem;
+			font-size: var(--sl-text-xl);
+		}
+
+		@media (min-width: 50rem) {
+			button[data-open-modal] {
+				border: 1px solid var(--sl-color-gray-5);
+				border-radius: 0.5rem;
+				padding-inline-start: 0.75rem;
+				padding-inline-end: 0.5rem;
+				background-color: var(--sl-color-black);
+				color: var(--sl-color-gray-2);
+				font-size: var(--sl-text-sm);
+				width: 100%;
+				max-width: 22rem;
+			}
+			button[data-open-modal]:hover {
+				border-color: var(--sl-color-gray-2);
+				color: var(--sl-color-white);
+			}
+
+			button[data-open-modal] > :last-child {
+				margin-inline-start: auto;
+			}
+		}
+
+		button > kbd {
+			border-radius: 0.25rem;
+			font-size: var(--sl-text-2xs);
+			gap: 0.25em;
+			padding-inline: 0.375rem;
+			background-color: var(--sl-color-gray-6);
+		}
+
+		kbd {
+			font-family: var(--__sl-font);
+		}
+
+		dialog {
+			margin: 0;
+			background-color: var(--sl-color-gray-6);
+			border: 1px solid var(--sl-color-gray-5);
+			width: 100%;
+			max-width: 100%;
+			height: 100%;
+			max-height: 100%;
+			box-shadow: var(--sl-shadow-lg);
+		}
+		dialog[open] {
+			display: flex;
+		}
+
+		dialog::backdrop {
+			background-color: var(--sl-color-backdrop-overlay);
+			-webkit-backdrop-filter: blur(0.25rem);
+			backdrop-filter: blur(0.25rem);
+		}
+
+		.dialog-frame {
+			position: relative;
+			overflow: auto;
+			flex-direction: column;
+			flex-grow: 1;
+			gap: 1rem;
+			padding: 1rem;
+		}
+
+		button[data-close-modal] {
+			position: absolute;
+			z-index: 1;
+			align-items: center;
+			align-self: flex-end;
+			height: calc(64px * var(--pagefind-ui-scale));
+			padding: 0.25rem;
+			border: 0;
+			background: transparent;
+			cursor: pointer;
+			color: var(--sl-color-text-accent);
+		}
+
+		#starlight__search {
+			--pagefind-ui-primary: var(--sl-color-text);
+			--pagefind-ui-text: var(--sl-color-gray-2);
+			--pagefind-ui-font: var(--__sl-font);
+			--pagefind-ui-background: var(--sl-color-black);
+			--pagefind-ui-border: var(--sl-color-gray-5);
+			--pagefind-ui-border-width: 1px;
+			--pagefind-ui-tag: var(--sl-color-gray-5);
+			--sl-search-cancel-space: 5rem;
+		}
+
+		:root[data-theme='light'] #starlight__search {
+			--pagefind-ui-tag: var(--sl-color-gray-6);
+		}
+
+		@media (min-width: 50rem) {
+			#starlight__search {
+				--sl-search-cancel-space: 0px;
+			}
+
+			dialog {
+				margin: 4rem auto auto;
+				border-radius: 0.5rem;
+				width: 90%;
+				max-width: 40rem;
+				height: max-content;
+				min-height: 15rem;
+				max-height: calc(100% - 8rem);
+			}
+
+			.dialog-frame {
+				padding: 1.5rem;
+			}
+		}
+	}
+</style>
+
+<style is:global>
+	@import url('@pagefind/default-ui/css/ui.css') layer(starlight.core);
+
+	@layer starlight.core {
+		[data-search-modal-open] {
+			overflow: hidden;
+		}
+
+		#starlight__search {
+			--sl-search-result-spacing: calc(1.25rem * var(--pagefind-ui-scale));
+			--sl-search-result-pad-inline-start: calc(3.75rem * var(--pagefind-ui-scale));
+			--sl-search-result-pad-inline-end: calc(1.25rem * var(--pagefind-ui-scale));
+			--sl-search-result-pad-block: calc(0.9375rem * var(--pagefind-ui-scale));
+			--sl-search-result-nested-pad-block: calc(0.625rem * var(--pagefind-ui-scale));
+			--sl-search-corners: calc(0.3125rem * var(--pagefind-ui-scale));
+			--sl-search-page-icon-size: calc(1.875rem * var(--pagefind-ui-scale));
+			--sl-search-page-icon-inline-start: calc(
+				(var(--sl-search-result-pad-inline-start) - var(--sl-search-page-icon-size)) / 2
+			);
+			--sl-search-tree-diagram-size: calc(2.5rem * var(--pagefind-ui-scale));
+			--sl-search-tree-diagram-inline-start: calc(
+				(var(--sl-search-result-pad-inline-start) - var(--sl-search-tree-diagram-size)) / 2
+			);
+		}
+
+		#starlight__search .pagefind-ui__form::before {
+			--pagefind-ui-text: var(--sl-color-gray-1);
+			opacity: 1;
+		}
+
+		#starlight__search .pagefind-ui__search-input {
+			color: var(--sl-color-white);
+			font-weight: 400;
+			width: calc(100% - var(--sl-search-cancel-space));
+		}
+
+		#starlight__search .pagefind-ui__search-input::placeholder {
+			color: var(--sl-color-gray-3);
+			opacity: 1;
+		}
+
+		#starlight__search input:focus {
+			--pagefind-ui-border: var(--sl-color-accent);
+		}
+
+		#starlight__search .pagefind-ui__search-clear {
+			inset-inline-end: var(--sl-search-cancel-space);
+			width: calc(60px * var(--pagefind-ui-scale));
+			padding: 0;
+			background-color: transparent;
+			overflow: hidden;
+		}
+		#starlight__search .pagefind-ui__search-clear:focus {
+			outline: 1px solid var(--sl-color-accent);
+		}
+		#starlight__search .pagefind-ui__search-clear::before {
+			content: '';
+			-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m13.41 12 6.3-6.29a1 1 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1 1 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 .33 1.64 1 1 0 0 0 1.09-.22l6.29-6.3 6.29 6.3a1 1 0 0 0 1.64-.33 1 1 0 0 0-.22-1.09L13.41 12Z'/%3E%3C/svg%3E")
+				center / 50% no-repeat;
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m13.41 12 6.3-6.29a1 1 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1 1 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 .33 1.64 1 1 0 0 0 1.09-.22l6.29-6.3 6.29 6.3a1 1 0 0 0 1.64-.33 1 1 0 0 0-.22-1.09L13.41 12Z'/%3E%3C/svg%3E")
+				center / 50% no-repeat;
+			background-color: var(--sl-color-text-accent);
+			display: block;
+			width: 100%;
+			height: 100%;
+		}
+
+		#starlight__search .pagefind-ui__results > * + * {
+			margin-top: var(--sl-search-result-spacing);
+		}
+		#starlight__search .pagefind-ui__result {
+			border: 0;
+			padding: 0;
+		}
+
+		#starlight__search .pagefind-ui__result-nested {
+			position: relative;
+			padding: var(--sl-search-result-nested-pad-block) var(--sl-search-result-pad-inline-end);
+			padding-inline-start: var(--sl-search-result-pad-inline-start);
+		}
+
+		#starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)),
+		#starlight__search .pagefind-ui__result-nested {
+			position: relative;
+			background-color: var(--sl-color-black);
+		}
+
+		#starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):hover,
+		#starlight__search
+			.pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):focus-within,
+		#starlight__search .pagefind-ui__result-nested:hover,
+		#starlight__search .pagefind-ui__result-nested:focus-within {
+			outline: 1px solid var(--sl-color-accent-high);
+		}
+
+		#starlight__search
+			.pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):focus-within,
+		#starlight__search .pagefind-ui__result-nested:focus-within {
+			background-color: var(--sl-color-accent-low);
+		}
+
+		#starlight__search .pagefind-ui__result-thumb,
+		#starlight__search .pagefind-ui__result-inner {
+			margin-top: 0;
+		}
+
+		#starlight__search .pagefind-ui__result-inner > :first-child {
+			border-radius: var(--sl-search-corners) var(--sl-search-corners) 0 0;
+		}
+		#starlight__search .pagefind-ui__result-inner > :last-child {
+			border-radius: 0 0 var(--sl-search-corners) var(--sl-search-corners);
+		}
+
+		#starlight__search .pagefind-ui__result-inner > .pagefind-ui__result-title {
+			padding: var(--sl-search-result-pad-block) var(--sl-search-result-pad-inline-end);
+			padding-inline-start: var(--sl-search-result-pad-inline-start);
+		}
+		#starlight__search .pagefind-ui__result-inner > .pagefind-ui__result-title::before {
+			content: '';
+			position: absolute;
+			inset-block: 0;
+			inset-inline-start: var(--sl-search-page-icon-inline-start);
+			width: var(--sl-search-page-icon-size);
+			background: var(--sl-color-gray-3);
+			-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='currentColor' viewBox='0 0 24 24'%3E%3Cpath d='M9 10h1a1 1 0 1 0 0-2H9a1 1 0 0 0 0 2Zm0 2a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9Zm11-3V8l-6-6a1 1 0 0 0-1 0H7a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V9Zm-6-4 3 3h-2a1 1 0 0 1-1-1V5Zm4 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5v3a3 3 0 0 0 3 3h3v9Zm-3-3H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2Z'/%3E%3C/svg%3E")
+				center no-repeat;
+						mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='currentColor' viewBox='0 0 24 24'%3E%3Cpath d='M9 10h1a1 1 0 1 0 0-2H9a1 1 0 0 0 0 2Zm0 2a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9Zm11-3V8l-6-6a1 1 0 0 0-1 0H7a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V9Zm-6-4 3 3h-2a1 1 0 0 1-1-1V5Zm4 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5v3a3 3 0 0 0 3 3h3v9Zm-3-3H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2Z'/%3E%3C/svg%3E")
+				center no-repeat;
+		}
+
+		#starlight__search .pagefind-ui__result-inner {
+			align-items: stretch;
+			gap: 1px;
+		}
+
+		#starlight__search .pagefind-ui__result-link {
+			position: unset;
+			--pagefind-ui-text: var(--sl-color-white);
+			font-weight: 600;
+		}
+
+		#starlight__search .pagefind-ui__result-link:hover {
+			text-decoration: none;
+		}
+
+		#starlight__search .pagefind-ui__result-nested .pagefind-ui__result-link::before {
+			content: unset;
+		}
+
+		#starlight__search .pagefind-ui__result-nested::before {
+			content: '';
+			position: absolute;
+			inset-block: 0;
+			inset-inline-start: var(--sl-search-tree-diagram-inline-start);
+			width: var(--sl-search-tree-diagram-size);
+			background: var(--sl-color-gray-4);
+						-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-linecap='round' viewBox='0 0 16 1000' preserveAspectRatio='xMinYMin slice'%3E%3Cpath d='M8 0v1000m6-988H8'/%3E%3C/svg%3E")
+				0% 0% / 100% no-repeat;
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-linecap='round' viewBox='0 0 16 1000' preserveAspectRatio='xMinYMin slice'%3E%3Cpath d='M8 0v1000m6-988H8'/%3E%3C/svg%3E")
+				0% 0% / 100% no-repeat;
+		}
+		#starlight__search .pagefind-ui__result-nested:last-of-type::before {
+			-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 16 16'%3E%3Cpath d='M8 0v12m6 0H8'/%3E%3C/svg%3E");
+			mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 16 16'%3E%3Cpath d='M8 0v12m6 0H8'/%3E%3C/svg%3E");
+		}
+
+		/* Flip page and tree icons around the vertical axis when in an RTL layout. */
+		[dir='rtl'] .pagefind-ui__result-title::before,
+		[dir='rtl'] .pagefind-ui__result-nested::before {
+			transform: matrix(-1, 0, 0, 1, 0, 0);
+		}
+
+		#starlight__search .pagefind-ui__result-link::after {
+			content: '';
+			position: absolute;
+			inset: 0;
+		}
+
+		#starlight__search .pagefind-ui__result-excerpt {
+			font-size: calc(1rem * var(--pagefind-ui-scale));
+			overflow-wrap: anywhere;
+		}
+
+		#starlight__search mark {
+			color: var(--sl-color-gray-2);
+			background-color: transparent;
+			font-weight: 600;
+		}
+
+		#starlight__search .pagefind-ui__filter-value::before {
+			border-color: var(--sl-color-text-invert);
+		}
+
+		#starlight__search .pagefind-ui__result-tags {
+			background-color: var(--sl-color-black);
+			margin-top: 0;
+			padding: var(--sl-search-result-nested-pad-block) var(--sl-search-result-pad-inline-end);
+		}
+	}
+</style>
+
+<style is:global>
+	/* cspell:enable */
+	/* The restyle (SPEC D36). Not in a CSS layer, so it wins over the `starlight.core` layer (Starlight and the Pagefind UI).
+	   Glass tokens (--tb-*) come from the taskbar (src/components/taskbar/Taskbar.astro), on every docs page. */
+	site-search dialog {
+		color: var(--fg);
+		background:
+			linear-gradient(180deg, var(--tb-sheen, transparent), transparent 30%),
+			linear-gradient(var(--tb-glass, transparent), var(--tb-glass, transparent)),
+			color-mix(in srgb, var(--bg) 60%, transparent);
+		border: 1px solid var(--tb-edge, var(--line));
+		-webkit-backdrop-filter: blur(14px) saturate(1.8);
+		backdrop-filter: blur(14px) saturate(1.8);
+		box-shadow:
+			inset 0 1px 0 var(--tb-sheen, transparent),
+			0 12px 40px rgba(0, 0, 0, 0.28);
+	}
+	/* Browsers without backdrop blur get a solid sheet, so text never sits on a busy page. */
+	@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+		site-search dialog {
+			background: var(--bg);
+		}
+	}
+
+	/* Layout: the field row stays put and only the results scroll. Each wrapper may shrink (min-height 0) down to
+	   the dialog's height; the results drawer is the one that scrolls. */
+	site-search .dialog-frame {
+		gap: 0;
+		padding: 0;
+		overflow: hidden;
+	}
+	site-search .search-container,
+	site-search #starlight__search,
+	site-search .pagefind-ui,
+	site-search .pagefind-ui__form {
+		display: flex;
+		flex: 0 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+	site-search .search-container {
+		padding: 14px 16px 0;
+	}
+	site-search .pagefind-ui__drawer {
+		display: block;
+		flex: 0 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding-bottom: 16px;
+	}
+
+	/* The field: a pill, 48px tall, with the magnifier inside and a clear button at the end. */
+	site-search #starlight__search {
+		--pagefind-ui-border-radius: 999px;
+		--pagefind-ui-border-width: 1px;
+		--pagefind-ui-border: var(--tb-edge);
+		--pagefind-ui-background: var(--tb-chip);
+		--pagefind-ui-text: var(--fg);
+		--sl-search-cancel-space: 0px;
+		--sl-search-result-spacing: 10px;
+	}
+	site-search .pagefind-ui__search-input {
+		flex: none;
+		height: 48px;
+		padding: 0 48px 0 46px;
+		border-radius: 999px;
+		background: var(--tb-chip);
+		color: var(--fg);
+		font-size: 17px;
+		font-weight: 400;
+		width: calc(100% - var(--sl-search-cancel-space));
+	}
+	site-search #starlight__search input:focus {
+		--pagefind-ui-border: var(--fg);
+		outline: none;
+	}
+	site-search .pagefind-ui__search-input:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: 2px;
+	}
+	site-search .pagefind-ui__form::before {
+		top: 16px;
+		left: 17px;
+		width: 16px;
+		height: 16px;
+		background-color: var(--fg);
+		opacity: 0.6;
+	}
+	site-search .pagefind-ui__search-clear {
+		inset-inline-end: var(--sl-search-cancel-space);
+		top: 0;
+		width: 48px;
+		height: 48px;
+		border-radius: 999px;
+	}
+	site-search .pagefind-ui__search-clear::before {
+		background-color: var(--fg);
+		opacity: 0.6;
+	}
+	site-search .pagefind-ui__search-clear:hover::before {
+		opacity: 1;
+	}
+	site-search .pagefind-ui__search-clear:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: -4px;
+	}
+
+	/* Results: one card per page, its sub-results indented under the title. */
+	site-search .pagefind-ui__message {
+		height: auto;
+		padding: 18px 4px 10px;
+		color: var(--tb-label, var(--mute));
+		font: 500 12px/1.2 var(--font-mono);
+	}
+	site-search .pagefind-ui__results {
+		padding: 0;
+		list-style: none;
+	}
+	site-search .pagefind-ui__result {
+		overflow: hidden;
+		border: 1px solid var(--tb-edge, var(--line));
+		border-radius: 16px;
+		background: var(--tb-chip);
+	}
+	site-search .pagefind-ui__result-inner {
+		gap: 0;
+	}
+	site-search .pagefind-ui__result-inner > .pagefind-ui__result-title,
+	site-search .pagefind-ui__result-nested {
+		background: transparent;
+	}
+	site-search .pagefind-ui__result-inner > .pagefind-ui__result-title {
+		display: flex;
+		align-items: center;
+		min-height: 48px;
+		margin: 0;
+		padding: 12px 16px;
+	}
+	site-search .pagefind-ui__result-inner > .pagefind-ui__result-title::before {
+		display: none;
+	}
+	site-search .pagefind-ui__result-link {
+		color: var(--fg);
+		font-size: 16px;
+		font-weight: 600;
+		line-height: 1.3;
+	}
+	site-search .pagefind-ui__result-nested {
+		min-height: 44px;
+		margin: 0;
+		padding: 10px 16px 12px 34px;
+		border-top: 1px solid var(--tb-edge, var(--line));
+	}
+	site-search .pagefind-ui__result-nested .pagefind-ui__result-link {
+		font-size: 14px;
+		font-weight: 500;
+	}
+	/* The tree diagram becomes a short rule down the left edge: this row belongs to the title above. */
+	site-search .pagefind-ui__result-nested::before,
+	site-search .pagefind-ui__result-nested:last-of-type::before {
+		inset-block: 12px;
+		inset-inline-start: 18px;
+		width: 2px;
+		border-radius: 2px;
+		background: var(--tb-edge, var(--line));
+		-webkit-mask: none;
+		mask: none;
+	}
+	site-search .pagefind-ui__result-excerpt {
+		margin-top: 4px;
+		color: var(--tb-label, var(--mute));
+		font-size: 14px;
+		line-height: 1.45;
+	}
+	site-search mark {
+		padding: 0 2px;
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--fg) 18%, transparent);
+		color: var(--fg);
+		font-weight: 600;
+	}
+	/* Hover and keyboard focus: a plain inset ring and a lighter tint, no layout shift. */
+	site-search .pagefind-ui__result-inner > .pagefind-ui__result-title:hover,
+	site-search .pagefind-ui__result-nested:hover {
+		background: var(--tb-chip);
+		outline: none;
+	}
+	site-search .pagefind-ui__result-inner > .pagefind-ui__result-title:focus-within,
+	site-search .pagefind-ui__result-nested:focus-within {
+		background: var(--tb-chip);
+		outline: 2px solid var(--fg);
+		outline-offset: -2px;
+	}
+
+	/* "Where to begin": shown only while the field is empty (no script: the input's placeholder is showing). */
+	site-search .dfz-begin {
+		flex: none;
+		padding: 18px 16px 16px;
+	}
+	site-search .dialog-frame:has(.pagefind-ui__search-input:not(:placeholder-shown)) .dfz-begin {
+		display: none;
+	}
+	site-search .dfz-begin-h {
+		margin: 0 4px 6px;
+		color: var(--tb-label, var(--mute));
+		font: 500 12px/1.2 var(--font-mono);
+	}
+	site-search .dfz-begin ul {
+		display: grid;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	site-search .dfz-begin a {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 48px;
+		padding: 8px 14px;
+		border: 1px solid var(--tb-edge, var(--line));
+		border-radius: 14px;
+		background: var(--tb-chip);
+		color: var(--fg);
+		font: 500 15px/1.3 var(--font-sans);
+		text-decoration: none;
+	}
+	site-search .dfz-begin a:hover {
+		border-color: var(--fg);
+	}
+	site-search .dfz-begin a:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: 2px;
+	}
+	/* A click lands on the link itself, so Starlight's click handler closes the dialog. */
+	site-search .dfz-begin a > * {
+		pointer-events: none;
+	}
+	site-search .dfz-begin-code {
+		flex: none;
+		min-width: 2.4em;
+		color: var(--tb-label, var(--mute));
+		font: 500 12px/1 var(--font-mono);
+	}
+
+	/* Phones: a full-screen sheet that slides up from the bottom, with "Cancel" in the top row beside the field. */
+	@media (max-width: 49.99rem) {
+		site-search dialog {
+			inset: 0;
+			width: 100%;
+			max-width: 100%;
+			height: 100%;
+			max-height: 100%;
+			border: 0;
+			border-radius: 0;
+			box-shadow: none;
+		}
+		site-search dialog::backdrop {
+			background: transparent;
+			-webkit-backdrop-filter: none;
+			backdrop-filter: none;
+		}
+		site-search dialog[open] {
+			animation: dfz-sheet-up 0.28s var(--tb-ease, cubic-bezier(0.16, 1, 0.3, 1)) both;
+		}
+		@keyframes dfz-sheet-up {
+			from {
+				transform: translateY(100%);
+			}
+		}
+		site-search .search-container {
+			padding-top: max(14px, env(safe-area-inset-top, 0px));
+		}
+		site-search #starlight__search {
+			--sl-search-cancel-space: 76px;
+		}
+		site-search button[data-close-modal] {
+			top: max(14px, env(safe-area-inset-top, 0px));
+			inset-inline-end: 16px;
+			min-width: 44px;
+			height: 48px;
+			padding: 0 4px;
+			border-radius: 10px;
+			color: var(--fg);
+			font: 500 16px/1 var(--font-sans);
+		}
+		site-search button[data-close-modal]:focus-visible {
+			outline: 2px solid var(--fg);
+			outline-offset: 0;
+		}
+		site-search .pagefind-ui__drawer {
+			padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+		}
+	}
+	@media (min-width: 50rem) {
+		site-search dialog {
+			border-radius: 22px;
+		}
+		site-search .search-container {
+			padding: 18px 20px 0;
+		}
+		site-search .dfz-begin {
+			padding: 18px 20px 20px;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		site-search dialog[open] {
+			animation: none;
+		}
+	}
+</style>

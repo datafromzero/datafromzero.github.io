@@ -85,6 +85,8 @@ export default defineConfig({
 				// Lesson header and footer (SPEC §5.1); both render nothing on non-lesson pages.
 				PageTitle: './src/components/starlight/PageTitle.astro',
 				Footer: './src/components/starlight/Footer.astro',
+				// Search sheet on phones, glass dialog on desktop, "where to begin" links (SPEC D36).
+				Search: './src/components/starlight/Search.astro',
 			},
 			// SPEC §8 / D3: English at the root, Vietnamese under /vi/ with the same slugs. Vietnamese is paused
 			// (D30): with the root locale alone the site is monolingual, so there is no language picker.

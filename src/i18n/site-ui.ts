@@ -7,6 +7,8 @@ export interface SiteUi {
 	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
 	consent: { label: string; text: string; privacy: string; accept: string; decline: string };
 	/** The bottom taskbar on every page (SPEC D31, D35). */
+	/** The search sheet (SPEC D36). */
+	search: { begin: string };
 	taskbar: {
 		label: string;
 		shortcuts: string;
@@ -39,6 +41,7 @@ const en: SiteUi = {
 		accept: 'Accept',
 		decline: 'Decline',
 	},
+	search: { begin: 'Where to begin' },
 	taskbar: {
 		label: 'Taskbar',
 		shortcuts: 'menu',
@@ -70,6 +73,7 @@ const vi: SiteUi = {
 		accept: 'Đồng ý',
 		decline: 'Từ chối',
 	},
+	search: { begin: 'Bắt đầu từ đâu' },
 	taskbar: {
 		label: 'Thanh công cụ',
 		shortcuts: 'trình đơn',

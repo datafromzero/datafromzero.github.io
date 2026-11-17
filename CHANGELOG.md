@@ -109,6 +109,10 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC D36 (owner request): search opens like a phone search. Below 50rem the dialog is a full-screen glass sheet that
+  slides up from the bottom, with a pill field, a text Cancel button and, while the field is empty, links to Start
+  here, the first lesson and the career quiz. Results are cards with the match highlighted and sub-results
+  indented. On desktop the centered dialog gets the same glass and cards. Ctrl+K and the search index are unchanged.
 - Taskbar: back to top is back on phones; the bar and its sheet are liquid glass (more see-through, blurred, with a top
   sheen) so the lesson shows faintly underneath; sheet rows rise in one after another and buttons give when pressed, in
   CSS only (GSAP stays on the homepage, D28).

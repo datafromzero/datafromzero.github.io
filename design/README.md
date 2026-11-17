@@ -188,6 +188,22 @@ is one bar (D35): Starlight's header menu button and "On this page" bar are hidd
 - Space: a spacer after the footer keeps the last content (footer, pagination) clear of the bar, and the hero's
   bottom padding includes the bar's height, so the hero copy and buttons sit just above it.
 
+
+### 5b. Search sheet (SPEC D36)
+
+The header search opens Starlight's dialog (`src/components/starlight/Search.astro`), restyled in the taskbar's liquid
+glass (`--tb-glass`, `--tb-edge`, `--tb-sheen`, blur 14px; a solid sheet without `backdrop-filter`).
+
+- **Phones (below 50rem):** a full-screen sheet that slides up from the bottom (0.28s, `--tb-ease`; none with reduced
+  motion). Top row: a pill field, 48px tall, 17px text, magnifier inside, clear button at the end, focused on open; a
+  text "Cancel" on the right (Starlight's own close button). Field and Cancel stay put; only the results scroll.
+- **Empty field:** "Where to begin" (Geist Mono 12px label) over three 48px rows: Start here, the first published lesson
+  with its mono code, Career quiz. A CSS `:has()` rule hides them as soon as there is a query.
+- **Results:** one card per page (16px radius, chip fill, edge border): the page title (16px 600), then its
+  sub-results indented under a short vertical rule, each with the heading (14px 500) and the excerpt (14px, muted)
+  with the match in a light chip (`mark`). Rows are at least 44px, the whole row is the link, and the focus ring is a
+  2px inset outline.
+- **Desktop (50rem and up):** the centered dialog (40rem, 22px radius) with the same glass, field and cards.
 ---
 
 ## 6. Build notes for Astro Starlight

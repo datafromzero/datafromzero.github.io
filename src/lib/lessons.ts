@@ -1,7 +1,7 @@
 import { getCollection } from 'astro:content';
 import { classify, STAGES, type Lesson } from './content-schemas.ts';
 import { unlocks } from './graph.ts';
-import { lessonCode } from './roadmap.ts';
+import { groupRoadmap, lessonCode } from './roadmap.ts';
 
 export interface LessonLink {
 	id: string;
@@ -47,4 +47,20 @@ function unlocksMap() {
 /** Lessons that list `id` as a prerequisite ("unlocks next"), drafts excluded, in the reader's locale. */
 export async function unlockedLessons(id: string, locale: string | undefined): Promise<LessonLink[]> {
 	return lessonLinks((await unlocksMap()).get(id) ?? [], locale);
+}
+
+/** The first published English lesson in roadmap order (E1), for "where to begin" links; `undefined` when none is published. */
+export async function firstLesson(): Promise<LessonLink | undefined> {
+	const docs = await getCollection('docs');
+	const lessons = docs
+		.filter((d) => {
+			const c = classify(d.id);
+			return c.kind === 'lesson' && c.locale === null && (d.data as Lesson).status === 'published';
+		})
+		.map((d) => {
+			const l = d.data as Lesson;
+			return { id: l.id, title: d.data.title, stage: l.stage, order: l.order, href: `/${classify(d.id).path}/`, prerequisites: [], status: l.status };
+		});
+	const first = groupRoadmap(lessons, new Set()).find((s) => s.lessons.length > 0)?.lessons[0];
+	return first && { id: first.id, title: first.title, href: first.href, code: first.code };
 }
