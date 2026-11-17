@@ -109,6 +109,8 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Sidebar: lesson codes sit in their own muted mono column beside the title, so wrapped titles line up and "E1" no
+  longer reads as part of the title.
 - Taskbar: off lessons the primary button is "Start E1 →" (the first published lesson) instead of "Learn →" to
   `/start/`, which the sheet already links; the menu label drops its empty first line so the title sits level with the icon.
 - Homepage footer: two centered rows (the license line, then the project links) instead of items pushed to both sides.
