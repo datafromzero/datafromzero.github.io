@@ -26,7 +26,8 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
   Respect `prefers-reduced-motion`. The bottom taskbar (D31) on every other page moves with CSS transitions only.
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own and the taskbar script (D31: one script
-  under 1 KB gzipped, no GSAP, no library). Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
+  under 1 KB gzipped, no GSAP, no library). One exception (D33): `/career-quiz/` adds one scoring script under 4 KB
+  gzipped (vanilla, no GSAP, no storage, sends nothing). Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.

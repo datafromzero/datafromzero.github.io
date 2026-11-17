@@ -1,7 +1,8 @@
 // First-load homepage script (about 1 KB). It never imports GSAP statically: the hero entrance is CSS,
 // and the scroll choreography is fetched after the page has loaded (or on first interaction).
-// Every reader, reduced motion included, also gets the section 03 tab list (home/tabs.ts, no GSAP) then;
-// without script the three solutions simply stay stacked.
+// Every reader, reduced motion included, also gets the section 03 tab list (home/tabs.ts) and the section 05
+// career cards (home/careers.ts) then, neither with GSAP; without script the three solutions stay stacked and
+// every career's details stay listed.
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 if (!reduced) {
@@ -34,10 +35,13 @@ let started = false;
 const start = () => {
 	if (started) return;
 	started = true;
-	// The tabs first, so the motion chunk measures the page in its final layout.
-	import('./home/tabs')
-		.then((m) => m.init())
-		.catch(() => {})
+	// The tabs and the cards first, so the motion chunk measures the page in its final layout.
+	Promise.all([
+		import('./home/tabs').then((m) => m.init()).catch(() => {}),
+		import('./home/careers')
+			.then((m) => m.init())
+			.catch(() => document.querySelector('[data-careers]')?.classList.add('is-static')),
+	])
 		.then(() => (reduced ? undefined : import('./home/motion').then((m) => m.init())))
 		.catch(() => {
 			// Motion is an enhancement: the page is already complete without it (the history list stops keeping room for the slider).

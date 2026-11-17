@@ -7,6 +7,19 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Career quiz at `/career-quiz/` (SPEC D33, from the research in issue #32): ten original questions about how you
+  like to work, each answer giving 2 points to the career it fits best and 1 to a close second. The result is a
+  suggested direction with the reason, a close second and the shared-core line (ties go to more 2-point answers,
+  then an honest tie); never percentages. One small scoring script on that page only (under 1 KB gzipped, no
+  library, no storage, sends nothing); without JavaScript every question is shown with "How to score it yourself"
+  and every answer's points. Carries the O*NET 31.0 Database CC BY 4.0 credit and a link to the free Mini Interest
+  Profiler on My Next Move. Listed in the taskbar shortcuts.
+- Homepage section 05 "Pick a direction" ("Four careers. One start.", owner-approved mockup): four career cards that
+  open one detail panel at a time (what the career does, the path from Excel to the career, the portfolio, "Start at
+  A1 →"), with a looping canvas figure per career (bars, tanks and pipes, clusters and a plane, a network) on the GSAP
+  ticker in a deferred chunk, paused off screen and while no card is open; a still frame with reduced motion; every
+  career's details listed without JavaScript. Below it, "Not sure which career fits you?" links to the quiz.
+  `npm run perf` gained a `careers` scenario.
 - Homepage section 04 "A short history of data" ("From punch cards to AI."), after "Same question. Three tools.":
   the 12 milestones researched in issue #29, from the 1804 Jacquard loom to ChatGPT in 2022, each with its year,
   title and one line, then a closing "Now — Your turn" card that links to `/start/`. A `<details>` below lists
@@ -74,6 +87,8 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Homepage: the 02 tree now shows four careers (DA, DE, DS, ML; SPEC D32) on evenly spaced branches, and the meta
+  description says four data careers.
 - SPEC §1 decision D32 (owner decision, amends D29), §3.1, §4, §5.1, §13: four career branches. Analytics Engineer is
   no longer a branch; its eleven draft lessons were folded into Data Engineer (eight dbt and modeling lessons, the
   dbt capstone included) and Data Analyst (the KPI dictionary). The freshness and incident lesson was merged into
@@ -135,6 +150,7 @@ All notable changes to datafromzero are recorded here. The format follows
   style, layout and paint cost on the built site with a 4× CPU throttle at 390 and 1280 px.
 
 ### Removed
+- Homepage: the marquee (and its pause control) and the "05 Begin" section, replaced by "05 Pick a direction".
 - The hero caption ("Excel → SQL → Python → DA · DE · DS") and its ScrambleText decode, and the separate
   "From A1 / to AI." headline (the lockup wordmark replaces it).
 - Section 03 "Two ways in" (Study / Reference panels, the Enlarge button and its Flip effect, the headline lag).

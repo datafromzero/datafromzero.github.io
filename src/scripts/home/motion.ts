@@ -31,7 +31,7 @@ interface Job {
 	run: () => void | Step[];
 	/** Section name, to find its effect loader (see sections/index.ts). */
 	name?: string;
-	/** Fetching the section's effect chunks (MorphSVG, MotionPath, Flip, ...), started when the job is near or due. */
+	/** Fetching the section's effect chunks (MotionPath, Flip, Draggable, ...), started when the job is near or due. */
 	ready?: Promise<void>;
 	loaded?: boolean;
 }
@@ -66,13 +66,11 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 		});
 	};
 	add('.hero', 'hero');
-	add('h2[data-split=""]:not(.end h2)', 'headings');
+	add('h2[data-split=""]', 'headings');
 	add('.core', 'core');
 	add('.branch', 'branches');
 	add('#tools', 'tools');
 	add('#history', 'history');
-	add('.marquee', 'marquee');
-	add('.end', 'begin');
 	add('.rule', 'rules');
 	// document order, so the nearest section is built first when nothing is urgent
 	jobs.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
@@ -356,7 +354,7 @@ export function init() {
 
 		// Magnetic buttons.
 		const off: (() => void)[] = [];
-		document.querySelectorAll<HTMLElement>('.magnet, .ctas .btn').forEach((m) => {
+		document.querySelectorAll<HTMLElement>('.ctas .btn').forEach((m) => {
 			const qx = gsap.quickTo(m, 'x', { duration: 0.6, ease: 'elastic.out(1,.4)' });
 			const qy = gsap.quickTo(m, 'y', { duration: 0.6, ease: 'elastic.out(1,.4)' });
 			let r: DOMRect | null = null;

@@ -53,7 +53,7 @@ export function init({ section, svg, trunk, branches, tl, drawnAt }: Tree): () =
 			.to(g, { motionPath: { path, align: path, alignOrigin: [0.5, 0.5] }, duration, ease }, 0)
 			.fromTo(g, { opacity: 1 }, { opacity: 0, duration: 0.35, ease: 'power1.in', immediateRender: false }, duration - 0.35);
 	};
-	// down the trunk (the data goes in), then it fans out to the five careers
+	// down the trunk (the data goes in), then it fans out to the four careers
 	const lights = [travel(trunk, 0.9, 'power2.in'), ...branches.map((b) => travel(b, 2.2, 'power2.inOut'))];
 
 	let loop: gsap.core.Timeline | undefined;

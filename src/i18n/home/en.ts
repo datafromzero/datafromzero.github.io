@@ -4,7 +4,7 @@ export const en: HomeStrings = {
 	meta: {
 		tagline: 'From A1 to AI',
 		description:
-			'A free, open roadmap for learning data from zero: Excel / Sheets, SQL, Python, and five data careers.',
+			'A free, open roadmap for learning data from zero: Excel / Sheets, SQL, Python, and four data careers.',
 	},
 	nav: {
 		label: 'Primary',
@@ -50,12 +50,11 @@ export const en: HomeStrings = {
 	branch: {
 		short: '02 Careers',
 		label: '02 — Then branch',
-		heading: 'One trunk.\n*Five careers.*',
+		heading: 'One trunk.\n*Four careers.*',
 		careers: [
 			{ abbr: 'DA', name: 'Data\nAnalyst' },
 			{ abbr: 'DE', name: 'Data\nEngineer' },
 			{ abbr: 'DS', name: 'Data\nScientist' },
-			{ abbr: 'AE', name: 'Analytics\nEngineer' },
 			{ abbr: 'ML', name: 'ML / AI\nEngineer' },
 		],
 	},
@@ -263,16 +262,73 @@ export const en: HomeStrings = {
 		primary: 'Primary source',
 		second: 'Second source',
 	},
-	marquee: [
-		{ text: 'Free' },
-		{ text: 'Open source', outline: true },
-		{ text: 'Content CC BY 4.0 · Code MIT' },
-		{ text: 'Mobile-first', outline: true },
-		{ text: 'Zero to job-ready' },
-		{ text: 'Free', outline: true },
-	],
-	marqueeControl: { pause: 'Pause', play: 'Play', what: 'marquee' },
-	begin: { short: '05 Begin', label: '05 — Begin', heading: 'Start\n*at zero.*', cta: 'Open step 01' },
+	// Copy from the owner-approved mockup (careers.html, 2026-11-17).
+	careers: {
+		short: '05 Directions',
+		label: '05 — Pick a direction',
+		heading: 'Four careers. *One start.*',
+		more: 'See the path',
+		path: ['Excel', 'SQL', 'Python', 'Core'],
+		pathLabel: 'Path',
+		cta: 'Start at A1',
+		careers: [
+			{
+				key: 'da',
+				label: '01 · Data Analyst',
+				name: 'Data Analyst',
+				line: 'Turns business questions into answers people can act on.',
+				figure: 'Bars that rise and fall · a live report',
+				does: [
+					'Query and clean data with SQL and Python',
+					'Define metrics and explain why they moved',
+					'Build dashboards and write the recommendation',
+				],
+				portfolio:
+					'Portfolio: one SQL project, one Python project, a published dashboard and a case study that ends in a recommendation.',
+			},
+			{
+				key: 'de',
+				label: '02 · Data Engineer',
+				name: 'Data Engineer',
+				line: 'Builds the pipelines that move data reliably.',
+				figure: 'Source tanks, pipes, a transform step and the warehouse',
+				does: [
+					'Load data from many sources into a warehouse',
+					'Make loads incremental and safe to re-run',
+					'Add quality checks and schedule the jobs',
+				],
+				portfolio:
+					'Portfolio: two or three deep pipeline projects with layered storage, quality checks, orchestration and an operations note.',
+			},
+			{
+				key: 'ds',
+				label: '03 · Data Scientist',
+				name: 'Data Scientist',
+				line: 'Uses experiments and models to support decisions.',
+				figure: 'Two clusters and the plane between them',
+				does: ['Test ideas with experiments', 'Build models that start from a baseline', 'Explain the errors and the limits honestly'],
+				portfolio: 'Portfolio: case studies on messy data with a baseline, validation, error analysis and honest limits.',
+			},
+			{
+				key: 'ml',
+				label: '04 · ML / AI Engineer',
+				name: 'ML / AI Engineer',
+				line: 'Ships models and AI apps that run in production.',
+				figure: 'A network passing signals forward',
+				does: [
+					'Build reproducible training pipelines',
+					'Serve a model or a retrieval (RAG) app behind an API',
+					'Evaluate and monitor it after launch',
+				],
+				portfolio: 'Portfolio: a deployed system with a live URL, an evaluation set, tests in CI and monitoring notes.',
+			},
+		],
+		unsure: {
+			heading: 'Not sure which *career fits you?*',
+			text: 'Answer ten questions about how you like to work. You get a suggested direction and why. Nothing is saved.',
+			cta: 'Take the career quiz',
+		},
+	},
 	footer: {
 		content: 'Content CC BY 4.0',
 		code: 'Code MIT',
