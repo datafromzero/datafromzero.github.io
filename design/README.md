@@ -163,7 +163,7 @@ Approved mockup (owner, 2026-11), built as `src/components/taskbar/Taskbar.astro
 glass bar (16px radius, blur 16px, max-width 720px, centered on the content column, 16px from the bottom plus
 the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop.
 
-- **Left:** a hamburger (three bars that morph to ×) and a label in Geist 500, 15px: the page title, or on the
+- **Left:** a menu icon (two bars that cross into ×; owner change 2026-11-17) and a label in Geist 500, 15px: the page title, or on the
   homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 History · 05 Directions). It opens the
   shortcuts sheet, which grows upward from the bar: big links (Home, Start here, Career quiz, About), then small groups
   (On this page, homepage only; Project: Changelog, Cite, License, Privacy, GitHub ↗). Esc, a second tap, a

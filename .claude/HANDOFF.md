@@ -1,7 +1,7 @@
 # Handoff: state of the work on 2026-11-17
 
 For the next lead session. Read `CLAUDE.md` first (rules, merging policy, commands), then this file.
-`SPEC.md` is authoritative; decisions D1–D33 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
+`SPEC.md` is authoritative; decisions D1–D34 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
 
 ## Who is who
 

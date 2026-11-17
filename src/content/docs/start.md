@@ -56,5 +56,7 @@ such as typos are welcome as pull requests.
 
 ## The roadmap map
 
-Four stages in order, then four career branches. Lessons are added under their stage when they are
-published, in rows from the first to the next, so a lesson is never above one it requires.
+Four stages in order, then four career branches. Open a stage to see its lessons in the order to study
+them. Each lesson has a short code to keep track of where you are: E1, E2 … for Excel, S for SQL, P for
+Python, C for the advanced core, and DA, DE, DS and ML for the branches. "Needs" lists the codes of the
+lessons to finish first.

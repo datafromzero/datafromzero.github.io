@@ -52,12 +52,12 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    nbstripout check, Lighthouse CI, Dependabot (monthly, grouped). One build-time graph module
    (`src/lib/graph.ts`, CLRS ch. 20/22, run by `scripts/check-graph.ts` per SPEC §12): DFS cycle detection that prints the cycle path, topological-order
    check against `order`, reverse edges for a "Unlocks next" list in the lesson footer, and longest-path
-   layering for the roadmap map. Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
+   layering (kept in the graph module; the `/start/` roadmap now lists lessons by `order`, D34). Zero runtime JS. Record "Unlocks next" (§5.1) and the roadmap map
    (§3.1 `/start/`) in SPEC when they are built.
    Then a small navigation PR (done, D26/D27): cross-document View Transitions (CSS, ≤150 ms, off for reduced motion) and
    Speculation Rules prefetch (moderate eagerness, same-origin, no prerender).
 7. **Project pages:** `/start/`, `/cite/`, `/changelog/`, `/about/`, `/license/`, `/privacy/`; `CITATION.cff`;
-   GA4 consent banner. `/start/` shows the roadmap map: static SVG from the graph module's layering.
+   GA4 consent banner. `/start/` shows the roadmap: stage cards that open on their coded lesson lists (D34).
 8. **Content** (SPEC §14, D24): curriculum map researched and approved by the owner → lessons created as drafts →
    the owner writes the text or asks for a team draft that the owner edits and approves (D24); `content-producer` adds frontmatter, exercises, notebooks, sheets, datasets, `Term`
    links and sources → the owner publishes. English only for now (D30; `vi-translator` stays, unused). Lesson content PRs always

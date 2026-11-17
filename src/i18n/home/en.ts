@@ -21,7 +21,7 @@ export const en: HomeStrings = {
 		short: 'Home',
 	},
 	core: {
-		short: '01 The core',
+		short: 'The core',
 		label: '01 — The core',
 		heading: 'Four steps.\n*No skipped rungs.*',
 		stepLabel: 'Step',
@@ -45,7 +45,7 @@ export const en: HomeStrings = {
 		],
 	},
 	branch: {
-		short: '02 Careers',
+		short: 'Careers',
 		label: '02 — Then branch',
 		heading: 'One trunk.\n*Four careers.*',
 		careers: [
@@ -56,7 +56,7 @@ export const en: HomeStrings = {
 		],
 	},
 	tools: {
-		short: '03 Three tools',
+		short: 'Three tools',
 		label: '03 — One idea, three tools',
 		heading: 'Same question. *Three tools.*',
 		questionLabel: 'The question',
@@ -90,7 +90,7 @@ export const en: HomeStrings = {
 	},
 	// Cards and sources: GitHub issue #29 ("Research: a short history of data"), all sources accessed 2026-11-16.
 	history: {
-		short: '04 History',
+		short: 'History',
 		label: '04 — A short history of data',
 		heading: 'From punch cards *to AI.*',
 		carousel: 'Milestones in the history of data',
@@ -261,7 +261,7 @@ export const en: HomeStrings = {
 	},
 	// Copy from the owner-approved mockup (careers.html, 2026-11-17).
 	careers: {
-		short: '05 Directions',
+		short: 'Directions',
 		label: '05 — Pick a direction',
 		heading: 'Four careers. *One start.*',
 		more: 'See the path',
