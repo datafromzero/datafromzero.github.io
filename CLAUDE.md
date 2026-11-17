@@ -5,6 +5,7 @@ know Microsoft Office: Excel/Sheets → SQL → Python → advanced core → fou
 Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafromzero.github.io.
 
 ## Read first (in this order)
+0. `.claude/HANDOFF.md` — where the work stands and what comes next (update it when a session hands over).
 1. `SPEC.md` — the long-term contract. **Authoritative.** Sections marked **CONTRACT** are public
    interfaces (URLs, content schemas, authoring components, datasets): do not change them casually.
 2. `design/README.md` — visual design: tokens, logo rules, logo animation, homepage sections and motion.
