@@ -1,4 +1,4 @@
-// 04: the logo's layers morph in. The void starts as a small round hole in the disc (a zero) and becomes the
+// 05: the logo's layers morph in. The void starts as a small round hole in the disc (a zero) and becomes the
 // database shape; each band starts as a flat spreadsheet row and curves into its layer. The end states are
 // the real path data of the mark, so the finished frame is the logo exactly.
 import { gsap } from '../gsap';

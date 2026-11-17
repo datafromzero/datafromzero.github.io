@@ -16,7 +16,7 @@ export const load = () =>
 
 const tall = matchMedia('(prefers-reduced-motion: no-preference) and (scripting: enabled) and (min-height: 600px)');
 
-/** 04: the mark assembles (disc, void, layers), then the headline and button arrive, while the stage holds. */
+/** 05: the mark assembles (disc, void, layers), then the headline and button arrive, while the stage holds. */
 export function init(section: HTMLElement, onCleanup: (fn: () => void) => void): Step[] | void {
 	const mark = section.querySelector<SVGElement>('.endmark');
 	const heading = section.querySelector<HTMLElement>('h2');

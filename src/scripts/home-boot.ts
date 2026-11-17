@@ -40,7 +40,8 @@ const start = () => {
 		.catch(() => {})
 		.then(() => (reduced ? undefined : import('./home/motion').then((m) => m.init())))
 		.catch(() => {
-			// Motion is an enhancement: the page is already complete without it.
+			// Motion is an enhancement: the page is already complete without it (the history list stops keeping room for the slider).
+			document.querySelector('.gallery')?.classList.add('is-static');
 		});
 };
 const whenIdle = () => {

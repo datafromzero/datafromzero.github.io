@@ -8,6 +8,7 @@
  *   scroll  a scripted compositor scroll (synthesized wheel gesture) through the whole page
  *   warm    the same scroll a second time, once every section timeline exists (steady state)
  *   pointer pointer sweep over the hero (desktop only)
+ *   history the 04 slider: Next and Previous buttons, ←/→ keys and a drag back and forth, once it is built
  *   docs    the same scroll on a docs page (must stay free of JS work)
  * for 390x844 mobile and 1280x800 desktop. Per window it prints the rAF frame-time distribution
  * (p50, p95, p99, max, frames over 16.7 ms and 8.3 ms), Long Animation Frames with script
@@ -138,6 +139,32 @@ async function scrollThrough(cdp, page, profile, maxMs = 60000) {
 	}
 }
 
+/** Drives the history slider (section 04): buttons, keys, then a slow drag each way that snaps to a card. */
+async function driveHistory(cdp, page) {
+	const box = await page.evaluate(() => {
+		const r = document.querySelector('#history .cards').getBoundingClientRect();
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+	});
+	for (let i = 0; i < 4; i++) {
+		await page.click('#history [data-step="1"]');
+		await sleep(700);
+	}
+	await page.focus('#history .gallery');
+	for (let i = 0; i < 3; i++) {
+		await page.keyboard.press('ArrowLeft');
+		await sleep(700);
+	}
+	for (const dir of [-1, 1]) {
+		await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: box.x, y: box.y, button: 'left', clickCount: 1 });
+		for (let k = 1; k <= 30; k++) {
+			await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x + dir * k * 10, y: box.y, button: 'left', buttons: 1 });
+			await sleep(16);
+		}
+		await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x + dir * 300, y: box.y, button: 'left', clickCount: 1 });
+		await sleep(900);
+	}
+}
+
 async function sweepPointer(cdp, profile, ms = 3000) {
 	const { width, height } = profile.viewport;
 	const t0 = Date.now();
@@ -157,6 +184,7 @@ const SCENARIOS = {
 	scroll: { path: '/', profiles: ['mobile', 'desktop'] },
 	warm: { path: '/', profiles: ['mobile', 'desktop'] }, // second pass over a page whose sections are all initialized
 	pointer: { path: '/', profiles: ['desktop'] },
+	history: { path: '/', profiles: ['mobile', 'desktop'] },
 	docs: { path: '/changelog/', profiles: ['mobile', 'desktop'] },
 };
 
@@ -233,6 +261,16 @@ async function run(browser, base, profileName, scenarioName, trace) {
 			await page.waitForFunction(() => performance.getEntriesByType('resource').some((r) => /motion|sections|gsap/i.test(r.name)) || document.querySelector('.marquee-toggle:not([hidden])'), null, { timeout: 15000 }).catch(() => {});
 		}
 		await sleep(4500);
+		if (scenarioName === 'history') {
+			await page.evaluate(() => {
+				const g = document.querySelector('#history .gallery');
+				scrollTo({ top: g.getBoundingClientRect().top + scrollY - (innerHeight - g.offsetHeight) / 2, behavior: 'instant' });
+			});
+			await page.waitForFunction(() => document.querySelector('#history .gallery.is-live'), null, { timeout: 15000 }).catch(() => {});
+			// The marquee below may be on screen and loops every frame: hold it, so the window measures the slider alone.
+			await page.evaluate(() => document.querySelector('.marquee-toggle:not([hidden])')?.click());
+			await sleep(1500);
+		}
 		if (scenarioName === 'warm') {
 			await scrollThrough(cdp, page, profile);
 			await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
@@ -243,6 +281,7 @@ async function run(browser, base, profileName, scenarioName, trace) {
 		m0 = await metrics();
 		traceStart = trace ? Date.now() : 0;
 		if (scenarioName === 'pointer') await sweepPointer(cdp, profile);
+		else if (scenarioName === 'history') await driveHistory(cdp, page);
 		else await scrollThrough(cdp, page, profile);
 		await sleep(400);
 	}

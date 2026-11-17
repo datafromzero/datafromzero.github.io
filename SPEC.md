@@ -379,7 +379,8 @@ refresh; section setup runs one section per task after a presented frame: sectio
 scrolling, in small slots), the rest after the intro while the reader is idle; a section that fails to build is
 reverted and the others continue; `will-change`
 exists only while its animation is active. Measured with `npm run perf` (dev only, noisy, not a CI gate):
-Chromium, CPU throttled 4×, 390×844 and 1280×800, intro, scroll, pointer and a docs page. Targets at 4×:
+Chromium, CPU throttled 4×, 390×844 and 1280×800, intro, scroll, warm (the same scroll once every section
+is built), pointer, history (the homepage slider: buttons, keys, drag) and a docs page. Targets at 4×:
 no long animation frame above 50 ms after the intro, scroll p95 main-thread frame at or under 16.7 ms
 (a proxy for 8.3 ms on a real phone), docs pages with zero layout, style and paint work while scrolling.
 **Accessibility target:** WCAG 2.2 AA (contrast, keyboard navigation, alt text, MathML).

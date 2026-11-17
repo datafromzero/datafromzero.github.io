@@ -75,6 +75,7 @@ effects follow the theme without literals:
 | `--panel` | `#050505` | `#fafafa` | Section 03 panels |
 | `--code` | `#dcdcdc` | `#232323` | Code in 03 |
 | `--outline` | `#4a4a4a` | `#b5b5b5` | Outlined marquee words (decorative stroke) |
+| `--card-edge` | `#2c2c2c` | `#dcdcdc` | History card border (section 04) |
 
 The nav keeps `mix-blend-mode: difference` in the dark theme only; in the light theme it is plain `--fg` on the
 white page (links `#333333`), which looks the same and lets contrast checkers measure it. The logo void is always
@@ -140,8 +141,8 @@ Total ≈ 2.9 s. All in `logo/logo-animation.js`.
 
 Content is English only for now (SPEC D30; Vietnamese under `/vi/` is paused) — keep all copy in i18n strings
 (`src/i18n/home/en.ts`).
-The hero and section 03 differ from `homepage-prototype/index.html` by owner decision (2026-11): this table is
-authoritative where they disagree.
+The hero and section 03 differ from `homepage-prototype/index.html`, and section 04 is new, by owner decision (2026-11):
+this table is authoritative where they disagree.
 
 | Section | Layout | Motion (GSAP) |
 |---|---|---|
@@ -150,8 +151,9 @@ authoritative where they disagree.
 | **01 — The core** | "Four steps. No skipped rungs." + vertical track: Excel/Sheets, SQL, Python, Advanced core | A white rail fills top→bottom with scroll (scrub); each step's node lights up and its text goes from 25% → 100% opacity as it is reached |
 | **02 — Then branch** | "One trunk. Four careers." + SVG tree: trunk splits into 4 branches → DA, DE, DS, ML (Data Analyst, Data Engineer, Data Scientist, ML/AI Engineer; SPEC D32 — the page still shows five, including AE, until the career-section PR lands) | Trunk then branches draw with scroll (scrub), leaf dots pop, labels fade up; once drawn, small lights travel down the branches (MotionPath, paused off screen) |
 | **03 — One idea, three tools** (`#tools`) | "Same question. Three tools." (2nd part muted). The question "Which store sold the most in March?", then the Excel (`SUMIFS`), SQL and Python solutions beside one result table (Riverside $1,284.50 · Old Quarter $1,102.75 · Harbor $968.20, "Example numbers."). Code in Geist Mono, wrapping (no horizontal scroll); one column on phones. Without JS: the three solutions stacked, each under its tool name | A script (no GSAP, also with reduced motion) turns the solutions into a real ARIA tab list (roving tabindex, ←/→/Home/End); panels share one cell, so switching never moves the page. GSAP (deferred): the underline slides (Flip, transforms only), the code fades up, the result rows pulse. The tabs cycle every 3.6 s while the section is on screen, stop for good on any interaction (click, key, focus, hover), and have a Pause / Play button (WCAG 2.2.2). Reduced motion: no cycle, no animation |
+| **04 — A short history of data** (`#history`) | "From punch cards to AI." (2nd part muted). An `<ol>` of 12 sourced milestone cards (year, title, one line; GitHub issue #29): 1804 Jacquard loom, 1890 Hollerith, 1970 Codd, 1974 SEQUEL, 1979 VisiCalc, 1985 Excel, 1991 Python, 2006 Hadoop, 2008 pandas, 2012 HBR, 2017 Transformer, 2022 ChatGPT, then a closing card "Now — Your turn" (inverted colors, "Start at A1 →" to `/start/`). Cards 240px wide on phones, up to 280px. Below: a `<details>` "Sources for these dates" with each card's primary and second source (accessed November 16, 2026). Without JS or with reduced motion: a horizontal scroll-snap list running to the screen edges, nothing hidden | Seamless-loop card slider (GSAP demo "Infinite card slider"): the center card is full size, the side cards scale down (power1.in, 80% of a card apart) and fade on their own curve: opacity 0.9 at ±1 (so their text keeps 4.5:1 in both themes), then 0.4, 0.15, 0.04; starts on 1804. Drag (Draggable, its own chunk), Previous / Next milestone buttons (48px) and ←/→ while the slider has focus; it always snaps to a card, and a polite live region names the centered card. While the chunk loads, the list keeps the slider's height; the chunk sets `.is-live`, CSS draws the first frame, then the loop is built on it (CLS 0); transforms and opacity per frame, `z-index` only when two cards swap order; `will-change` only while moving. Without `.is-live` (reduced motion, no script, a failed chunk) it is always the list |
 | **Marquee** | Large alternating solid/outlined words: Free · Open source · CC BY 4.0 · Mobile-first · Zero to job-ready | Infinite horizontal loop; speeds up with scroll velocity, eases back; can be flicked sideways by finger, mouse or trackpad (Observer; vertical scroll stays native) |
-| **04 — Begin** | Small logo, "Start / at zero.", one big button | Logo assembles once as it enters (disc → void and layers morph into place, MorphSVG). Button is magnetic on desktop (pointer: fine only) |
+| **05 — Begin** | Small logo, "Start / at zero.", one big button | Logo assembles once as it enters (disc → void and layers morph into place, MorphSVG). Button is magnetic on desktop (pointer: fine only) |
 | **Footer** | Mono: © 2026 datafromzero · Content CC BY 4.0 · Code MIT · version + DOI · Cookie settings · GitHub link | — |
 
 Every section heading uses the same word-by-word mask reveal when it enters the viewport.
@@ -163,7 +165,7 @@ glass bar (16px radius, blur 16px, max-width 720px, centered on the content colu
 the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop.
 
 - **Left:** a hamburger (three bars that morph to ×) and a label in Geist 500, 15px: the page title, or on the
-  homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 Begin). It opens the
+  homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 History · 05 Begin). It opens the
   shortcuts sheet, which grows upward from the bar: big links (Home, Start here, About), then small groups
   (On this page, homepage only; Project: Changelog, Cite, License, Privacy, GitHub ↗). Esc, a second tap, a
   link or an outside click closes it.
