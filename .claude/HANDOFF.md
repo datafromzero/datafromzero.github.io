@@ -40,8 +40,9 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    - Lesson content PRs always wait for the owner's approval; he sets `status: published`.
 3. **First dataset `cafe-sales`:** build it with the first Excel lesson. It is English, with prices in US dollars
    and cents (D29). Decide the dataset frontmatter then (D19 is deferred until the first dataset).
-4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were never opened. Check each one when
-   its lesson is produced.
+4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
+   200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
+   `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.
 5. **Release `v1.0.0`** when the four core stages (102 lessons) are published; then enable Zenodo (SPEC §9, §14).
 
 ## Open items and owner decisions still pending
