@@ -5,63 +5,63 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 763 nodes, 664 edges, 94 communities (390 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 53, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 408, overrides 5, references 24, runs 9, specified-by 4, uses 18, uses-token 22, validated-by 5.
+- 1558 nodes, 2114 edges, 75 communities (1088 isolated nodes).
+- Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 814, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 49, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 31, mentions 1843, overrides 5, references 24, runs 9, specified-by 4, uses 33, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
-| 1 | `astro.config.mjs` | config | 37 | astro.config.mjs:1 |
-| 2 | `src/site.ts` | module | 25 | src/site.ts:1 |
-| 3 | `design/README.md` | doc | 22 | design/README.md:1 |
-| 4 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
-| 5 | `.claude/HANDOFF.md` | doc | 19 | .claude/HANDOFF.md:1 |
-| 6 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:363 |
-| 7 | `S6` Authoring components | spec-section | 19 | SPEC.md:245 |
-| 8 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
-| 9 | `D31` Bottom taskbar | decision | 18 | SPEC.md:58 |
-| 10 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
-| 11 | `D30` Vietnamese paused | decision | 17 | SPEC.md:57 |
-| 12 | `DG5` Homepage (see `homepage-proto… | design-section | 15 | design/README.md:140 |
-| 13 | `S5` Content model | spec-section | 15 | SPEC.md:148 |
-| 14 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
-| 15 | `D28` Motion scope and budget | decision | 14 | SPEC.md:55 |
+| 1 | `.claude/worktrees/agent-a4d6f48b987824c39/.claude/kb/GRAPH_REPORT.md` | doc | 108 | .claude/worktrees/agent-a4d6f48b987824c39/.claude/kb/GRAPH_REPORT.md:1 |
+| 2 | `.claude/worktrees/agent-a680e036f6ec6db1c/.claude/kb/GRAPH_REPORT.md` | doc | 108 | .claude/worktrees/agent-a680e036f6ec6db1c/.claude/kb/GRAPH_REPORT.md:1 |
+| 3 | `.claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md` | doc | 106 | .claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md:1 |
+| 4 | `.claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/kb/GRAPH_REPORT.md` | doc | 105 | .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/kb/GRAPH_REPORT.md:1 |
+| 5 | `.claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md` | doc | 75 | .claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md:1 |
+| 6 | `.claude/worktrees/agent-a4d6f48b987824c39/SPEC.md` | doc | 75 | .claude/worktrees/agent-a4d6f48b987824c39/SPEC.md:1 |
+| 7 | `.claude/worktrees/agent-a680e036f6ec6db1c/SPEC.md` | doc | 75 | .claude/worktrees/agent-a680e036f6ec6db1c/SPEC.md:1 |
+| 8 | `.claude/worktrees/agent-ab8507f0ea327573f/SPEC.md` | doc | 75 | .claude/worktrees/agent-ab8507f0ea327573f/SPEC.md:1 |
+| 9 | `SPEC.md` | doc | 54 | SPEC.md:1 |
+| 10 | `design/README.md` | doc | 54 | design/README.md:1 |
+| 11 | `S6` Authoring components | spec-section | 51 | SPEC.md:245 |
+| 12 | `.claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md` | doc | 47 | .claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md:1 |
+| 13 | `.claude/worktrees/agent-a4d6f48b987824c39/CHANGELOG.md` | doc | 47 | .claude/worktrees/agent-a4d6f48b987824c39/CHANGELOG.md:1 |
+| 14 | `.claude/worktrees/agent-a680e036f6ec6db1c/CHANGELOG.md` | doc | 47 | .claude/worktrees/agent-a680e036f6ec6db1c/CHANGELOG.md:1 |
+| 15 | `.claude/worktrees/agent-ab8507f0ea327573f/CHANGELOG.md` | doc | 47 | .claude/worktrees/agent-ab8507f0ea327573f/CHANGELOG.md:1 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
-- **C2 site.ts** (16): src/site.ts; D30 Vietnamese paused; S8 Internationalization; D3 Languages (paused by D30); R7 Language; src/site.ts#ANALYTICS_ENABLED
-- **C3 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C4 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
-- **C5 Solution** (9): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/cell-references.mdx; src/content/docs/excel/first-formulas.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx
-- **C6 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
-- **C7 Tech stack** (8): S2 Tech stack; S4 Information architecture; agent:content-producer content-producer; research/curriculum/01-competitor-map.md; S3 URL contract; research/curriculum/00-README.md
-- **C8 astro.config.mjs** (8): astro.config.mjs; DG3 The logo; S3.2 Slug rules; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex
-- **C9 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
-- **C10 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C11 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
-- **C12 README.md** (7): design/README.md; D9 Theme; S10 Design & motion; DG2 Visual direction; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; M2 Design system
+- **C1 GRAPH_REPORT.md** (48): .claude/worktrees/agent-a4d6f48b987824c39/.claude/kb/GRAPH_REPORT.md; .claude/worktrees/agent-a680e036f6ec6db1c/.claude/kb/GRAPH_REPORT.md; .claude/worktrees/agent-ab8507f0ea327573f/.claude/kb/GRAPH_REPORT.md; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/kb/GRAPH_REPORT.md; .claude/worktrees/agent-a0a5ee6fd2ba72540/CLAUDE.md; .claude/worktrees/agent-a4d6f48b987824c39/CLAUDE.md
+- **C2 Authoring components** (44): S6 Authoring components; S5 Content model; D32 Four career branches; S4 Information architecture; S14 Content production (replaces migr…; S1 Decision record
+- **C3 Bottom taskbar** (28): D31 Bottom taskbar; D9 Theme; src/styles/home.css; src/styles/tokens.css; S10 Design & motion; D23 Scroll-linked effects
+- **C4 CHANGELOG.md** (26): .claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md; .claude/worktrees/agent-a4d6f48b987824c39/CHANGELOG.md; .claude/worktrees/agent-a680e036f6ec6db1c/CHANGELOG.md; .claude/worktrees/agent-ab8507f0ea327573f/CHANGELOG.md; src/site.ts; S9 Versioning, citation, changelog
+- **C5 SPEC.md** (20): .claude/worktrees/agent-a0a5ee6fd2ba72540/SPEC.md; .claude/worktrees/agent-a4d6f48b987824c39/SPEC.md; .claude/worktrees/agent-a680e036f6ec6db1c/SPEC.md; .claude/worktrees/agent-ab8507f0ea327573f/SPEC.md; package.json; D5 Versioning & citation
+- **C6 Solution** (14): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInSheets.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/cell-references.mdx; src/content/docs/excel/conditional-totals.mdx
+- **C7 career-quiz.ts** (14): src/lib/career-quiz.ts; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER; src/lib/career-quiz.ts#MINI_IP_URL; src/lib/career-quiz.ts#ONET_CREDIT; src/lib/career-quiz.ts#QUESTIONS
+- **C8 CLAUDE.md** (13): CLAUDE.md; scripts/kb.mjs; D18 Draft lessons; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/skills/kb/SKILL.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/skills/kb/SKILL.md; .claude/worktrees/agent-a680e036f6ec6db1c/.claude/skills/kb/SKILL.md
+- **C9 Vietnamese paused** (13): D30 Vietnamese paused; S15 Explicitly out of scope (for now); CHANGELOG.md; agent:spec-reviewer spec-reviewer; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/agents/spec-reviewer.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/agents/spec-reviewer.md
+- **C10 SPEC.md** (10): SPEC.md; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/agents/site-builder.md; .claude/worktrees/agent-a0a5ee6fd2ba72540/README.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/agents/site-builder.md; .claude/worktrees/agent-a4d6f48b987824c39/README.md; .claude/worktrees/agent-a680e036f6ec6db1c/.claude/agents/site-builder.md
+- **C11 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#LessonBox; src/lib/roadmap.ts#MAP_WIDTH; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLayout
+- **C12 README.md** (9): design/README.md; D28 Motion scope and budget; .claude/worktrees/agent-a0a5ee6fd2ba72540/.claude/agents/frontend-designer.md; .claude/worktrees/agent-a4d6f48b987824c39/.claude/agents/frontend-designer.md; .claude/worktrees/agent-a680e036f6ec6db1c/.claude/agents/frontend-designer.md; .claude/worktrees/agent-ab8507f0ea327573f/.claude/agents/frontend-designer.md
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `D1` -mentions-> `D24` (C57 to C15, SPEC.md:28)
-- `ctype:career` -specified-by-> `S5.4` (C67 to C66, src/lib/content-schemas.ts:96)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C57 to C2, research/curriculum/02-syllabus-inventory.md:319)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C27 to C50, .claude/agents/README.md:39)
-- `S5.2` -mentions-> `D18` (C44 to C38, SPEC.md:222)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C78 to C79, src/components/starlight/ThemeSelect.astro:3)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C77, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C27 to C57, .claude/skills/kb/SKILL.md:3)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C36 to C37, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C37 to C46, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C60 to C12, design/README.md:198)
-- `M6` -mentions-> `D27` (C42 to C39, CLAUDE.md:55)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C60 to C58, src/layouts/HomeLayout.astro:39)
+- `src/scripts/home/fx/select.ts` -mentions-> `DG5` (C69 to C28, src/scripts/home/fx/select.ts:2)
+- `DG2:light-theme-every-page-the-homepage-included` -mentions-> `DG5` (C3 to C28, design/README.md:54)
+- `DG5` -mentions-> `src/i18n/home/en.ts` (C28 to C3, design/README.md:143)
+- `src/components/content/Solution.astro` -mentions-> `src/lib/remark-content-rules.ts` (C6 to C63, src/components/content/Solution.astro:3)
+- `src/components/home/Hero.astro` -mentions-> `DG5` (C1 to C28, src/components/home/Hero.astro:2)
+- `src/lib/citation.ts` -mentions-> `package.json` (C32 to C5, src/lib/citation.ts:3)
+- `src/scripts/home/motion.ts` -mentions-> `DG5` (C70 to C28, src/scripts/home/motion.ts:222)
+- `D2` -mentions-> `S3.4` (C5 to C2, SPEC.md:29)
+- `DG4` -mentions-> `DG5` (C1 to C28, design/README.md:131)
+- `DG5` -mentions-> `DG4` (C28 to C1, design/README.md:150)
+- `DG6` -mentions-> `DG5` (C47 to C28, design/README.md:190)
 
 ## Decisions (SPEC §1)
 
@@ -112,8 +112,8 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 term: id — file:line
 
-- draft: `S5.1` — SPEC.md:162
-- prerequisites: `S12` — SPEC.md:363
+- draft: `.claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/excel/ai-draft-and-verify.md` — .claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/excel/ai-draft-and-verify.md:1
+- prerequisites: `S5.1` — SPEC.md:162
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
 - slug: `S3.2` — SPEC.md:107
@@ -125,20 +125,20 @@ term: id — file:line
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:25
 - gsap: `pkg:gsap` — package.json:39
-- scroll: `DG5` — design/README.md:140
+- scroll: `S12` — SPEC.md:363
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
 - logo: `src/components/home/Logo.astro` — src/components/home/Logo.astro:1
 - favicon: `DG6` — design/README.md:184
-- i18n: `src/i18n/home/types.ts` — src/i18n/home/types.ts:1
+- i18n: `src/content/i18n/vi.json` — src/content/i18n/vi.json:1
 - vietnamese: `R:curriculum/01-competitor-map#5-gaps-data-from-zero-exploits:gap-3-vietnamese-scaffolding-is-a-moat-not-a-translation-feature` — research/curriculum/01-competitor-map.md:211
 - validation: `src/lib/content-validation.ts` — src/lib/content-validation.ts:1
 - schema: `src/lib/content-schemas.ts` — src/lib/content-schemas.ts:1
 - lesson metadata: `src/lib/content-schemas.ts#Lesson` — src/lib/content-schemas.ts:106
 - exercise: `src/components/content/Exercise.astro` — src/components/content/Exercise.astro:1
 - solution: `src/components/content/Solution.astro` — src/components/content/Solution.astro:1
-- colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
+- colab: `S1` — SPEC.md:24
 - sheets: `R:curriculum/02-syllabus-inventory#1-stage-1-spreadsheets-and-the-bi-layer:1-5-google-sheets-what-transfers-what-is-sheets-only` — research/curriculum/02-syllabus-inventory.md:51
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
 - katex: `pkg:katex` — package.json:40
@@ -150,15 +150,15 @@ term: id — file:line
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
 - migration: `S14` — SPEC.md:433
-- license: `R8` — CLAUDE.md:33
-- changelog: `S9` — SPEC.md:319
-- zenodo: `S1` — SPEC.md:24
+- license: `.claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/license.md` — .claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/license.md:1
+- changelog: `.claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md` — .claude/worktrees/agent-a0a5ee6fd2ba72540/CHANGELOG.md:1
+- zenodo: `S9` — SPEC.md:319
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
 - hero: `src/components/home/Hero.astro` — src/components/home/Hero.astro:1
 - tokens: `src/styles/tokens.css` — src/styles/tokens.css:1
 - font: `DG2:design-tokens` — design/README.md:37
-- agents: `agent:spec-reviewer` — .claude/agents/spec-reviewer.md:1
+- agents: `.claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/core/ai-literacy-rag-and-agents.md` — .claude/worktrees/agent-a0a5ee6fd2ba72540/src/content/docs/core/ai-literacy-rag-and-agents.md:1
 - build plan: `R:curriculum/00-README#3-how-each-package-file-maps-to-build-decisions:04-ui-ux-lessons-site-build` — research/curriculum/00-README.md:84
 - out of scope: `R:curriculum/00-README#4-evidence-and-confidence:what-remains-unverified-or-out-of-scope` — research/curriculum/00-README.md:121
 - career: `src/lib/career-quiz-score.ts#Career` — src/lib/career-quiz-score.ts:10
@@ -170,8 +170,8 @@ term: id — file:line
 - nvmrc: `.nvmrc` — .nvmrc:1
 - Authoring components: `S6` — SPEC.md:245
 - Content model: `S5` — SPEC.md:148
+- Information architecture: `S4` — SPEC.md:127
 - Internationalization: `S8` — SPEC.md:303
-- Design & motion: `S10` — SPEC.md:335
 
 ## Suggested questions
 
