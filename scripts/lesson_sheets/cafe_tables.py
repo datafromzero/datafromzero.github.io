@@ -134,3 +134,51 @@ def order_row(o: Order) -> list[object]:
 def write_orders_sheet(ws: Worksheet, orders: list[Order]) -> None:
     """The order list used by the Tables and IF lessons: one row per order, real dates, real numbers."""
     write_table(ws, ORDER_HEADER, [order_row(o) for o in orders], formats=ORDER_FORMATS)
+
+
+# ---------------------------------------------------------------------------------------------
+# Exercise sheets that start from a prepared state ("done for you" in a lesson means it is here).
+
+TABLE_FIRST_ROW = 6  # rows 1-3 hold totals, row 4 is blank, row 5 is the header, records start at row 6
+
+
+def write_orders_table_sheet(
+    ws: Worksheet,
+    orders: list[Order],
+    table_name: str,
+    summary: list[tuple[str, str]],
+    extra: tuple[str, list[str]] | None = None,
+) -> None:
+    """A copy of raw_orders as an Excel Table: header in row 5, records from row 6, and the
+    summary formulas (label in column A, formula in column C) in the rows above the table, where a
+    filter can never hide them. `extra` adds one more column: (header, one formula per record)."""
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    for i, (label, formula) in enumerate(summary, start=1):
+        ws.cell(i, 1, label).font = Font(bold=True)
+        ws.cell(i, 3, formula)
+    header = ORDER_HEADER + ([extra[0]] if extra else [])
+    for col, name in enumerate(header, start=1):
+        ws.cell(5, col, name).font = Font(bold=True)
+    for r, o in enumerate(orders, start=TABLE_FIRST_ROW):
+        for col, v in enumerate(order_row(o), start=1):
+            cell = ws.cell(r, col, v)
+            if col == 4:
+                cell.number_format = "yyyy-mm-dd"
+            elif col == 7:
+                cell.number_format = "0.00"
+        if extra:
+            ws.cell(r, 8, extra[1][r - TABLE_FIRST_ROW])
+    last_col = "H" if extra else "G"
+    last_row = TABLE_FIRST_ROW + len(orders) - 1
+    table = Table(displayName=table_name, ref=f"A5:{last_col}{last_row}")
+    table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+    ws.add_table(table)
+    for col, width in zip("ABCDEFGH", (16, 12, 12, 12, 16, 12, 12, 12)):
+        ws.column_dimensions[col].width = width
+
+
+def order_ranges(n: int) -> tuple[str, str]:
+    """The record ranges of an order Table made by write_orders_table_sheet: order_id and amount_usd."""
+    last = TABLE_FIRST_ROW + n - 1
+    return f"A{TABLE_FIRST_ROW}:A{last}", f"G{TABLE_FIRST_ROW}:G{last}"

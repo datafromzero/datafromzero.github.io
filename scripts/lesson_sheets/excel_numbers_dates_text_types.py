@@ -8,6 +8,9 @@ month/day/year opened the file. The mechanism is reproduced exactly (no randomne
   February 1), so it looks right and is wrong;
 * a date whose day is above 12 could not be read as a month, so it stayed text;
 * the amounts of one payment method were exported as text.
+
+The file was then saved as .xlsx, which keeps those values and types as they were read: that is what
+the lesson's practice file holds.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from __future__ import annotations
 from datetime import date
 
 from openpyxl import Workbook
+from openpyxl.styles import Font
 
 from .cafe_tables import Order, order_table, write_table
 from .common import save
@@ -42,22 +46,50 @@ def export_rows(orders: list[Order], text_amounts: str | None) -> list[list[obje
     return rows
 
 
+def write_export(ws, rows: list[list[object]]) -> None:
+    # Real dates display as month/day/year with a fixed format code, so every computer shows the same.
+    write_table(
+        ws,
+        HEADER,
+        rows,
+        widths={"ordered_on": 14, "payment_method": 16},
+        formats={"ordered_on": "mm/dd/yyyy", "total_usd": "0.00"},
+    )
+
+
 def build() -> None:
     wb = Workbook()
     wb.remove(wb.active)
 
     all_orders = order_table()
+    exports = {}
     for sheet, store, month, text_amounts in EXPORTS:
         orders = [o for o in all_orders if o.store_name == store and o.when.month == month]
-        # Real dates display as month/day/year with a fixed format code, so every computer shows the same.
-        write_table(
-            wb.create_sheet(sheet),
-            HEADER,
-            export_rows(orders, text_amounts),
-            widths={"ordered_on": 14, "payment_method": 16},
-            formats={"ordered_on": "mm/dd/yyyy", "total_usd": "0.00"},
-        )
+        exports[sheet] = export_rows(orders, text_amounts)
+        write_export(wb.create_sheet(sheet), exports[sheet])
 
+    # `calc` is for the worked example; every exercise has its own sheet, so nothing is overwritten.
     wb.create_sheet("calc")
+
+    # Exercise 1 starts from this state: the Old Town export copied in and its amounts checked.
+    rows = exports["raw_export_oldtown_feb"]
+    ws = wb.create_sheet("calc_ex1")
+    write_export(ws, rows)
+    last = len(rows) + 1
+    checks = [
+        ("numbers_in_total", f"=COUNT(D2:D{last})"),
+        ("filled_in_total", f"=COUNTA(D2:D{last})"),
+        ("sum_as_it_stands", f"=SUM(D2:D{last})"),
+    ]
+    ws["G1"], ws["H1"] = "check", "value"
+    for c in ("G1", "H1"):
+        ws[c].font = Font(bold=True)
+    for i, (label, formula) in enumerate(checks, start=2):
+        ws[f"G{i}"], ws[f"H{i}"] = label, formula
+    ws.column_dimensions["G"].width = 20
+
+    # Exercise 2 is a blank start.
+    wb.create_sheet("calc_ex2")
+
     wb.create_sheet("output")
     save(wb, "excel-numbers-dates-text-types")
