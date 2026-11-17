@@ -20,11 +20,11 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.worksheet.worksheet import Worksheet
+from stable_xlsx import stabilize
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "datasets" / "cafe-sales" / "v1"
 OUT = ROOT / "sheets" / "excel"
-FIXED_TIME = datetime(2026, 11, 17)
 
 
 def read(name: str) -> list[dict[str, str]]:
@@ -68,10 +68,9 @@ def raw_sheet(ws: Worksheet, rows: list[dict[str, str]]) -> None:
 
 def save(wb: Workbook, lesson_id: str) -> None:
     wb.properties.creator = "datafromzero"
-    wb.properties.created = FIXED_TIME
-    wb.properties.modified = FIXED_TIME
     OUT.mkdir(parents=True, exist_ok=True)
     wb.save(OUT / f"{lesson_id}.xlsx")
+    stabilize(OUT / f"{lesson_id}.xlsx")
     print(f"sheets/excel/{lesson_id}.xlsx")
 
 
@@ -103,7 +102,7 @@ def excel_grid_and_tidy_layout() -> None:
 
     # A store manager's weekly report, messy on purpose: merged title, blank rows, two facts in
     # one cell, money typed as text, and a total row inside the data.
-    ws = wb.create_sheet("weekly_report")
+    ws = wb.create_sheet("raw_weekly_report")
     days = weekly_sales("1", date(2026, 1, 5), date(2026, 1, 11))
     ws["A1"] = "OLD TOWN: WEEKLY SALES, week of January 5, 2026"
     ws["A1"].font = Font(bold=True, size=14)
@@ -116,7 +115,7 @@ def excel_grid_and_tidy_layout() -> None:
     for i, (day, n, usd) in enumerate(days):
         if i in (2, 5):  # blank rows the manager left between parts of the week
             ws.append([])
-        ws.append([day.strftime("%A %b %-d"), f"{n} orders, ${usd:.2f}", notes.get(day, "")])
+        ws.append([f"{day:%A %b} {day.day}", f"{n} orders, ${usd:.2f}", notes.get(day, "")])
     ws.append([])
     total_n = sum(n for _, n, _ in days)
     total_usd = sum((usd for _, _, usd in days), Decimal(0))

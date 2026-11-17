@@ -19,6 +19,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+from stable_xlsx import stabilize
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "datasets" / "cafe-sales" / "v1"
 SEED = 20260101
@@ -263,11 +265,9 @@ def to_xlsx(tables: dict[str, tuple[list[str], list[list[object]]]], path: Path)
                 for (cell,) in ws.iter_rows(min_row=2, min_col=col, max_col=col):
                     cell.number_format = "yyyy-mm-dd"
         ws.freeze_panes = "A2"
-    fixed = datetime(2026, 11, 17)
     wb.properties.creator = "datafromzero"
-    wb.properties.created = fixed
-    wb.properties.modified = fixed
     wb.save(path)
+    stabilize(path)
 
 
 def main() -> None:

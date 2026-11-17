@@ -6,6 +6,10 @@ All notable changes to datafromzero are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- SPEC §1 D24 and §14: the owner may ask the team for a draft lesson text, which the owner edits and approves before
+  publishing; the first is `excel-grid-and-tidy-layout`.
+
 ### Added
 - First dataset, `cafe-sales` v1 (SPEC §7, D29): three fictional Bay Area cafes, January to June 2026, prices in US
   dollars and cents. Five tables (stores 3, customers 150, products 16, orders 1,800, order lines 3,287) as CSV,
