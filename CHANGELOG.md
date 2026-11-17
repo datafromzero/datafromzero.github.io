@@ -113,9 +113,10 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
-- Consent banner (SPEC §11, owner request): it moves from a floating card at the bottom to the top of the page, in
-  normal flow under the header, like GOV.UK and Microsoft Learn. It no longer covers the bottom taskbar, its open
-  menu or any focused element. The homepage "Your turn" card now says "Start here".
+- Consent (SPEC §11, owner request): the banner is now a glass card like the one on johnha.info, with a cookie icon,
+  "Your privacy choices", Reject all and Accept all side by side, and Customize for an Analytics switch. It floats
+  above the bottom taskbar (bottom-left of the content on wide screens) and steps aside while the taskbar menu is
+  open. The homepage "Your turn" card now says "Start here".
 - Taskbar sheet (SPEC D35): "Start here" leaves the bottom row (the primary button already starts the lessons); the
   Course list ends with "See the whole roadmap". The primary button's first lesson comes from the same helper as the
   search suggestions.

@@ -274,10 +274,6 @@ export function init() {
 
 		// Fonts change text metrics once: re-measure a single time.
 		document.fonts?.ready.then(() => ScrollTrigger.refresh());
-		// The consent banner sits in normal flow at the top: opening or closing it moves every section.
-		const onLayout = () => ScrollTrigger.refresh();
-		document.addEventListener('dfz:layout', onLayout);
-		cleanups.push(() => document.removeEventListener('dfz:layout', onLayout));
 
 		return () => cleanups.forEach((fn) => fn());
 	});

@@ -85,8 +85,6 @@ export default defineConfig({
 				// Lesson header and footer (SPEC §5.1); both render nothing on non-lesson pages.
 				PageTitle: './src/components/starlight/PageTitle.astro',
 				Footer: './src/components/starlight/Footer.astro',
-				// The consent banner at the top of the content, in normal flow (SPEC §11).
-				Banner: './src/components/starlight/Banner.astro',
 				// Search sheet on phones, glass dialog on desktop, "where to begin" links (SPEC D36).
 				Search: './src/components/starlight/Search.astro',
 			},

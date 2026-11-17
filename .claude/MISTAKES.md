@@ -68,8 +68,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   our class-level `:focus-visible` ring, so keyboard users lost the focus ring. → **Match the specificity of the rule you
   override, and Tab to every new focus style in a browser before merging.**
 
-- 2026-11-17 — The consent banner moved into Starlight's `<main>`, so search indexed its text as the first words of
-  every page. → **Anything placed in Starlight's `<main>` (Banner, PageTitle, Footer overrides) that is site chrome
+- 2026-11-17 — The consent card used plain class names (`.card`, `.head`); the homepage's own `.card` rule gave it a
+  340px minimum height. → **A component that renders on the homepage and on docs pages prefixes its classes (for
+  example `dfz-c-`), and is checked on both before merging.**
+- 2026-11-17 — The consent banner sits inside Starlight's `<main>`, so search indexed its text on every page. → **Anything placed in Starlight's `<main>` (Banner, PageTitle, Footer overrides) that is site chrome
   carries `data-pagefind-ignore`; after the build, read one file in `dist/pagefind/fragment/`.**
 
 ## Datasets and generated files

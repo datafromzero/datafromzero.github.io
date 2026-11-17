@@ -5,7 +5,20 @@ export type UiLang = 'en' | 'vi';
 
 export interface SiteUi {
 	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
-	consent: { label: string; text: string; privacy: string; accept: string; decline: string };
+	/** The consent card (SPEC §11), laid out like the owner's johnha.info. */
+	consent: {
+		title: string;
+		text: string;
+		privacy: string;
+		customize: string;
+		reject: string;
+		accept: string;
+		save: string;
+		necessary: string;
+		necessaryText: string;
+		analytics: string;
+		analyticsText: string;
+	};
 	/** The search sheet (SPEC D36). */
 	search: { begin: string };
 	/** The bottom taskbar on every page (SPEC D31, D35). */
@@ -43,11 +56,17 @@ export interface SiteUi {
 const en: SiteUi = {
 	nav: { label: 'Project', about: 'About', cite: 'Cite', changelog: 'Changelog', license: 'License', privacy: 'Privacy', cookies: 'Cookie settings' },
 	consent: {
-		label: 'Cookie consent',
-		text: 'May we use Google Analytics cookies to count visits? The site works the same either way.',
-		privacy: 'Privacy',
-		accept: 'Accept',
-		decline: 'Decline',
+		title: 'Your privacy choices',
+		text: 'We use Google Analytics cookies to see which pages are read and improve the lessons. No ads. The site works the same either way, and you can change your choice any time.',
+		privacy: 'Privacy policy',
+		customize: 'Customize',
+		reject: 'Reject all',
+		accept: 'Accept all',
+		save: 'Save choices',
+		necessary: 'Strictly necessary',
+		necessaryText: 'Remembers your theme and this cookie choice in this browser. Always on.',
+		analytics: 'Analytics',
+		analyticsText: 'Google Analytics 4: pages viewed, the page you came from, device type and approximate location.',
 	},
 	search: { begin: 'Where to begin' },
 	taskbar: {
@@ -83,11 +102,17 @@ const en: SiteUi = {
 const vi: SiteUi = {
 	nav: { label: 'Dự án', about: 'Giới thiệu', cite: 'Trích dẫn', changelog: 'Nhật ký thay đổi', license: 'Giấy phép', privacy: 'Quyền riêng tư', cookies: 'Cài đặt cookie' },
 	consent: {
-		label: 'Đồng ý dùng cookie',
-		text: 'Bạn có đồng ý để chúng tôi dùng cookie của Google Analytics để đếm lượt truy cập không? Trang hoạt động như nhau trong cả hai trường hợp.',
-		privacy: 'Quyền riêng tư',
-		accept: 'Đồng ý',
-		decline: 'Từ chối',
+		title: 'Lựa chọn quyền riêng tư',
+		text: 'Chúng tôi dùng cookie của Google Analytics để biết trang nào được đọc và cải thiện bài học. Không quảng cáo. Trang hoạt động như nhau trong cả hai trường hợp, và bạn có thể đổi lựa chọn bất cứ lúc nào.',
+		privacy: 'Chính sách quyền riêng tư',
+		customize: 'Tùy chỉnh',
+		reject: 'Từ chối tất cả',
+		accept: 'Đồng ý tất cả',
+		save: 'Lưu lựa chọn',
+		necessary: 'Cần thiết',
+		necessaryText: 'Ghi nhớ giao diện sáng/tối và lựa chọn cookie này trong trình duyệt. Luôn bật.',
+		analytics: 'Phân tích',
+		analyticsText: 'Google Analytics 4: trang đã xem, trang bạn đến từ đó, loại thiết bị và vị trí gần đúng.',
 	},
 	search: { begin: 'Bắt đầu từ đâu' },
 	taskbar: {

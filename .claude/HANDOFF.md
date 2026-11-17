@@ -60,8 +60,9 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 - **Homepage accessibility score is 97, not 100:** the 01 steps are dimmed to 25% until reached, which fails the
   contrast audit. It is the approved design; change it only if the owner asks.
 - **Course tab** lists every published lesson by stage automatically (`src/components/taskbar/Taskbar.astro`, D35).
-- **Consent banner** is at the top of the page in normal flow (`src/components/starlight/Banner.astro`, and first in
-  the homepage body), never fixed; opening or closing it fires `dfz:layout` so the homepage motion re-measures.
+- **Consent card** (`src/components/project/Consent.astro`) copies the layout of the owner's johnha.info: fixed above
+  the taskbar, hidden while the taskbar menu is open, classes prefixed `dfz-c-`. The owner tried it at the top of the
+  page and preferred this.
 - **Design prototype:** `design/homepage-prototype/index.html` is the original approved prototype and no longer
   matches the homepage; `design/README.md` §4–§5 describe the current design.
 

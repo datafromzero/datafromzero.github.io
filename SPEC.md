@@ -355,9 +355,11 @@ Notebooks are cleared of outputs before commit (CI check).
 ## 11. Analytics & privacy
 
 - **Google Analytics 4**, loaded **only after consent** (Consent Mode v2, default `denied`).
-- A minimal consent banner (Accept / Decline), choice remembered; "Cookie settings" link in the footer to change it.
-  The banner sits at the top of the page in normal flow, under the header, never fixed or sticky (as GOV.UK and
-  Microsoft Learn do), so it never covers content, a focused element (WCAG 2.2 SC 2.4.11) or the bottom taskbar.
+- A consent card laid out like the owner's johnha.info (owner decision, 2026-11-17): a glass card floating at the
+  bottom (centered on phones, bottom-left of the content on wide screens), always above the bottom taskbar and hidden
+  while the taskbar menu is open. Reject all and Accept all have equal weight; Customize opens "Strictly necessary"
+  (always on) and an Analytics switch with Save choices. Choice remembered; "Cookie settings" link in the footer to
+  change it.
 - Declining must leave the site fully functional; GA script must never block rendering.
 - The Measurement ID is the single value `GA_ID` in `src/site.ts`. While it is empty there is no banner, no GA code, no "Cookie settings" link and no added JavaScript. The choice is kept in `localStorage` key `dfz-consent`; only page views are collected for now.
 - `/privacy/` page states what is collected, why, retention, and how to opt out.

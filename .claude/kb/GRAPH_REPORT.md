@@ -5,15 +5,15 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 792 nodes, 786 edges, 95 communities (381 isolated nodes).
-- Nodes: agent 8, build plan 9, component 35, config 10, content 167, content-type 5, decision 38, dependency 17, design-section 14, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 7, style 5, symbol 140, template 2, token 12.
-- Edges: defines 140, imports 36, mentions 491, overrides 7, references 27, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
+- 790 nodes, 780 edges, 94 communities (381 isolated nodes).
+- Nodes: agent 8, build plan 9, component 34, config 10, content 167, content-type 5, decision 38, dependency 17, design-section 14, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 6, style 5, symbol 140, template 2, token 12.
+- Edges: defines 140, imports 35, mentions 488, overrides 6, references 26, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
-| 1 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
+| 1 | `astro.config.mjs` | config | 40 | astro.config.mjs:1 |
 | 2 | `.claude/HANDOFF.md` | doc | 26 | .claude/HANDOFF.md:1 |
 | 3 | `src/site.ts` | module | 26 | src/site.ts:1 |
 | 4 | `src/components/content/Solution.astro` | component | 24 | src/components/content/Solution.astro:1 |
@@ -22,7 +22,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 7 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
 | 8 | `D31` Bottom taskbar (amended by D3… | decision | 20 | SPEC.md:58 |
 | 9 | `D30` Vietnamese paused | decision | 19 | SPEC.md:57 |
-| 10 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:371 |
+| 10 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:373 |
 | 11 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
 | 12 | `S6` Authoring components | spec-section | 18 | SPEC.md:251 |
 | 13 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
@@ -33,35 +33,35 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 Solution** (24): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/ai-draft-and-verify.mdx; src/content/docs/excel/cell-references.mdx; src/content/docs/excel/charts-that-tell-the-truth.mdx
-- **C2 HANDOFF.md** (22): .claude/HANDOFF.md; src/site.ts; D30 Vietnamese paused; S8 Internationalization; .claude/agents/README.md; D3 Languages (paused by D30)
+- **C1 HANDOFF.md** (26): .claude/HANDOFF.md; .claude/MISTAKES.md; CLAUDE.md; D32 Four career branches; S14 Content production (replaces migr…; research/curriculum/07-curriculum-rationale.md
+- **C2 Solution** (24): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/excel/ai-draft-and-verify.mdx; src/content/docs/excel/cell-references.mdx; src/content/docs/excel/charts-that-tell-the-truth.mdx
 - **C3 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
-- **C4 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C5 tokens.css** (10): src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/print.css; DG2:light-theme-every-page-the-homepage-included Light theme (every page, the home…; token:--bg --bg
-- **C6 Four career branches** (9): D32 Four career branches; S14 Content production (replaces migr…; research/curriculum/07-curriculum-rationale.md; D24 Content source; agent:content-producer content-producer; M8 Content
-- **C7 README.md** (9): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; src/components/home/History.astro
-- **C8 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
-- **C9 roadmap.ts** (9): src/lib/roadmap.ts; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage; src/lib/roadmap.ts#StageDef
-- **C10 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
-- **C11 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
-- **C12 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
+- **C4 site.ts** (17): src/site.ts; S11 Analytics & privacy; D8 Analytics; src/components/project/Consent.astro; R9 Analytics; src/components/project/CookieSettings.astro
+- **C5 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C6 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
+- **C7 roadmap.ts** (9): src/lib/roadmap.ts; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage; src/lib/roadmap.ts#StageDef
+- **C8 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
+- **C9 content-context.ts** (8): src/lib/content-context.ts; src/lib/content-context.ts#GlossaryTerm; src/lib/content-context.ts#claimExerciseId; src/lib/content-context.ts#colabUrl; src/lib/content-context.ts#findGlossaryTerm; src/lib/content-context.ts#misuse
+- **C10 home.css** (8): src/styles/home.css; token:--body --body; token:--card-edge --card-edge; token:--code --code; token:--dot --dot; token:--figure --figure
+- **C11 Authoring components** (7): S6 Authoring components; src/components/content/index.ts; D21 Using components in content; M4 Authoring components; R4 Content portability; src/components/content/OpenInSheets.astro
+- **C12 astro.config.mjs** (7): astro.config.mjs; DG3 The logo; pkg:@astrojs/mdx; pkg:astro-auto-import astro-auto-import; pkg:rehype-katex rehype-katex; pkg:remark-math remark-math
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C67 to C65, src/lib/content-schemas.ts:96)
-- `D1` -mentions-> `D24` (C2 to C6, SPEC.md:28)
-- `research/curriculum/00-README.md` -mentions-> `S4` (C22 to C63, research/curriculum/00-README.md:134)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C13 to C2, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C16 to C31, design/README.md:180)
-- `M8` -mentions-> `S4` (C6 to C63, CLAUDE.md:65)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C79, src/layouts/HomeLayout.astro:39)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C41 to C42, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C42 to C66, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C59 to C45, design/README.md:225)
-- `M7` -mentions-> `D34` (C42 to C16, CLAUDE.md:60)
-- `S5.2` -mentions-> `D18` (C49 to C43, SPEC.md:228)
+- `ctype:career` -specified-by-> `S5.4` (C65 to C62, src/lib/content-schemas.ts:96)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C1 to C29, research/curriculum/02-syllabus-inventory.md:319)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C20 to C60, research/curriculum/00-README.md:134)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C71 to C1, scripts/check-placeholders.mjs:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C80 to C77, src/layouts/HomeLayout.astro:39)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C15 to C30, design/README.md:180)
+- `M8` -mentions-> `S4` (C1 to C60, CLAUDE.md:65)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C84 to C40, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C40 to C63, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C56 to C13, design/README.md:225)
+- `M7` -mentions-> `D34` (C40 to C15, CLAUDE.md:60)
+- `S5.2` -mentions-> `D18` (C46 to C1, SPEC.md:228)
 
 ## Decisions (SPEC §1)
 
@@ -118,7 +118,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 term: id — file:line
 
 - draft: `S5.1` — SPEC.md:167
-- prerequisites: `S12` — SPEC.md:371
+- prerequisites: `S12` — SPEC.md:373
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
 - slug: `S3.2` — SPEC.md:112
@@ -154,7 +154,7 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:51
 - cspell: `pkg:cspell` — package.json:47
 - markdownlint: `pkg:markdownlint-cli2` — package.json:23
-- migration: `S14` — SPEC.md:441
+- migration: `S14` — SPEC.md:443
 - license: `R8` — CLAUDE.md:35
 - changelog: `CHANGELOG.md` — CHANGELOG.md:1
 - zenodo: `S9` — SPEC.md:325
