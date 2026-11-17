@@ -3,7 +3,7 @@ id: data-engineer-streaming-concepts
 title: 'Streaming: events, windows and when not to bother'
 description: Understand events, topics and windows, and judge when streaming is not worth its complexity.
 stage: data-engineer
-order: 110
+order: 180
 level: advanced
 duration: 25
 objectives:

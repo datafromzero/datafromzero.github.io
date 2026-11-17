@@ -3,7 +3,7 @@ id: data-analyst-take-home-simulation
 title: A take-home simulation, graded like a hiring manager
 description: Scope a take-home to its time budget, profile the data first, answer the question asked and finish with a recommendation.
 stage: data-analyst
-order: 110
+order: 120
 level: advanced
 duration: 30
 objectives:

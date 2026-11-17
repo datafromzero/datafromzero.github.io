@@ -19,6 +19,9 @@ Data From Zero is a free, visual-first learning site that teaches its own origin
 - **Bilingual-ready by structure:** English at the root, Vietnamese under `/vi/`. The Vietnamese edition is scaffolding — terminology, examples, and format guidance built for Vietnamese learners — not a machine translation of the English pages.
 - **Repo as source of truth.** Site content lives as Markdown in the repository; a sync step mirrors it into the website. A published page's URL does not change; a rename requires a redirect.
 
+Later owner decision (2026-11-17, SPEC D32): the site has **four** career tracks. Analytics Engineer is no longer a
+track; its skills live in Data Engineer and Data Analyst. The research below predates that decision and is kept as written.
+
 Judge every recommendation in this package against four tests from the project charter: does it beat the incumbents on clarity, on visual and intuitive teaching, on time-to-skill, and on career outcomes?
 
 Two scope notes that apply to the whole package:

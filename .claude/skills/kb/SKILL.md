@@ -1,6 +1,6 @@
 ---
 name: kb
-description: Project knowledge graph for datafromzero. Use for questions about where something is defined, what a SPEC section or decision (D1-D29) says, which files depend on or mention a file, how parts of the architecture connect, or which agent/rule/milestone covers a topic. Use before Grep or reading SPEC.md, CLAUDE.md or design/README.md in full.
+description: Project knowledge graph for datafromzero. Use for questions about where something is defined, what a SPEC section or decision (D1-D32) says, which files depend on or mention a file, how parts of the architecture connect, or which agent/rule/milestone covers a topic. Use before Grep or reading SPEC.md, CLAUDE.md or design/README.md in full.
 ---
 # Knowledge graph lookup
 

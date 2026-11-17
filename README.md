@@ -1,8 +1,8 @@
 # datafromzero
 
 **From A1 to AI.** A free, open roadmap for learning data from zero —
-Excel / Google Sheets → SQL → Python → advanced core → five data careers
-(Data Analyst, Data Engineer, Data Scientist, Analytics Engineer, ML/AI Engineer).
+Excel / Google Sheets → SQL → Python → advanced core → four data careers
+(Data Analyst, Data Engineer, Data Scientist, ML/AI Engineer).
 
 Website: https://datafromzero.github.io *(in construction)*
 

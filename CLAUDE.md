@@ -1,7 +1,7 @@
 # CLAUDE.md — datafromzero
 
 Website for **datafromzero** — *From A1 to AI* — a free, open data roadmap for beginners who only
-know Microsoft Office: Excel/Sheets → SQL → Python → advanced core → five data careers.
+know Microsoft Office: Excel/Sheets → SQL → Python → advanced core → four data careers.
 Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafromzero.github.io.
 
 ## Read first (in this order)

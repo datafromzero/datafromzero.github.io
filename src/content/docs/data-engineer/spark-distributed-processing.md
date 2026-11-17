@@ -3,7 +3,7 @@ id: data-engineer-spark-distributed-processing
 title: Distributed processing with Spark
 description: Explain why Spark exists, write DataFrame transformations with lazy evaluation, and recognize shuffles and skew.
 stage: data-engineer
-order: 100
+order: 170
 level: advanced
 duration: 30
 objectives:

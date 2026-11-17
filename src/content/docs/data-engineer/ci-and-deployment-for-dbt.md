@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-ci-and-deployment-for-dbt
+id: data-engineer-ci-and-deployment-for-dbt
 title: Review, CI and scheduled runs for dbt
 description: Run tests on every pull request, separate development from production and schedule trusted runs.
-stage: analytics-engineer
-order: 90
+stage: data-engineer
+order: 160
 level: advanced
 duration: 30
 objectives:
@@ -12,7 +12,8 @@ objectives:
   - Separate development and production schemas
   - Schedule a production run and read its status
 prerequisites:
-  - analytics-engineer-dbt-tests-and-documentation
+  - data-engineer-dbt-tests-and-documentation
+  - data-engineer-orchestration-with-airflow
   - core-git-branches-and-pull-requests
 datasets:
   - cafe-sales

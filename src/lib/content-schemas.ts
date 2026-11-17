@@ -13,7 +13,6 @@ export const STAGES = [
 	'data-analyst',
 	'data-engineer',
 	'data-scientist',
-	'analytics-engineer',
 	'ml-engineer',
 ] as const;
 export const REFERENCE_AREAS = ['excel', 'sql', 'pandas', 'stats'] as const;

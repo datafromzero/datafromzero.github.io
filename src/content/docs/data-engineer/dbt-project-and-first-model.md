@@ -1,18 +1,20 @@
 ---
-id: analytics-engineer-dbt-project-and-first-model
+id: data-engineer-dbt-project-and-first-model
 title: A dbt project and your first model
 description: Create a dbt project, write a model as a SELECT with ref and source, and run it against DuckDB with dbt-duckdb.
-stage: analytics-engineer
-order: 20
+stage: data-engineer
+order: 100
 level: intermediate
 duration: 30
 objectives:
+  - 'Explain transformation as code: SQL models in version control, reviewed and tested'
   - Name the folders of a dbt project and what each holds
   - Declare a source and select from it
   - Write a model that selects from another model with ref
   - Run and build models and read the log
 prerequisites:
-  - analytics-engineer-role-and-transformation-as-code
+  - data-engineer-etl-elt-and-layers
+  - sql-ctes
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

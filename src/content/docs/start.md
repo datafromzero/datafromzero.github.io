@@ -4,7 +4,7 @@ description: How to use datafromzero, a free, open roadmap for learning data fro
 ---
 
 datafromzero is a free, open roadmap for people who only know Microsoft Office. It goes from
-Excel and Google Sheets to SQL, then Python, then an advanced core, and finally five data careers.
+Excel and Google Sheets to SQL, then Python, then an advanced core, and finally four data careers.
 The site is still being written, so lessons appear stage by stage.
 
 ## Follow the order
@@ -15,7 +15,7 @@ Study the stages in this order:
 2. **SQL:** ask questions of tables.
 3. **Python:** pandas, notebooks and automation.
 4. **Advanced core:** statistics, Git, data modeling and cloud basics.
-5. **One career branch:** Data Analyst, Data Engineer, Data Scientist, Analytics Engineer, or ML / AI Engineer.
+5. **One career branch:** Data Analyst, Data Engineer, Data Scientist, or ML / AI Engineer.
 
 You can skip a stage you already know. Read its last lessons first: if they feel easy, move on.
 
@@ -56,5 +56,5 @@ such as typos are welcome as pull requests.
 
 ## The roadmap map
 
-Four stages in order, then five career branches. Lessons are added under their stage when they are
+Four stages in order, then four career branches. Lessons are added under their stage when they are
 published, in rows from the first to the next, so a lesson is never above one it requires.

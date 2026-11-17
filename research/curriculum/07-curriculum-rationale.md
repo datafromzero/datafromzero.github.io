@@ -1,5 +1,8 @@
 # Curriculum map: rationale
 
+Amended by the owner decision of 2026-11-17 at the end of this file (SPEC D32): four career branches, 159 lessons.
+The sections before it are kept as approved on 2026-11-16.
+
 Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each), 3 datasets, 80 glossary terms, 124 reference entries. `validate.mjs` passes with zero errors. Every lesson cites its research section in `research:`.
 
 ## How the map is built
@@ -71,3 +74,33 @@ The owner approved this map; slugs are now permanent (SPEC §3, §14). Answers t
 
 Source URLs marked `verified: false` (including every DuckDB, Power BI and Looker Studio page) were not opened when the
 map was made; check each one when its lesson is produced.
+
+## Owner decision (2026-11-17, SPEC D32)
+
+Analytics Engineer is no longer a career branch. Its skills live in Data Engineer and Data Analyst, and four careers
+match the homepage and the career quiz. The eleven draft lessons were folded in; none was published, so no URL changes.
+
+| Former lesson | Now |
+|---|---|
+| `analytics-engineer-role-and-transformation-as-code` | Dropped; its transformation-as-code objective moved to `data-engineer-dbt-project-and-first-model` |
+| `analytics-engineer-dbt-project-and-first-model` | `data-engineer-dbt-project-and-first-model` |
+| `analytics-engineer-staging-intermediate-marts` | `data-engineer-staging-intermediate-marts` |
+| `analytics-engineer-materializations-and-incremental-models` | `data-engineer-materializations-and-incremental-models` |
+| `analytics-engineer-dbt-tests-and-documentation` | `data-engineer-dbt-tests-and-documentation` |
+| `analytics-engineer-dimensional-models-and-scd` | `data-engineer-dimensional-models-and-scd` |
+| `analytics-engineer-jinja-and-macros` | `data-engineer-jinja-and-macros` (still stretch) |
+| `analytics-engineer-ci-and-deployment-for-dbt` | `data-engineer-ci-and-deployment-for-dbt` |
+| `analytics-engineer-freshness-and-data-incidents` | Merged into `data-engineer-backfills-and-failure-recovery` (triage and the incident note); freshness checks were already in `data-engineer-data-quality-checks` |
+| `analytics-engineer-metrics-and-kpi-dictionary` | `data-analyst-metrics-and-kpi-dictionary` (not a duplicate of `core-defining-metrics`) |
+| `analytics-engineer-analytics-platform-capstone` | `data-engineer-analytics-platform-capstone`, a second Data Engineer project beside the pipeline design capstone |
+
+- **Counts.** 159 lessons in 8 stages: Excel 22, SQL 30, Python 25, core 25, Data Analyst 13, Data Engineer 20,
+  Data Scientist 12, ML Engineer 12. Seven stretch lessons remain (152 without them).
+- **Data Engineer order.** The Python pipeline lessons (10 to 90), then the dbt block (100 to 160), then Spark and
+  streaming, then the two projects: the dbt capstone (190) and the pipeline design capstone (200).
+- **New prerequisite edges, now that the lessons share a branch.** dbt starts after `data-engineer-etl-elt-and-layers`;
+  dbt tests build on `data-engineer-data-quality-checks`; incremental models on
+  `data-engineer-incremental-loads-idempotency`; scheduled dbt runs on `data-engineer-orchestration-with-airflow`.
+  The dbt capstone no longer requires the KPI dictionary, because branches do not depend on each other.
+- **Careers.** The Data Engineer portfolio may include a public dbt project; the Data Analyst portfolio adds a KPI
+  dictionary. Lessons tagged `AE` lost that tag.
