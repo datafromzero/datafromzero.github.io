@@ -33,7 +33,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D6 | URL style | **Topic slugs, no numbers** (`/sql/joins/`) | Order lives in frontmatter, never in URLs or file names. |
 | D7 | Authorship | **Single author**; Issues welcome; small PRs (typos, fixes) reviewed by owner | No CONTRIBUTING workflow for new lessons; a short CONTRIBUTING.md for fixes. |
 | D8 | Analytics | **Google Analytics 4 with a consent banner** | GA loads only after the visitor accepts (§11). |
-| D9 | Theme | **Dark by default + light toggle** on docs pages; homepage always dark; print always light | |
+| D9 | Theme | **Dark by default + light toggle** on every page; print always light | Amended in 2026-11 (owner): the homepage has a light theme too (the black-on-white inverse, design/README.md §2), and the one switch for the whole site is in the bottom taskbar (D31). The state is Starlight's (`data-theme` on `<html>`, `localStorage` key `starlight-theme`), so the homepage and the docs agree; only an explicit choice leaves dark, and an inline head script applies it before first paint. |
 | D10 | Exercise solutions | **Hidden directly under each exercise** (click to reveal) | Must work without JS (`<details>`). |
 | D11 | Lesson metadata | Objectives, prerequisites, time + level, last-reviewed date + sources — **all required** | Enforced by schema at build time (§5). |
 | D12 | Practice data | **Own datasets in the repo**, used from Excel through Python | Datasets are versioned and immutable (§7). |
@@ -55,6 +55,7 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand, on the homepage `/` only**; project pages, stories, lessons, reference and datasets get no effects (narrowed by the owner in 2026-11: project pages and `/stories/*` were included before) | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. Project pages keep only CSS (the View Transitions of D26); the `/start/` roadmap map is a static SVG. A story's `motion` field (§5.4) stays in the schema and has no effect for now. |
 | D29 | Curriculum map | **Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; one English dataset set in USD** | The map is `research/curriculum/06-curriculum-map.yaml` (rationale in `07-…`); lessons are created as drafts from it (§14) and their frontmatter is the source of truth from then on. `v1.0.0` = the four core stages (102 lessons); the five branches follow in 1.x. SQL lessons run DuckDB in Colab and cite DuckDB docs; dbt lessons use dbt-duckdb. Dashboard lessons teach principles, then short parallel how-tos for Power BI Desktop and Looker Studio. Datasets are English with prices in US dollars and cents; `/vi/` reuses them. |
 | D30 | Vietnamese paused | **English only for now**; Vietnamese and other languages later, when the owner decides | No `vi` locale is built (one switch, `VI_ENABLED` in `src/site.ts`), so there is no language picker and no `hreflang` alternates. Every `/vi/` URL that was published (`/vi/` and the six project pages) redirects to its English twin (`src/redirects.ts`, static meta-refresh pages, not in the sitemap). A page under `src/content/docs/vi/` fails the build. D3 and §8 are paused, not deleted: the `translated_from_version` field stays in the schemas (§5, CONTRACT) and its rule applies again once §8 is reactivated. |
+| D31 | Bottom taskbar | **A floating bar at the bottom of every page** (homepage, project pages, lessons, reference): shortcuts menu, "Start learning", light / dark switch, back to top | Approved by the owner in 2026-11 (mockup ported to `src/components/taskbar/Taskbar.astro`). Shortcuts link only to pages that exist (drafts are not deployed). On project, lesson and reference pages it may ship **one** script under 1 KB gzipped (`src/scripts/taskbar.ts`): no GSAP, no library, motion is CSS transitions only and none under reduced motion. Without JavaScript the menu is a `<details>` toggle, back to top is an anchor and the theme switch is hidden. The bar never covers content (a spacer after the footer) and is hidden in print. |
 
 ---
 
@@ -331,7 +332,8 @@ Notebooks are cleared of outputs before commit (CI check).
 
 ## 10. Design & motion
 
-- Tokens, typography and logo rules: see `design/README.md` §2–3. Dark is default; docs pages get a light toggle; `@media print` forces black-on-white, hides nav/buttons, prints link URLs.
+- Tokens, typography and logo rules: see `design/README.md` §2–3. Dark is default; every page, the homepage included, has a light theme behind the switch in the bottom taskbar (D9, D31); `@media print` forces black-on-white, hides nav/buttons, prints link URLs.
+- Every page has the bottom taskbar (D31). Off the homepage it is the only script beyond Starlight's own: under 1 KB gzipped, CSS transitions only.
 - **GSAP is allowed on the homepage `/` only**, any plugin, each effect loaded on demand (D28). Project pages
   (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`), stories, lessons, reference and datasets
   load no motion script.
@@ -370,7 +372,7 @@ Notebooks are cleared of outputs before commit (CI check).
 | Accessibility + performance | Lighthouse CI on `/`, one lesson, one reference page | Yes if a budget is missed |
 
 **Budgets:** Lighthouse mobile ≥ 90 (performance), ≥ 95 (accessibility). Lesson pages ship no
-framework JS beyond Starlight's own. JavaScript before first paint ≈ 3 KB gzipped on the homepage; effects load on demand (D28).
+framework JS beyond Starlight's own and the taskbar script (D31: one script under 1 KB gzipped, no GSAP, no library). JavaScript before first paint ≈ 3 KB gzipped on the homepage; effects load on demand (D28).
 **Motion performance budget:** every frame of motion fits 8.3 ms of main-thread work (120 Hz). Per-frame
 work is O(1) and writes only `transform` and `opacity`; sizes are measured once and on ScrollTrigger's
 refresh; section setup runs one section per task after a presented frame: sections near the viewport first (also while

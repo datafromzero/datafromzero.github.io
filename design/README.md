@@ -49,6 +49,37 @@ drawn indirectly**. Lots of negative space, no gradients, no colour accents, no 
 | Easing | `expo.out` for reveals, `expo.inOut` for transforms, `power2` for draws | |
 | Radius | buttons fully round (999px); panels 6px | |
 
+### Light theme (every page, the homepage included)
+
+Dark is the default; light is the reader's explicit choice, made with the switch in the bottom taskbar (§5a)
+and shared by the homepage and the docs (Starlight's `data-theme` and `localStorage` key `starlight-theme`,
+SPEC D9). It is the black-on-white inverse of the dark palette. Site tokens (`src/styles/tokens.css`):
+
+| Token | Dark | Light |
+|---|---|---|
+| `--bg` | `#000000` | `#ffffff` |
+| `--fg` | `#f4f4f4` | `#0a0a0a` |
+| `--mute` | `#777777` | `#666666` (darker than the inverse, to keep 4.5:1 on white) |
+| `--line` | `#1c1c1c` | `#e6e6e6` |
+| `--dim` | `#3a3a3a` | `#c4c4c4` |
+
+Homepage grays (`src/styles/home.css`); every homepage color is a token, so the CSS entrance and the GSAP
+effects follow the theme without literals:
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--dot` | `#2c2c2c` | `#d3d3d3` | Hero dot grid |
+| `--soft` | `#a8a8a8` | `#575757` | Hero sub copy, result cells |
+| `--body` | `#9a9a9a` | `#656565` | Step text in 01 |
+| `--ghost-line` / `--ghost-fg` | `#333333` / `#cccccc` | `#cccccc` / `#333333` | Ghost button |
+| `--panel` | `#050505` | `#fafafa` | Section 03 panels |
+| `--code` | `#dcdcdc` | `#232323` | Code in 03 |
+| `--outline` | `#4a4a4a` | `#b5b5b5` | Outlined marquee words (decorative stroke) |
+
+The nav keeps `mix-blend-mode: difference` in the dark theme only; in the light theme it is plain `--fg` on the
+white page (links `#333333`), which looks the same and lets contrast checkers measure it. The logo void is always
+`--logo-bg` = the surface behind it.
+
 ---
 
 ## 3. The logo
@@ -125,6 +156,28 @@ authoritative where they disagree.
 
 Every section heading uses the same word-by-word mask reveal when it enters the viewport.
 
+### 5a. Bottom taskbar (every page, SPEC D31)
+
+Approved mockup (owner, 2026-11), built as `src/components/taskbar/Taskbar.astro`: a floating, rounded
+glass bar (16px radius, blur 16px, max-width 720px, centered on the content column, 16px from the bottom plus
+the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop.
+
+- **Left:** a hamburger (three bars that morph to ×) and a label in Geist 500, 15px: the page title, or on the
+  homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 Begin). It opens the
+  shortcuts sheet, which grows upward from the bar: big links (Home, Start here, About), then small groups
+  (On this page, homepage only; Project: Changelog, Cite, License, Privacy, GitHub ↗). Esc, a second tap, a
+  link or an outside click closes it.
+- **Right:** "Start learning →" (solid; "Learn" at 420px or less) to `/start/`, the light / dark switch (a
+  half-filled circle) and back to top (a chevron, dimmed in the first 200px).
+- Glass tints: dark `rgba(18,18,18,.72)`, edge `rgba(255,255,255,.09)`, chip `rgba(255,255,255,.07)`; light
+  `rgba(250,250,250,.78)`, edge `rgba(0,0,0,.08)`, chip `rgba(0,0,0,.06)`; shadow `0 10px 40px rgba(0,0,0,.18)`
+  (the one shadow on the site, from the mockup). Targets 44px.
+- Motion: CSS transitions only (the sheet's rows 0fr → 1fr, .55s expo.out; big links rise from masks); none
+  with reduced motion. No GSAP. Without JavaScript the menu is a `<details>` toggle and the theme switch is
+  hidden. Hidden in print.
+- Space: a spacer after the footer keeps the last content (footer, pagination) clear of the bar, and the hero's
+  bottom padding includes the bar's height, so the hero copy and buttons sit just above it.
+
 ---
 
 ## 6. Build notes for Astro Starlight
@@ -132,7 +185,8 @@ Every section heading uses the same word-by-word mask reveal when it enters the 
 **Priorities (in order): stability & speed → mobile-first (most readers are on phones) → nice motion.**
 
 - **Where GSAP is allowed:** the homepage only (SPEC D28). Project pages, stories, lessons, exercises and
-  reference pages load no motion script — they stay plain Starlight for speed.
+  reference pages load no motion script — they stay plain Starlight for speed, plus the taskbar's one small
+  script (§5a, SPEC D31: under 1 KB gzipped, CSS transitions only).
 - **Homepage:** build it as a custom Astro page (its own layout, not the docs layout), port the prototype
   into components, and load GSAP only there (`<script>` inside the page/component so it is bundled per-page).
 - **GSAP:** `npm i gsap` (3.13+; all plugins are free now). Any plugin, each effect loaded on demand (SPEC D28).

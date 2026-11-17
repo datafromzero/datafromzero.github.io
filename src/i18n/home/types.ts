@@ -17,19 +17,24 @@ export interface HomeStrings {
 		ctaStart: string;
 		ctaExample: string;
 		scroll: string;
+		/** Name shown in the bottom taskbar while this section is on screen (SPEC D31); `short` below too. */
+		short: string;
 	};
 	core: {
+		short: string;
 		label: string;
 		heading: string;
 		stepLabel: string;
 		steps: { title: string; text: string }[];
 	};
 	branch: {
+		short: string;
 		label: string;
 		heading: string;
 		careers: { abbr: string; name: string }[];
 	};
 	tools: {
+		short: string;
 		label: string;
 		heading: string;
 		questionLabel: string;
@@ -49,6 +54,6 @@ export interface HomeStrings {
 	};
 	marquee: { text: string; outline?: boolean }[];
 	marqueeControl: { pause: string; play: string; what: string };
-	begin: { label: string; heading: string; cta: string };
+	begin: { short: string; label: string; heading: string; cta: string };
 	footer: { content: string; code: string; github: string; version: string };
 }

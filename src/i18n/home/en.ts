@@ -21,8 +21,10 @@ export const en: HomeStrings = {
 		ctaStart: 'Start at zero',
 		ctaExample: 'See an example',
 		scroll: 'Scroll',
+		short: 'Home',
 	},
 	core: {
+		short: '01 The core',
 		label: '01 — The core',
 		heading: 'Four steps.\n*No skipped rungs.*',
 		stepLabel: 'Step',
@@ -46,6 +48,7 @@ export const en: HomeStrings = {
 		],
 	},
 	branch: {
+		short: '02 Careers',
 		label: '02 — Then branch',
 		heading: 'One trunk.\n*Five careers.*',
 		careers: [
@@ -57,6 +60,7 @@ export const en: HomeStrings = {
 		],
 	},
 	tools: {
+		short: '03 Three tools',
 		label: '03 — One idea, three tools',
 		heading: 'Same question. *Three tools.*',
 		questionLabel: 'The question',
@@ -97,7 +101,7 @@ export const en: HomeStrings = {
 		{ text: 'Free', outline: true },
 	],
 	marqueeControl: { pause: 'Pause', play: 'Play', what: 'marquee' },
-	begin: { label: '04 — Begin', heading: 'Start\n*at zero.*', cta: 'Open step 01' },
+	begin: { short: '04 Begin', label: '04 — Begin', heading: 'Start\n*at zero.*', cta: 'Open step 01' },
 	footer: {
 		content: 'Content CC BY 4.0',
 		code: 'Code MIT',

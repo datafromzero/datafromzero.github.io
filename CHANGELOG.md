@@ -7,6 +7,15 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Bottom taskbar on every page (SPEC D31, owner-approved mockup): a floating glass bar with a shortcuts menu
+  (hamburger that morphs to ×, the page title or, on the homepage, the section on screen; the sheet grows
+  upward with Home, Start here, About, the homepage sections and the project pages), "Start learning →", a light /
+  dark switch and back to top. One script under 1 KB gzipped off the homepage, CSS transitions only (none with
+  reduced motion); without JavaScript the menu is a `<details>` toggle. Starlight's header theme picker is gone:
+  the taskbar switch keeps Starlight's state, so the homepage and the docs share one theme.
+- Light theme for the homepage (SPEC D9 amended): every section, the hero logo and its CSS animation, the dot grid,
+  the selection box, the tools tabs, the marquee and the 04 logo morph follow `data-theme`; the homepage grays
+  are tokens with a black-on-white inverse (design/README.md §2). Dark stays the default.
 - Homepage hero lockup (owner's choice, sample 1): the logo and the wordmark "From A1 to AI." side by side (stacked
   on phones), the wordmark being the page's only `<h1>`. CSS first: the words rise from a mask and the last word's
   reel rolls 1 → I; GSAP (deferred) adds an Excel-style selection box that moves from "A1" to "AI" with the roll,
