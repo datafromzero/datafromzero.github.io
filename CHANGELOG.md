@@ -7,6 +7,10 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D37 (owner request): "Report a problem" in the taskbar sheet, on every page. A flag button in the bottom row opens
+  a small form (kind, what happened) that continues on GitHub's issue form with the page and title filled in; the
+  lesson footer's "Report an issue" link uses the same form (`.github/ISSUE_TEMPLATE/page-report.yml`). No script and
+  no account on the site: the reader needs a GitHub account and can paste a screenshot there.
 - The 22 Excel / Sheets lessons are published (owner decision, 2026-11-17), each with a downloadable practice
   workbook. Checks still to do in the real apps, and the Google Sheets copy links, are tracked in issue #41. The
   bottom taskbar now lists a shortcut to the first lesson of every stage that has published lessons.
@@ -109,6 +113,13 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Taskbar sheet (SPEC D35): "Start here" leaves the bottom row (the primary button already starts the lessons); the
+  Course list ends with "See the whole roadmap". The primary button's first lesson comes from the same helper as the
+  search suggestions.
+- SPEC D38 (owner decision): on the homepage the four career cards share their rows, so the titles line up at every
+  width. Each career's panel button reads "Go to Data Analyst" (and so on) once that career has published lessons,
+  and "Start at E1" until then, linking to the first published lesson.
+- Search focus ring: the keyboard ring on the field is no longer cancelled by the border rule.
 - SPEC D36 (owner request): search opens like a phone search. Below 50rem the dialog is a full-screen glass sheet that
   slides up from the bottom, with a pill field, a text Cancel button and, while the field is empty, links to Start
   here, the first lesson and the career quiz. Results are cards with the match highlighted and sub-results

@@ -293,6 +293,8 @@ export const en: HomeStrings = {
 		path: ['Excel', 'SQL', 'Python', 'Core'],
 		pathLabel: 'Path',
 		cta: 'Start at A1',
+		startAt: 'Start at',
+		go: 'Go to',
 		careers: [
 			{
 				key: 'da',

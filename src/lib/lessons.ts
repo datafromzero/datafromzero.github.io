@@ -49,8 +49,11 @@ export async function unlockedLessons(id: string, locale: string | undefined): P
 	return lessonLinks((await unlocksMap()).get(id) ?? [], locale);
 }
 
-/** The first published English lesson in roadmap order (E1), for "where to begin" links; `undefined` when none is published. */
-export async function firstLesson(): Promise<LessonLink | undefined> {
+/**
+ * The first published English lesson in roadmap order (E1), for "where to begin" links; with `stage`, the first
+ * published lesson of that stage only. `undefined` when none is published.
+ */
+export async function firstLesson(stage?: string): Promise<LessonLink | undefined> {
 	const docs = await getCollection('docs');
 	const lessons = docs
 		.filter((d) => {
@@ -61,6 +64,6 @@ export async function firstLesson(): Promise<LessonLink | undefined> {
 			const l = d.data as Lesson;
 			return { id: l.id, title: d.data.title, stage: l.stage, order: l.order, href: `/${classify(d.id).path}/`, prerequisites: [], status: l.status };
 		});
-	const first = groupRoadmap(lessons, new Set()).find((s) => s.lessons.length > 0)?.lessons[0];
+	const first = groupRoadmap(lessons, new Set()).find((s) => s.lessons.length > 0 && (!stage || s.id === stage))?.lessons[0];
 	return first && { id: first.id, title: first.title, href: first.href, code: first.code };
 }

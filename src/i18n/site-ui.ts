@@ -6,9 +6,9 @@ export type UiLang = 'en' | 'vi';
 export interface SiteUi {
 	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
 	consent: { label: string; text: string; privacy: string; accept: string; decline: string };
-	/** The bottom taskbar on every page (SPEC D31, D35). */
 	/** The search sheet (SPEC D36). */
 	search: { begin: string };
+	/** The bottom taskbar on every page (SPEC D31, D35). */
 	taskbar: {
 		label: string;
 		shortcuts: string;
@@ -21,6 +21,14 @@ export interface SiteUi {
 		/** Primary button off lessons: "Start E1", the first published lesson. */
 		begin: string;
 		roadmap: string;
+		roadmapAll: string;
+		report: string;
+		reportKind: string;
+		reportKinds: [string, string, string];
+		reportDetails: string;
+		reportHint: string;
+		reportGo: string;
+		reportNote: string;
 		home: string;
 		start: string;
 		quiz: string;
@@ -53,6 +61,14 @@ const en: SiteUi = {
 		next: 'Next',
 		begin: 'Start',
 		roadmap: 'Roadmap',
+		roadmapAll: 'See the whole roadmap',
+		report: 'Report a problem',
+		reportKind: 'Kind',
+		reportKinds: ['Bug on the page', 'Feedback', 'Content error'],
+		reportDetails: 'What happened?',
+		reportHint: 'Tell us what happened. On the GitHub page you can also attach a screenshot.',
+		reportGo: 'Continue on GitHub',
+		reportNote: 'You need a GitHub account to send this. You can paste a screenshot there.',
 		home: 'Home',
 		start: 'Start here',
 		quiz: 'Career quiz',
@@ -85,6 +101,14 @@ const vi: SiteUi = {
 		next: 'Tiếp',
 		begin: 'Bắt đầu',
 		roadmap: 'Lộ trình',
+		roadmapAll: 'Xem toàn bộ lộ trình',
+		report: 'Báo lỗi',
+		reportKind: 'Loại',
+		reportKinds: ['Lỗi trên trang', 'Góp ý', 'Sai nội dung'],
+		reportDetails: 'Chuyện gì đã xảy ra?',
+		reportHint: 'Hãy cho chúng tôi biết chuyện gì đã xảy ra. Trên trang GitHub bạn cũng có thể đính kèm ảnh chụp màn hình.',
+		reportGo: 'Tiếp tục trên GitHub',
+		reportNote: 'Bạn cần tài khoản GitHub để gửi. Bạn có thể dán ảnh chụp màn hình ở đó.',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',
 		quiz: 'Trắc nghiệm nghề',

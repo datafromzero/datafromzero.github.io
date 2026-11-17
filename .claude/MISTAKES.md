@@ -61,6 +61,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   page (homepage, lesson, project page with `tableOfContents: false`); take section lists from `headings`, not `toc`;
   load each variant once with the console open before merging.**
 
+- 2026-11-17 — A copied Starlight rule `#starlight__search input:focus { outline: none }` (an ID selector) silently beat
+  our class-level `:focus-visible` ring, so keyboard users lost the focus ring. → **Match the specificity of the rule you
+  override, and Tab to every new focus style in a browser before merging.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
