@@ -7,6 +7,9 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Link previews (owner request): every page now declares a 1200×630 preview card (`og:image`, `twitter:image`),
+  black with the logo and "From A1 to AI.", so chat apps and social sites show it instead of picking the first image on
+  the page (they had picked the new author avatar). Source `design/og/card.html`, rendered by `scripts/build-og.mjs`.
 - Homepage author line (owner request): between the careers section and the footer, the owner's avatar, name (linking to
   johnha.info), one line of the story and "Read the story" to the About page. Static, no script.
 - SPEC D37 (owner request): "Report a problem" in the taskbar sheet, on every page. A flag button in the bottom row opens

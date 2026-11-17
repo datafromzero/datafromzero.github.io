@@ -39,6 +39,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — A single PR mixed a mergeable change with one waiting for the owner. → **Split them: what the lead may
   merge goes in its own PR first; lesson content and SPEC decisions wait in theirs.**
 
+- 2026-11-17 — The homepage had no `og:image`; after the author avatar was added, chat apps used the avatar as the
+  link preview. → **Every page declares `og:image` (`OG_IMAGE` in `src/site.ts`); after adding an image to a page, check
+  the link preview.**
+
 ## Repo tooling and checks
 
 - 2026-11-17 — Editing `.claude/HANDOFF.md` made CI fail on a stale knowledge graph. → **After changing any `.md`, SPEC,
