@@ -59,6 +59,10 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   A Vietnamese terminology research prompt was given to the owner earlier; no result has arrived.
 - **Homepage accessibility score is 97, not 100:** the 01 steps are dimmed to 25% until reached, which fails the
   contrast audit. It is the approved design; change it only if the owner asks.
+- **Course-platform sources (owner decides when the Data Analyst branch is built):** the drafts
+  `data-analyst/the-analysts-loop.md` and `portfolio-case-study.md` cite the Coursera program page of the Google Data
+  Analytics certificate. The owner removed the Coursera mention from `/about/` to avoid advertising a provider; ask
+  whether to keep, replace or drop these sources before publishing those lessons.
 - **Course tab** lists every published lesson by stage automatically (`src/components/taskbar/Taskbar.astro`, D35).
 - **Homepage author line** (`src/components/home/Author.astro`, strings `author` in `src/i18n/home/en.ts`, avatar
   `src/assets/author.jpg` from the owner's GitHub, served as webp by `astro:assets`). Option B of three the owner saw.
