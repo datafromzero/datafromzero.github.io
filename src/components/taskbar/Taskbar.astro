@@ -1,9 +1,9 @@
 ---
 // The bottom bar on every page (SPEC D31, D35): a floating glass bar with two controls. Left, the menu button: a
 // two-line label (small mono line "E8 · current section", then the lesson or page title) that opens the sheet.
-// Right, the primary button: "Next E9 →" on a lesson, "Start E1 →" (the first published lesson) everywhere else. The sheet has two tabs,
+// Right, the primary button: "Next E9 →" on a lesson, "Start E1 →" on /start/, "Start here →" everywhere else. The sheet has two tabs,
 // "This lesson" (the page's own headings) and "Course" (the published lessons by stage), and a bottom row with Home,
-// Start here, Career quiz and the light / dark switch. Phones get no other navigation: Starlight's header menu button
+// Career quiz, Report a problem and the light / dark switch. Phones get no other navigation: Starlight's header menu button
 // and its "On this page" bar are hidden below the widths where they appear (CSS at the end of this file).
 // One small script (scripts/taskbar.ts, < 1 KB gzipped) and CSS transitions only: no GSAP, no library.
 // Without script the menu is a <details> toggle (the sheet opens through :has()), the tabs are radio inputs, the
@@ -12,6 +12,8 @@ import { getCollection } from 'astro:content';
 import { projectHref, siteUi } from '../../i18n/site-ui';
 import { classify, type Lesson } from '../../lib/content-schemas.ts';
 import { groupRoadmap, nextLesson, type MapLesson } from '../../lib/roadmap.ts';
+import { firstLesson } from '../../lib/lessons.ts';
+import { GITHUB_REPO } from '../../site.ts';
 
 interface Props {
 	lang: string;
@@ -46,23 +48,26 @@ const stages = groupRoadmap(published, new Set());
 const filled = stages.filter((s) => s.lessons.length > 0);
 const openStage = filled.find((s) => s.lessons.some((l) => l.id === lesson?.id))?.id ?? filled[0]?.id;
 const next = lesson && nextLesson(stages, lesson.id);
-// Right-hand button: Next on a lesson (the roadmap after the last one). Every other page starts the first published
-// lesson ("Start E1"), so the button never points back at /start/, which the sheet already links (owner request).
-const first = filled[0]?.lessons[0];
+// Right-hand button (owner decisions): Next on a lesson (the roadmap after the last one); on /start/ itself, the first
+// published lesson ("Start E1"), so it never points back at the page you are on; on every other page, "Start here".
+const first = await firstLesson();
+const onStart = path === start;
 const primary = next
 	? { href: next.href, text: `${t.next} ${next.code}`, aria: `${t.next}: ${next.code} ${next.title}` }
 	: lesson
 		? { href: start, text: t.roadmap }
-		: first
+		: onStart && first
 			? { href: first.href, text: `${t.begin} ${first.code}`, aria: `${t.begin}: ${first.code} ${first.title}` }
-			: { href: start, text: t.learn, short: t.learnShort };
+			: { href: start, text: t.start };
 const tabbed = sections.length > 0;
 const current = (href: string) => (href === path ? 'page' : undefined);
 const foot = [
 	[lang === 'vi' ? '/vi/' : '/', t.home],
-	[start, t.start],
 	[projectHref(lang, 'career-quiz'), t.quiz],
 ];
+// "Report a problem" (SPEC D37): a plain GET form to GitHub's issue form (.github/ISSUE_TEMPLATE/page-report.yml).
+const pageUrl = new URL(path, Astro.site).href;
+const reportTitle = lesson?.code ? `[${lesson.code}] ${label}` : label;
 const kicker = kick ?? lesson?.code ?? '';
 ---
 
@@ -70,17 +75,20 @@ const kicker = kick ?? lesson?.code ?? '';
 <nav class="tb" aria-label={t.label}>
 	<div class="tb-card">
 		<div class="tb-sheet" id="tb-sheet">
-			<div class:list={[!tabbed && 'tb-solo']}>
+			<div>
+				<div class="tb-radios" role="radiogroup" aria-label={t.tabs}>
+					{tabbed && <input class="tb-r" type="radio" name="tb-tab" id="tb-t1" checked />}
+					<input class="tb-r" type="radio" name="tb-tab" id="tb-t2" checked={!tabbed} />
+					<input class="tb-r" type="radio" name="tb-tab" id="tb-t3" />
+				</div>
 				{
 					tabbed ? (
-						<div class="tb-tabs" role="radiogroup" aria-label={t.tabs}>
-							<input class="tb-r" type="radio" name="tb-tab" id="tb-t1" checked />
+						<div class="tb-tabs">
 							<label for="tb-t1">{lesson ? t.thisLesson : t.thisPage}</label>
-							<input class="tb-r" type="radio" name="tb-tab" id="tb-t2" />
 							<label for="tb-t2">{t.course}</label>
 						</div>
 					) : (
-						<p class="tb-head">{t.course}</p>
+						<p class="tb-head tb-head-course">{t.course}</p>
 					)
 				}
 				<div class="tb-panes">
@@ -109,10 +117,35 @@ const kicker = kick ?? lesson?.code ?? '';
 						<ul class="tb-soon">
 							{stages.filter((s) => s.lessons.length === 0).map((s) => <li>{s.title} · {t.soon}</li>)}
 						</ul>
+						<a class="tb-all" href={start}>{t.roadmapAll}<span aria-hidden="true">→</span></a>
+					</div>
+					<div class="tb-pane tb-p3">
+						<p class="tb-head">{t.report}</p>
+						<form method="get" action={`https://github.com/${GITHUB_REPO}/issues/new`} target="_blank" rel="noopener">
+							<input type="hidden" name="template" value="page-report.yml" />
+							<input type="hidden" name="page" value={pageUrl} />
+							<input type="hidden" name="title" value={reportTitle} />
+							<label class="tb-fl">
+								{t.reportKind}
+								<select name="kind">{t.reportKinds.map((k) => <option>{k}</option>)}</select>
+							</label>
+							<label class="tb-fl">
+								{t.reportDetails}
+								<textarea name="details" rows="4" required placeholder={t.reportHint}></textarea>
+							</label>
+							<button class="tb-go" type="submit">{t.reportGo} ↗</button>
+							<p class="tb-note">{t.reportNote}</p>
+						</form>
 					</div>
 				</div>
 				<div class="tb-foot">
 					{foot.map(([href, text]) => <a href={href} aria-current={current(href)}>{text}</a>)}
+					<label class="tb-icon tb-flag" for="tb-t3">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M5 21V4m0 0h11l-2 4 2 4H5"></path>
+						</svg>
+						<span class="tb-sr">{t.report}</span>
+					</label>
 					<button class="tb-icon tb-theme tb-js" type="button" aria-label={t.toLight} data-light={t.toLight} data-dark={t.toDark}>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
 							<circle cx="12" cy="12" r="8.5"></circle>
@@ -502,10 +535,18 @@ const kicker = kick ?? lesson?.code ?? '';
 		padding: 16px 16px 0;
 		font: 500 14px/1 var(--font-sans);
 	}
+	.tb-radios {
+		position: relative;
+		height: 0;
+	}
 	.tb-r {
 		position: absolute;
 		opacity: 0;
 		pointer-events: none;
+	}
+	/* The Report pane hides the Course heading that stands in for the tabs on pages without headings. */
+	.tb-sheet > div:has(#tb-t3:checked) .tb-head-course {
+		display: none;
 	}
 	.tb-tabs label {
 		display: grid;
@@ -517,11 +558,15 @@ const kicker = kick ?? lesson?.code ?? '';
 		color: var(--tb-label);
 		cursor: pointer;
 	}
-	.tb-r:checked + label {
+	.tb-sheet > div:has(#tb-t1:checked) label[for='tb-t1'],
+	.tb-sheet > div:has(#tb-t2:checked) label[for='tb-t2'],
+	.tb-sheet > div:has(#tb-t3:checked) .tb-flag {
 		background: var(--fg);
 		color: var(--bg);
 	}
-	.tb-r:focus-visible + label {
+	.tb-sheet > div:has(#tb-t1:focus-visible) label[for='tb-t1'],
+	.tb-sheet > div:has(#tb-t2:focus-visible) label[for='tb-t2'],
+	.tb-sheet > div:has(#tb-t3:focus-visible) .tb-flag {
 		outline: 2px solid var(--fg);
 		outline-offset: 2px;
 	}
@@ -538,7 +583,7 @@ const kicker = kick ?? lesson?.code ?? '';
 		}
 		.tb-sheet > div:has(#tb-t1:checked) .tb-p1,
 		.tb-sheet > div:has(#tb-t2:checked) .tb-p2,
-		.tb-solo .tb-pane {
+		.tb-sheet > div:has(#tb-t3:checked) .tb-p3 {
 			display: block;
 		}
 	}
@@ -628,8 +673,66 @@ const kicker = kick ?? lesson?.code ?? '';
 		text-decoration: underline;
 		text-underline-offset: 4px;
 	}
-	.tb-foot .tb-icon {
+	.tb-foot .tb-flag {
 		margin-inline-start: auto;
+	}
+	.tb-foot .tb-icon + .tb-icon {
+		margin-inline-start: 6px;
+	}
+	/* "See the whole roadmap": the way to /start/ on phones, at the end of the Course list. */
+	.tb-pane a.tb-all {
+		justify-content: space-between;
+		margin-top: 8px;
+		border: 1px solid var(--tb-edge);
+		font-weight: 500;
+	}
+	/* The Report pane: a plain form that opens GitHub's issue form in a new tab. */
+	.tb-p3 .tb-head {
+		padding: 4px 4px 0;
+	}
+	.tb-p3 form {
+		display: grid;
+		gap: 12px;
+		padding: 12px 4px 6px;
+	}
+	.tb-fl {
+		display: grid;
+		gap: 6px;
+		color: var(--tb-label);
+		font: 500 13px/1.2 var(--font-sans);
+	}
+	.tb-fl :is(select, textarea) {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 44px;
+		padding: 10px 12px;
+		border: 1px solid var(--tb-edge);
+		border-radius: 12px;
+		background: var(--tb-chip);
+		color: var(--fg);
+		font: 400 16px/1.4 var(--font-sans);
+	}
+	.tb-fl textarea {
+		min-height: 104px;
+		resize: vertical;
+	}
+	.tb-fl textarea::placeholder {
+		color: var(--tb-label);
+		opacity: 1;
+	}
+	.tb-go {
+		height: 48px;
+		border: 0;
+		border-radius: 12px;
+		background: var(--fg);
+		color: var(--bg);
+		font: 500 15px/1 var(--font-sans);
+		cursor: pointer;
+	}
+	.tb-note {
+		margin: 0;
+		color: var(--tb-label);
+		font: 400 13px/1.45 var(--font-sans);
 	}
 	@media (min-width: 560px) {
 		.tb-pane ul {

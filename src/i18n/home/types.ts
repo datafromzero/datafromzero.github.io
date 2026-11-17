@@ -114,7 +114,12 @@ export interface HomeStrings {
 		path: string[];
 		/** Accessible name of the path chips. */
 		pathLabel: string;
+		/** Panel button when the career has no lessons yet: "Start at A1" (no lesson published at all). */
 		cta: string;
+		/** Panel button text before the first lesson's code ("Start at" E1) when the career has no lessons yet. */
+		startAt: string;
+		/** Panel button text before the career's name once its lessons exist ("Go to" Data Analyst). */
+		go: string;
 		careers: {
 			/** Stable key: da, de, ds, ml (the figure to draw). */
 			key: 'da' | 'de' | 'ds' | 'ml';

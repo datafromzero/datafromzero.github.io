@@ -5,15 +5,15 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 781 nodes, 757 edges, 90 communities (381 isolated nodes).
-- Nodes: agent 8, build plan 9, component 33, config 10, content 167, content-type 5, decision 35, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 139, template 1, token 12.
-- Edges: defines 139, imports 33, mentions 470, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
+- 790 nodes, 779 edges, 92 communities (381 isolated nodes).
+- Nodes: agent 8, build plan 9, component 34, config 10, content 167, content-type 5, decision 38, dependency 17, design-section 14, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 6, style 5, symbol 140, template 2, token 12.
+- Edges: defines 140, imports 35, mentions 487, overrides 6, references 26, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
-| 1 | `astro.config.mjs` | config | 38 | astro.config.mjs:1 |
+| 1 | `astro.config.mjs` | config | 40 | astro.config.mjs:1 |
 | 2 | `src/site.ts` | module | 26 | src/site.ts:1 |
 | 3 | `.claude/HANDOFF.md` | doc | 25 | .claude/HANDOFF.md:1 |
 | 4 | `src/components/content/Solution.astro` | component | 24 | src/components/content/Solution.astro:1 |
@@ -22,9 +22,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 7 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
 | 8 | `D31` Bottom taskbar (amended by D3… | decision | 20 | SPEC.md:58 |
 | 9 | `D30` Vietnamese paused | decision | 19 | SPEC.md:57 |
-| 10 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:366 |
+| 10 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:369 |
 | 11 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
-| 12 | `S6` Authoring components | spec-section | 18 | SPEC.md:248 |
+| 12 | `S6` Authoring components | spec-section | 18 | SPEC.md:251 |
 | 13 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 14 | `.claude/MISTAKES.md` | doc | 16 | .claude/MISTAKES.md:1 |
 | 15 | `D28` Motion scope and budget | decision | 16 | SPEC.md:55 |
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C61 to C59, src/lib/content-schemas.ts:96)
+- `ctype:career` -specified-by-> `S5.4` (C63 to C60, src/lib/content-schemas.ts:96)
 - `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C1 to C4, research/curriculum/02-syllabus-inventory.md:319)
-- `research/curriculum/00-README.md` -mentions-> `S4` (C20 to C57, research/curriculum/00-README.md:134)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C67 to C1, scripts/check-placeholders.mjs:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C76 to C73, src/layouts/HomeLayout.astro:39)
-- `M8` -mentions-> `S4` (C1 to C57, CLAUDE.md:65)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C80 to C35, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C35 to C44, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C53 to C37, design/README.md:207)
-- `M7` -mentions-> `D34` (C35 to C14, CLAUDE.md:60)
-- `S5.2` -mentions-> `D18` (C42 to C1, SPEC.md:225)
-- `research/curriculum/01-competitor-map.md` -mentions-> `S1` (C20 to C1, research/curriculum/01-competitor-map.md:5)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C20 to C58, research/curriculum/00-README.md:134)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C69 to C1, scripts/check-placeholders.mjs:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C78 to C75, src/layouts/HomeLayout.astro:39)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C14 to C29, design/README.md:180)
+- `M8` -mentions-> `S4` (C1 to C58, CLAUDE.md:65)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C82 to C37, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C37 to C61, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C54 to C39, design/README.md:225)
+- `M7` -mentions-> `D34` (C37 to C14, CLAUDE.md:60)
+- `S5.2` -mentions-> `D18` (C44 to C1, SPEC.md:228)
 
 ## Decisions (SPEC §1)
 
@@ -102,25 +102,28 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D33 | Career quiz page | `/career-quiz/`: ten questions that suggest one of the four careers (… | SPEC.md:60 §15 |
 | D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 |
 | D35 | Mobile navigation: one bottom bar | On phones the bottom bar is the only navigation (owner decision, 2026… | SPEC.md:62 |
+| D36 | Mobile search sheet | Search opens as a full-screen glass sheet on phones and a glass dialo… | SPEC.md:63 |
+| D37 | Report a problem from any page | A "Report a problem" pane in the taskbar sheet that hands off to a Gi… | SPEC.md:64 §15 |
+| D38 | Career panel button | "Go to <career>" once that career has published lessons, else "Start… | SPEC.md:65 |
 
 ## CONTRACT sections
 
-- §3 URL contract — SPEC.md:81-128 (includes §3.1, §3.2, §3.3, §3.4)
-- §5 Content model — SPEC.md:150-247 (includes §5.1, §5.2, §5.3, §5.4)
-- §6 Authoring components — SPEC.md:248-279 (includes §6.4)
-- §7 Datasets — SPEC.md:280-305
+- §3 URL contract — SPEC.md:84-131 (includes §3.1, §3.2, §3.3, §3.4)
+- §5 Content model — SPEC.md:153-250 (includes §5.1, §5.2, §5.3, §5.4)
+- §6 Authoring components — SPEC.md:251-282 (includes §6.4)
+- §7 Datasets — SPEC.md:283-308
 
 ## Where is…
 
 term: id — file:line
 
-- draft: `S5.1` — SPEC.md:164
-- prerequisites: `S12` — SPEC.md:366
+- draft: `S5.1` — SPEC.md:167
+- prerequisites: `S12` — SPEC.md:369
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
-- slug: `S3.2` — SPEC.md:109
+- slug: `S3.2` — SPEC.md:112
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:96
-- dataset: `S7` — SPEC.md:280
+- dataset: `S7` — SPEC.md:283
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
 - consent: `src/components/project/Consent.astro` — src/components/project/Consent.astro:1
 - analytics: `R9` — CLAUDE.md:36
@@ -132,7 +135,7 @@ term: id — file:line
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
 - logo: `src/components/home/Logo.astro` — src/components/home/Logo.astro:1
-- favicon: `DG6` — design/README.md:193
+- favicon: `DG6` — design/README.md:211
 - i18n: `src/i18n/home/types.ts` — src/i18n/home/types.ts:1
 - vietnamese: `R:curriculum/01-competitor-map#5-gaps-data-from-zero-exploits:gap-3-vietnamese-scaffolding-is-a-moat-not-a-translation-feature` — research/curriculum/01-competitor-map.md:211
 - validation: `src/lib/content-validation.ts` — src/lib/content-validation.ts:1
@@ -151,10 +154,10 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:51
 - cspell: `pkg:cspell` — package.json:47
 - markdownlint: `pkg:markdownlint-cli2` — package.json:23
-- migration: `S14` — SPEC.md:436
+- migration: `S14` — SPEC.md:439
 - license: `R8` — CLAUDE.md:35
 - changelog: `CHANGELOG.md` — CHANGELOG.md:1
-- zenodo: `S9` — SPEC.md:322
+- zenodo: `S9` — SPEC.md:325
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
 - hero: `src/components/home/Hero.astro` — src/components/home/Hero.astro:1
@@ -170,9 +173,9 @@ term: id — file:line
 - lesson header: `R:curriculum/03-teaching-playbook#2-the-canonical-lesson-template-seven-sections` — research/curriculum/03-teaching-playbook.md:43
 - footer: `src/components/starlight/Footer.astro` — src/components/starlight/Footer.astro:1
 - nvmrc: `.nvmrc` — .nvmrc:1
-- Authoring components: `S6` — SPEC.md:248
-- Internationalization: `S8` — SPEC.md:306
-- Content model: `S5` — SPEC.md:150
+- Authoring components: `S6` — SPEC.md:251
+- Internationalization: `S8` — SPEC.md:309
+- Content model: `S5` — SPEC.md:153
 - LESSON-STANDARD: `agent:LESSON-STANDARD` — .claude/agents/LESSON-STANDARD.md:1
 
 ## Suggested questions

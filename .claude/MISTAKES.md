@@ -33,6 +33,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   to be on the site. → **Every "done" ends with a link the owner can open: the live URL once deployed (merge when
   allowed, wait for the deploy, open the page), or a preview (a PDF or screenshot sent as a file) for anything not on
   the site yet. Say plainly when something is not live and why.**
+- 2026-11-17 — Asked to stop the "Learn" button duplicating Start here on the start page, the lead changed the button
+  on every page; the owner wanted the homepage to keep pointing at Start here. → **Change only the page or element
+  the owner named; when a fix would change other pages, say so and ask first.**
 - 2026-11-17 — A single PR mixed a mergeable change with one waiting for the owner. → **Split them: what the lead may
   merge goes in its own PR first; lesson content and SPEC decisions wait in theirs.**
 
@@ -60,6 +63,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   table of contents off), so it would throw there. → **Every element a script queries must exist on every kind of
   page (homepage, lesson, project page with `tableOfContents: false`); take section lists from `headings`, not `toc`;
   load each variant once with the console open before merging.**
+
+- 2026-11-17 — A copied Starlight rule `#starlight__search input:focus { outline: none }` (an ID selector) silently beat
+  our class-level `:focus-visible` ring, so keyboard users lost the focus ring. → **Match the specificity of the rule you
+  override, and Tab to every new focus style in a browser before merging.**
 
 ## Datasets and generated files
 
