@@ -80,4 +80,16 @@ def build() -> None:
 
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    # One sheet per exercise: 1 and 2 start blank, 3 holds the colleague's file.
+    wb.create_sheet("calc_ex1")
+    wb.create_sheet("calc_ex2")
+    ws = wb.create_sheet("calc_ex3")
+    ws.append(["printed_text", "her_date"])
+    ws["A2"] = "2026-02-30"
+    ws["B2"] = "=DATE(VALUE(LEFT(A2,4)),VALUE(MID(A2,6,2)),VALUE(RIGHT(A2,2)))"
+    ws["B2"].number_format = "yyyy-mm-dd"
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 14
     save(wb, "excel-date-functions")

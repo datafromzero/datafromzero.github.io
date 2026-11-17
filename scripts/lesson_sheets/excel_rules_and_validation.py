@@ -12,7 +12,8 @@
 from __future__ import annotations
 
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from .common import raw_sheet, read, save
@@ -69,4 +70,14 @@ def build() -> None:
 
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    # One sheet per exercise. 1: a copy of the orders (done for you). 2: blank. 3: the colleague's
+    # sheet, with her flawed rule =E2="canceled" already applied to A2:F1801.
+    raw_sheet(wb.create_sheet("calc_ex1"), read("orders"))
+    wb.create_sheet("calc_ex2")
+    flawed = wb.create_sheet("calc_ex3")
+    raw_sheet(flawed, read("orders"))
+    flawed.conditional_formatting.add(
+        "A2:F1801",
+        FormulaRule(formula=['E2="canceled"'], fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")),
+    )
     save(wb, "excel-rules-and-validation")

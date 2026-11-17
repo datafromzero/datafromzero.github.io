@@ -58,6 +58,32 @@ def one_column(ws: Worksheet, header: str, values: list[str], width: int) -> Non
     ws.freeze_panes = "A2"
 
 
+def exercise_sheets(wb: Workbook) -> None:
+    """One sheet per exercise, so no exercise writes over the worked example or a raw sheet."""
+    # Exercise 1 (faded): the clean code, store and order number are done for you.
+    ws = wb.create_sheet("calc_ex1")
+    ws.append(["code_clean", "store_id", "order_id"])
+    for r in range(2, 1802):
+        ws.cell(r, 1).value = f"=UPPER(TRIM(raw_till_export!A{r}))"
+        ws.cell(r, 2).value = f"=VALUE(MID(A{r},2,1))"
+        ws.cell(r, 3).value = f"=VALUE(MID(A{r},4,4))"
+    # Exercise 2 (blank start): nothing prepared on purpose.
+    wb.create_sheet("calc_ex2")
+    # Exercise 3 (spot the flaw): the colleague's file, order number cut with MID and no VALUE.
+    ws = wb.create_sheet("calc_ex3")
+    ws.append(["code_clean", "store_id", "order_no", None, "her check"])
+    for r in range(2, 1802):
+        ws.cell(r, 1).value = f"=UPPER(TRIM(raw_till_export!A{r}))"
+        ws.cell(r, 2).value = f"=VALUE(MID(A{r},2,1))"
+        ws.cell(r, 3).value = f"=MID(A{r},4,4)"
+    ws["E2"] = "=SUM(C2:C1801)"
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    wb["calc_ex1"].freeze_panes = "A2"
+    for c in wb["calc_ex1"][1]:
+        c.font = Font(bold=True)
+
+
 def build() -> None:
     wb = Workbook()
     wb.remove(wb.active)
@@ -69,4 +95,5 @@ def build() -> None:
 
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    exercise_sheets(wb)
     save(wb, "excel-text-functions")

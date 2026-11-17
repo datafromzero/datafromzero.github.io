@@ -93,5 +93,20 @@ def build() -> None:
         rc.column_dimensions[letter].width = width
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    # One sheet per exercise. 1 and 2 are empty: load each new query there (Close & Load To... an
+    # existing worksheet). 3 describes the colleague's situation, since a query cannot be shipped in a file.
+    wb.create_sheet("calc_ex1")
+    wb.create_sheet("calc_ex2")
+    ws = wb.create_sheet("calc_ex3")
+    ws.append(["The colleague's setup"])
+    ws["A1"].font = Font(bold=True)
+    for line in [
+        "Query source: till-export.csv (the first file, 1,500 orders after cleaning)",
+        "Monday: the new export, 1,800 orders, was saved in the same folder as till-export-monday.csv",
+        "She pressed Refresh All. Rows in the loaded table: 1,500",
+        "Her conclusion: refresh is broken.",
+    ]:
+        ws.append([line])
+    ws.column_dimensions["A"].width = 90
     save(wb, "excel-power-query-basics")
 
