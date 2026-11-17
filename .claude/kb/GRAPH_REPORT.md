@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 741 nodes, 648 edges, 94 communities (373 isolated nodes).
+- 741 nodes, 647 edges, 94 communities (373 isolated nodes).
 - Nodes: agent 7, build plan 9, component 32, config 10, content 167, content-type 5, decision 33, dependency 16, design-section 13, doc 15, i18n 6, layout 1, module 15, npm-script 18, page 1, research-section 165, rule 10, script 31, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
-- Edges: defines 138, imports 31, mentions 410, overrides 5, references 24, runs 9, specified-by 4, uses-token 22, validated-by 5.
+- Edges: defines 138, imports 31, mentions 409, overrides 5, references 24, runs 9, specified-by 4, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -16,8 +16,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 1 | `astro.config.mjs` | config | 37 | astro.config.mjs:1 |
 | 2 | `src/site.ts` | module | 25 | src/site.ts:1 |
 | 3 | `design/README.md` | doc | 22 | design/README.md:1 |
-| 4 | `.claude/HANDOFF.md` | doc | 21 | .claude/HANDOFF.md:1 |
-| 5 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
+| 4 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 20 | .claude/HANDOFF.md:1 |
 | 6 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:363 |
 | 7 | `S6` Authoring components | spec-section | 19 | SPEC.md:245 |
 | 8 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
