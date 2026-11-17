@@ -29,6 +29,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   fast-forwards to it first.**
 - 2026-11-17 — The owner pasted a raw Google Analytics `<script>` snippet. → **Never paste third-party scripts; use the
   existing mechanism (SPEC §11: `GA_ID` and `GA_RETENTION` in `src/site.ts`).**
+- 2026-11-17 — Reported "done" without a link; the owner did not know where to look, and expected unpublished drafts
+  to be on the site. → **Every "done" ends with a link the owner can open: the live URL once deployed (merge when
+  allowed, wait for the deploy, open the page), or a preview (a PDF or screenshot sent as a file) for anything not on
+  the site yet. Say plainly when something is not live and why.**
 - 2026-11-17 — A single PR mixed a mergeable change with one waiting for the owner. → **Split them: what the lead may
   merge goes in its own PR first; lesson content and SPEC decisions wait in theirs.**
 
