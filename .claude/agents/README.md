@@ -34,10 +34,13 @@ text. Haiku does mechanical, verifiable work. Fable is not on the team; escalate
 3. `content-reviewer` checks the commit (budget ~25 calls; list issues already known so it skips them).
 4. Findings go back to the **same** `content-producer` by SendMessage (warm context: one fix pass cost 10–30 calls
    instead of a fresh agent's 150).
-5. lead merges the batches, resolves `project-words.txt` and `.claude/kb/` (run `npm run kb`), runs `npm run check`,
+5. lead adds every new kind of mistake from the review to `.claude/MISTAKES.md` (and to `LESSON-STANDARD.md` if it
+   is a lesson rule), so the next batch does not repeat it.
+6. lead merges the batches, resolves `project-words.txt` and `.claude/kb/` (run `npm run kb`), runs `npm run check`,
    opens one PR per stage. Lesson PRs wait for the owner.
 
-**Code change** (one milestone = one PR): lead brief → `site-builder` → `qa-runner` → `spec-reviewer` → lead commits.
+**Code change** (one milestone = one PR): lead brief → `site-builder` → `qa-runner` → `spec-reviewer` → lead logs new
+mistakes in `.claude/MISTAKES.md` → lead commits.
 
 ## Token rules
 

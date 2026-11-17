@@ -2,7 +2,7 @@
 
 The one page lesson agents read instead of the 463-line playbook. Distilled from
 `research/curriculum/03-teaching-playbook.md` §2–§3 and from every review finding on the Excel stage.
-No frontmatter `name`, so it is not loaded as an agent. Open the playbook only for a domain section you need
+No frontmatter `name`, so it is not loaded as an agent. Past mistakes and their rules: `.claude/MISTAKES.md`. Open the playbook only for a domain section you need
 (§3.2 SQL, §3.3 Python, §3.4 statistics, §3.5 DE/ML/AI).
 
 ## Read, in this order

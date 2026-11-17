@@ -6,6 +6,8 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 
 ## Read first (in this order)
 0. `.claude/HANDOFF.md` — where the work stands and what comes next (update it when a session hands over).
+   `.claude/MISTAKES.md` — every mistake made once and the rule that prevents it. Read the sections for your work;
+   add each new mistake (review finding, red CI, owner correction) in the same PR.
 1. `SPEC.md` — the long-term contract. **Authoritative.** Sections marked **CONTRACT** are public
    interfaces (URLs, content schemas, authoring components, datasets): do not change them casually.
 2. `design/README.md` — visual design: tokens, logo rules, logo animation, homepage sections and motion.
@@ -97,7 +99,7 @@ Use the Node version in `.nvmrc` (`nvm use`).
 - `npm run preview` — serve the production build locally
 - `npm run check` — every blocking gate locally: spelling, markdownlint, knowledge graph, build (schemas + links),
   prerequisite graph, unit and fixture tests, notebooks (skipped when none or `nbstripout` is missing)
-- Single gates: `npm run spell` · `lint:md` · `check:graph` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
+- Single gates: `npm run spell` · `lint:md` · `check:lessons` (mistakes-log rules) · `check:graph` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
 - `npm run lighthouse` — builds the fixture site (`tests/fixtures/valid`) and runs Lighthouse CI (mobile, perf ≥ 90, a11y ≥ 95);
   Chrome from `CHROME_PATH`, else `/opt/pw-browsers/chromium` when present
 - `npm run review-report` — lessons whose `reviewed` date is older than 18 months

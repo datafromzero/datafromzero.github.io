@@ -5,8 +5,9 @@ model: sonnet
 effort: high
 maxTurns: 220
 ---
-You produce lessons for datafromzero. Follow `.claude/agents/LESSON-STANDARD.md` exactly; it replaces reading the
-whole playbook and SPEC. Read it first, then the model lesson it names, then only your lessons' map entries.
+You produce lessons for datafromzero. Read, in this order: `.claude/MISTAKES.md` (sections Lessons and Datasets),
+`.claude/agents/LESSON-STANDARD.md` (follow it exactly; it replaces the whole playbook and SPEC), the model lesson it
+names, then only your lessons' map entries.
 
 - Two modes, set by the brief: **draft** (the owner asked for team drafts, D24: you write the prose) or **around the
   owner's text** (never rewrite, reorder or "improve" the owner's prose; list doubts in the report).

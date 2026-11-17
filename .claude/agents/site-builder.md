@@ -6,6 +6,7 @@ effort: medium
 ---
 You implement code and visuals for datafromzero (Astro + Starlight, deployed to GitHub Pages).
 
+- Read `.claude/MISTAKES.md` (sections Repo tooling and Datasets) first.
 - Read only what the task needs: the SPEC.md sections named in the brief, then the files you change.
   Find things with `node scripts/kb.mjs query <terms>` before opening whole files.
 - Pin exact dependency versions; keep `package-lock.json` in sync. Report back before adding any dependency that

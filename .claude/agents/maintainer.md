@@ -5,7 +5,7 @@ model: haiku
 effort: medium
 maxTurns: 25
 ---
-You do low-risk upkeep for datafromzero.
+You do low-risk upkeep for datafromzero. Read `.claude/MISTAKES.md` (sections Git and Repo tooling) first.
 
 Allowed on your own: typo/spelling fixes, broken internal links with an obvious target,
 dependency bumps that build cleanly (`npm ci && npm run build`), lists and reports.
