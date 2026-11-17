@@ -19,9 +19,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `S12` Quality gates (CI on every PR… | spec-section | 18 | SPEC.md:361 |
 | 5 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 6 | `src/styles/home.css` | style | 18 | src/styles/home.css:1 |
-| 7 | `D31` Bottom taskbar | decision | 17 | SPEC.md:57 |
+| 7 | `D31` Bottom taskbar | decision | 17 | SPEC.md:58 |
 | 8 | `S6` Authoring components | spec-section | 17 | SPEC.md:243 |
-| 9 | `D30` Vietnamese paused | decision | 16 | SPEC.md:58 |
+| 9 | `D30` Vietnamese paused | decision | 16 | SPEC.md:57 |
 | 10 | `src/lib/graph.ts` | module | 15 | src/lib/graph.ts:1 |
 | 11 | `D28` Motion scope and budget | decision | 14 | SPEC.md:55 |
 | 12 | `DG5` Homepage (see `homepage-proto… | design-section | 13 | design/README.md:139 |
@@ -96,8 +96,8 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D27 | Prefetch | Speculation Rules `prefetch`, moderate eagerness; never prerender | SPEC.md:54 §11 |
 | D28 | Motion scope and budget | Full GSAP plugin set, each effect loaded on demand, on the homepage `… | SPEC.md:55 §12 §5.4 |
 | D29 | Curriculum map | Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; o… | SPEC.md:56 §14 |
-| D31 | Bottom taskbar | A floating bar at the bottom of every page (homepage, project pages,… | SPEC.md:57 |
-| D30 | Vietnamese paused | English only for now; Vietnamese and other languages later, when the… | SPEC.md:58 §5 §8 |
+| D30 | Vietnamese paused | English only for now; Vietnamese and other languages later, when the… | SPEC.md:57 §5 §8 |
+| D31 | Bottom taskbar | A floating bar at the bottom of every page (homepage, project pages,… | SPEC.md:58 |
 
 ## CONTRACT sections
 
