@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { lessonCode, ROADMAP_STAGES } from './roadmap.ts';
 
-type Link = { label: string; link: string };
+type Link = { label: string; link: string; attrs?: Record<string, string> };
 type Group = { label: string; collapsed?: boolean; items: Link[] };
 
 const DOCS = 'src/content/docs';
@@ -26,7 +26,12 @@ function stageLessons(stage: string, includeDrafts: boolean): Link[] {
 		})
 		.filter((l) => typeof l.order === 'number' && l.title && (l.status === 'published' || (includeDrafts && l.status === 'draft')))
 		.sort((a, b) => a.order! - b.order!)
-		.map((l) => ({ label: `${lessonCode(stage, l.order!)} ${l.title}`, link: `/${stage}/${l.slug}/` }));
+		// The code is drawn by CSS from `data-code` (tokens.css) in its own mono column, so a wrapped title stays
+		// aligned and screen readers still hear it first through the accessible label.
+		.map((l) => {
+			const code = lessonCode(stage, l.order!)!;
+			return { label: l.title!, link: `/${stage}/${l.slug}/`, attrs: { 'data-code': code, 'aria-label': `${code} ${l.title}` } };
+		});
 }
 
 export function buildSidebar(includeDrafts: boolean): Group[] {
