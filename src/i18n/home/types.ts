@@ -137,5 +137,8 @@ export interface HomeStrings {
 		/** The quiz teaser below the cards. */
 		unsure: { heading: string; text: string; cta: string };
 	};
+	/** The author line above the footer (owner request, 2026-11-17): avatar, name linking to the owner's site, one line
+	 * of the story and a link to /about/. */
+	author: { label: string; name: string; href: string; line: string; more: string };
 	footer: { content: string; code: string; github: string; version: string };
 }

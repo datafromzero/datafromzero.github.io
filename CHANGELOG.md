@@ -7,6 +7,8 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Homepage author line (owner request): between the careers section and the footer, the owner's avatar, name (linking to
+  johnha.info), one line of the story and "Read the story" to the About page. Static, no script.
 - SPEC D37 (owner request): "Report a problem" in the taskbar sheet, on every page. A flag button in the bottom row opens
   a small form (kind, what happened) that continues on GitHub's issue form with the page and title filled in; the
   lesson footer's "Report an issue" link uses the same form (`.github/ISSUE_TEMPLATE/page-report.yml`). No script and
