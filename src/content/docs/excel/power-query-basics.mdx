@@ -1,0 +1,474 @@
+---
+id: excel-power-query-basics
+title: Repeatable cleaning with Power Query
+description: Import a CSV with explicit delimiter and locale settings, apply cleaning steps once and refresh them whenever the file changes.
+stage: excel
+order: 140
+level: intermediate
+duration: 25
+objectives:
+  - Import a CSV choosing delimiter, data types and locale on purpose
+  - Apply remove, split, trim and type steps in the Query editor
+  - Read the applied-steps list as a recipe
+  - Refresh the query after the source file changes
+prerequisites:
+  - excel-cleaning-workflow
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Support: About Power Query in Excel'
+    url: https://support.microsoft.com/en-us/office/about-power-query-in-excel-7104fbee-9e62-4cb9-a02e-5bfb1a6c536a
+  - title: 'Microsoft Support: Import or export text (.txt or .csv) files'
+    url: https://support.microsoft.com/en-us/office/import-or-export-text-txt-or-csv-files-5250ac4c-663c-47ce-937b-339e391393ba
+  - title: 'Microsoft Learn: Power Query Text/CSV connector'
+    url: https://learn.microsoft.com/en-us/power-query/connectors/text-csv
+  - title: 'Microsoft Learn: Data types in Power Query'
+    url: https://learn.microsoft.com/en-us/power-query/data-types
+  - title: 'Microsoft Learn: Applied steps'
+    url: https://learn.microsoft.com/en-us/power-query/applied-steps
+  - title: 'Microsoft Learn: Split columns by delimiter'
+    url: https://learn.microsoft.com/en-us/power-query/split-columns-delimiter
+  - title: 'Microsoft Learn: Working with duplicate values'
+    url: https://learn.microsoft.com/en-us/power-query/working-with-duplicates
+status: draft
+---
+
+This lesson is for **Microsoft Excel on a computer**. Power Query is a part of Excel, and Google Sheets has
+nothing that works the same way, so a Sheets route is given at the end instead of side-by-side steps.
+Microsoft's page on Power Query lists Excel for Windows, Excel for Mac (Microsoft 365, but not Excel 2016
+or 2019 for Mac) and Excel for the web; check that page for what the web version can do. If your Excel has no
+**Get & Transform Data** group on the **Data** tab, you cannot follow the clicks, but you can still read the
+recipe.
+
+**Your practice files:** download
+[`excel-power-query-basics.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-power-query-basics.xlsx)
+and the three CSV files:
+[`excel-power-query-basics-orders.csv`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-power-query-basics-orders.csv),
+[`excel-power-query-basics-orders-update.csv`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-power-query-basics-orders-update.csv)
+and
+[`excel-power-query-basics-harbor-eu.csv`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-power-query-basics-harbor-eu.csv).
+They hold till exports from **cafe-sales**, messy on purpose. A query only ever *reads* its file, so the CSV
+files are your raw data. The workbook gives you `raw_orders_export` (a copy of the first file, for the
+Sheets route and for comparing), an empty `recipe` sheet for your notes, and empty `calc` and `output`
+sheets. Each exercise has its own sheet, `calc_ex1`, `calc_ex2` and `calc_ex3`, so nothing you do there touches the worked example.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`. (Power Query is Excel-only; decide whether
+a Sheets copy still makes sense for this lesson.)
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. A clean code in A2 reads `S2-1001-MOBILE`. Write the formula that returns the order number, 1001, as a
+   number.
+
+   <details>
+   <summary>Answer</summary>
+
+   **`=VALUE(MID(A2,4,4))`**. `MID` cuts four characters from position 4 and returns text; `VALUE` makes
+   it a number.
+
+   </details>
+
+2. Name the four moves of the cleaning workflow, in order.
+
+   <details>
+   <summary>Answer</summary>
+
+   Keep raw untouched; profile before you fix; fix on a copy, one step at a time; reconcile and log.
+   Today's tool does the third move so that it can be run again.
+
+   </details>
+
+3. A colleague in Europe sends a CSV where the amounts look like `12,50` and the fields are separated by
+   semicolons. Which two import settings have to change from the usual?
+
+   <details>
+   <summary>Answer</summary>
+
+   The **delimiter** (semicolon, not comma) and the **locale** used to read numbers and dates, because a
+   comma is a decimal mark there, not a thousands separator.
+
+   </details>
+
+## The question
+
+Every Monday the till system drops a new export. Cleaning it by hand takes the morning, and last Monday you
+skipped a step and nobody noticed for a week. The owner asks:
+
+> Can you set this up so that next Monday's file takes one click, and the numbers still match the till
+> report?
+
+Here are the first lines of the first file, `till-export.csv` (a **·** marks a space):
+
+```text
+till_code,ordered_at,total_usd,status,cashier_notes
+··S2-1001-Mobile··,2026-01-01 08:02:00,14.00,COMPLETED··,
+··S1-1002-Mobile,2026-01-01 15:38:00,12.50,·COMPLETED,
+·s2-1003-mobile··,2026-01-01 15:47:00,12.50,Completed,"spilled, remade"
+```
+
+The till report for this file says **1,500 orders, 1,499 completed and 1 canceled, worth \$18,958.00**. The
+file has 1,515 data rows, because some orders were sent twice. By the end of this lesson you will have a
+query that turns the file into a clean table of exactly those 1,500 orders, and that does the same on the
+bigger file that arrives next week.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 406" width="360" role="img" aria-labelledby="pq-flow-title pq-flow-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="pq-flow-title">A Power Query pipeline from a CSV file to a table</title>
+<desc id="pq-flow-desc">A source file, till-export.csv with 1,515 data rows, feeds nine numbered applied steps ending in Removed Duplicates, which brings the rows from 1,515 to 1,500. The result is an Excel table of 1,500 rows and 6 columns. An arrow from the table back to the file is labeled Refresh.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A recipe that runs again on refresh</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="32" width="230" height="30" /></g>
+<text x="18" y="52">till-export.csv   (1,515 data rows)</text>
+<text x="10" y="84" font-weight="600" font-size="11">Applied steps</text>
+<text x="240" y="84" font-weight="600" font-size="11" text-anchor="end">rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="90" width="230" height="26" /><rect x="10" y="116" width="230" height="26" /><rect x="10" y="142" width="230" height="26" /><rect x="10" y="168" width="230" height="26" /><rect x="10" y="194" width="230" height="26" /><rect x="10" y="220" width="230" height="26" /><rect x="10" y="246" width="230" height="26" /><rect x="10" y="272" width="230" height="26" /><rect x="10" y="298" width="230" height="26" /></g>
+<text x="18" y="107" font-weight="700">1</text>
+<text x="36" y="107">Source</text>
+<text x="232" y="107" text-anchor="end">1,515</text>
+<text x="18" y="133" font-weight="700">2</text>
+<text x="36" y="133">Promoted Headers</text>
+<text x="232" y="133" text-anchor="end">1,515</text>
+<text x="18" y="159" font-weight="700">3</text>
+<text x="36" y="159">Trimmed Text</text>
+<text x="232" y="159" text-anchor="end">1,515</text>
+<text x="18" y="185" font-weight="700">4</text>
+<text x="36" y="185">Lowercased Text</text>
+<text x="232" y="185" text-anchor="end">1,515</text>
+<text x="18" y="211" font-weight="700">5</text>
+<text x="36" y="211">Split Column by Delimiter</text>
+<text x="232" y="211" text-anchor="end">1,515</text>
+<text x="18" y="237" font-weight="700">6</text>
+<text x="36" y="237">Renamed Columns</text>
+<text x="232" y="237" text-anchor="end">1,515</text>
+<text x="18" y="263" font-weight="700">7</text>
+<text x="36" y="263">Removed Columns</text>
+<text x="232" y="263" text-anchor="end">1,515</text>
+<text x="18" y="289" font-weight="700">8</text>
+<text x="36" y="289">Changed Type</text>
+<text x="232" y="289" text-anchor="end">1,515</text>
+<text x="18" y="315" font-weight="700">9</text>
+<text x="36" y="315">Removed Duplicates</text>
+<text x="232" y="315" text-anchor="end">1,500</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="338" width="230" height="30" /></g>
+<text x="18" y="358">Excel table: 1,500 rows × 6 columns</text>
+<path d="M 240 353 H 270 V 47 H 244" fill="none" stroke="currentColor" stroke-width="1.5" />
+<path d="M 250 42 L 242 47 L 250 52" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="280" y="120" font-size="11" font-weight="600">Refresh:</text>
+<text x="280" y="136" font-size="11">reads the</text>
+<text x="280" y="150" font-size="11">file again,</text>
+<text x="280" y="164" font-size="11">runs all 9</text>
+<text x="280" y="178" font-size="11">steps</text>
+<text x="10" y="394">Step names are chosen by Power Query and may differ slightly.</text>
+</svg>
+<svg viewBox="0 0 360 256" width="360" role="img" aria-labelledby="pq-cells-title pq-cells-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="pq-cells-title">One CSV line becomes one typed table row</title>
+<desc id="pq-cells-desc">The CSV line with padded till code S2-1001-Mobile, a timestamp, an amount 14.00 and status COMPLETED becomes a table row with store s2, order id 1001, payment mobile, ordered at 2026-01-01 08:02 and total 14, each column with a data type shown under its name.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One input row, one output row</text>
+<text x="10" y="42" font-size="11" opacity="0.8">In the CSV file (text, as exported):</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="48" width="340" height="28" /></g>
+<text x="16" y="66" font-size="11">··S2-1001-Mobile··,2026-01-01 08:02:00,14.00,COMPLETED··,</text>
+<text x="10" y="100" font-size="11" opacity="0.8">In the loaded table (typed, clean):</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="106" width="50" height="24" /><rect x="10" y="130" width="50" height="24" /><rect x="10" y="154" width="50" height="26" /><rect x="60" y="106" width="60" height="24" /><rect x="60" y="130" width="60" height="24" /><rect x="60" y="154" width="60" height="26" /><rect x="120" y="106" width="62" height="24" /><rect x="120" y="130" width="62" height="24" /><rect x="120" y="154" width="62" height="26" /><rect x="182" y="106" width="96" height="24" /><rect x="182" y="130" width="96" height="24" /><rect x="182" y="154" width="96" height="26" /><rect x="278" y="106" width="72" height="24" /><rect x="278" y="130" width="72" height="24" /><rect x="278" y="154" width="72" height="26" /></g>
+<text x="15" y="123" font-weight="600" font-size="11">store</text>
+<text x="15" y="147" font-size="10" opacity="0.6">text</text>
+<text x="15" y="172" font-size="11">s2</text>
+<text x="65" y="123" font-weight="600" font-size="11">order_id</text>
+<text x="65" y="147" font-size="10" opacity="0.6">whole</text>
+<text x="115" y="172" font-size="11" text-anchor="end">1001</text>
+<text x="125" y="123" font-weight="600" font-size="11">payment</text>
+<text x="125" y="147" font-size="10" opacity="0.6">text</text>
+<text x="125" y="172" font-size="11">mobile</text>
+<text x="187" y="123" font-weight="600" font-size="11">ordered_at</text>
+<text x="187" y="147" font-size="10" opacity="0.6">date/time</text>
+<text x="187" y="172" font-size="11">2026-01-01 08:02</text>
+<text x="283" y="123" font-weight="600" font-size="11">total_usd</text>
+<text x="283" y="147" font-size="10" opacity="0.6">decimal</text>
+<text x="345" y="172" font-size="11" text-anchor="end">14</text>
+<text x="10" y="204" font-size="11" opacity="0.8">A sixth column, status (completed), is not drawn here.</text>
+<text x="10" y="224" font-size="11">Under each name: the data type that Power Query set.</text>
+<text x="10" y="244" font-size="11">Spaces gone, case unified, one fact per column, numbers as numbers.</text>
+</svg>
+</figure>
+
+**Power Query** is the tool in Excel that reads data from a file, shapes it, and loads the result into a
+sheet. Everything you do in its editor is recorded as a **step**, in order. Microsoft's page says the editor
+"keeps track of everything you do with the data by recording and labelling each transformation, or step",
+and that when you refresh, "each step runs automatically". The list of steps is the **Applied steps** pane,
+and it reads as a recipe: the source, then each change, top to bottom. Your list may have a step or two
+more than the picture, because Power Query sometimes adds a step of its own, such as a type change after
+a split.
+
+Three things make this different from the formulas of the last lessons:
+
+- **The recipe is saved, and it runs again.** Replace the file, press Refresh, and the same steps run on
+  the new rows.
+- **The source is never changed.** The CSV file stays exactly as it arrived.
+- **Types and locale are decisions you make.** The editor can guess the type of each column, but Microsoft's
+  page says inference can be wrong, so we choose on purpose.
+
+## Worked example
+
+Question: **turn the 1,515-row file into 1,500 clean orders, and then refresh it with next week's file.**
+Open Excel and follow along.
+
+1. **Say what one row is, and what the totals should be.** One row of the clean table is one order. The till
+   report says 1,500 orders, 1,499 completed and 1 canceled, \$18,958.00.
+   *Why first:* a recipe without a target cannot be checked.
+
+2. **Keep the file where it can be replaced.** Save `excel-power-query-basics-orders.csv` into a folder of
+   your own as `till-export.csv`.
+   *Why this name:* the query remembers the file's path. Next week's file will have to take this name in
+   this folder (you will see why in the Check yourself exercise).
+
+3. **Import on purpose.** In the practice workbook, **Data > From Text/CSV**, pick `till-export.csv`. In the preview
+   window set **Delimiter** to **Comma** and **Data Type Detection** to the option that turns detection off
+   (**Do not detect data types**), then choose **Transform Data**. Microsoft's pages list these choices (file origin, delimiter, and detection
+   based on the first 200 rows, on the entire data set, or off, which makes every column text). Off
+   means nothing is guessed, and we set each type in step 9.
+   *Why:* a wrong guess is silent. Setting the types yourself puts the choice in the recipe.
+
+4. **Read the first steps.** The **Applied steps** pane on the right shows **Source** and **Promoted Headers**.
+   Click each and look at the preview. All the columns are text.
+
+5. **Trim, then lowercase.** Select the `till_code` and `status` columns (click one header, then Ctrl+click
+   the other). Use the **Format** menu on the **Transform** tab to choose **Trim**, and then
+   again to choose **lowercase**. Two new steps appear. `··S2-1001-Mobile··` becomes `s2-1001-mobile` and
+   `COMPLETED··` becomes `completed`.
+   *Why:* the same reasons as in the formula lessons: positions and matches break on stray spaces, and
+   Microsoft's pages say Power Query is **case-sensitive**.
+
+6. **Split the code.** Select `till_code`, then **Split Column > By Delimiter** (it is under the **Split
+   column** menu on the **Home** tab and in the **Text Column** group on **Transform**). Choose **Custom**
+   and type `-`, **Each occurrence of the delimiter**. You get three columns named `till_code.1`,
+   `till_code.2` and `till_code.3`.
+   *Why:* each column then holds one fact. The names with a dot and a number are what Microsoft's page
+   says the new columns are called.
+
+7. **Rename the new columns** to `store`, `order_id` and `payment` (double-click a header).
+
+8. **Remove what you do not need.** Select `cashier_notes`, then **Remove Columns** on the **Home** tab.
+   *Why:* free-text notes would only get in the way of the table you are building.
+
+9. **Set the types.** One column at a time, use the icon at the left of the header: `store`, `payment` and
+   `status` stay **Text**, `order_id` is **Whole Number**, `ordered_at` is **Date/Time**, and `total_usd`
+   is **Decimal Number**. This is the step Microsoft calls **Changed Type**. If a column's text is written the
+   way another region writes it, use **Change Type > Using Locale** instead. Microsoft's example is a CSV
+   with day/month/year dates read under a United States locale: setting the type to Date gives error
+   values, because there is no month 22 in the calendar. You will meet this in the last exercise.
+   *Why now, and not earlier:* a number that still had its spaces or its hyphens would fail to convert.
+
+10. **Remove duplicates on the key.** Select `order_id`, then **Home > Remove Rows > Remove Duplicates**.
+    *Why only `order_id`:* it identifies an order, as in the cleaning workflow. Microsoft's page warns
+    that Power Query "doesn't guarantee that it keeps the first instance" of a duplicate. Here it does not
+    matter: the repeated rows in this file are exact copies, so every copy is the same row.
+
+11. **Load.** **Home > Close & Load To...**, choose **Table** and **Existing worksheet**, and point it at `calc`,
+    cell A1. (Microsoft's import page lists loading to a table in an existing or a new worksheet.)
+
+12. **Reconcile.** On `calc`, select the `order_id` column's values: the status bar shows
+    **Count: 1500**. Select `total_usd`: **Sum: 18958**. Count the statuses with a filter or with
+    `=COUNTIFS(...,"completed")`: **1499 completed and 1 canceled**. All three match the till report.
+
+13. **Change the file, then refresh.** Close nothing. In your folder, replace `till-export.csv` with
+    `excel-power-query-basics-orders-update.csv` renamed to `till-export.csv` (the full export of all
+    1,800 orders, plus 20 repeated rows). Back in Excel: **Data > Refresh All**. The table now has
+    **1,800** rows, `total_usd` sums to **22754.25**, and the statuses are **1,799 completed and 1
+    canceled**. You did not touch a step.
+
+That answers the owner: **yes. Cleaned once, refreshed with one click, and both files reconcile: 1,500 orders
+(\$18,958.00) and then 1,800 orders (\$22,754.25).**
+
+<details>
+<summary>Explain it in your own words: why did we set the data types after trimming, splitting and
+renaming, and not at the start?</summary>
+
+Because a type is a promise about what is in the column. Before the trim and the split, `till_code` still
+held spaces and three facts, and `order_id` did not exist yet. Setting the types last means every value
+already looks like what its type expects.
+
+</details>
+
+<Aside type="note" title="If you only have Google Sheets">
+Google Sheets has no Power Query. The nearest route is to bring the CSV in with **File > Import**, then do
+the same cleaning with the formulas from the text and cleaning-workflow lessons: the formulas are your
+recipe. To run it on a new file, import that file as a new sheet and point the formulas at it. That is more
+manual than a refresh, which is the whole point of Power Query. The practice workbook's `raw_orders_export`
+sheet holds the first file's rows so you can try it.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-power-query-basics-1">
+
+**Keep only the completed orders, and see the recipe run again.** Expected output: a clean table of the
+1,499 completed orders from the first file, and then 1,799 after you refresh with the update file.
+
+Work on the empty sheet `calc_ex1`. The first steps are done for you:
+
+1. One row is one order, and the key is `order_id`.
+2. Your query from the worked example exists, with all its steps, loaded to `calc`. Leave that one alone.
+
+Now finish it: make a copy of that query (in the **Queries & Connections** pane, right-click it and choose
+**Duplicate**), add one step to the copy that keeps only the rows whose `status` is `completed`, load the
+copy to `calc_ex1`, and reconcile.
+
+<details>
+<summary>Hint</summary>
+
+Open the copy (double-click it in the **Queries & Connections** pane). Click the **last step** before you
+add anything, so the new step goes at the end. How do you filter a column in the editor? Look at the
+little arrow in the column header.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Click the arrow on the `status` column, clear the tick next to `canceled`, and choose OK. The new step is added to the
+bottom of the applied steps. Close and load to `calc_ex1`, and reconcile with the status bar: the count of rows should be
+one less than on `calc`.
+
+</details>
+
+<Solution>
+
+1. In the editor, click the last applied step (**Removed Duplicates**). Click the filter arrow on `status` and
+   clear the tick next to `canceled`. A step called something like **Filtered Rows** appears at the end of the list.
+2. **Close & Load To...** `calc_ex1`, cell A1. With the first file in place the table has **1,499** rows and `total_usd` sums to
+   **18953**: that is 18,958.00 minus the canceled order's 5.00.
+3. Replace `till-export.csv` with the update file and **Refresh All**. The table has **1,799** rows and the
+   sum is **22749.25**: 22,754.25 minus the same 5.00.
+
+Why the arrow lists `canceled` and `completed` and nothing else: the trim and lowercase steps ran first, so
+the filter list shows two clean values and not the many spellings of the raw file. That is the recipe
+working as a chain: each step gets the result of the one before.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-power-query-basics-2">
+
+**Import the Harbor export from a European computer.** Work on the empty sheet `calc_ex2`.
+`excel-power-query-basics-harbor-eu.csv` was saved
+on a computer set to a European region: the fields are separated by semicolons, amounts are written
+with a decimal comma (`9,00`), and dates are day/month/year (`01/04/2026`). Harbor opened on April 1, 2026.
+The till report for this file says **355 orders, worth \$4,606.25**, and the file has a few repeated rows.
+
+Before you import anything, write one sentence in `calc_ex2!A1` saying what the result should look like:
+how many rows, what one row is, which columns and types, and how you will check the import. Then build the
+query with the same recipe as before, and reconcile.
+
+<details>
+<summary>Hint</summary>
+
+Two settings changed from the worked example. One is on the import window, the other is where the type
+of a column is set. Remember the Microsoft example in step 9 of dates in day/month/year order read with a
+United States locale: what happened to the dates with a day above 12?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"355 rows, one per order, with `store`, `order_id`, `payment`, `ordered_at` as a real
+date and time, `total_usd` as a number, and `status`."* Choose the **semicolon** as the delimiter. For
+`ordered_at` and `total_usd`, change the type **using locale** (right-click the column, **Change Type >
+Using Locale**) and pick a locale that writes dates the way the file does and a locale that writes
+decimals with a comma. Then check the sum before you trust anything.
+
+</details>
+
+<Solution>
+
+The sentence: *"355 rows, one per order; store, order_id, payment (text), ordered_at (date/time), total_usd
+(decimal number), status; checked against 355 orders and \$4,606.25, and no date before April 1 or after June 30."*
+
+1. **From Text/CSV**, delimiter **Semicolon**, Data Type Detection **Do not detect data types**, **Transform Data**.
+2. The same steps as before: trim and lowercase `till_code` and `status`, split `till_code` on `-`, rename,
+   remove `cashier_notes`, then types.
+3. For types, `ordered_at`: **Change Type > Using Locale**, type **Date/Time**, locale **English
+   (United Kingdom)** (Microsoft's own example uses that locale for day/month/year dates). `total_usd`:
+   **Using Locale**, type **Decimal Number**, a locale that uses a decimal comma, such as **German (Germany)**.
+   `order_id` is a **Whole Number**.
+4. **Remove Duplicates** on `order_id`: **355** rows remain from 360. (The types are already set, so you
+   will have seen the problems below *before* this step, on all 360 rows.)
+5. **Reconcile:** `total_usd` sums to **4606.25**. The earliest `ordered_at` is **2026-04-01** and the latest
+   **2026-06-30**, so nothing is before Harbor's opening or after the end of the data.
+
+**What goes wrong if your computer is set to English (United States):** a date such as `14/04/2026` has no
+month 14, so Power Query shows an error. On the 360 rows in the file, **223** rows have a day above 12 (219
+distinct orders). The other **137** rows (136 orders) have a day of 12 or less, such as `08/04/2026`, which reads
+as August 4 with no error at all; 74 of those rows land after June 30. The amounts go wrong too: `9,00` read
+with a US locale becomes 900, because the comma counts as a thousands separator, and no error appears. That is
+why the check on the earliest and latest date and on the sum (4606.25) is part of the recipe and not an extra.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does the **Applied steps** list contain, and what happens to it when you press
+   Refresh?
+
+   <details>
+   <summary>Answer</summary>
+
+   Every transformation you made, in order, from the **Source** step down. On refresh Power Query reads the
+   source again and runs each step on whatever it now contains.
+
+   </details>
+
+<Exercise id="excel-power-query-basics-3">
+
+**Spot the flaw.** Open `calc_ex3`, which describes a colleague's setup. She built the query on `till-export.csv` (1,500 rows after cleaning). The next
+Monday, the new file arrives as `till-export-monday.csv` in the same folder. She presses **Refresh All** and
+the table still has 1,500 rows. She concludes: *"Refresh is broken, I will clean the new file by hand."*
+What went wrong?
+
+<details>
+<summary>Hint</summary>
+
+Click the **Source** step in the applied steps. What does it point to?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+A query reads the file it was built on, by its path. Which file did it read on Monday?
+
+</details>
+
+<Solution>
+
+Refresh was not broken: it ran every step again, on the **old file**. The **Source** step holds the path
+and name of the file the query was built on, so it read `till-export.csv` again, and that file had not
+changed. Her new file has another name, so the query never saw it.
+
+Two fixes. Either save the new export over the old name (what we did in the worked example), or change the
+**Source** step: Microsoft's pages show that you can edit it in the applied steps pane and point it at the new file.
+Then press **Refresh All**: the table has **1,800** rows when the update file is the source. The same check
+as ever: a row count that does not change when the data should have changed is a reason to look at the
+source, not at the tool.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can import a CSV with a delimiter, data types and locale that I chose, clean it with
+steps that I can read as a recipe, reconcile the result with an outside total, and refresh it when the file
+changes.*
+Test: Exercise excel-power-query-basics-2, done from the blank `calc_ex2` sheet without opening the hints.
+
+The pattern to remember: **import on purpose, clean in steps, reconcile, refresh.** The same idea, a recipe
+that runs again on new data, comes back in Python as a script and in SQL as a view.

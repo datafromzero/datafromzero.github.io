@@ -1,0 +1,446 @@
+---
+id: excel-cleaning-workflow
+title: A cleaning workflow you can defend
+description: Profile a messy export, standardize keys, handle duplicates and blanks on purpose, and keep raw data, clean data and a change log.
+stage: excel
+order: 130
+level: intermediate
+duration: 30
+objectives:
+  - Profile a column for blanks, duplicates and distinct values
+  - Remove duplicates on the correct key columns
+  - Map inconsistent labels to one clean value with a mapping table
+  - Record each change in a change log and keep the raw sheet untouched
+prerequisites:
+  - excel-text-functions
+  - excel-xlookup
+  - excel-date-functions
+  - excel-formula-errors-and-auditing
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: Wickham, Tidy Data (Journal of Statistical Software)
+    url: https://www.jstatsoft.org/article/view/v059i10
+  - title: 'Microsoft Support: Remove duplicate values'
+    url: https://support.microsoft.com/en-us/office/remove-duplicate-values-ccf664b0-81d6-449b-bbe1-8daaec1e83c2
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+  - title: 'Microsoft Support: TRIM function'
+    url: https://support.microsoft.com/en-us/office/trim-function-410388fa-c5df-49c6-b16c-9e5630b479f9
+  - title: 'Google Docs Editors Help: Split text, remove duplicates or trim whitespace'
+    url: https://support.google.com/docs/answer/6325535
+  - title: 'Google Docs Editors Help: Google Sheets function list'
+    url: https://support.google.com/docs/table/25273
+status: draft
+---
+
+This lesson works the same in Microsoft Excel and in Google Sheets. Where the two apps differ, both
+ways are shown.
+
+**Your practice file:** download
+[`excel-cleaning-workflow.xlsx`](https://github.com/datafromzero/datafromzero.github.io/raw/main/sheets/excel/excel-cleaning-workflow.xlsx)
+and open it in Excel, or upload it to Google Drive and open it with Google Sheets.
+It holds two messy exports from **cafe-sales**, `raw_orders_export` and `raw_customers_export`, and the
+sheets you will fill: `mapping`, `calc`, `change_log` and `output`. Each exercise has its own sheet, `calc_ex1`, `calc_ex2` and `calc_ex3`, so nothing you do there touches the worked example.
+
+TODO(owner): upload the practice file to Google Drive, add its "make a copy" link as `sheet` in the
+frontmatter, and replace the download paragraph above with `<OpenInSheets />`. When you have checked
+the lesson, set `reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. A code cell holds `·S2-1001-CARD·` (a **·** is a space). Write the formula that returns the store digit,
+   `2`, as a number.
+
+   <details>
+   <summary>Answer</summary>
+
+   **`=VALUE(MID(TRIM(A2),2,1))`**. `TRIM` first, so the position is the same on every row; `MID` cuts one
+   character at position 2; `VALUE` turns the text `"1"` into the number 1.
+
+   </details>
+
+2. A lookup should return `UNMAPPED` instead of `#N/A` when the key is not in the table. Which argument of
+   `XLOOKUP` does that, and what does the full formula look like for a key in E2 and a table in
+   `mapping!A2:B5`?
+
+   <details>
+   <summary>Answer</summary>
+
+   The fourth argument, `if_not_found`: **`=XLOOKUP(E2,mapping!$A$2:$A$5,mapping!$B$2:$B$5,"UNMAPPED")`**.
+   The `$` signs keep the table in place when you fill down.
+
+   </details>
+
+3. A column of dates sorts oddly and `=MIN()` over it returns 0. What is the cause?
+
+   <details>
+   <summary>Answer</summary>
+
+   The dates are text, not numbers. Check with `ISNUMBER`, then rebuild them with `DATE`.
+
+   </details>
+
+## The question
+
+The owner of the cafes says:
+
+> The till system reports 1,800 orders, and 1,799 of them completed. The export I got has 1,830 rows and
+> I cannot tell what is what. Clean it so the numbers match, and tell me exactly what you changed.
+
+Here is the top of `raw_orders_export` (a **·** marks a space). The same order, 1173, appears twice: on
+row 174 and again on row 1825, spelled differently.
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---|---|---|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38 | completed | apple·pay |
+| 1003 | 61 | 2 | 2026-01-01 15:47 | completed | apple·pay |
+| … | | | | | |
+| 1173 (row 174) | 66 | 2 | 2026-01-24 07:34 | completed | Credit·Card |
+| 1173 (row 1825) | 66 | 2 | 2026-01-24 07:34 | completed· | card· |
+
+By the end of this lesson you will turn it into 1,800 clean rows that reconcile with the till system's
+totals, and a change log that lets someone else check every step.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 328" width="360" role="img" aria-labelledby="cw-flow-title cw-flow-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="cw-flow-title">Raw, calc and output with row counts</title>
+<desc id="cw-flow-desc">Three stacked sheets. raw_orders_export holds 1,830 rows and is never edited. calc is a copy that is cleaned: Remove Duplicates on order_id removes 30 rows to leave 1,800, then labels are mapped. output holds 1,799 completed plus 1 canceled order. A change log on the right records each step with the rows left after it.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Three sheets, counts that reconcile</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="34" width="206" height="44" /></g>
+<text x="18" y="54" font-weight="600">raw_orders_export</text>
+<text x="18" y="72" font-size="11" opacity="0.8">1,830 rows, never edited</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="120" width="206" height="84" /></g>
+<text x="18" y="140" font-weight="600">calc</text>
+<text x="18" y="158" font-size="11">Remove Duplicates on order_id</text>
+<text x="18" y="176" font-size="11">1,830 → 1,800 rows (−30)</text>
+<text x="18" y="194" font-size="11">then map labels: 1,800 rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="246" width="206" height="44" /></g>
+<text x="18" y="266" font-weight="600">output</text>
+<text x="18" y="284" font-size="11" opacity="0.8">1,799 completed + 1 canceled</text>
+<path d="M 113 78 V 117" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M 108 111 L 113 118 L 118 111" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="126" y="103.0" font-size="11">copy values: 1,830</text>
+<path d="M 113 204 V 243" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M 108 237 L 113 244 L 118 237" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="126" y="229.0" font-size="11">1,800 rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="230" y="34" width="120" height="256" /></g>
+<text x="238" y="54" font-weight="600">change_log</text>
+<text x="238" y="72" font-size="11" opacity="0.8">rows after:</text>
+<text x="238" y="96" font-size="11">1 copy</text>
+<text x="342" y="96" font-size="11" text-anchor="end">1,830</text>
+<text x="238" y="118" font-size="11">2 dedupe</text>
+<text x="342" y="118" font-size="11" text-anchor="end">1,800</text>
+<text x="238" y="140" font-size="11">3 status</text>
+<text x="342" y="140" font-size="11" text-anchor="end">1,800</text>
+<text x="238" y="162" font-size="11">4 payment</text>
+<text x="342" y="162" font-size="11" text-anchor="end">1,800</text>
+<text x="238" y="184" font-size="11">5 blank id</text>
+<text x="342" y="184" font-size="11" text-anchor="end">kept</text>
+<text x="10" y="316">Every step: rows before, rows after, why. Raw stays as it arrived.</text>
+</svg>
+<svg viewBox="0 0 360 258" width="360" role="img" aria-labelledby="cw-map-title cw-map-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="cw-map-title">Mapping inconsistent labels to one clean value</title>
+<desc id="cw-map-desc">Four exported status values, completed with a trailing space, Complete, DONE and cancelled with a trailing space, are lowercased and trimmed, then looked up in a mapping table that returns completed or canceled.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Many spellings, one mapping table</text>
+<text x="10" y="44" font-weight="600" font-size="11">status as exported</text>
+<text x="130" y="44" font-weight="600" font-size="11">LOWER(TRIM())</text>
+<text x="250" y="44" font-weight="600" font-size="11">status_clean</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="52" width="110" height="28" /><rect x="120" y="52" width="110" height="28" /><rect x="230" y="52" width="120" height="28" /><rect x="10" y="80" width="110" height="28" /><rect x="120" y="80" width="110" height="28" /><rect x="230" y="80" width="120" height="28" /><rect x="10" y="108" width="110" height="28" /><rect x="120" y="108" width="110" height="28" /><rect x="230" y="108" width="120" height="28" /><rect x="10" y="136" width="110" height="28" /><rect x="120" y="136" width="110" height="28" /><rect x="230" y="136" width="120" height="28" /></g>
+<text x="16" y="70">completed·</text>
+<text x="126" y="70">completed</text>
+<text x="236" y="70" font-weight="600">completed</text>
+<text x="16" y="98">Complete</text>
+<text x="126" y="98">complete</text>
+<text x="236" y="98" font-weight="600">completed</text>
+<text x="16" y="126">DONE</text>
+<text x="126" y="126">done</text>
+<text x="236" y="126" font-weight="600">completed</text>
+<text x="16" y="154">cancelled·</text>
+<text x="126" y="154">cancelled</text>
+<text x="236" y="154" font-weight="600">canceled</text>
+<text x="10" y="184" opacity="0.8">· = a trailing space you cannot see.</text>
+<text x="10" y="206">Middle column = the key looked up in the mapping sheet:</text>
+<text x="10" y="224">XLOOKUP(key, mapping keys, mapping labels, "UNMAPPED")</text>
+<text x="10" y="246" opacity="0.8">A new spelling shows UNMAPPED instead of an error or a guess.</text>
+</svg>
+</figure>
+
+Hadley Wickham opens his paper on tidy data with the observation that "a huge amount of effort is spent
+cleaning data to get it ready for analysis". The way to make that effort safe is a fixed workflow:
+
+1. **Keep raw untouched.** The export stays on `raw_orders_export`, exactly as it arrived.
+2. **Profile before you fix.** Count rows, blanks, duplicates and the different spellings. You cannot
+   decide what to change until you know what is there.
+3. **Fix on a copy, one step at a time.** Each fix is a decision (what counts as a duplicate, which
+   spellings mean the same thing), so each one is written down.
+4. **Reconcile.** After every step the row count must be the one you expect, and the end totals must match
+   a number from outside the file (here, the till system's report).
+
+## Worked example
+
+Question: **turn the 1,830-row export into clean orders that match the till system's 1,800 orders and
+1,799 completed, and log every change.** Open the practice file and follow along.
+
+1. **Say what one row is, and what its key is.** One row should be one order, and the key is `order_id`:
+   two rows with the same `order_id` are the same order. The control totals from the till system are
+   1,800 orders and 1,799 completed.
+   *Why decide now:* "duplicate" has no meaning until you say which columns identify a row.
+
+2. **Copy, do not edit.** Select `raw_orders_export!A1:F1831`, copy, and paste **values** into `calc!A1`.
+   The data on `calc` has **1,830 rows** under the header. *Why:* raw stays as it arrived. If you spoil
+   the copy, copy it again.
+
+3. **Profile.** On `calc` (to the right of the data, in columns I and up) write down what you find:
+   - Rows: `=COUNTA(A2:A1831)` gives **1830**.
+   - Blanks: `=COUNTBLANK(B2:B1831)` gives **1**. One order has no `customer_id`: a walk-in without a
+     loyalty card. We will leave it blank on purpose (step 8).
+   - Duplicate keys: copy `A2:A1831` into `I2`, select that column and run **Remove Duplicates** on it, then
+     `=COUNT(I2:I1831)` gives **1800**. So **30 rows are repeats** of an order that already appeared.
+   - Spellings: copy `E2:E1831` into `K2` and run Remove Duplicates on it. Five lines remain:
+     `completed`, `completed·`, `Complete`, `DONE`, `cancelled·`. Two of them look identical on screen;
+     one has a trailing space.
+   *Why profile first:* the five spellings and the 30 repeats are the work. Without the profile you would
+   clean what you happened to notice.
+
+4. **Remove duplicates on the key.** Select `calc!A1:F1831`. In **Excel**, **Data > Remove Duplicates**; in
+   **Google Sheets**, **Data > Data cleanup > Remove duplicates**. Say that your data has a header row and
+   tick **only `order_id`**. Excel reports 30 duplicates removed and 1,800 unique values remaining.
+   Excel keeps the first row it finds for each value and deletes the later ones (Microsoft's page describes
+   it that way); in Excel, **Ctrl+Z** undoes it if you made a mistake.
+   *Why only `order_id`:* the key says what an order is. Try it with all six columns ticked (then undo): it
+   removes only **20**, leaving **1,810** rows, because the 10 re-sent rows, like order 1173 above, are
+   spelled differently and do not match as whole rows.
+   *Why now:* do this before you add formula columns next to the data, because Remove Duplicates works
+   inside the block you selected.
+
+5. **Write the mapping table.** On `mapping`, type `status_key` in A1 and `status_clean` in B1, then
+   four rows: `completed → completed`, `complete → completed`, `done → completed`,
+   `cancelled → canceled`. The keys are **lowercase, with no spaces**.
+   *Why a table:* "complete" and "done" meaning completed is a decision. In a table anyone can read and
+   change it; inside a long formula nobody can.
+
+6. **Apply it.** In `calc!G2` type
+   `=XLOOKUP(LOWER(TRIM(E2)),mapping!$A$2:$A$5,mapping!$B$2:$B$5,"UNMAPPED")` and fill down to row 1801.
+   *Why `LOWER(TRIM())`:* it standardizes the key before the lookup, so the trailing space and the case
+   stop mattering. *Why `"UNMAPPED"`:* a spelling you did not list shows up as a word you can count, not as
+   an error or a silent guess.
+
+7. **Reconcile.** `=COUNTIFS(G2:G1801,"UNMAPPED")` is **0**. `=COUNTIFS(G2:G1801,"completed")` is
+   **1799** and `=COUNTIFS(G2:G1801,"canceled")` is **1**. `=COUNTA(A2:A1801)` is **1800**. All four match
+   the till system.
+
+8. **Decide the blank, then write the log.** The one blank `customer_id` is a walk-in. Putting a 0 there
+   would invent a customer, so it stays blank. On `change_log` write one line per step:
+
+   | step | what changed | rows before | rows after | why |
+   |---|---|---|---|---|
+   | 1 | Copied raw_orders_export to calc as values | 1,830 | 1,830 | Raw stays untouched |
+   | 2 | Remove Duplicates on order_id, first row kept | 1,830 | 1,800 | 20 exact copies and 10 re-sends spelled differently |
+   | 3 | Mapped status: completed, complete, done → completed; cancelled → canceled | 1,800 | 1,800 | Matches the till system: 1,799 completed, 1 canceled |
+   | 4 | Left the blank customer_id blank | 1,800 | 1,800 | One walk-in order, no card |
+
+That answers the owner: **1,800 orders, 1,799 completed and 1 canceled, after removing 30 repeated rows.
+Every change is on the log, and the raw sheet is as it arrived.**
+
+<details>
+<summary>Explain it in your own words: why did we copy the data before removing duplicates?</summary>
+
+Because Remove Duplicates deletes rows, and Microsoft's page advises copying the original range to another
+sheet or workbook first. On a copy, a mistake costs you one more copy and paste. On the raw sheet it can
+cost you the only record of what the export said.
+
+</details>
+
+<Aside type="note" title="Excel and Google Sheets">
+Remove Duplicates exists in both: in Excel it compares the text you can see, and Google's help says that
+in Sheets "cells with identical values but different letter cases, formatting, or formulas are considered
+to be duplicates". `XLOOKUP` is in Google Sheets' function list, but Microsoft says it "is not available in Excel 2016
+and Excel 2019"; there, use the `INDEX` with `MATCH` pattern from the lesson on reading VLOOKUP and
+INDEX with MATCH.
+</Aside>
+
+## Finish it
+
+<Exercise id="excel-cleaning-workflow-1">
+
+**Clean the `payment_method` column and count the payments.** Expected output: a clean payment column in
+which every row is `card`, `mobile` or `cash`, three counts that add up to 1,800, and a new line on the log.
+
+Work on the sheet `calc_ex1`. The first steps are done for you:
+
+1. One row is one order, the key is `order_id`.
+2. `calc_ex1` holds the copy, already de-duplicated to **1,800 rows**, with the status mapped in column G
+   (its mapping table is in J1:K5) and the first three lines of the change log in P1:T4.
+
+Now finish it. Profile the column, build its mapping table (in M1:N, to the right of the status table), look
+the labels up in column H, reconcile, and add line 4 to the log.
+
+<details>
+<summary>Hint</summary>
+
+Do the same moves as steps 3 and 5 to 8 of the worked example, on column F. Copy the column aside and
+remove duplicates to list the spellings first. One of the spellings is `apple pay`: which clean value
+does it belong to, and where do you record that choice?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Profiling lists nine spellings of three payment methods. Lowercase and trim them, which leaves seven keys.
+The one that needs a judgment is `apple pay`: it is a phone wallet, so it goes under `mobile`. Write
+that choice in the log as well as in the table.
+
+</details>
+
+<Solution>
+
+1. Profile: copy `F2:F1801` aside (say to column V) and remove duplicates there. Nine spellings remain: `card`, `card·`, `Credit Card`,
+   `mobile`, `Mobile Pay`, `apple pay`, `cash`, `cash·`, `in cash`.
+2. Mapping table, in `calc_ex1!M1:N8` (headers `payment_key`, `payment_clean`), keys lowercase and trimmed:
+
+   | payment_key | payment_clean |
+   |---|---|
+   | card | card |
+   | credit card | card |
+   | mobile | mobile |
+   | mobile pay | mobile |
+   | apple pay | mobile |
+   | cash | cash |
+   | in cash | cash |
+
+3. In `calc_ex1!H2`: `=XLOOKUP(LOWER(TRIM(F2)),$M$2:$M$8,$N$2:$N$8,"UNMAPPED")`, filled down.
+4. Reconcile: `UNMAPPED` count **0**; **card 1,001, mobile 546, cash 253**, total **1,800**.
+5. Log line, in P5:T5: *step 4, mapped payment_method: card, credit card → card; mobile, mobile pay, apple pay →
+   mobile; cash, in cash → cash; 1,800 rows before and after. Why: nine spellings of three methods; Apple
+   Pay treated as mobile (my decision).*
+
+The decision about Apple Pay is the point of the log: someone who disagrees can change one row of the
+table and see every count update.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="excel-cleaning-workflow-2">
+
+**Clean the customer export.** Open `raw_customers_export`: the loyalty customers, with city and tier typed
+many ways, and some customers listed twice. Do not change that sheet. The loyalty app says it has **150
+customers**. Work on the empty sheet `calc_ex2`: build a clean table there, with the mapping table and the change log
+to the right of it.
+
+Before you touch anything, write one sentence on `calc_ex2` saying what the result should look like: how many
+rows, what one row is and what identifies it, which values each column may hold, and what you will do
+with blanks. Then clean it and reconcile.
+
+<details>
+<summary>Hint</summary>
+
+Profile every column first: rows, distinct ids, spellings of `city` and of `loyalty_tier`, and blanks. Not
+every blank is a mistake. Look at `referred_by` and ask what an empty cell there means.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"150 rows, one per `customer_id`; `city` is Alameda, Berkeley or Oakland; `loyalty_tier`
+is bronze, silver or gold; `referred_by` stays blank when nobody referred the customer."* The profile finds
+162 rows but only 150 distinct ids, six lowercase-and-trimmed spellings of city and six of tier. Remove
+duplicates on the key, not on the whole row.
+
+</details>
+
+<Solution>
+
+The sentence: *"150 rows, one per customer_id; city is Alameda, Berkeley or Oakland; loyalty_tier is bronze,
+silver or gold; a blank referred_by is kept because it means nobody referred them."*
+
+1. Profile: 162 rows; 150 distinct `customer_id` values, so 12 repeats; nine spellings of city and nine of
+   tier as exported.
+2. Copy to `calc` as values (162 rows). Remove Duplicates on `customer_id` only: **12 removed, 150 remain**. With all
+   five columns ticked it would remove only 8 and leave **154**, because 4 of the re-sent rows have the
+   tier spelled differently.
+3. City mapping (keys lowercase and trimmed): `alameda`, `alameda, ca` → Alameda; `berkeley`, `berkley` →
+   Berkeley; `oakland`, `oakland, ca` → Oakland. Tier mapping: `bronze`, `brnz` → bronze; `silver`,
+   `silver member` → silver; `gold`, `gold member` → gold. Apply both with `XLOOKUP(LOWER(TRIM(...)),...,"UNMAPPED")`.
+4. Reconcile: `UNMAPPED` count 0 for both. **Alameda 60, Berkeley 46, Oakland 44**. **Bronze 85, silver 50,
+   gold 15**. Each adds up to **150**. The blank `referred_by` cells number **120**; the rest hold an id.
+   Leave them blank.
+5. Log: one line per step with rows before and after (162 → 162 copy, 162 → 150 duplicates, 150 → 150 for
+   each mapping and for the blanks), and a reason on each. The Berkley typo and the `, CA` suffix belong
+   in the log lines for city, as the reason those rows needed mapping.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does a cleaning workflow end with a reconciliation against a number from
+   outside the file?
+
+   <details>
+   <summary>Answer</summary>
+
+   Because a file can be internally consistent and still wrong. Row counts that match the till system's
+   totals prove nothing was dropped or doubled; a total you computed from the same file proves very little.
+
+   </details>
+
+<Exercise id="excel-cleaning-workflow-3">
+
+**Spot the flaw.** Open `calc_ex3`: it holds a colleague's result, with her two totals in M2 and N2. She
+cleaned the order export like this: *"I selected all six columns on
+`raw_orders_export`, ran Remove Duplicates, and saved. Now it has 1,810 rows. I mapped the status labels,
+and I get 1,809 completed orders. Done."* The till system says 1,800 orders and 1,799 completed. Name every
+problem you can find.
+
+<details>
+<summary>Hint</summary>
+
+There are three. One is about where she worked, one about what she compared, one about what she did not
+write down. Which of her numbers disagree with the till system, and by how much?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Her counts are 10 too high. Ten rows are orders that arrived twice with different spellings. Why did
+Remove Duplicates keep them when she ticked every column?
+
+</details>
+
+<Solution>
+
+1. **She edited the raw sheet.** Remove Duplicates deletes rows, and once the file is saved and closed there
+   is no undo. The export as it arrived no longer exists, and nobody can check what she removed.
+2. **She compared whole rows, not the key.** Ticking all six columns removed only the 20 exact copies. The
+   10 re-sent orders, spelled differently, survived: 1,810 rows instead of 1,800. Her completed count of
+   **1,809** is **10 too high** compared with the till system's 1,799: those ten orders are counted twice.
+   The mismatch with the control total was the clue, and she did not compare.
+3. **No log.** Nobody can tell which rows she removed, which rule she used, or that the 10 are still
+   there.
+
+The fix: copy the raw data, remove duplicates on `order_id` only (1,800 rows), map the labels, reconcile
+to 1,800 and 1,799, and log each step.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can profile a messy export, remove duplicates on the right key, map inconsistent
+labels with a mapping table, and show with a change log and a reconciliation that the raw data is untouched
+and nothing was lost or doubled.*
+Test: Exercise excel-cleaning-workflow-2, done from the blank `calc_ex2` sheet without opening the hints.
+
+The pattern to remember: **profile, fix on a copy, reconcile, log.** The next lesson does the same cleaning
+once, as a recipe that Power Query can run again whenever the file changes.

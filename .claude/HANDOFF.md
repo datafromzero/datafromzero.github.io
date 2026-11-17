@@ -5,8 +5,9 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## Who is who
 
-- **Owner:** the sole author of all lesson and story text. He writes in Vietnamese in chat; the site is
-  American English only for now (D30). Reply to him in Vietnamese.
+- **Owner:** the sole author of all lesson and story text (under D24 the owner may ask the team for a draft, which
+  the owner edits and approves). Writes in Vietnamese in chat; the site is American English only for now (D30).
+  Reply in Vietnamese.
 - **Lead session:** plans, delegates to the agents in `.claude/agents/`, reviews, opens and merges PRs under the
   merging policy in `CLAUDE.md`.
 - **External research:** arrives as GitHub issues that use the research-report template (label `research`).
@@ -24,22 +25,28 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   - 05 "Pick a direction" (four career cards with canvas 3D figures, link to the quiz).
 - **Bottom taskbar** on every page (D31): shortcuts menu, Start learning, light/dark, back to top.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
+- **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
 - **Curriculum (D29, D32):** 159 lessons in 8 stages, all `status: draft` (never deployed):
   Excel 22, SQL 30, Python 25, core 25, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
   The map is `research/curriculum/06-curriculum-map.yaml`; lesson frontmatter is the source of truth.
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
-- **Open issues and PRs:** none.
+- **Open issues and PRs:** the Excel-stage drafts PR (waits for the owner).
 
 ## What comes next (build plan item 8, content)
 
-1. **The owner writes lesson text**, starting with `src/content/docs/excel/grid-and-tidy-layout.md`. Each draft has
-   seven sections to fill: Warm-up, The question, The picture, Worked example, Finish it, On your own, Check yourself.
-2. **When he sends a lesson** (file or pasted text, English or Vietnamese):
-   - `content-producer` adds exercises and solutions, the Colab notebook, the Sheets template, `Term` links and
-     sources, and keeps the build green. It never rewrites his prose.
-   - Lesson content PRs always wait for the owner's approval; he sets `status: published`.
-3. **First dataset `cafe-sales`:** build it with the first Excel lesson. It is English, with prices in US dollars
-   and cents (D29). Decide the dataset frontmatter then (D19 is deferred until the first dataset).
+1. **Excel stage (22 lessons):** every lesson has full draft text (team drafts under D24), three exercises and a
+   practice workbook in `sheets/excel/{lesson-id}.xlsx`, built from `cafe-sales` by its own module in
+   `scripts/lesson_sheets/` (`python3 scripts/build-lesson-sheets.py [lesson-id]`; byte-stable output). Each
+   exercise has its own pre-built sheet (`calc_ex1..3`); `raw_*` sheets are never edited. All still `status: draft`.
+   The owner reviews each lesson, resolves its `TODO(owner)` notes (menu names and behaviors that could not be run
+   here: Power Query, Sheets QUERY, Sheets error wording), uploads the workbook to Google Drive, adds the `sheet`
+   link, sets `reviewed` and `status: published`.
+2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/`), then Python and core. The
+   Excel batches worked well as four parallel `content-producer` agents in worktrees, the model lesson as the
+   standard, then one `spec-reviewer` pass per batch (it always found real issues: exercises overwriting the worked
+   example's cells, filters hiding summary cells, unsourced app behavior, first-person notes in learner text).
+3. **Glossary:** no glossary entries exist yet, so lessons use no `Term` links. Glossary pages have no `status`
+   field and would publish at once; ask the owner before adding them.
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
    200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
    `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.

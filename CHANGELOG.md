@@ -7,6 +7,10 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Draft text for the 21 other Excel lessons (team drafts under D24, still `status: draft`), each with three exercises
+  (faded, blank-start on messy data, spot-the-flaw), static SVG pictures, and a practice workbook in `sheets/excel/` built
+  from `cafe-sales` by its own module in `scripts/lesson_sheets/` (one pre-built sheet per exercise). Power Query ships
+  three CSV files to import. `excel-date-functions` now lists `excel-text-functions` as a prerequisite.
 - Analytics on (SPEC §11, D8): Google Analytics 4 property `G-0TNDBK1ZJX`, loaded only after the visitor accepts the
   consent banner (Consent Mode v2, defaults denied). Event data is kept for 2 months, as `/privacy/` now states.
 - First dataset, `cafe-sales` v1 (SPEC §7, D29): three fictional Bay Area cafes, January to June 2026, prices in US
