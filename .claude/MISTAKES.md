@@ -68,6 +68,15 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   our class-level `:focus-visible` ring, so keyboard users lost the focus ring. → **Match the specificity of the rule you
   override, and Tab to every new focus style in a browser before merging.**
 
+- 2026-11-17 — The consent card used plain class names (`.card`, `.head`); the homepage's own `.card` rule gave it a
+  340px minimum height. → **A component that renders on the homepage and on docs pages prefixes its classes (for
+  example `dfz-c-`), and is checked on both before merging.**
+- 2026-11-17 — The floating consent card had no height limit; with Customize open on a landscape phone its top went
+  off screen. → **Every fixed or floating overlay gets a `max-height` inside the viewport and its own scrolling; check
+  it at 320×256 (400% zoom) with every panel open.**
+- 2026-11-17 — The consent banner sits inside Starlight's `<main>`, so search indexed its text on every page. → **Anything placed in Starlight's `<main>` (Banner, PageTitle, Footer overrides) that is site chrome
+  carries `data-pagefind-ignore`; after the build, read one file in `dist/pagefind/fragment/`.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

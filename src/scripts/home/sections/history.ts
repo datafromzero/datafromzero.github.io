@@ -140,12 +140,12 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		if (b) step(Number(b.dataset.step));
 	};
 	const onKey = (e: KeyboardEvent) => {
-		// On the "Start at A1" link the arrows keep their usual meaning (screen readers, caret browsing).
+		// On the "Start here" link the arrows keep their usual meaning (screen readers, caret browsing).
 		if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || (e.target as Element).closest('a')) return;
 		e.preventDefault();
 		step(e.key === 'ArrowRight' ? 1 : -1);
 	};
-	// Keyboard focus on a link inside a side card (the last card's "Start at A1") brings that card to the
+	// Keyboard focus on a link inside a side card (the last card's "Start here") brings that card to the
 	// center, the shortest way round, so the focused link is never small or faded.
 	const onFocus = (e: FocusEvent) => {
 		const i = cards.indexOf((e.target as Element).closest('.card') as HTMLElement);

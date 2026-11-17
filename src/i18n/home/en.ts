@@ -276,7 +276,7 @@ export const en: HomeStrings = {
 			year: 'Now',
 			title: 'Your turn',
 			line: 'Your first spreadsheet, query and script continue the story.',
-			cta: 'Start at A1',
+			cta: 'Start here',
 			icon: 'cursor',
 		},
 		sourcesSummary: 'Sources for these dates',
