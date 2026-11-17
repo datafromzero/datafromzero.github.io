@@ -78,10 +78,11 @@ def build() -> None:
         c.font = Font(bold=True)
     ws.append(["price of product code 99", "=VLOOKUP(99,raw_products!$A$2:$D$17,4,FALSE)"])
     ws.append(["double the price typed in C3", "=C3*2", "n/a"])
-    ws.append(["add the three prices in C4:E4 (a column was deleted)", "=SUM(C4,#REF!,E4)", 3.5, 4.5, 3.25])
+    # The formula once used a third cell in a column that was deleted since, so only C4 and E4 still hold prices.
+    ws.append(["add the prices in C4 and E4 (the formula once used a column that was deleted)", "=SUM(C4,#REF!,E4)", 3.5, None, 3.25])
     ws.append(["average price: total in C5 divided by lines in D5", "=C5/D5", 12.5, 0])
     ws.append(["price of product code 2, typed in Spanish", "=BUSCARV(2,raw_products!$A$2:$D$17,4,FALSE)"])
-    ws.column_dimensions["A"].width = 52
+    ws.column_dimensions["A"].width = 72
     ws.column_dimensions["B"].width = 44
     ws.freeze_panes = "A2"
 
