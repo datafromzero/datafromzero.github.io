@@ -68,12 +68,13 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and
-token rules: `.claude/agents/README.md`. Default flow per milestone: implementer → `qa-runner`
-→ `spec-reviewer` → lead commits. Do small edits inline; delegate whole milestones or batches.
+token rules: `.claude/agents/README.md`; lessons follow `.claude/agents/LESSON-STANDARD.md`. Code: `site-builder` →
+`qa-runner` → `spec-reviewer` → lead commits. Lessons: `content-producer` batches (in parallel, one git worktree each) →
+`content-reviewer` → fixes by the same writer → lead merges. Do small edits inline; delegate whole milestones or batches.
 
 ## Merging
 The owner lets the lead merge PRs without asking when all of these hold: the build and CI are green
-(before `ci.yml` exists: a clean local `npm run build`); `spec-reviewer` approved, or the change is
+(before `ci.yml` exists: a clean local `npm run build`); `spec-reviewer` approved (`content-reviewer` for lessons), or the change is
 tooling/docs only with no CONTRACT impact; no owner decision is pending; the PR description has no AI
 attribution. Always ask the owner first for: CONTRACT changes or SPEC decisions not yet approved, lesson
 or story content (the owner is the sole author), dependencies that ship JS to lesson pages, anything in

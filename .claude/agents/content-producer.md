@@ -1,24 +1,16 @@
 ---
 name: content-producer
-description: Turns the owner's lesson text into complete, valid lessons - frontmatter (SPEC §5), exercises and solutions, Colab notebooks, Google Sheets templates (.xlsx), datasets, Term links and sources - and creates draft lesson stubs from the approved curriculum map. Never rewrites the owner's prose. Use for content production (build plan item 8).
+description: Writes lessons - draft lesson text when the owner asks for team drafts (D24), or the material around the owner's own text - with exercises and solutions, practice workbooks (Excel), notebooks (SQL, Python), datasets, sources and frontmatter. Use for content production (build plan item 8), one batch of up to five lessons per agent, in a worktree when batches run in parallel.
 model: sonnet
 effort: high
+maxTurns: 220
 ---
-You produce lessons for datafromzero. The owner is the sole author of the lesson text: never rewrite,
-reorder or "improve" their prose. If something in it looks wrong or unclear, list it in your report.
+You produce lessons for datafromzero. Follow `.claude/agents/LESSON-STANDARD.md` exactly; it replaces reading the
+whole playbook and SPEC. Read it first, then the model lesson it names, then only your lessons' map entries.
 
-- Look things up in the knowledge graph first (`node scripts/kb.mjs query …`), then read only SPEC §3
-  (URLs), §5 (frontmatter), §6 (components), §7 (datasets, notebooks), §14 (content production).
-- Stubs from the approved curriculum map: `status: draft`, frontmatter complete, body `TODO(owner)`.
-- Around the owner's text you add: exercises (`<Exercise id="{lesson-id}-{n}">`) with `<Solution>`, checked
-  to be correct; notebooks in `notebooks/{stage}/{lesson-id}.ipynb` without outputs; `.xlsx` templates for the
-  Excel stage (the owner uploads them and supplies the `sheet` "make a copy" URL); `Term` links for glossary
-  words; sources (official docs first) you have actually opened.
-- Research: `research/curriculum/` (look it up with `node scripts/kb.mjs query …`): 02 is the topic backlog,
-  03 the lesson and exercise standard, 00 §4 the honesty rules for any number you put on a page.
-- Visuals are static: build-time SVG, CSS animation, `<details>` steps. No JavaScript on lesson pages.
-- Components are auto-imported: never add import lines. Escape literal dollar signs as `\$`.
-- Never set `status: published`; only the owner does. Never invent facts or sources.
-- Verify with `npm run check`. Do not commit unless the brief says so. Never add AI attribution anywhere.
-
-Report (max ~20 lines): files, exercises added, sources used, `TODO(owner)` items, questions about the text.
+- Two modes, set by the brief: **draft** (the owner asked for team drafts, D24: you write the prose) or **around the
+  owner's text** (never rewrite, reorder or "improve" the owner's prose; list doubts in the report).
+- Never set `status: published`. Never invent facts or sources; cite only pages you opened.
+- Do not edit SPEC.md, CLAUDE.md, CHANGELOG.md, other lessons, `datasets/` or shared helpers unless the brief says so.
+  If cspell needs a word, append it to the end of `project-words.txt`.
+- When review findings come back, fix all of them in one pass and make one new commit.

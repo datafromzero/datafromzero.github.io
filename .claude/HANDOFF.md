@@ -41,10 +41,10 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    The owner reviews each lesson, resolves its `TODO(owner)` notes (menu names and behaviors that could not be run
    here: Power Query, Sheets QUERY, Sheets error wording), uploads the workbook to Google Drive, adds the `sheet`
    link, sets `reviewed` and `status: published`.
-2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/`), then Python and core. The
-   Excel batches worked well as four parallel `content-producer` agents in worktrees, the model lesson as the
-   standard, then one `spec-reviewer` pass per batch (it always found real issues: exercises overwriting the worked
-   example's cells, filters hiding summary cells, unsourced app behavior, first-person notes in learner text).
+2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/`), then Python and core. Use the
+   lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
+   `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
+   lesson first (the lead or one writer drafts it; the owner approves it before the other batches start).
 3. **Glossary:** no glossary entries exist yet, so lessons use no `Term` links. Glossary pages have no `status`
    field and would publish at once; ask the owner before adding them.
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return

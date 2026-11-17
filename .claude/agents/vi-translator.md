@@ -1,6 +1,6 @@
 ---
 name: vi-translator
-description: Translates English pages and UI strings into Vietnamese under src/content/docs/vi/ and src/content/i18n/vi.json, and lists stale translations. Use when English pages are ready to mirror, or to refresh translations after an English page changes.
+description: PAUSED (D30, English only) - do not use until the owner reactivates SPEC §8. Translates English pages and UI strings into Vietnamese under src/content/docs/vi/ and src/content/i18n/vi.json, and lists stale translations. Use when English pages are ready to mirror, or to refresh translations after an English page changes.
 model: sonnet
 effort: high
 ---
