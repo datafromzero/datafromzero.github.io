@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 777 nodes, 739 edges, 92 communities (381 isolated nodes).
-- Nodes: agent 8, build plan 9, component 32, config 10, content 167, content-type 5, decision 34, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 137, template 1, token 12.
-- Edges: defines 137, imports 33, mentions 454, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
+- 779 nodes, 741 edges, 92 communities (381 isolated nodes).
+- Nodes: agent 8, build plan 9, component 33, config 10, content 167, content-type 5, decision 34, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 138, template 1, token 12.
+- Edges: defines 138, imports 33, mentions 455, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -59,9 +59,9 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `M8` -mentions-> `S4` (C1 to C58, CLAUDE.md:65)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C82 to C50, src/lib/repo-files.ts:4)
 - `D34` -mentions-> `src/lib/sidebar.ts` (C52 to C83, SPEC.md:61)
-- `D5` -mentions-> `S9` (C50 to C41, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C54 to C34, design/README.md:198)
-- `S5.2` -mentions-> `D18` (C39 to C1, SPEC.md:224)
+- `D5` -mentions-> `S9` (C50 to C42, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C54 to C35, design/README.md:198)
+- `S5.2` -mentions-> `D18` (C40 to C1, SPEC.md:224)
 
 ## Decisions (SPEC §1)
 
