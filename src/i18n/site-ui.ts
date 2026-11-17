@@ -16,6 +16,8 @@ export interface SiteUi {
 		course: string;
 		soon: string;
 		next: string;
+		/** Primary button off lessons: "Start E1", the first published lesson. */
+		begin: string;
 		roadmap: string;
 		home: string;
 		start: string;
@@ -46,6 +48,7 @@ const en: SiteUi = {
 		course: 'Course',
 		soon: 'coming soon',
 		next: 'Next',
+		begin: 'Start',
 		roadmap: 'Roadmap',
 		home: 'Home',
 		start: 'Start here',
@@ -76,6 +79,7 @@ const vi: SiteUi = {
 		course: 'Khóa học',
 		soon: 'sắp có',
 		next: 'Tiếp',
+		begin: 'Bắt đầu',
 		roadmap: 'Lộ trình',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',

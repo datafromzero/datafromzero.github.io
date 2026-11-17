@@ -109,6 +109,8 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Taskbar: off lessons the primary button is "Start E1 →" (the first published lesson) instead of "Learn →" to
+  `/start/`, which the sheet already links; the menu label drops its empty first line so the title sits level with the icon.
 - Homepage footer: two centered rows (the license line, then the project links) instead of items pushed to both sides.
 - SPEC D35 (owner decision): one navigation on phones. The bottom bar is now two controls: a menu button with a
   two-line label (the lesson code and current section, over the title) and a primary button, "Next E9" on a lesson

@@ -24,7 +24,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   - 04 "A short history of data" (card slider with a line icon per card; short sourced summaries).
   - 05 "Pick a direction" (four career cards with canvas 3D figures, link to the quiz).
 - **Bottom taskbar** on every page (D31, D35): a menu button labeled with the lesson code and the section being read,
-  and `Next E9 →` on lessons (`Learn →` elsewhere). Its sheet has two tabs, This lesson and Course, plus Home, Start
+  and `Next E9 →` on lessons (`Start E1 →`, the first published lesson, elsewhere). Its sheet has two tabs, This lesson and Course, plus Home, Start
   here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
