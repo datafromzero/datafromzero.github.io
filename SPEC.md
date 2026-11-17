@@ -418,6 +418,7 @@ datafromzero.github.io/
 ├─ public/                    # favicon.svg, logo files, og-image
 ├─ datasets/                  # §7
 ├─ notebooks/                 # §7
+├─ sheets/excel/              # practice workbooks for Excel lessons ({lesson-id}.xlsx), built from datasets/
 ├─ scripts/                   # graph check, review report, dataset builders, migration scripts
 ├─ tests/                     # unit tests and fixtures (valid/ and invalid/ cases; never deployed)
 ├─ .github/workflows/         # deploy, ci, link-check, review-reminder
