@@ -1,4 +1,6 @@
 import { gsap, willChange } from '../gsap';
+import { opacityAt, scaleAt, STEP_WIDTH } from '../history-curve';
+import type { Step } from './index';
 import type { Draggable as DraggablePlugin } from 'gsap/Draggable';
 
 let Draggable: typeof DraggablePlugin | undefined;
@@ -11,19 +13,18 @@ export const load = () =>
 
 /** Time between two cards on the loop: one card's whole pass (right edge to left edge) takes 1. */
 const SPACING = 0.1;
-/** How far one card moves per step, in card widths (xPercent 400 → -400 over 1, so 80% per SPACING). */
-const STEP_WIDTH = 0.8;
-/** The CSS slider layout exists only when this matches (old browsers without `scripting` keep the list). */
-const SLIDER = '(prefers-reduced-motion: no-preference) and (scripting: enabled)';
 
 /**
- * One card's pass across the stage: it slides from 400% to -400% of its width while it grows to full size
- * and opacity at the center and shrinks again (power1.in both ways). Transforms and opacity only.
+ * One card's pass across the stage: it slides from 400% to -400% of its width while it grows to full size at
+ * the center and shrinks again (power1.in both ways). Opacity has its own curve (history-curve.ts): the
+ * neighbors stay readable, the cards further out fade. Transforms and opacity only.
  */
+const half = { duration: 0.5, yoyo: true, repeat: 1, immediateRender: false };
 const pass = (el: HTMLElement) =>
 	gsap
 		.timeline()
-		.fromTo(el, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, yoyo: true, repeat: 1, ease: 'power1.in', immediateRender: false })
+		.fromTo(el, { scale: 0 }, { scale: 1, ease: scaleAt, ...half })
+		.fromTo(el, { opacity: 0 }, { opacity: 1, ease: opacityAt, ...half }, 0)
 		.fromTo(el, { xPercent: 400 }, { xPercent: -400, duration: 1, ease: 'none', immediateRender: false }, 0);
 
 /**
@@ -53,23 +54,34 @@ function seamlessLoop(items: HTMLElement[]) {
  * 04: the history slider. The center card is full size, the side cards scale down and fade; the loop has no
  * end. It moves by drag (Draggable), the Previous / Next buttons and ←/→ while the slider has focus, always
  * coming to rest on a card, and a polite live region names the centered card after each move. It starts on
- * the first card (1804), the same frame the CSS already shows. Nothing runs between moves: the only
- * per-frame work is the scrub tween, which writes transform and opacity (z-index only when the order of two
- * cards changes, once per card passed).
+ * the first card (1804). Nothing runs between moves: the only per-frame work is the scrub tween, which
+ * writes transform and opacity (z-index only when the order of two cards changes, once per card passed).
+ *
+ * Two frame slots: .is-live first turns the list into the slider's first frame (CSS only, from --d, --s,
+ * --o), then the loop is built on it. Without .is-live, whatever the reason, the cards stay a list.
  */
-export function init(section: HTMLElement, onCleanup: (fn: () => void) => void) {
+export function init(section: HTMLElement, onCleanup: (fn: () => void) => void): Step[] | void {
 	const gallery = section.querySelector<HTMLElement>('.gallery');
 	const list = gallery?.querySelector<HTMLElement>('.cards');
-	const controls = gallery?.querySelector<HTMLElement>('.hist-controls');
-	const say = gallery?.querySelector<HTMLElement>('.hist-live');
-	if (!gallery || !list || !matchMedia(SLIDER).matches) return;
+	if (!gallery || !list) return;
 	const cards = gsap.utils.toArray<HTMLElement>('.card', list);
-	const n = cards.length;
-	if (n < 5) return;
-
-	// From here GSAP owns the transforms: drop the CSS first frame before GSAP reads the start values.
+	if (cards.length < 5) return;
 	gallery.classList.add('is-live');
-	gsap.set(cards, { xPercent: 400, scale: 0, opacity: 0 });
+	let undo: (() => void) | undefined;
+	onCleanup(() => {
+		undo?.();
+		gallery.classList.remove('is-live');
+	});
+	return [() => (undo = build(gallery, list, cards))];
+}
+
+function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): () => void {
+	const controls = gallery.querySelector<HTMLElement>('.hist-controls');
+	const say = gallery.querySelector<HTMLElement>('.hist-live');
+	const n = cards.length;
+	// GSAP takes over from the CSS first frame: x, y and scale are given so the CSS transform it parses
+	// first is not kept as an offset.
+	gsap.set(cards, { x: 0, y: 0, xPercent: 400, scale: 0, opacity: 0 });
 	const loop = seamlessLoop(cards);
 	const wrapTime = gsap.utils.wrap(0, loop.duration());
 	const wrapIndex = gsap.utils.wrap(0, n);
@@ -128,7 +140,8 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void) 
 		if (b) step(Number(b.dataset.step));
 	};
 	const onKey = (e: KeyboardEvent) => {
-		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		// On the "Start at A1" link the arrows keep their usual meaning (screen readers, caret browsing).
+		if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || (e.target as Element).closest('a')) return;
 		e.preventDefault();
 		step(e.key === 'ArrowRight' ? 1 : -1);
 	};
@@ -169,7 +182,7 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void) 
 		});
 	}
 
-	onCleanup(() => {
+	return () => {
 		drag?.kill();
 		scrub.kill();
 		loop.kill();
@@ -180,6 +193,5 @@ export function init(section: HTMLElement, onCleanup: (fn: () => void) => void) 
 		if (say) say.textContent = '';
 		willChange(cards, null);
 		gsap.set(cards, { clearProps: 'transform,opacity,zIndex' });
-		gallery.classList.remove('is-live');
-	});
+	};
 }

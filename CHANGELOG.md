@@ -14,7 +14,8 @@ All notable changes to datafromzero are recorded here. The format follows
   (center card full size, side cards scaled and faded), moved by drag (Draggable, a deferred chunk), Previous /
   Next buttons and ←/→, snapping to a card and announcing it in a polite live region. Without JavaScript or with
   reduced motion the cards are a horizontal scroll-snap list and GSAP is not loaded for it. Begin is now 05; the
-  taskbar's "On this page" lists both. `npm run perf` gained a `history` scenario.
+  taskbar's "On this page" lists both. `npm run perf` gained a `history` scenario (SPEC §12 now lists the
+  `warm` and `history` scenarios).
 - Bottom taskbar on every page (SPEC D31, owner-approved mockup): a floating glass bar with a shortcuts menu
   (hamburger that morphs to ×, the page title or, on the homepage, the section on screen; the sheet grows
   upward with Home, Start here, About, the homepage sections and the project pages), "Start learning →", a light /

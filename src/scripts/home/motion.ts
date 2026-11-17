@@ -16,8 +16,8 @@ type Ctx = gsap.Context;
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel);
 /**
- * The history slider (04) waits for its chunk in its CSS first frame: if the chunk cannot build it, it goes
- * back to the plain list. `all` also resets a slider whose setup failed halfway.
+ * The history list (04) keeps the slider's height while it waits for its chunk: if the chunk cannot build
+ * the slider, the list takes its own height again. `all` also resets a slider whose setup failed halfway.
  */
 const staticGalleries = (root: ParentNode, all = false) =>
 	root.querySelectorAll(all ? '.gallery' : '.gallery:not(.is-live)').forEach((g) => {

@@ -255,7 +255,7 @@ export const en: HomeStrings = {
 		now: {
 			year: 'Now',
 			title: 'Your turn',
-			line: 'Every step above started with a question and a table.',
+			line: 'Your first spreadsheet, query and script continue the story.',
 			cta: 'Start at A1',
 		},
 		sourcesSummary: 'Sources for these dates',

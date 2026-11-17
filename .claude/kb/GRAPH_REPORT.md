@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 711 nodes, 570 edges, 92 communities (377 isolated nodes).
-- Nodes: agent 7, build plan 9, component 32, config 10, content 168, content-type 5, decision 31, dependency 16, design-section 13, doc 14, i18n 6, layout 1, module 13, npm-script 18, page 1, research-section 164, rule 10, script 30, skill 1, spec-section 25, starlight-component 5, style 5, symbol 114, template 1, token 12.
-- Edges: defines 114, imports 34, mentions 353, overrides 5, references 24, runs 9, specified-by 4, uses-token 22, validated-by 5.
+- 717 nodes, 575 edges, 93 communities (377 isolated nodes).
+- Nodes: agent 7, build plan 9, component 32, config 10, content 168, content-type 5, decision 31, dependency 16, design-section 13, doc 14, i18n 6, layout 1, module 13, npm-script 18, page 1, research-section 164, rule 10, script 31, skill 1, spec-section 25, starlight-component 5, style 5, symbol 119, template 1, token 12.
+- Edges: defines 119, imports 34, mentions 353, overrides 5, references 24, runs 9, specified-by 4, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `D1` -mentions-> `D24` (C56 to C12, SPEC.md:28)
-- `ctype:career` -specified-by-> `S5.4` (C68 to C66, src/lib/content-schemas.ts:97)
-- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C22 to C45, .claude/agents/README.md:39)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C56 to C1, research/curriculum/02-syllabus-inventory.md:319)
-- `S5.2` -mentions-> `D18` (C38 to C32, SPEC.md:220)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C22 to C56, .claude/skills/kb/SKILL.md:3)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D29` (C22 to C12, .claude/skills/kb/SKILL.md:3)
-- `research/curriculum/00-README.md` -mentions-> `S4` (C42 to C64, research/curriculum/00-README.md:131)
-- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C79 to C80, src/components/starlight/ThemeSelect.astro:3)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C82 to C78, src/layouts/HomeLayout.astro:39)
-- `D5` -mentions-> `S9` (C31 to C40, SPEC.md:32)
-- `research/curriculum/01-competitor-map.md` -mentions-> `S3` (C17 to C42, research/curriculum/01-competitor-map.md:5)
+- `D1` -mentions-> `D24` (C57 to C12, SPEC.md:28)
+- `ctype:career` -specified-by-> `S5.4` (C69 to C67, src/lib/content-schemas.ts:97)
+- `.claude/agents/README.md` -mentions-> `scripts/kb.mjs` (C23 to C46, .claude/agents/README.md:39)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C57 to C1, research/curriculum/02-syllabus-inventory.md:319)
+- `S5.2` -mentions-> `D18` (C39 to C33, SPEC.md:220)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C23 to C57, .claude/skills/kb/SKILL.md:3)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D29` (C23 to C12, .claude/skills/kb/SKILL.md:3)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C43 to C65, research/curriculum/00-README.md:131)
+- `src/components/starlight/ThemeSelect.astro` -mentions-> `src/components/taskbar/Taskbar.astro` (C80 to C81, src/components/starlight/ThemeSelect.astro:3)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C83 to C79, src/layouts/HomeLayout.astro:39)
+- `D5` -mentions-> `S9` (C32 to C41, SPEC.md:32)
+- `research/curriculum/01-competitor-map.md` -mentions-> `S3` (C18 to C43, research/curriculum/01-competitor-map.md:5)
 
 ## Decisions (SPEC §1)
 
@@ -147,7 +147,7 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:47
 - cspell: `pkg:cspell` — package.json:46
 - markdownlint: `pkg:markdownlint-cli2` — package.json:22
-- migration: `S14` — SPEC.md:429
+- migration: `S14` — SPEC.md:430
 - license: `R8` — CLAUDE.md:31
 - changelog: `S9` — SPEC.md:317
 - zenodo: `S1` — SPEC.md:24
