@@ -26,7 +26,7 @@ if (bar) {
 		btn.setAttribute('aria-expanded', String(o));
 		sheet.inert = !o;
 		if (o) {
-			sheet.querySelector<HTMLElement>(':checked')?.focus({ preventScroll: true });
+			sheet.querySelector<HTMLElement>(':checked, a')?.focus({ preventScroll: true });
 			show();
 		}
 	};

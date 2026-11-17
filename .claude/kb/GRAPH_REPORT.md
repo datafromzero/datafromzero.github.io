@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 781 nodes, 752 edges, 90 communities (381 isolated nodes).
+- 781 nodes, 754 edges, 90 communities (381 isolated nodes).
 - Nodes: agent 8, build plan 9, component 33, config 10, content 167, content-type 5, decision 35, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 139, template 1, token 12.
-- Edges: defines 139, imports 33, mentions 465, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
+- Edges: defines 139, imports 33, mentions 467, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,7 +15,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `astro.config.mjs` | config | 38 | astro.config.mjs:1 |
 | 2 | `src/site.ts` | module | 26 | src/site.ts:1 |
-| 3 | `.claude/HANDOFF.md` | doc | 24 | .claude/HANDOFF.md:1 |
+| 3 | `.claude/HANDOFF.md` | doc | 25 | .claude/HANDOFF.md:1 |
 | 4 | `src/components/content/Solution.astro` | component | 24 | src/components/content/Solution.astro:1 |
 | 5 | `src/components/content/Exercise.astro` | component | 23 | src/components/content/Exercise.astro:1 |
 | 6 | `design/README.md` | doc | 22 | design/README.md:1 |
@@ -55,13 +55,13 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `research/curriculum/00-README.md` -mentions-> `S4` (C20 to C57, research/curriculum/00-README.md:134)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C67 to C1, scripts/check-placeholders.mjs:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C76 to C73, src/layouts/HomeLayout.astro:39)
+- `M7` -mentions-> `D34` (C35 to C14, CLAUDE.md:60)
 - `M8` -mentions-> `S4` (C1 to C57, CLAUDE.md:65)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C80 to C27, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C27 to C44, SPEC.md:32)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C80 to C35, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C35 to C44, SPEC.md:32)
 - `DG6` -mentions-> `DG2` (C53 to C37, design/README.md:204)
 - `S5.2` -mentions-> `D18` (C42 to C1, SPEC.md:225)
 - `research/curriculum/01-competitor-map.md` -mentions-> `S1` (C20 to C1, research/curriculum/01-competitor-map.md:5)
-- `research/curriculum/01-competitor-map.md` -mentions-> `S4` (C20 to C57, research/curriculum/01-competitor-map.md:3)
 
 ## Decisions (SPEC §1)
 
@@ -100,7 +100,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D31 | Bottom taskbar (amended by D34, D… | A floating bar at the bottom of every page (homepage, project pages,… | SPEC.md:58 |
 | D32 | Four career branches | Data Analyst, Data Engineer, Data Scientist and ML / AI Engineer; Ana… | SPEC.md:59 §3.1 §5 |
 | D33 | Career quiz page | `/career-quiz/`: ten questions that suggest one of the four careers (… | SPEC.md:60 §15 |
-| D34 | Navigation for learners | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 |
+| D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 |
 | D35 | Mobile navigation: one bottom bar | On phones the bottom bar is the only navigation (owner decision, 2026… | SPEC.md:62 |
 
 ## CONTRACT sections
