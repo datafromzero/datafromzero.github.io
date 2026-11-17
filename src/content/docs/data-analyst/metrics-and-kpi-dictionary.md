@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-metrics-and-kpi-dictionary
+id: data-analyst-metrics-and-kpi-dictionary
 title: A KPI dictionary and a metrics layer
 description: Define each KPI once with an owner, a definition and caveats, and see how a semantic layer serves it to every tool.
-stage: analytics-engineer
-order: 80
+stage: data-analyst
+order: 90
 level: advanced
 duration: 25
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Describe how a semantic layer exposes metrics
   - Test that two dashboards agree on one KPI
 prerequisites:
-  - analytics-engineer-dimensional-models-and-scd
+  - data-analyst-first-bi-dashboard
   - core-defining-metrics
 datasets:
   - cafe-sales

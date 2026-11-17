@@ -65,6 +65,12 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC §1 decision D32 (owner decision, amends D29), §3.1, §4, §5.1, §13: four career branches. Analytics Engineer is
+  no longer a branch; its eleven draft lessons were folded into Data Engineer (eight dbt and modeling lessons, the
+  dbt capstone included) and Data Analyst (the KPI dictionary). The freshness and incident lesson was merged into
+  `data-engineer-backfills-and-failure-recovery` and the role lesson was dropped, so the map now has 159 draft
+  lessons in eight stages. `analytics-engineer` is gone from the lesson `stage` enum, career `stages`, the `/start/`
+  roadmap map and the curriculum map. None of these lessons was published, so no URL changes.
 - SPEC §1 decision D30, §3.1, §8, §13: Vietnamese is paused; the site is English only for now. No `vi` locale is
   built (no language picker, no `hreflang`), the seven published `/vi/` URLs (`/vi/`, `/vi/start/`, `/vi/about/`,
   `/vi/cite/`, `/vi/changelog/`, `/vi/license/`, `/vi/privacy/`) redirect to their English pages, the sitemap has no

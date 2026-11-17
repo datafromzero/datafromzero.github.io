@@ -53,9 +53,10 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | D26 | Page transitions | **Cross-document View Transitions, CSS only** | `@view-transition { navigation: auto; }` with a root cross-fade of 120 ms (≤ 150 ms), declared only inside `prefers-reduced-motion: no-preference` so reduced-motion readers get none. No named per-element morphs, no JavaScript, no change to first paint. Chrome/Edge 126+ and Safari 18.2+ animate; Firefox navigates normally. |
 | D27 | Prefetch | **Speculation Rules `prefetch`, moderate eagerness; never prerender** | One JSON `<script type="speculationrules">` (`src/lib/speculation-rules.ts`) in every page head: same-origin links only, excluding `#` links, `target=_blank`, `download`, `rel=external` and file paths. Astro's own prefetch script is off (`prefetch: false`), so every page ships one fewer script. Prerender is forbidden: it would run page code, and later analytics (§11), before the visit. Chromium only; Safari and Firefox navigate normally, so no request is spent on pages that may not be read. |
 | D28 | Motion scope and budget | **Full GSAP plugin set, each effect loaded on demand, on the homepage `/` only**; project pages, stories, lessons, reference and datasets get no effects (narrowed by the owner in 2026-11: project pages and `/stories/*` were included before) | Effects load on demand in deferred chunks after first paint (effects may share a chunk when that saves requests); a section is built when it nears the viewport or, after the intro, while the reader is idle; the budget is JavaScript before first paint ≈ 3 KB gzipped, Lighthouse mobile ≥ 90 (target 100) and the frame budget in §12. Replaces D22's plugin list and 90 KB total. Project pages keep only CSS (the View Transitions of D26); the `/start/` roadmap map is a static SVG. A story's `motion` field (§5.4) stays in the schema and has no effect for now. |
-| D29 | Curriculum map | **Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; one English dataset set in USD** | The map is `research/curriculum/06-curriculum-map.yaml` (rationale in `07-…`); lessons are created as drafts from it (§14) and their frontmatter is the source of truth from then on. `v1.0.0` = the four core stages (102 lessons); the five branches follow in 1.x. SQL lessons run DuckDB in Colab and cite DuckDB docs; dbt lessons use dbt-duckdb. Dashboard lessons teach principles, then short parallel how-tos for Power BI Desktop and Looker Studio. Datasets are English with prices in US dollars and cents; `/vi/` reuses them. |
+| D29 | Curriculum map (amended by D32) | **Approved: 161 lessons in 9 stages; DuckDB for SQL; BI tool neutral; one English dataset set in USD** | The map is `research/curriculum/06-curriculum-map.yaml` (rationale in `07-…`); lessons are created as drafts from it (§14) and their frontmatter is the source of truth from then on. `v1.0.0` = the four core stages (102 lessons); the five branches follow in 1.x. SQL lessons run DuckDB in Colab and cite DuckDB docs; dbt lessons use dbt-duckdb. Dashboard lessons teach principles, then short parallel how-tos for Power BI Desktop and Looker Studio. Datasets are English with prices in US dollars and cents; `/vi/` reuses them. |
 | D30 | Vietnamese paused | **English only for now**; Vietnamese and other languages later, when the owner decides | No `vi` locale is built (one switch, `VI_ENABLED` in `src/site.ts`), so there is no language picker and no `hreflang` alternates. Every `/vi/` URL that was published (`/vi/` and the six project pages) redirects to its English twin (`src/redirects.ts`, static meta-refresh pages, not in the sitemap). A page under `src/content/docs/vi/` fails the build. D3 and §8 are paused, not deleted: the `translated_from_version` field stays in the schemas (§5, CONTRACT) and its rule applies again once §8 is reactivated. |
 | D31 | Bottom taskbar | **A floating bar at the bottom of every page** (homepage, project pages, lessons, reference): shortcuts menu, "Start learning", light / dark switch, back to top | Approved by the owner in 2026-11 (mockup ported to `src/components/taskbar/Taskbar.astro`). Shortcuts link only to pages that exist (drafts are not deployed). On project, lesson and reference pages it may ship **one** script under 1 KB gzipped (`src/scripts/taskbar.ts`): no GSAP, no library, motion is CSS transitions only and none under reduced motion. Without JavaScript the menu is a `<details>` toggle, back to top is an anchor and the theme switch is hidden. The bar never covers content (a spacer after the footer) and is hidden in print. |
+| D32 | Four career branches | **Data Analyst, Data Engineer, Data Scientist and ML / AI Engineer**; Analytics Engineer is no longer a branch | Owner decision (2026-11-17): analytics engineering skills live in Data Engineer and Data Analyst, and four careers match the homepage and the career quiz. The eleven Analytics Engineer drafts were folded in: eight moved to Data Engineer (dbt project, layers, materializations, tests and documentation, dimensional models, Jinja as stretch, CI, the dbt capstone), the KPI dictionary moved to Data Analyst, the freshness and incident lesson was merged into `data-engineer-backfills-and-failure-recovery`, and the role lesson was dropped (its transformation-as-code objective moved to `data-engineer-dbt-project-and-first-model`). Amends D29: **159 lessons in 8 stages**; `v1.0.0` is still the four core stages (102 lessons) and the four branches follow in 1.x. `analytics-engineer` is removed from the lesson `stage` enum and from career `stages` (§5, CONTRACT) and from the route map (§3.1). No `/analytics-engineer/` URL was ever published (all were drafts, D18), so no redirect is needed. |
 
 ---
 
@@ -89,14 +90,13 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 | `/data-analyst/{lesson}/` | Branch — Data Analyst | `lessons` |
 | `/data-engineer/{lesson}/` | Branch — Data Engineer | `lessons` |
 | `/data-scientist/{lesson}/` | Branch — Data Scientist | `lessons` |
-| `/analytics-engineer/{lesson}/` | Branch — Analytics Engineer | `lessons` |
 | `/ml-engineer/{lesson}/` | Branch — ML / AI Engineer | `lessons` |
 | `/reference/glossary/` · `/reference/glossary/{term}/` | Glossary | `glossary` |
 | `/reference/excel/{function}/` | e.g. `/reference/excel/xlookup/` | `reference` |
 | `/reference/sql/{keyword}/` | e.g. `/reference/sql/group-by/` | `reference` |
 | `/reference/pandas/{name}/` | e.g. `/reference/pandas/merge/` | `reference` |
 | `/reference/stats/{formula}/` | e.g. `/reference/stats/standard-deviation/` | `reference` |
-| `/careers/{career}/` | Career guides (the 5 roles) | `careers` |
+| `/careers/{career}/` | Career guides (the 4 roles, D32) | `careers` |
 | `/stories/{slug}/` | History / story / visualization pages (static for now, D28) | `stories` |
 | `/datasets/` · `/datasets/{name}/` | Dataset documentation + download | `datasets` |
 | `/cite/` · `/changelog/` · `/about/` · `/license/` · `/privacy/` | Project pages | `docs` |
@@ -128,12 +128,12 @@ Read together with `design/README.md` (visual design, logo, homepage motion).
 datafromzero
 ├─ Learn (Study mode — open, quiet, one idea per screen)
 │  ├─ 1 Excel / Sheets → 2 SQL → 3 Python → 4 Advanced core
-│  └─ Branches: Data Analyst · Data Engineer · Data Scientist · Analytics Engineer · ML/AI Engineer
+│  └─ Branches: Data Analyst · Data Engineer · Data Scientist · ML/AI Engineer
 ├─ Reference (Book mode — indexed, compact, searchable)
 │  ├─ Glossary
 │  ├─ Syntax: Excel functions · SQL keywords · pandas
 │  ├─ Statistics formulas
-│  └─ Careers (5 guides)
+│  └─ Careers (4 guides)
 ├─ Stories (history, explainers, visualizations — motion allowed)
 ├─ Datasets
 └─ About · Cite · Changelog · License · Privacy
@@ -165,7 +165,7 @@ id: sql-joins                 # permanent internal key; never changes, even if t
 title: Joining tables
 description: Combine rows from two tables with INNER and LEFT JOIN.   # ≤ 160 chars, used for SEO/social
 stage: sql                    # excel | sql | python | core | data-analyst | data-engineer |
-                              # data-scientist | analytics-engineer | ml-engineer
+                              # data-scientist | ml-engineer
 order: 40                     # sort key inside the stage; use gaps of 10 so lessons can be inserted
 level: beginner               # beginner | intermediate | advanced
 duration: 25                  # minutes, integer
@@ -397,7 +397,7 @@ datafromzero.github.io/
 │  ├─ content/
 │  │  ├─ docs/                # Starlight docs: lessons, reference, careers, stories, project pages
 │  │  │  ├─ excel/ sql/ python/ core/
-│  │  │  ├─ data-analyst/ data-engineer/ data-scientist/ analytics-engineer/ ml-engineer/
+│  │  │  ├─ data-analyst/ data-engineer/ data-scientist/ ml-engineer/
 │  │  │  ├─ reference/{glossary,excel,sql,pandas,stats}/
 │  │  │  ├─ careers/ stories/ datasets/
 │  │  │  └─ vi/               # Vietnamese mirror (same structure; paused, D30)

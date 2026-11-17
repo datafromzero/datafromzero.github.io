@@ -3,7 +3,7 @@ id: data-analyst-case-interview-practice
 title: 'Analytics case questions: define, diagnose, design, judge'
 description: 'Practice the four case families out loud: define a metric, diagnose a drop, design a test and judge a trade-off.'
 stage: data-analyst
-order: 100
+order: 110
 level: advanced
 duration: 30
 objectives:

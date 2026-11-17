@@ -1,7 +1,7 @@
 /**
  * Roadmap map layout for /start/ (SPEC §3.1). Pure TypeScript: no Astro imports, so the build and
  * the unit tests share it. The map is a vertical SVG (it reads well at 360 px): four stages in
- * sequence on a left rail, then a fork into the five branches. Published lessons sit under their
+ * sequence on a left rail, then a fork into the four branches. Published lessons sit under their
  * stage in rows; a row is one distinct `layers()` value (longest prerequisite path, see graph.ts),
  * so a lesson never appears above one it requires. Cross-stage and in-stage edges are not drawn:
  * the rows already encode the order, and the text list below the map lists every prerequisite link.
@@ -22,7 +22,6 @@ export const ROADMAP_STAGES: readonly StageDef[] = [
 	{ id: 'data-analyst', title: 'Data Analyst', branch: true },
 	{ id: 'data-engineer', title: 'Data Engineer', branch: true },
 	{ id: 'data-scientist', title: 'Data Scientist', branch: true },
-	{ id: 'analytics-engineer', title: 'Analytics Engineer', branch: true },
 	{ id: 'ml-engineer', title: 'ML / AI Engineer', branch: true },
 ];
 

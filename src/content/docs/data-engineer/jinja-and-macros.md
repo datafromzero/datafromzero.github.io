@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-jinja-and-macros
+id: data-engineer-jinja-and-macros
 title: Reusing SQL with Jinja and macros
 description: Remove repeated SQL with variables, loops and macros, and read compiled SQL to check the result.
-stage: analytics-engineer
-order: 70
+stage: data-engineer
+order: 150
 level: advanced
 duration: 25
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Compile a model and read the generated SQL
   - Say when a macro hurts readability
 prerequisites:
-  - analytics-engineer-materializations-and-incremental-models
+  - data-engineer-materializations-and-incremental-models
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

@@ -3,7 +3,7 @@ id: data-analyst-ab-test-readout
 title: Reading an A/B test result end to end
 description: 'Analyze a finished experiment in Python: sanity checks, the effect with an interval, guardrails and a ship or no-ship memo.'
 stage: data-analyst
-order: 90
+order: 100
 level: advanced
 duration: 30
 objectives:

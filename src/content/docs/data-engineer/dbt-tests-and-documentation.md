@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-dbt-tests-and-documentation
+id: data-engineer-dbt-tests-and-documentation
 title: 'Tests and documentation: how a model earns trust'
 description: Add unique, not-null, accepted-values and relationship tests, write documentation and read the lineage graph.
-stage: analytics-engineer
-order: 50
+stage: data-engineer
+order: 130
 level: intermediate
 duration: 30
 objectives:
@@ -12,7 +12,8 @@ objectives:
   - Document models and columns
   - Read the lineage graph to find what a change affects
 prerequisites:
-  - analytics-engineer-staging-intermediate-marts
+  - data-engineer-staging-intermediate-marts
+  - data-engineer-data-quality-checks
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

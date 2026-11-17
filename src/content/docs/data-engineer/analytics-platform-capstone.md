@@ -1,9 +1,9 @@
 ---
-id: analytics-engineer-analytics-platform-capstone
-title: 'The capstone: one serious analytics project'
-description: Design a layered project on warehouse data with tests, docs, CI, a KPI dictionary and a README that defends grain and keys.
-stage: analytics-engineer
-order: 110
+id: data-engineer-analytics-platform-capstone
+title: 'A dbt capstone: one serious analytics project'
+description: Design a layered dbt project on warehouse data with tests, docs, CI and a README that defends grain and keys.
+stage: data-engineer
+order: 190
 level: advanced
 duration: 30
 objectives:
@@ -12,10 +12,9 @@ objectives:
   - Write a README that defends the grain and key choices
   - Prove the models serve real questions with a small BI or SQL layer
 prerequisites:
-  - analytics-engineer-dimensional-models-and-scd
-  - analytics-engineer-metrics-and-kpi-dictionary
-  - analytics-engineer-ci-and-deployment-for-dbt
-  - analytics-engineer-freshness-and-data-incidents
+  - data-engineer-dimensional-models-and-scd
+  - data-engineer-ci-and-deployment-for-dbt
+  - data-engineer-backfills-and-failure-recovery
 datasets:
   - cafe-sales
 reviewed: 2026-11-16
