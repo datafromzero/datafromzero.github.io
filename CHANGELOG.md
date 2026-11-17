@@ -109,6 +109,9 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Taskbar: back to top is back on phones; the bar and its sheet are liquid glass (more see-through, blurred, with a top
+  sheen) so the lesson shows faintly underneath; sheet rows rise in one after another and buttons give when pressed, in
+  CSS only (GSAP stays on the homepage, D28).
 - Sidebar: lesson codes sit in their own muted mono column beside the title, so wrapped titles line up and "E1" no
   longer reads as part of the title.
 - Taskbar: off lessons the primary button is "Start E1 →" (the first published lesson) instead of "Learn →" to

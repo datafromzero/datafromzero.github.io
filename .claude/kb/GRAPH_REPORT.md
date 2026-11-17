@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 781 nodes, 756 edges, 90 communities (381 isolated nodes).
+- 781 nodes, 757 edges, 90 communities (381 isolated nodes).
 - Nodes: agent 8, build plan 9, component 33, config 10, content 167, content-type 5, decision 35, dependency 16, design-section 13, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 63, skill 1, spec-section 25, starlight-component 5, style 5, symbol 139, template 1, token 12.
-- Edges: defines 139, imports 33, mentions 469, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
+- Edges: defines 139, imports 33, mentions 470, overrides 5, references 25, runs 10, specified-by 4, uses 44, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -27,7 +27,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 12 | `S6` Authoring components | spec-section | 18 | SPEC.md:248 |
 | 13 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 | 14 | `.claude/MISTAKES.md` | doc | 16 | .claude/MISTAKES.md:1 |
-| 15 | `CLAUDE.md` | doc | 15 | CLAUDE.md:1 |
+| 15 | `D28` Motion scope and budget | decision | 16 | SPEC.md:55 |
 
 ## Communities
 
@@ -58,7 +58,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `M8` -mentions-> `S4` (C1 to C57, CLAUDE.md:65)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C80 to C35, src/lib/repo-files.ts:4)
 - `D5` -mentions-> `S9` (C35 to C44, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C53 to C37, design/README.md:204)
+- `DG6` -mentions-> `DG2` (C53 to C37, design/README.md:207)
 - `M7` -mentions-> `D34` (C35 to C14, CLAUDE.md:60)
 - `S5.2` -mentions-> `D18` (C42 to C1, SPEC.md:225)
 - `research/curriculum/01-competitor-map.md` -mentions-> `S1` (C20 to C1, research/curriculum/01-competitor-map.md:5)
@@ -132,7 +132,7 @@ term: id — file:line
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
 - logo: `src/components/home/Logo.astro` — src/components/home/Logo.astro:1
-- favicon: `DG6` — design/README.md:190
+- favicon: `DG6` — design/README.md:193
 - i18n: `src/i18n/home/types.ts` — src/i18n/home/types.ts:1
 - vietnamese: `R:curriculum/01-competitor-map#5-gaps-data-from-zero-exploits:gap-3-vietnamese-scaffolding-is-a-moat-not-a-translation-feature` — research/curriculum/01-competitor-map.md:211
 - validation: `src/lib/content-validation.ts` — src/lib/content-validation.ts:1

@@ -170,7 +170,10 @@ is one bar (D35): Starlight's header menu button and "On this page" bar are hidd
   Careers · Three tools · History · Directions) over the site name; elsewhere it is the current h2 or empty.
 - **Right:** a solid primary button: "Next E9 →" on a lesson (next published lesson in the stage, else the next
   stage's first, else "Roadmap" to `/start/`), "Start E1 →" (the first published lesson) everywhere else, so it never points back at `/start/`.
-  Back to top (a chevron, dimmed in the first 200px) shows from 50rem up only; the light / dark switch moved into the sheet.
+  Back to top (a chevron, dimmed in the first 200px) shows at every width; the light / dark switch moved into the sheet.
+  Liquid glass: `--tb-glass` tint (0.5 dark, 0.55 light), 14px backdrop blur with saturate 1.8, a top-edge sheen
+  (`--tb-sheen`), a solid `--bg` fallback without blur support. Motion is CSS only: sheet rows rise in with a stagger
+  and a slight spring (`--tb-spring`), buttons scale to 0.96 when pressed; none of it under reduced motion.
 - **Sheet:** grows upward from the bar. A segmented control with two tabs, This lesson (This page off lessons: the
   page's h2s, current one marked with a bar on the leading edge) and Course (stages with published lessons as `<details>`
   of `E1 Title` rows, current lesson marked and scrolled into view; stages without lessons as muted "SQL · coming soon"
