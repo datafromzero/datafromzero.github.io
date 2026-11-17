@@ -109,6 +109,10 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Homepage 04 "A short history of data": each card has a small line picture under its year (13 icons drawn for the
+  site, no brand logos). "Sources for these dates" is shorter: per milestone a two-to-three-line summary (the card's
+  line and why it matters, from issue #29) and two short links, Primary source and Second source, whose accessible
+  names carry the full titles.
 - Taskbar menu icon: two bars that cross into an X when the menu opens, instead of three bars with one fading out.
 - SPEC D34, §3.1, §5.1: docs-style navigation. The sidebar lists Get started, then each stage's lessons in study
   order with codes (E1 … E22), then the project pages last. Every lesson shows its code in the header, in Before this

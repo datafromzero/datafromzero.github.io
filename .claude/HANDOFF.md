@@ -21,7 +21,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   - 01 The core.
   - 02 "One trunk. Four careers."
   - 03 "Same question. Three tools."
-  - 04 "A short history of data" (card slider with sources).
+  - 04 "A short history of data" (card slider with a line icon per card; short sourced summaries).
   - 05 "Pick a direction" (four career cards with canvas 3D figures, link to the quiz).
 - **Bottom taskbar** on every page (D31): shortcuts menu, Start learning, light/dark, back to top.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).

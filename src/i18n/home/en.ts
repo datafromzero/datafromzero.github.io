@@ -101,6 +101,8 @@ export const en: HomeStrings = {
 				year: '1804',
 				title: 'A loom reads punched cards',
 				line: "Jacquard's loom weaves patterns stored as holes in interchangeable punched cards.",
+				why: 'The cards were data a machine could read, hole or no hole: the same "store it where a machine can use it" idea behind every table and file on this path.',
+				icon: 'card',
 				sources: [
 					{
 						name: 'Science and Industry Museum (Science Museum Group), "Programming patterns: the story of the Jacquard loom"',
@@ -116,6 +118,8 @@ export const en: HomeStrings = {
 				year: '1890',
 				title: 'Punched cards count a country',
 				line: "Herman Hollerith's electric tabulators process the US Census.",
+				why: 'Each card held one person\'s answers as holes in fixed positions, a row of data: the same record-and-aggregate idea behind a spreadsheet table or a SQL GROUP BY.',
+				icon: 'dial',
 				sources: [
 					{
 						name: 'US Census Bureau, "The Hollerith Machine"',
@@ -131,6 +135,8 @@ export const en: HomeStrings = {
 				year: '1970',
 				title: 'Data gets tables',
 				line: 'IBM researcher Edgar F. Codd proposes storing data in simple tables of rows and columns.',
+				why: 'Every table you create, and every JOIN and GROUP BY you write in SQL, follows the relational model this paper defined.',
+				icon: 'table',
 				sources: [
 					{
 						name: 'E. F. Codd, "A Relational Model of Data for Large Shared Data Banks", ACM Digital Library',
@@ -146,6 +152,8 @@ export const en: HomeStrings = {
 				year: '1974',
 				title: 'SQL is born',
 				line: 'At IBM, Chamberlin and Boyce describe SEQUEL, an English-like language for asking questions of tables.',
+				why: 'The SELECT, FROM and WHERE clauses you type in your first SQL lesson descend directly from SEQUEL\'s keyword templates.',
+				icon: 'query',
 				sources: [
 					{
 						name: 'Chamberlin & Boyce, "SEQUEL: A Structured English Query Language", ACM Digital Library',
@@ -158,6 +166,8 @@ export const en: HomeStrings = {
 				year: '1979',
 				title: 'The first personal-computer spreadsheet',
 				line: 'VisiCalc turns a personal computer into a business tool.',
+				why: 'The grid, cell references and formulas you use in Excel and Google Sheets today follow the model VisiCalc set.',
+				icon: 'screen',
 				sources: [
 					{
 						name: 'Dan Bricklin and Bob Frankston, "VisiCalc: Information from its creators"',
@@ -170,6 +180,8 @@ export const en: HomeStrings = {
 				year: '1985',
 				title: 'Excel arrives on the Macintosh',
 				line: 'Microsoft ships Excel 1.0 for the Macintosh.',
+				why: 'Excel is the tool this roadmap starts from, and its basic layout and core functions still match that first Macintosh version.',
+				icon: 'sheet',
 				sources: [
 					{
 						name: 'Microsoft (Signal), "Formulas, fandom and an AI-fueled future — Microsoft Excel celebrates 40 years"',
@@ -182,6 +194,8 @@ export const en: HomeStrings = {
 				year: '1991',
 				title: "Python's first public release",
 				line: "Guido van Rossum publishes Python 0.9.0, the language's first public release.",
+				why: 'Python is the language this roadmap\'s third stage teaches, and pandas, Jupyter and scikit-learn all build on it.',
+				icon: 'code',
 				sources: [
 					{
 						name: 'Guido van Rossum, "A Brief Timeline of Python", in The History of Python',
@@ -194,6 +208,8 @@ export const en: HomeStrings = {
 				year: '2006',
 				title: 'Hadoop brings big data open source',
 				line: 'Apache Hadoop 0.1.0 is released, spreading data work across many ordinary machines.',
+				why: 'Hadoop\'s split-the-work idea still sits underneath the cloud data platforms beginners meet on the job.',
+				icon: 'cluster',
 				sources: [
 					{
 						name: 'Apache Hadoop project, "Release 0.1.0 changelog"',
@@ -206,6 +222,8 @@ export const en: HomeStrings = {
 				year: '2008',
 				title: 'pandas brings tables to Python',
 				line: 'Wes McKinney starts building pandas at AQR, bringing spreadsheet-style tables to Python.',
+				why: 'pandas is still the first tool most beginners reach for when cleaning and exploring a table in Python.',
+				icon: 'frame',
 				sources: [
 					{ name: 'GitHub Readme Stories, "Wes McKinney"', url: 'https://github.com/readme/stories/wes-mckinney' },
 					{ name: 'Wikipedia, "Pandas (software)" (History)', url: 'https://en.wikipedia.org/wiki/Pandas_(software)' },
@@ -215,6 +233,8 @@ export const en: HomeStrings = {
 				year: '2012',
 				title: 'A job gets a name',
 				line: 'Harvard Business Review names data scientist the sexiest job of the 21st century.',
+				why: 'The data careers at the end of this roadmap became named, hirable jobs in the years around this article.',
+				icon: 'person',
 				sources: [
 					{
 						name: 'Davenport & Patil, "Data Scientist: The Sexiest Job of the 21st Century", Harvard Business Review',
@@ -230,6 +250,8 @@ export const en: HomeStrings = {
 				year: '2017',
 				title: 'The Transformer',
 				line: "A paper, Attention Is All You Need, introduces the Transformer, the design behind today's AI models.",
+				why: 'The AI assistants you can now use while learning are built on this design, and they run on data prepared with skills from this roadmap.',
+				icon: 'network',
 				sources: [
 					{ name: 'Vaswani et al., "Attention Is All You Need", arXiv:1706.03762', url: 'https://arxiv.org/abs/1706.03762' },
 					{
@@ -242,6 +264,8 @@ export const en: HomeStrings = {
 				year: '2022',
 				title: 'AI in a chat box',
 				line: 'OpenAI releases ChatGPT: a large language model anyone can talk to in a chat box.',
+				why: 'AI tools like this now sit next to your spreadsheet and code editor, and judging their answers takes the data skills in this roadmap.',
+				icon: 'chat',
 				sources: [
 					{ name: 'OpenAI, "Introducing ChatGPT"', url: 'https://openai.com/index/chatgpt/' },
 					{ name: 'Simple English Wikipedia, "ChatGPT"', url: 'https://simple.m.wikipedia.org/wiki/ChatGPT' },
@@ -253,6 +277,7 @@ export const en: HomeStrings = {
 			title: 'Your turn',
 			line: 'Your first spreadsheet, query and script continue the story.',
 			cta: 'Start at A1',
+			icon: 'cursor',
 		},
 		sourcesSummary: 'Sources for these dates',
 		accessed: 'Accessed November 16, 2026.',
