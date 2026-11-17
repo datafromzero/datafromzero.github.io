@@ -2,6 +2,11 @@
 // (SPEC D30).
 // Text conventions: "\n" is a line break; *text* is the muted second voice of a heading.
 
+export interface HistorySource {
+	name: string;
+	url: string;
+}
+
 export interface HomeStrings {
 	meta: { tagline: string; description: string };
 	nav: { label: string; roadmap: string; example: string; github: string; skip: string };
@@ -51,6 +56,28 @@ export interface HomeStrings {
 		};
 		/** The auto-cycle's pause / play button (WCAG 2.2.2), shown only while the script cycles the tabs. */
 		control: { pause: string; play: string; what: string };
+	};
+	history: {
+		short: string;
+		label: string;
+		heading: string;
+		/** Accessible name of the slider (role region, aria-roledescription "carousel"). */
+		carousel: string;
+		prev: string;
+		next: string;
+		/**
+		 * The milestones, oldest first, exactly as researched in GitHub issue #29: year, title and one line.
+		 * Every card has a primary and a second source (the honesty rules of the teaching playbook,
+		 * research/curriculum/ §4: every fact on the site is sourced).
+		 */
+		cards: { year: string; title: string; line: string; sources: [HistorySource, HistorySource] }[];
+		/** The closing card: site copy, not a researched milestone, so no source. */
+		now: { year: string; title: string; line: string; cta: string };
+		sourcesSummary: string;
+		/** Date the sources were checked. */
+		accessed: string;
+		primary: string;
+		second: string;
 	};
 	marquee: { text: string; outline?: boolean }[];
 	marqueeControl: { pause: string; play: string; what: string };

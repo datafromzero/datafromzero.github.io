@@ -15,6 +15,15 @@ import type { Loader, SectionInit, Step } from './sections';
 type Ctx = gsap.Context;
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel);
+/**
+ * The history slider (04) waits for its chunk in its CSS first frame: if the chunk cannot build it, it goes
+ * back to the plain list. `all` also resets a slider whose setup failed halfway.
+ */
+const staticGalleries = (root: ParentNode, all = false) =>
+	root.querySelectorAll(all ? '.gallery' : '.gallery:not(.is-live)').forEach((g) => {
+		g.classList.remove('is-live');
+		g.classList.add('is-static');
+	});
 
 /** One unit of setup work: a section's init, or one of the later steps it asked for (see SectionInit). */
 interface Job {
@@ -61,6 +70,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 	add('.core', 'core');
 	add('.branch', 'branches');
 	add('#tools', 'tools');
+	add('#history', 'history');
 	add('.marquee', 'marquee');
 	add('.end', 'begin');
 	add('.rule', 'rules');
@@ -179,6 +189,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 						gsap.set([job.el, ...job.el.querySelectorAll('*')], {
 							clearProps: 'opacity,visibility,transform,clipPath,strokeDasharray,strokeDashoffset,willChange',
 						});
+						staticGalleries(job.el, true);
 						continue;
 					}
 					if (steps?.length) {
@@ -189,6 +200,7 @@ function sections(ctx: Ctx, cleanups: (() => void)[]) {
 			}
 		} catch {
 			// Motion is an enhancement: the page is already complete without it.
+			staticGalleries(document);
 		} finally {
 			pumping = false;
 		}
