@@ -22,4 +22,7 @@ def build() -> None:
 
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    # One empty sheet per exercise, so an exercise never overwrites the worked example.
+    wb.create_sheet("calc_ex1")
+    wb.create_sheet("calc_ex2")
     save(wb, "excel-ai-draft-and-verify")

@@ -24,4 +24,9 @@ def build() -> None:
     # The three-sheet habit: raw data stays untouched, work happens in calc, results go to output.
     wb.create_sheet("calc")
     wb.create_sheet("output")
+    # One empty sheet per exercise, so an exercise never overwrites the worked example.
+    wb.create_sheet("calc_ex1")
+    wb.create_sheet("output_ex1")
+    wb.create_sheet("calc_ex2")
+    wb.create_sheet("output_ex2")
     save(wb, "excel-pivottables-build")
