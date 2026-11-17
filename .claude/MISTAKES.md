@@ -56,6 +56,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — A PDF preview showed the header, the table of contents, the consent banner and the taskbar over the
   text. → **For previews, remove fixed and sticky elements and open only the `<details>` inside `.sl-markdown-content`.**
 
+- 2026-11-17 — The taskbar script assumed an element that one page variant never rendered (project pages with the
+  table of contents off), so it would throw there. → **Every element a script queries must exist on every kind of
+  page (homepage, lesson, project page with `tableOfContents: false`); take section lists from `headings`, not `toc`;
+  load each variant once with the console open before merging.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
