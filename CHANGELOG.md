@@ -109,6 +109,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- Homepage footer: two centered rows (the license line, then the project links) instead of items pushed to both sides.
 - SPEC D35 (owner decision): one navigation on phones. The bottom bar is now two controls: a menu button with a
   two-line label (the lesson code and current section, over the title) and a primary button, "Next E9" on a lesson
   and "Learn" elsewhere. The sheet has two tabs, This lesson (the page's headings) and Course (every published
