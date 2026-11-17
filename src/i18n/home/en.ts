@@ -353,6 +353,13 @@ export const en: HomeStrings = {
 			cta: 'Take the career quiz',
 		},
 	},
+	author: {
+		label: 'About the author',
+		name: 'Nguyen “John” Ha',
+		href: 'https://johnha.info/',
+		line: "From business school and a market research desk to data, one coffee at a time. I built the roadmap I wish I'd had.",
+		more: 'Read the story',
+	},
 	footer: {
 		content: 'Content CC BY 4.0',
 		code: 'Code MIT',

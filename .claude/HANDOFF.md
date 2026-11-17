@@ -60,6 +60,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 - **Homepage accessibility score is 97, not 100:** the 01 steps are dimmed to 25% until reached, which fails the
   contrast audit. It is the approved design; change it only if the owner asks.
 - **Course tab** lists every published lesson by stage automatically (`src/components/taskbar/Taskbar.astro`, D35).
+- **Homepage author line** (`src/components/home/Author.astro`, strings `author` in `src/i18n/home/en.ts`, avatar
+  `src/assets/author.jpg` from the owner's GitHub, served as webp by `astro:assets`). Option B of three the owner saw.
 - **Consent card** (`src/components/project/Consent.astro`) copies the layout of the owner's johnha.info: fixed above
   the taskbar, hidden while the taskbar menu is open, classes prefixed `dfz-c-`. The owner tried it at the top of the
   page and preferred this.
