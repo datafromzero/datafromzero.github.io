@@ -30,17 +30,14 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   Excel 22, SQL 30, Python 25, core 25, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
   The map is `research/curriculum/06-curriculum-map.yaml`; lesson frontmatter is the source of truth.
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
-- **Open issues and PRs:** the Excel-stage drafts PR (waits for the owner).
+- **Open issues and PRs:** issue #41 (Excel checks in the real apps, Sheets copy links).
 
 ## What comes next (build plan item 8, content)
 
-1. **Excel stage (22 lessons):** every lesson has full draft text (team drafts under D24), three exercises and a
-   practice workbook in `sheets/excel/{lesson-id}.xlsx`, built from `cafe-sales` by its own module in
-   `scripts/lesson_sheets/` (`python3 scripts/build-lesson-sheets.py [lesson-id]`; byte-stable output). Each
-   exercise has its own pre-built sheet (`calc_ex1..3`); `raw_*` sheets are never edited. All still `status: draft`.
-   The owner reviews each lesson, resolves its `TODO(owner)` notes (menu names and behaviors that could not be run
-   here: Power Query, Sheets QUERY, Sheets error wording), uploads the workbook to Google Drive, adds the `sheet`
-   link, sets `reviewed` and `status: published`.
+1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
+   workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
+   Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
+   names) and sends Google Sheets `/copy` links; each link becomes a `sheet` field plus `<OpenInSheets />`.
 2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/`), then Python and core. Use the
    lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
    `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
@@ -62,7 +59,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   contrast audit. It is the approved design; change it only if the owner asks.
 - **Two menus on phones** on inner pages: Starlight's top menu (page list) and the taskbar menu (shortcuts).
   The owner was told and has not asked to merge them.
-- **Taskbar shortcuts** list only pages that exist. Add Excel, SQL, Python and the branches when lessons publish.
+- **Taskbar shortcuts** add a stage automatically once it has a published lesson (`src/components/taskbar/Taskbar.astro`).
 - **Design prototype:** `design/homepage-prototype/index.html` is the original approved prototype and no longer
   matches the homepage; `design/README.md` §4–§5 describe the current design.
 

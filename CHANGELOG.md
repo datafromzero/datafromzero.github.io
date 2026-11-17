@@ -7,6 +7,9 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- The 22 Excel / Sheets lessons are published (owner decision, 2026-11-17), each with a downloadable practice
+  workbook. Checks still to do in the real apps, and the Google Sheets copy links, are tracked in issue #41. The
+  bottom taskbar now lists a shortcut to the first lesson of every stage that has published lessons.
 - `.claude/MISTAKES.md`: a log of every mistake made once and the rule that prevents it, read by the lead and every
   agent before work and extended after every review. `npm run check:lessons` (part of `npm run check`) enforces the
   rules that can be checked mechanically: American spelling, no first-person notes outside the owner's to-do notes, no bare `$`
