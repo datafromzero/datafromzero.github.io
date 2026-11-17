@@ -109,6 +109,12 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Changed
+- SPEC D35 (owner decision): one navigation on phones. The bottom bar is now two controls: a menu button with a
+  two-line label (the lesson code and current section, over the title) and a primary button, "Next E9" on a lesson
+  and "Learn" elsewhere. The sheet has two tabs, This lesson (the page's headings) and Course (every published
+  lesson by stage, the current one marked), and a bottom row with Home, Start here, Career quiz and the light / dark
+  switch. Starlight's header menu button and its "On this page" bar are hidden on phones; the desktop sidebar and
+  table of contents are unchanged. Tabs work without JavaScript.
 - Homepage 04 "A short history of data": each card has a small line picture under its year (13 icons drawn for the
   site, no brand logos). "Sources for these dates" is shorter: per milestone a two-to-three-line summary (the card's
   line and why it matters, from issue #29) and two short links, Primary source and Second source, whose accessible

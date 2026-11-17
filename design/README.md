@@ -157,25 +157,31 @@ this table is authoritative where they disagree.
 
 Every section heading uses the same word-by-word mask reveal when it enters the viewport.
 
-### 5a. Bottom taskbar (every page, SPEC D31)
+### 5a. Bottom taskbar (every page, SPEC D31, D35)
 
 Approved mockup (owner, 2026-11), built as `src/components/taskbar/Taskbar.astro`: a floating, rounded
 glass bar (16px radius, blur 16px, max-width 720px, centered on the content column, 16px from the bottom plus
-the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop.
+the safe-area inset) on the homepage, project pages, lessons and reference, phone and desktop. Mobile navigation
+is one bar (D35): Starlight's header menu button and "On this page" bar are hidden on phones.
 
-- **Left:** a menu icon (two bars that cross into ×; owner change 2026-11-17) and a label in Geist 500, 15px: the page title, or on the
-  homepage the section on screen (Home · 01 The core · 02 Careers · 03 Three tools · 04 History · 05 Directions). It opens the
-  shortcuts sheet, which grows upward from the bar: big links (Home, Start here, Career quiz, About), then small groups
-  (On this page, homepage only; Project: Changelog, Cite, License, Privacy, GitHub ↗). Esc, a second tap, a
-  link or an outside click closes it.
-- **Right:** "Start learning →" (solid; "Learn" at 420px or less) to `/start/`, the light / dark switch (a
-  half-filled circle) and back to top (a chevron, dimmed in the first 200px).
-- Glass tints: dark `rgba(18,18,18,.72)`, edge `rgba(255,255,255,.09)`, chip `rgba(255,255,255,.07)`; light
-  `rgba(250,250,250,.78)`, edge `rgba(0,0,0,.08)`, chip `rgba(0,0,0,.06)`; shadow `0 10px 40px rgba(0,0,0,.18)`
+- **Left:** the menu button, a menu icon (two bars that cross into ×) and a two-line label: a small mono line (Geist Mono
+  500, 11px, muted) and the page title (Geist 500, 15px), both with an ellipsis. On a lesson the small line is `E8 · current
+  section` and follows the scroll (the page's h2s); on the homepage it is the section on screen (Home · The core ·
+  Careers · Three tools · History · Directions) over the site name; elsewhere it is the current h2 or empty.
+- **Right:** a solid primary button: "Next E9 →" on a lesson (next published lesson in the stage, else the next
+  stage's first, else "Roadmap" to `/start/`), "Learn →" to `/start/` everywhere else (short label at 420px or less).
+  Back to top (a chevron, dimmed in the first 200px) shows from 50rem up only; the light / dark switch moved into the sheet.
+- **Sheet:** grows upward from the bar. A segmented control with two tabs, This lesson (This page off lessons: the
+  page's h2s, current one marked with a bar on the leading edge) and Course (stages with published lessons as `<details>`
+  of `E1 Title` rows, current lesson marked and scrolled into view; stages without lessons as muted "SQL · coming soon"
+  lines). Rows are at least 44px. A bottom row holds Home, Start here, Career quiz and the light / dark switch (a
+  half-filled circle). Esc, a second tap, a link or an outside click closes it.
+- Glass tints: dark `rgba(18,18,18,.84)`, edge `rgba(255,255,255,.09)`, chip `rgba(255,255,255,.07)`; light
+  `rgba(250,250,250,.9)`, edge `rgba(0,0,0,.08)`, chip `rgba(0,0,0,.06)`; shadow `0 10px 40px rgba(0,0,0,.18)`
   (the one shadow on the site, from the mockup). Targets 44px.
-- Motion: CSS transitions only (the sheet's rows 0fr → 1fr, .55s expo.out; big links rise from masks); none
-  with reduced motion. No GSAP. Without JavaScript the menu is a `<details>` toggle and the theme switch is
-  hidden. Hidden in print.
+- Motion: CSS transitions only (the sheet's rows 0fr → 1fr, .55s expo.out); none with reduced motion. No GSAP.
+  Without JavaScript the menu is a `<details>` toggle, the tabs are radio inputs switched with `:has()` and the
+  theme switch is hidden. Hidden in print.
 - Space: a spacer after the footer keeps the last content (footer, pagination) clear of the bar, and the hero's
   bottom padding includes the bar's height, so the hero copy and buttons sit just above it.
 
