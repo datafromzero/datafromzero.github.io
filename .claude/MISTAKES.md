@@ -250,6 +250,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   DuckDB page and would also have given away the exercise 2 prediction. → **Before a theory sentence stays, find its
   sentence on an opened page; if none exists, cut it or show it by a result, and never state in theory the answer to a
   count the exercises ask the learner to predict.**
+- 2026-11-18 — Expected lines said "an error that starts with `Binder Error`" (and "Parser Error", "Catalog Error"), but the
+  in-page runner strips such labels (`src/scripts/sql-errors.ts`), so learners never see them. → **An Expected line for an
+  error describes the visible text (for example "an error saying set operations need the same number of result columns");
+  check each one against `sql-errors.ts`, and quote an engine message only without its label.**
 - 2026-11-18 — The first "How it works" drafts stated the answers of two predict steps (3,287 rows) and reused the
   spot-the-flaw query of Exercise 3 as the misconception example; one lesson also ran 43 words over its duration. →
   **Before finalizing a theory section, list every predict and spot-the-flaw prompt in the lesson. No sentence of the
