@@ -236,6 +236,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   returns the same customers as the coverage count. → **A rule stated more broadly than the docs or a result support
   must be tested with the counter-case before it is written (for "every", try `INTERSECT`); state only what the test
   shows, or narrow the claim.**
+- 2026-11-18 — Review of the S1 to S5 "How it works" sections: rules were stricter than DuckDB ("another sort column is the
+  only thing that settles a tie", "each side of OR must be a complete test"), and one section said "second picture" for
+  the first. → **A section's rules must not be stricter than DuckDB's behavior: "X can only do Y" needs a result you ran,
+  or a softer word. Check every "in the first/second picture" against the figure order.**
 
 ## Agents and reviews
 
