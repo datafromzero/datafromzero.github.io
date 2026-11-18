@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 862 nodes, 1029 edges, 109 communities (353 isolated nodes).
+- 862 nodes, 1034 edges, 109 communities (353 isolated nodes).
 - Nodes: agent 8, build plan 9, component 37, config 10, content 172, content-type 5, decision 42, dependency 25, design-section 15, doc 16, i18n 6, layout 1, module 17, npm-script 19, page 2, research-section 165, rule 10, script 81, skill 1, spec-section 25, starlight-component 6, style 7, symbol 169, template 2, token 12.
-- Edges: defines 169, imports 46, mentions 579, overrides 6, references 27, runs 10, specified-by 4, uses 152, uses-token 31, validated-by 5.
+- Edges: defines 169, imports 46, mentions 579, overrides 6, references 27, runs 10, specified-by 4, uses 157, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -33,7 +33,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 Solution** (61): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/sql/group-by-having.mdx
+- **C1 Solution** (61): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/sql/aggregate-functions.mdx; src/content/docs/sql/case-expressions.mdx
 - **C2 HANDOFF.md** (28): .claude/HANDOFF.md; src/site.ts; D30 Vietnamese paused; S8 Internationalization; S14 Content production (replaces migr…; .claude/agents/README.md
 - **C3 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C4 Tech stack** (12): S2 Tech stack; research/curriculum/07-curriculum-rationale.md; agent:spec-reviewer spec-reviewer; S15 Explicitly out of scope (for now); S1 Decision record; S4 Information architecture
@@ -57,11 +57,11 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C47 to C2, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C19 to C34, design/README.md:181)
 - `M8` -mentions-> `S4` (C2 to C4, CLAUDE.md:70)
-- `src/components/content/RunSQL.astro` -mentions-> `src/scripts/run-sql.ts` (C1 to C15, src/components/content/RunSQL.astro:4)
 - `M7` -mentions-> `D34` (C46 to C19, CLAUDE.md:65)
 - `S5.2` -mentions-> `D18` (C53 to C48, SPEC.md:233)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C45 to C46, src/lib/repo-files.ts:4)
 - `D5` -mentions-> `S9` (C46 to C73, SPEC.md:32)
+- `DG6` -mentions-> `DG2` (C66 to C18, design/README.md:226)
 
 ## Decisions (SPEC §1)
 

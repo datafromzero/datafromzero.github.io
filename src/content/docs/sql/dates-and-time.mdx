@@ -50,41 +50,8 @@ page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints dates and booleans as described. Check that the cafes' time zone is Pacific time (the cafe-sales README says only local time in the San Francisco Bay Area). Time the lesson against its 25 minutes. When you have checked it, set
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints dates and booleans as described. Check that the cafes' time zone is Pacific time (the cafe-sales README says only local time in the San Francisco Bay Area). Time the lesson against its 25 minutes. The notebook's Exercise 1 cell still starts from the unfinished two-line query; the page starts from a query that already runs and asks only for the sort. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *GROUP BY and HAVING* (S8): `SELECT payment_method, COUNT(*) FROM orders GROUP BY payment_method` runs on the
-   1,800 orders. How many rows come back, and what is one row?
-
-   <details>
-   <summary>Answer</summary>
-
-   Three rows, one per payment method (card, mobile, cash). Their counts add up to 1,800.
-
-   </details>
-
-2. In *Dates as numbers* (E11): two cells hold real dates, and `=B2-A2` gives a number. What is the number, and why does
-   the subtraction work?
-
-   <details>
-   <summary>Answer</summary>
-
-   The days between the two dates. A date is a number (a serial number) shown with a date format.
-
-   </details>
-
-3. In *Computed columns and data types* (S5), write a query that shows `ordered_at` as a plain date, without the time.
-
-   <details>
-   <summary>Answer</summary>
-
-   `SELECT CAST(ordered_at AS DATE) FROM orders;`
-
-   </details>
 
 ## The question
 
@@ -100,10 +67,128 @@ The first rows of `orders`:
 | 1002 | 2026-01-01 15:38:00 |
 | 1003 | 2026-01-01 15:47:00 |
 
-By the end you will have a six-row table of monthly counts that adds up to all 1,800 orders, and a check that tells
-you when the last month is only partly there.
+## Warm-up
 
-## The picture
+Answer from memory before you open anything. Then click to check.
+
+1. In *GROUP BY and HAVING* (S8): `SELECT payment_method, COUNT(*) FROM orders GROUP BY payment_method` runs on the
+   1,800 orders. How many rows come back, and what is one row?
+
+   <details>
+   <summary>Answer</summary>
+
+   Three rows, one per payment method (card, mobile, cash). Their counts add up to 1,800.
+
+   </details>
+
+2. In *Computed columns and data types* (S5), write a query that shows `ordered_at` as a plain date, without the time.
+
+   <details>
+   <summary>Answer</summary>
+
+   `SELECT CAST(ordered_at AS DATE) FROM orders;`
+
+   </details>
+
+## The big idea
+
+A **date function** can cut a timestamp back to the start of its month, so every order of one month gets the same label
+and can be counted together.
+
+{/* CONCEPT: concept-date-trunc */}
+
+## Learn by doing
+
+Five small steps. Run the notebook's setup cell first, then the cells named in each step.
+
+### 1. Take a timestamp apart
+
+A **date** names a day. A **timestamp** names a day and a time of day, and `ordered_at` is one. A `TIMESTAMP` holds no
+time zone: DuckDB calls it a timestamp without time zone, usually a local reading of the clock in an unspecified zone.
+The column cannot say which zone; the dataset notes do. In cafe-sales, `ordered_at` is local time at the cafes in the San
+Francisco Bay Area (Pacific time), so 08:02 is 8:02 on the cafe's clock. Data from another zone needs converting first.
+
+**Try it** (notebook step 1): look at the type.
+
+<RunSQL query={`SELECT order_id, ordered_at, typeof(ordered_at) AS type
+FROM orders
+ORDER BY order_id
+LIMIT 3;`} />
+
+Expected: 3 rows, 3 columns; `type` reads `TIMESTAMP`. *Why:* the type has no zone, so you name it yourself: local time
+at the cafes.
+
+A **part function** takes one piece out of a timestamp: `year`, `month`, `day`, `dayname` (the weekday name) and `isodow`
+(the weekday number, Monday = 1 to Sunday = 7). A part keeps less than you might expect: `month(x)` returns 1 to 12 with
+no year, so January 2026 and January 2027 give the same number.
+
+**Try it** (notebook step 2):
+
+<RunSQL query={`SELECT order_id, ordered_at, year(ordered_at) AS yr, month(ordered_at) AS mo, day(ordered_at) AS dom,
+       dayname(ordered_at) AS weekday, isodow(ordered_at) AS dow
+FROM orders
+ORDER BY order_id
+LIMIT 3;`} />
+
+Expected: 3 rows, 7 columns; all three orders fall on Thursday, January 1, `dow` 4. *Excel:* `YEAR`, `MONTH` and `DAY`.
+*Why:* each function returns one part, so you can group or filter by it.
+
+### 2. Dates are numbers of days
+
+Subtract one date from another and you get the days between them. `x + INTERVAL 7 DAY` moves a date or a timestamp by an
+interval; subtract it to move back. *Excel:* in *Dates as numbers* (E11), a date is a serial number, so dates work in
+calculations the same way.
+
+**Try it** (notebook step 3):
+
+<RunSQL query={`SELECT store_name, opened_on, DATE '2026-06-30' - opened_on AS days_open
+FROM stores
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 3 columns; Harbor's `days_open` is `90`: 90 days between opening and June 30 (91 open days counting
+both ends). *Why:* a date behaves like a number of days, as in a sheet.
+
+**Try it** (notebook step 4): the last seven days before July 1.
+
+<RunSQL query={`SELECT COUNT(*) AS last_week_orders
+FROM orders
+WHERE ordered_at >= DATE '2026-07-01' - INTERVAL 7 DAY
+  AND ordered_at < DATE '2026-07-01';`} />
+
+Expected: 1 row, 1 column: `82`. *Why:* July 1 minus 7 days is June 24, so the range covers June 24 to 30, seven whole
+days.
+
+### 3. Cut to the start of a period
+
+`date_trunc('month', x)` cuts a timestamp back to the start of its month: it keeps the year and the month and sets
+everything after them to its starting value, so `2026-01-01 08:02:00` becomes `2026-01-01 00:00:00`. Every order of one
+month gets the same value, so grouping by it makes months. It returns a `TIMESTAMP`, even when you give it a `DATE`:
+wrap it in `CAST(... AS DATE)` to show a day without the time. The same function also cuts to `'week'` and `'day'`.
+
+**Try it** (notebook step 5): the start of the day, week and month.
+
+<RunSQL query={`SELECT order_id, ordered_at,
+       CAST(ordered_at AS DATE) AS day,
+       CAST(date_trunc('week', ordered_at) AS DATE) AS week_start,
+       CAST(date_trunc('month', ordered_at) AS DATE) AS month_start
+FROM orders
+ORDER BY order_id
+LIMIT 3;`} />
+
+Expected: 3 rows, 5 columns; `week_start` is Monday, December 29, 2025, before the data begins. *Excel:* none; you would
+build it with `DATE(YEAR(A2), MONTH(A2), 1)`.
+
+**Try it** (notebook step 6): group by month.
+
+<RunSQL query={`SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+FROM orders
+GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
+ORDER BY month;`} />
+
+Expected: 6 rows, 2 columns, January to June. *Why:* every order in a month is cut to the same first day, so the groups
+are months. `ORDER BY` runs last and puts them in time order. All 1,800 orders are counted, the canceled one included.
+
+Here are the six months as bars.
 
 <figure>
 <svg viewBox="0 0 360 216" width="360" role="img" aria-labelledby="months-bars-title months-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -137,6 +222,57 @@ you when the last month is only partly there.
 <text x="314.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">30 days</text>
 <text x="10" y="214" font-size="11">Months have 28 to 31 days, and every month is complete.</text>
 </svg>
+</figure>
+
+### 4. Keep the last day
+
+To count a whole month, start on its first day and stop before the first day of the next month, as in *Filtering rows
+with WHERE* (S3).
+
+**Try it** (notebook step 7). Two ways to count June:
+
+<RunSQL query={`SELECT COUNT(*) AS june_between
+FROM orders
+WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';`} />
+
+<RunSQL query={`SELECT COUNT(*) AS june
+FROM orders
+WHERE ordered_at >= '2026-06-01' AND ordered_at < '2026-07-01';`} />
+
+Expected: 1 row, 1 column each. The first returns `344`, the second `353`, which is the June row of unit 3. *Why:* the
+`BETWEEN` version is short by the 9 orders placed on June 30.
+
+<details>
+<summary>Explain it in your own words: why does <code>BETWEEN '2026-06-01' AND '2026-06-30'</code> return fewer orders than June has?</summary>
+
+A date written alone means the start of that day, 00:00:00. An order at 10:15 on June 30 comes after it, so it is left
+out.
+
+</details>
+
+### 5. Flag a partial month
+
+A month is **partial** when its last order day comes before its last calendar day. `last_day(x)` gives the last day of the
+month of `x`.
+
+**Try it** (notebook step 8). The real data ends on June 30. To practice, pretend the file was exported on June 12, by
+keeping only orders before June 13.
+
+<RunSQL query={`SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month,
+       COUNT(*) AS orders,
+       MAX(CAST(ordered_at AS DATE)) AS last_order_day,
+       last_day(MAX(ordered_at)) AS month_end,
+       MAX(CAST(ordered_at AS DATE)) < last_day(MAX(ordered_at)) AS is_partial
+FROM orders
+WHERE ordered_at < TIMESTAMP '2026-06-13'
+GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
+ORDER BY month;`} />
+
+Expected: 6 rows, 5 columns; only June has `is_partial` true: 130 orders up to June 12, against 353 in the full month.
+*Excel:* `EOMONTH(date, 0)` gives the same month end. *Why:* a partial month looks like a drop but is only missing days.
+Without the `WHERE`, every month is complete.
+
+<figure>
 <svg viewBox="0 0 360 216" width="360" role="img" aria-labelledby="months-partial-title months-partial-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="months-partial-title">The same months if the export stopped on June 12</title>
 <desc id="months-partial-desc">The bars for January to May are unchanged: 242, 218, 258, 349 and 380. June is drawn hatched with 130 orders, the orders from June 1 to June 12, inside a dashed outline that marks the 353 orders of the full month. Only 12 of the 30 days of June are in the data, so the hatched bar is not a fair month.</desc>
@@ -173,175 +309,23 @@ you when the last month is only partly there.
 </svg>
 </figure>
 
-## How it works
+**Check.** The six monthly counts of unit 3, 242 + 218 + 258 + 349 + 380 + 353, add up to 1,800, the Count you read in
+*Rows, columns and tidy layout* (E1), and June's 353 matches unit 4. Answer: **242, 218, 258, 349, 380 and 353 orders**,
+and every month is complete.
 
-A **date** names a day. A **timestamp** names a day and a time of day, and `ordered_at` is one. Two common kinds
-of date function take a part out of it (`year`, `month`, `dayname`) or cut it back to the start of a period
-(`date_trunc`). The cut is what turns orders into months: rows cut to the same value belong together.
+<Aside type="tip" title="Remember">
 
-In the first picture above, 1,800 orders become six bars. Logically, SQL does this:
+- A `TIMESTAMP` holds a day and a time but no time zone; the dataset notes name the zone.
+- `year`, `month`, `dayname` and `isodow` return one part. `date_trunc` cuts to the start of a period and keeps the year.
+- `date_trunc` returns a `TIMESTAMP`: wrap it in `CAST(... AS DATE)` to show a plain day.
+- To count a whole period, start on its first day and stop before the next period's first day.
+- A month is partial when its last order day is before its last calendar day.
 
-1. `FROM orders` supplies every order with its `ordered_at`. A `WHERE` on that column would remove rows here.
-2. For each row, `date_trunc('month', ordered_at)` keeps the year and the month and sets everything after them to its
-   starting value, so `2026-01-01 08:02:00` becomes `2026-01-01 00:00:00`. Every order of one month gets the same value.
-3. `GROUP BY` that value puts those orders in one group, and `COUNT(*)` counts it. `ORDER BY` runs last and puts the
-   months in time order.
+**Common trap: "`date_trunc` rounds to the nearest month."** It cuts down, never up. The last order in the data, order
+2800, was placed at 16:30 on 2026-06-30, on the last day of June, and `date_trunc('month', ordered_at)` still gives
+`2026-06-01`, not July 1.
 
-The rules:
-
-- `date_trunc` returns a `TIMESTAMP`, even when you give it a `DATE`. Wrap it in `CAST(... AS DATE)` to show a day
-  without the time.
-- A part keeps less than a cut: `month(x)` returns 1 to 12 with no year, so January 2026 and January 2027 give the same
-  number, while `date_trunc('month', x)` keeps the year.
-- A `TIMESTAMP` holds no time zone: DuckDB calls it a timestamp without time zone, usually a local reading of the clock
-  in an unspecified zone. The column cannot say which zone; the dataset notes do. In cafe-sales, `ordered_at` is local
-  time at the cafes in the San Francisco Bay Area (Pacific time), so 08:02 is 8:02 on the cafe's clock. Data from
-  another zone needs converting first.
-
-**Excel.** In *Dates as numbers* (E11), a date is a serial number, so dates can be used in calculations. `YEAR`,
-`MONTH` and `DAY` take a date apart, and `EOMONTH` returns the last day of a month.
-
-**A common misconception: "`date_trunc` rounds to the nearest month."** It cuts down, never up. The last order in the
-data, order 2800, was placed at 16:30 on 2026-06-30, on the last day of June, and `date_trunc('month', ordered_at)`
-still gives `2026-06-01`, not July 1.
-
-| Function | What it returns | In Excel (E11) |
-|---|---|---|
-| `year(x)`, `month(x)`, `day(x)` | that part as a number | `YEAR`, `MONTH`, `DAY` |
-| `dayname(x)`, `isodow(x)` | the weekday name; the weekday number, Monday = 1 to Sunday = 7 | |
-| `date_trunc('month', x)` | the start of the month of `x` (also `'week'`, `'day'`) | |
-| `last_day(x)` | the last day of the month of `x` | `EOMONTH(date, 0)` |
-| `x + INTERVAL 7 DAY` | a date or timestamp moved by an interval | |
-| `date1 - date2` | the days between two dates | subtraction |
-
-## Worked example
-
-Question: **how many orders per month, and is every month complete?** Run the notebook's setup cell, then one cell per
-step.
-
-1. **Look at the type.**
-
-   ```sql
-   SELECT order_id, ordered_at, typeof(ordered_at) AS type
-   FROM orders
-   ORDER BY order_id
-   LIMIT 3;
-   ```
-
-   Expected: 3 rows, 3 columns; `type` reads `TIMESTAMP`. *Why:* no time zone in the type, so you name it yourself: local
-   time at the cafes.
-
-2. **Take a timestamp apart.**
-
-   ```sql
-   SELECT order_id, ordered_at, year(ordered_at) AS yr, month(ordered_at) AS mo, day(ordered_at) AS dom,
-          dayname(ordered_at) AS weekday, isodow(ordered_at) AS dow
-   FROM orders
-   ORDER BY order_id
-   LIMIT 3;
-   ```
-
-   Expected: 3 rows, 7 columns; all three orders fall on Thursday, January 1, `dow` 4. *Excel:* `YEAR`, `MONTH` and `DAY`.
-   *Why:* each function returns one part, so you can group or filter by it.
-
-3. **Subtract two dates.**
-
-   ```sql
-   SELECT store_name, opened_on, DATE '2026-06-30' - opened_on AS days_open
-   FROM stores;
-   ```
-
-   Expected: 3 rows, 3 columns; Harbor's `days_open` is `90`: 90 days between opening and June 30 (91 open days counting both ends). *Excel:* subtract one date from the other. *Why:* a date
-   behaves like a number of days, as in a sheet.
-
-4. **Add and subtract an interval.**
-
-   ```sql
-   SELECT COUNT(*) AS last_week_orders
-   FROM orders
-   WHERE ordered_at >= DATE '2026-07-01' - INTERVAL 7 DAY
-     AND ordered_at < DATE '2026-07-01';
-   ```
-
-   Expected: 1 row, 1 column: `82`. *Why:* July 1 minus 7 days is June 24, so the range covers June 24 to 30, seven
-   whole days. It includes the first day and stops before the next, as in *Filtering rows with WHERE* (S3).
-
-5. **Cut a timestamp to the start of its day, week and month.**
-
-   ```sql
-   SELECT order_id, ordered_at,
-          CAST(ordered_at AS DATE) AS day,
-          CAST(date_trunc('week', ordered_at) AS DATE) AS week_start,
-          CAST(date_trunc('month', ordered_at) AS DATE) AS month_start
-   FROM orders
-   ORDER BY order_id
-   LIMIT 3;
-   ```
-
-   Expected: 3 rows, 5 columns; `week_start` is Monday, December 29, 2025, before the data begins. *Excel:* none; you
-   would build it with `DATE(YEAR(A2), MONTH(A2), 1)`. *Why:* the `CAST` is explained in How it works.
-
-6. **Group by month.**
-
-   ```sql
-   SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-   FROM orders
-   GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
-   ORDER BY month;
-   ```
-
-   Expected: 6 rows, 2 columns, January to June. *Why:* every order in a month is cut to the same first day, so the
-   groups are months. All 1,800 orders are counted, the canceled one included.
-
-7. **Keep the last day.**
-
-   ```sql
-   SELECT COUNT(*) AS june_between
-   FROM orders
-   WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';
-   ```
-
-   ```sql
-   SELECT COUNT(*) AS june
-   FROM orders
-   WHERE ordered_at >= '2026-06-01' AND ordered_at < '2026-07-01';
-   ```
-
-   Expected: 1 row, 1 column each. The first returns `344`, the second `353`, which is the June row of step 6. *Why:*
-   `'2026-06-30'` stands for the very start of that day, so `BETWEEN` loses the 9 orders placed on June 30 after
-   midnight. Include the first day and stop before the next.
-
-8. **Flag an incomplete period.** The real data ends on June 30. To practice, pretend the file was exported on June 12,
-   by keeping only orders before June 13.
-
-   ```sql
-   SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month,
-          COUNT(*) AS orders,
-          MAX(CAST(ordered_at AS DATE)) AS last_order_day,
-          last_day(MAX(ordered_at)) AS month_end,
-          MAX(CAST(ordered_at AS DATE)) < last_day(MAX(ordered_at)) AS is_partial
-   FROM orders
-   WHERE ordered_at < TIMESTAMP '2026-06-13'
-   GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
-   ORDER BY month;
-   ```
-
-   Expected: 6 rows, 5 columns; only June has `is_partial` true: 130 orders up to June 12, against 353 in the full
-   month. *Excel:* `EOMONTH(date, 0)` gives the same month end. *Why:* a month is partial when its last order day comes before
-   its last calendar day. A partial month looks like a drop but is only missing days. Without the `WHERE`, every month is
-   complete.
-
-9. **Verify.** The six monthly counts, 242 + 218 + 258 + 349 + 380 + 353, add up to 1,800, the Count you read in
-   *Rows, columns and tidy layout* (E1), and June's 353 matches step 7. Answer: **242, 218, 258, 349, 380 and 353
-   orders**, and every month is complete.
-
-<details>
-<summary>Explain it in your own words: why does `BETWEEN '2026-06-01' AND '2026-06-30'` return fewer orders than June has?</summary>
-
-A date written alone means the start of that day, 00:00:00. An order at 10:15 on June 30 comes after it, so it is left
-out. The safe range starts on the first day and stops before the first day of the next month.
-
-</details>
+</Aside>
 
 ## Finish it
 
@@ -349,19 +333,18 @@ out. The safe range starts on the first day and stops before the first day of th
 
 **Which weekday takes the most orders?** Use the Exercise 1 cell. Expected: 7 rows, 2 columns, busiest weekday first.
 
-The first steps are done for you:
+The first steps are done for you: the query counts the orders of each weekday name:
 
-```sql
-SELECT dayname(ordered_at) AS weekday, COUNT(*) AS orders
+<RunSQL query={`SELECT dayname(ordered_at) AS weekday, COUNT(*) AS orders
 FROM orders
-```
+GROUP BY dayname(ordered_at);`} />
 
-Now finish it: add the line that groups by the weekday name, and the line that puts the busiest first.
+Now finish it: add the line that puts the busiest weekday first.
 
 <details>
 <summary>Hint</summary>
 
-Step 6 grouped by a month; here you group by `dayname(ordered_at)`. Sort by the count, largest first.
+Sort by the count, largest first. Use the name you gave the count.
 
 </details>
 
@@ -400,10 +383,12 @@ Before you run anything, write one sentence in the first cell: which months you 
 
 Expected shape, to check your sentence against: 2 columns (the month and the count). Counts cover orders of any status.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
-Take the query of step 6 and add a `WHERE` on `store_id`. Think about when Harbor opened.
+Take the query of unit 3 and add a `WHERE` on `store_id`. Think about when Harbor opened.
 
 </details>
 
@@ -449,13 +434,11 @@ first queries* (S1). Three rows, not six, is correct: Harbor opened on April 1, 
 **Spot the flaw.** A colleague counts orders per week and reports that the quietest weeks of the half-year are the week
 of June 29 and the week of December 29, "so sales fall at New Year and at the end of June". The query:
 
-```sql
-SELECT CAST(date_trunc('week', ordered_at) AS DATE) AS week_start, COUNT(*) AS orders
+<RunSQL query={`SELECT CAST(date_trunc('week', ordered_at) AS DATE) AS week_start, COUNT(*) AS orders
 FROM orders
 GROUP BY CAST(date_trunc('week', ordered_at) AS DATE)
 ORDER BY orders
-LIMIT 3;
-```
+LIMIT 3;`} />
 
 Expected: 3 rows, 2 columns. Find the flaw and fix the query.
 

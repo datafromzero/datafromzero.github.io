@@ -53,8 +53,25 @@ closing `;` that this page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that step 4 prints the not-a-number value as `-nan` (the DuckDB documentation pages opened for this lesson do not describe it, and older DuckDB versions may print `NULL` for 0 divided by 0, so consider `%pip install duckdb==2.0.0` in the setup cell) and that exercise 3 runs without an error. Time the lesson against its 30 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that step 4 prints the not-a-number value as `-nan` (the DuckDB documentation pages opened for this lesson do not describe it, and older DuckDB versions may print `NULL` for 0 divided by 0, so consider `%pip install duckdb==2.0.0` in the setup cell), that the page's SQL runner shows the same value in the browser (DuckDB 1.4.3 returns NaN for it in Python; the runner's display was not checked), and that exercise 3 runs without an error. The notebook's Exercise 1 cell still starts from the unfinished `COUNT(CASE ...)` line; the page starts from a query that already runs. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> For each cafe, how many orders were paid by card, by mobile and by cash? And what share of each cafe's orders is mobile?
+
+In S8 you got the counts as a long list, one row per store and payment method. The first three of those nine rows:
+
+| store_id | payment_method | orders |
+|---:|---|---:|
+| 1 | card | 421 |
+| 1 | cash | 91 |
+| 1 | mobile | 217 |
+
+The owner wants one row per store, with a column for each method, like the PivotTable of *Summarize with a PivotTable*
+(E15) with `payment_method` in Columns.
 
 ## Warm-up
 
@@ -80,25 +97,60 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+**Conditional aggregation** puts a `CASE` (S6) inside an aggregate (S7): each row says what it adds to a column, so one
+pass over the rows can fill several columns side by side.
 
-> For each cafe, how many orders were paid by card, by mobile and by cash? And what share of each cafe's orders is mobile?
+{/* CONCEPT: concept-conditional-agg */}
 
-In S8 you got the counts as a long list, one row per store and payment method. The first three of those nine rows:
+## Learn by doing
 
-| store_id | payment_method | orders |
-|---:|---|---:|
-| 1 | card | 421 |
-| 1 | cash | 91 |
-| 1 | mobile | 217 |
+Five small steps. Run the notebook's setup cell first, then the cells named in each step.
 
-The owner wants one row per store, with a column for each method, like the PivotTable of *Summarize with a PivotTable*
-(E15) with `payment_method` in Columns. By the end you will have built it with one query, added the share, and kept the
-division safe.
+### 1. One conditional column
 
-## The picture
+Inside a group, the `CASE` is worked out on one row at a time, and the aggregate then adds up what the rows gave it.
+`SUM(CASE WHEN test THEN 1 ELSE 0 END)` gives 1 to the rows that pass and 0 to the others, and adds them up. To add up an
+amount instead of counting, put the amount where the 1 is: `SUM(CASE WHEN test THEN quantity ELSE 0 END)`.
+
+**Try it** (notebook step 1). Grain: *one row per store*.
+
+<RunSQL query={`SELECT store_id,
+       COUNT(*) AS orders,
+       SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 3 columns: store 1 has 729 orders and 421 card, store 2 has 716 and 400, store 3 has 355 and 180.
+*Excel:* `COUNTIFS` on the payment column; with an amount instead of the 1 it is `SUMIFS` (both E7).
+
+*Why:* for each order the `CASE` gives 1 if it was paid by card and 0 if not, and `SUM` adds the 1s inside each store's
+group. `COUNT(*)` has no `CASE`: it counts all of the store's orders, so it sits beside the card count as the whole.
+
+### 2. The same column, the other way
+
+`COUNT(CASE WHEN test THEN 1 END)` has no `ELSE`, so the rows that fail the test give `NULL` (S6), and `COUNT` skips
+`NULL` (S7). It gives the same number as the `SUM` form. Use it for the other two methods.
+
+**Try it** (notebook step 2). Grain: *one row per store*.
+
+<RunSQL query={`SELECT store_id,
+       COUNT(*) AS orders,
+       SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card,
+       COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
+       COUNT(CASE WHEN payment_method = 'cash' THEN 1 END) AS cash
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 5 columns. Store 1 reads 729, 421, 217, 91. *Excel:* the PivotTable with `payment_method` in Columns.
+
+*Why:* three rows now, instead of nine. Pick one form and keep it. (DuckDB's `FILTER` clause, `SUM(x) FILTER (WHERE
+test)`, is a shorter way to write the same columns; this lesson keeps `CASE`, as in S6.)
+
+This is the result, with the expression that fills each column. The last row is the whole table, which you query in unit 5.
 
 <figure>
 <svg viewBox="0 0 360 284" width="360" role="img" aria-labelledby="pivot-title pivot-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -136,158 +188,99 @@ division safe.
 </svg>
 </figure>
 
-## How it works
-
-**Conditional aggregation** gives each group several answers side by side. A `CASE` (S6) sits inside an aggregate
-(S7): for every row, the `CASE` says what that row contributes to this column, and the aggregate folds those
-contributions over the group.
-
-In the picture above, the columns `card`, `mobile` and `cash` all come from one query. Logically, SQL does this:
-
-1. `FROM orders` supplies the 1,800 rows. A `WHERE` here would remove rows from every column at once.
-2. `GROUP BY store_id` puts the rows into three groups.
-3. Inside a group, each `CASE` is worked out on one row at a time, and gives that row a value.
-4. Each aggregate then folds the values of its own `CASE` over the group. `COUNT(*)` has no `CASE` and counts the
-   group's rows.
-5. `SELECT` returns one row per group, with a column for each aggregate.
-
-The rules:
-
-- `SUM(CASE WHEN test THEN 1 ELSE 0 END)` gives 1 to the rows that pass and 0 to the others, and adds them up.
-- `COUNT(CASE WHEN test THEN 1 END)` has no `ELSE`, so the other rows give `NULL` (S6), and `COUNT` skips `NULL` (S7).
-  Both forms give the same number.
-- To add up an amount instead of counting, put the amount where the 1 is, as in
-  `SUM(CASE WHEN test THEN quantity ELSE 0 END)`.
-- A percentage is a part divided by a whole, both aggregates over the same group. Which rows are in the whole changes
-  the answer, so name them before you write the query.
-- A division can meet a denominator of 0 inside a group. Step 4 shows what happens and how to guard against it.
-- DuckDB's `FILTER` clause, written `SUM(x) FILTER (WHERE test)`, is a shorter way to write the same columns; this
-  lesson keeps `CASE`, as in S6.
-
-**Excel.** `COUNTIFS` counts, and `SUMIFS` adds, only what meets the conditions you give
-(*Conditional totals with SUMIFS and COUNTIFS*, E7). In SQL the condition moves inside the aggregate as a `CASE`, and
-`GROUP BY` repeats it for every group.
-
-**A common misconception: "a `CASE` inside an aggregate filters rows, like `WHERE`."** Every row still goes into the
-aggregate; the `CASE` only decides what that row adds. So `COUNT(*)` can sit beside a card count in one result row:
-store 1 shows 729 orders next to its 421 card orders. A `WHERE` on the payment method would change every column.
-
-| SQL | In Excel |
-|---|---|
-| `COUNT(CASE WHEN payment_method = 'card' THEN 1 END)` | `COUNTIFS` with the payment condition (E7) |
-| `SUM(CASE WHEN test THEN quantity ELSE 0 END)` | `SUMIFS` (E7) |
-| `GROUP BY store_id` plus one `CASE` column per method | PivotTable: `store` in Rows, `payment_method` in Columns (E15) |
-| `100.0 * part / COUNT(*)` | the share of the row total in a pivot (E16) |
-
-## Worked example
-
-Question: **for each cafe, how many orders by card, mobile and cash, and what share of the orders is mobile?** Run the
-notebook's setup cell, then one cell per step. Each step starts with the grain and shows the shape of the result to
-expect.
-
-1. **One conditional column.** Grain: *one row per store*.
-
-   ```sql
-   SELECT store_id,
-          COUNT(*) AS orders,
-          SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 3 columns: store 1 has 729 orders and 421 card, store 2 has 716 and 400, store 3 has 355 and 180.
-   *Excel:* `COUNTIFS` on the payment column. *Why:* for each order the `CASE` gives 1 if it was paid by card and 0 if not,
-   and `SUM` adds the 1s inside each store's group. `COUNT(*)` beside it is the whole of the store's orders.
-
-2. **The other two columns, with the other form.**
-
-   ```sql
-   SELECT store_id,
-          COUNT(*) AS orders,
-          SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card,
-          COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
-          COUNT(CASE WHEN payment_method = 'cash' THEN 1 END) AS cash
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 5 columns. Store 1 reads 729, 421, 217, 91. *Excel:* the PivotTable with `payment_method` in
-   Columns. *Why:* three rows now, instead of nine. Pick one form and keep it.
-
-3. **A percentage, with its denominator named.** The part is the store's mobile orders. The whole is *all orders of
-   that store, canceled included*.
-
-   ```sql
-   SELECT store_id,
-          COUNT(*) AS orders,
-          COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
-          ROUND(100.0 * COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) / COUNT(*), 1) AS mobile_pct
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 4 columns; `mobile_pct` reads 29.8, 29.2 and 33.8. *Excel:* the share of the row total (E16).
-   *Why:* part over whole, with the whole named (How it works), as E16 asked. `100.0 *` puts the result on a scale of 0
-   to 100, and `ROUND(..., 1)` keeps one decimal.
-
-4. **Divide safely with `NULLIF`.** The first quarter is January to March. Harbor opened on April 1, so it has no
-   orders in it, and its denominator is 0. Run this and read Harbor's last column:
-
-   ```sql
-   SELECT store_id,
-          COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders,
-          COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END) AS q1_mobile,
-          ROUND(100.0 * COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END)
-                / COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END), 1) AS q1_mobile_pct
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 4 columns. Harbor's last column is not a number (DuckDB 2.0 prints `-nan`), the result of 0 divided by
-   0. *Excel:* the `#DIV/0!` of *Formula errors and auditing* (E12), where `=IF(D5=0,"no lines",C5/D5)` guards the same division. Now wrap the denominator in `NULLIF(..., 0)`:
-
-   ```sql
-   SELECT store_id,
-          COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders,
-          COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END) AS q1_mobile,
-          ROUND(100.0 * COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END)
-                / NULLIF(COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END), 0), 1) AS q1_mobile_pct
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 4 columns. Old Town reads 364, 104 and 28.6, Campus reads 354, 99 and 28.0, and Harbor reads 0, 0
-   and `NULL`. *Why:* `NULLIF(x, 0)` returns `NULL` when `x` is 0 and `x` otherwise, and dividing by `NULL` gives `NULL`.
-   An empty cell is the honest answer when there was nothing to take a share of.
-
-5. **Verify.**
-
-   ```sql
-   SELECT COUNT(*) AS orders,
-          SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card,
-          COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
-          COUNT(CASE WHEN payment_method = 'cash' THEN 1 END) AS cash
-   FROM orders;
-   ```
-
-   Expected: 1 row, 4 columns: 1800, 1001, 546 and 253. *Why:* this is the grand-total row of the pivot, and it matches
-   the card, mobile and cash counts of *A cleaning workflow you can defend* (E13). The columns of step 2 add up to it
-   (421 + 400 + 180 = 1,001), and so do the rows (421 + 217 + 91 = 729). The quarter counts of step 4 add up to
-   364 + 354 + 0 = 718, the January to March total of *Dates as numbers* (E11): 242 + 218 + 258.
-
 <details>
 <summary>Explain it in your own words: why does the mobile column need no <code>ELSE</code>, and the card column does?</summary>
 
-The mobile column uses `COUNT`, which skips `NULL`, so rows that fail the test can be `NULL`. The card column uses `SUM`,
-which would add up `NULL`s as nothing but return `NULL` for a store with no card orders, so the `ELSE 0` keeps every
-row a number.
+Picture a store with no card orders at all. The `COUNT` form still returns 0, because it counts nothing. A `SUM` over
+rows that all gave `NULL` would return `NULL`, an empty cell where a 0 belongs, so the `ELSE 0` keeps every row a number.
 
 </details>
+
+### 3. A percentage, with its denominator named
+
+A percentage is a part divided by a whole. The whole is the **denominator**, the number you divide by. Both are
+aggregates over the same group, and which rows are in the whole changes the answer, so name them before you write the
+query. Here the part is the store's mobile orders, and the whole is *all orders of that store, canceled included*.
+
+**Try it** (notebook step 3). Grain: *one row per store*.
+
+<RunSQL query={`SELECT store_id,
+       COUNT(*) AS orders,
+       COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
+       ROUND(100.0 * COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) / COUNT(*), 1) AS mobile_pct
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 4 columns; `mobile_pct` reads 29.8, 29.2 and 33.8. *Excel:* the share of the row total (E16).
+
+*Why:* part over whole, as E16 asked. `100.0 *` puts the result on a scale of 0 to 100, and `ROUND(..., 1)` keeps one
+decimal.
+
+### 4. Divide safely with `NULLIF`
+
+Sometimes a group has nothing to take a share of. The first quarter is January to March, and Harbor opened on April 1,
+so it has no orders in it and its denominator is 0.
+
+**Try it** (notebook step 4). Run this and read Harbor's last column.
+
+<RunSQL query={`SELECT store_id,
+       COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders,
+       COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END) AS q1_mobile,
+       ROUND(100.0 * COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END)
+             / COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END), 1) AS q1_mobile_pct
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 4 columns. Harbor's last column is not a number: it is 0 divided by 0 (DuckDB 2.0 prints `-nan`).
+*Excel:* the `#DIV/0!` of *Formula errors and auditing* (E12), where `=IF(D5=0,"no lines",C5/D5)` guards the same
+division.
+
+Now wrap the denominator in `NULLIF(..., 0)`:
+
+<RunSQL query={`SELECT store_id,
+       COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders,
+       COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END) AS q1_mobile,
+       ROUND(100.0 * COUNT(CASE WHEN ordered_at < '2026-04-01' AND payment_method = 'mobile' THEN 1 END)
+             / NULLIF(COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END), 0), 1) AS q1_mobile_pct
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 4 columns. Old Town reads 364, 104 and 28.6, Campus reads 354, 99 and 28.0, and Harbor reads 0, 0 and
+`NULL`.
+
+*Why:* `NULLIF(x, 0)` returns `NULL` when `x` is 0 and `x` otherwise, and dividing by `NULL` gives `NULL`. An empty cell
+is the honest answer when there was nothing to take a share of.
+
+### 5. Check the totals
+
+**Try it** (notebook step 5):
+
+<RunSQL query={`SELECT COUNT(*) AS orders,
+       SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card,
+       COUNT(CASE WHEN payment_method = 'mobile' THEN 1 END) AS mobile,
+       COUNT(CASE WHEN payment_method = 'cash' THEN 1 END) AS cash
+FROM orders;`} />
+
+Expected: 1 row, 4 columns: 1800, 1001, 546 and 253. *Why:* this is the grand-total row of the pivot, and it matches the
+card, mobile and cash counts of *A cleaning workflow you can defend* (E13). The columns of unit 2 add up to it (421 +
+400 + 180 = 1,001), and so do the rows (421 + 217 + 91 = 729). The quarter counts of unit 4 add up to 364 + 354 + 0 =
+718, the January to March total of *Dates as numbers* (E11): 242 + 218 + 258.
+
+<Aside type="tip" title="Remember">
+
+- `SUM(CASE WHEN test THEN 1 ELSE 0 END)` and `COUNT(CASE WHEN test THEN 1 END)` give the same count.
+- One `CASE` column per category, with `GROUP BY` for the rows, is a pivot in one query.
+- A percentage is part over whole: name the rows in the whole first.
+- Wrap a denominator that can be 0 in `NULLIF(..., 0)`.
+
+**Common trap: "a `CASE` inside an aggregate filters rows, like `WHERE`."** Every row still goes into the aggregate;
+the `CASE` only decides what that row adds. That is why `COUNT(*)` can sit beside a card count in one result row: store
+1 shows 729 orders next to its 421 card orders. A `WHERE` on the payment method would change every column.
+
+</Aside>
 
 ## Finish it
 
@@ -296,14 +289,16 @@ row a number.
 **How many orders did each cafe take in the first quarter (January to March) and in the second (April to June)?**
 Grain: one row per store. Use the Exercise 1 cell. Expected: 3 rows, 3 columns (`store_id`, `q1_orders`, `q2_orders`).
 
-The first steps are done for you: the table is `orders`, and the query starts
+The first steps are done for you: the table is `orders`, and the query counts the first quarter, grouped and sorted by
+store:
 
-```sql
-SELECT store_id,
-       COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders,
-```
+<RunSQL query={`SELECT store_id,
+       COUNT(CASE WHEN ordered_at < '2026-04-01' THEN 1 END) AS q1_orders
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
 
-Now finish it: add the second column for orders on or after April 1, name the table, and group and sort by store.
+Now finish it: add the second column for orders on or after April 1.
 
 <details>
 <summary>Hint</summary>
@@ -354,6 +349,8 @@ cash?** Grain: one row per store. Work in the Exercise 2 cells.
 Before you run anything, write two sentences in the first cell, one per percentage: what is the part, and what is the
 whole? Expected shape, to check your sentences against: 3 rows, 3 columns (`store_id` and the two percentages, each
 rounded to one decimal). The data includes the one canceled order.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -409,14 +406,12 @@ so only Campus differs. A different whole gave a different number, which is why 
 **Spot the flaw.** A colleague builds the card and mobile columns with `COUNT` and an `ELSE 0`. The query runs without
 an error, and the colleague says the table looks right:
 
-```sql
-SELECT store_id,
+<RunSQL query={`SELECT store_id,
        COUNT(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS card,
        COUNT(CASE WHEN payment_method = 'mobile' THEN 1 ELSE 0 END) AS mobile
 FROM orders
 GROUP BY store_id
-ORDER BY store_id;
-```
+ORDER BY store_id;`} />
 
 Expected: 3 rows, 3 columns. Run it and compare each column with the store's order count. What do you notice, and why?
 Then fix it.
