@@ -5,7 +5,7 @@ description: Compare each row with the previous or next one using LAG and LEAD, 
 stage: sql
 order: 160
 level: intermediate
-duration: 32
+duration: 30
 objectives:
   - Compare a value with the previous period using LAG
   - Compute a change and a percent change safely
@@ -42,7 +42,7 @@ page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that a zero denominator gives `inf` there, as in step 3, and that the `RANGE` form in step 5 gives the same averages. Time the lesson against its 32 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that a zero denominator gives `inf` there, as in step 3, and that the `RANGE` form in step 5 gives the same averages. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -169,15 +169,13 @@ daily series, and a warning about one function that surprises everybody once.
 
 ## How it works
 
-Two more kinds of window function (*Window functions: keep the rows, add the context*, S14) work on **neighbors**: `LAG`
-and `LEAD` copy a value from another row of the list, and an aggregate over a **frame**, a set of rows around the
-current one, works on a sliding window. Every row stays and one column is added. The pictures above show both ideas.
+`LAG`, `LEAD` and moving averages are window functions that look at neighbors. Their `OVER` clause works as in *Window
+functions: keep the rows, add the context* (S14), and the pictures above show both ideas.
 
 1. Build the series first: one row per period, such as a month, from `GROUP BY`.
-2. `ORDER BY` inside `OVER` lines the rows up. "Above" and "below" mean earlier and later in that order, and each
-   `PARTITION BY` group is a separate list.
-3. `LAG(x)` writes beside each row the value of `x` from the row above, and `LEAD(x)` the value from the row below.
-4. A frame function takes the current row and the rows around it, as many as `ROWS BETWEEN` says, works out `AVG` over
+2. `LAG(x)` writes beside each row the value of `x` from the row above, and `LEAD(x)` the value from the row below.
+   "Above" and "below" follow the `ORDER BY` inside `OVER`.
+3. A frame function takes the current row and the rows around it, as many as `ROWS BETWEEN` says, works out `AVG` over
    just those rows, and writes the answer beside the current row. The window then moves down one row.
 
 The rules:
@@ -186,18 +184,17 @@ The rules:
   row that far away you get `NULL`, unless the third argument supplies a `default`.
 - `LAG` and `LEAD` count rows, not calendar time, and never reach into another partition.
 - `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` counts rows: the current one and the six before it.
-- `RANGE` measures distance in values instead. With dates it takes an `INTERVAL`, as in
-  `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`, which DuckDB's documentation uses "to handle any missing
-  days". *Complete time series and recursive CTEs* (S27) fills the gaps instead.
+- `RANGE` measures distance in values instead. DuckDB's documentation uses `RANGE` with an `INTERVAL` of days "to handle
+  any missing days"; ours is `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`. *Complete time series and
+  recursive CTEs* (S27) fills the gaps instead.
 
-**Excel.** A reference to the cell above, copied down, moves down with the row, and so does a range such as `B2:B8`
-(E3, *Relative and absolute references*); that is how a sheet does `LAG` and a moving average.
+**Excel.** With months in A2 to A7 and orders in B2 to B7, a reference to the cell above, copied down, moves down with
+the row, and so does a range such as `B2:B8` (E3, *Relative and absolute references*); that is how a sheet does `LAG`
+and a moving average, as the table below shows.
 
 **A common misconception: "a 7-row frame is a 7-day average."** The two agree only while every day has a row. Suppose
 April 2 had no orders and so no row: the frame of April 4 would still hold seven rows, and it would reach back to March
 28, eight calendar days. The `RANGE` form above would hold six rows, March 29 to April 4.
-
-With months in A2 to A7 and orders in B2 to B7, a sheet does it like this:
 
 | SQL | Reads as | In Excel or Google Sheets |
 |---|---|---|
@@ -205,9 +202,6 @@ With months in A2 to A7 and orders in B2 to B7, a sheet does it like this:
 | `orders - LAG(orders) OVER (...)` | the change from the row above | `=B3-B2` |
 | `(orders - prev_orders) * 100.0 / prev_orders` | the percent change | `=(B3-B2)/B2` |
 | `AVG(orders) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)` | a 7-row moving average | `=AVERAGE(B2:B8)`, copied down |
-
-In the sheet, the first data row has no row above, so you start the formula one row lower; SQL gives that row a
-`NULL`.
 
 ## Worked example
 
@@ -328,8 +322,7 @@ smooth?** Run the setup cell, then one cell per step.
    ```
 
    Expected: 9 rows, 3 columns, the days around the jump in early April (second picture). *Excel:* `=AVERAGE(B2:B8)` copied
-   down. *Why:* the frame is the current day and the six rows before it. The date filter comes after the `smoothed`
-   stage: a `WHERE` in the same query would remove the earlier days before the average could see them. Rows are days
+   down. *Why:* the frame is the current day and the six rows before it. Rows are days
    here because all 181 days from January 1 to June 30 have orders. The first seven rows, to check the cropped start:
 
    ```sql
@@ -474,8 +467,7 @@ ORDER BY day;
 | 2026-04-09 | 13 | 11 | 2 |
 | 2026-04-10 | 10 | 9 | 1 |
 
-April 4, a Saturday, had 18 orders against 10 the Saturday before (+8). `LAG` can reach March 28 because the date
-filter comes in the last `SELECT`, after `LAG` has run.
+April 4, a Saturday, had 18 orders against 10 the Saturday before (+8).
 
 </Solution>
 

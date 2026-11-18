@@ -240,6 +240,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   only thing that settles a tie", "each side of OR must be a complete test"), and one section said "second picture" for
   the first. → **A section's rules must not be stricter than DuckDB's behavior: "X can only do Y" needs a result you ran,
   or a softer word. Check every "in the first/second picture" against the figure order.**
+- 2026-11-18 — A section quoted the DuckDB phrase "to handle any missing days" and then gave our own `RANGE ... INTERVAL 6
+  DAYS` query as if the docs page showed it; another sentence called a DuckDB result "the only way". → **When a docs page
+  shows a phrase with its own example, quote the phrase but do not attribute our example to the page ("the documentation
+  uses X; ours is Y"). Never write "the only way" without a source.**
 
 ## Agents and reviews
 
