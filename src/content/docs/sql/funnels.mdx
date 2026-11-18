@@ -18,7 +18,6 @@ prerequisites:
   - sql-left-join-anti-join
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-funnels.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Date functions'
@@ -30,54 +29,8 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
-A **funnel** counts how many people reach each step of a path and how many drop out between steps. Product teams
-often build funnels from app events, for example viewed, added to cart and paid. cafe-sales has no events, so you build the funnel
-from what exists: a customer signs up (`customers`), then places a first, a second and a third order (`orders`).
-
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
-Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
-notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. The stub planned an app-events dataset that does not exist, so the lesson uses cafe-sales; confirm that signup, first, second and third order is an acceptable funnel for the stage. The stub's DataLemur page does not mention funnels and the Interview Query page could not be opened (HTTP 429), so neither is listed. Time the lesson against its 30 minutes. When you have checked it, set
+TODO(owner): The stub planned an app-events dataset that does not exist, so the lesson uses cafe-sales; confirm that signup, first, second and third order is an acceptable funnel for the stage. The stub's DataLemur page does not mention funnels and the Interview Query page could not be opened (HTTP 429), so neither is listed. Run every block on this page after a fresh load and check each result against its Expected line. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *Several metrics in one pass* (S9), write the expression that counts only the completed orders in a group, without
-   `WHERE`.
-
-   <details>
-   <summary>Answer</summary>
-
-   `COUNT(CASE WHEN status = 'completed' THEN 1 END)`. Rows that fail the test become `NULL`, and `COUNT` skips them.
-
-   </details>
-
-2. In *Working with dates and time* (S11), what does `DATE '2026-03-01' - DATE '2026-02-01'` return?
-
-   <details>
-   <summary>Answer</summary>
-
-   `28`: the number of days between the two dates.
-
-   </details>
-
-3. In *LEFT JOIN and finding rows with no match* (S20), where do you put a condition on the right table so that the
-   rows with no match stay?
-
-   <details>
-   <summary>Answer</summary>
-
-   In the `ON`, not in `WHERE`. A `WHERE` on the right table removes the unmatched rows and turns the join into an
-   inner join.
-
-   </details>
 
 ## The question
 
@@ -93,42 +46,64 @@ Three customers, with the date of their first three completed orders:
 | 87 | Jan 3 | Jan 18 | Jan 29 | Feb 1 |
 | 92 | Jan 20 | Apr 22 | May 15 | Jun 8 |
 
-All three order a lot in the end, but not all within a month of joining. By the end you will have a funnel table for the
-whole group, with the conversion of each step and what it is a share of.
+All three order a lot in the end, but not all within a month of joining.
 
-## The picture
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Several metrics in one pass* (S9), write the expression that counts only the completed orders in a group, without
+   `WHERE`.
+
+   <details>
+   <summary>Answer</summary>
+
+   `COUNT(CASE WHEN status = 'completed' THEN 1 END)`. Rows that fail the test become `NULL`, and `COUNT` skips them.
+
+   </details>
+
+2. In *LEFT JOIN and finding rows with no match* (S20), where do you put a condition on the right table so that the
+   rows with no match stay?
+
+   <details>
+   <summary>Answer</summary>
+
+   In the `ON`, not in `WHERE`. A `WHERE` on the right table removes the unmatched rows and turns the join into an
+   inner join.
+
+   </details>
+
+## The big idea
+
+A **funnel** counts how many customers reach each step of a path, so you can see where they drop out.
+
+{/* CONCEPT: concept-funnel */}
+
+## Learn by doing
+
+Five small steps. Each gives you one idea, then you try it in the editor under it. Every order here is a completed order.
+
+### 1. Write the definition first
+
+Before any SQL, write one sentence: *by reaching step k we mean …, counted over …, excluding …*. It fixes the **steps** (sign up, then a first, second and third order), the **counting unit** (what one count stands for: here a customer, and "the same customer" means the same `customer_id`), the **window** (the time allowed to reach a step) and who is left out. Ours:
+
+> A customer reaches step k when they have at least k completed orders within 30 days of signing up (day 0 to day 30). We count customers, identified by `customer_id`, not orders. We count the 49 customers who signed up from January 1 to May 31, 2026, and leave out three groups: the 85 who signed up before 2026 (the data starts on January 1, so their first days are missing), the 16 who signed up in June (the data ends on June 30, so their 30 days are not over), and order 1335, which has no customer to follow.
+
+**Try it**: fix the group.
+
+<RunSQL query={`SELECT COUNT(*) AS signed_up, MIN(signup_date) AS first_signup, MAX(signup_date) AS last_signup
+FROM customers
+WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31';`} />
+
+Expected: 1 row, 3 columns: `49`, `2026-01-02` and `2026-05-30`. *Why:* May 31 plus 30 days is June 30, the last day of the data, so every customer here has a full window.
+
+### 2. One window per customer
+
+The window is a number of days after signup, not a calendar range: every customer's day 0 is their own signup. Subtracting one date from another gives a number of days (S11), so "within 30 days" is a test on that number. A `LEFT JOIN` keeps every row of the left table, and the right table's columns are empty for a row with no partner. So a customer with no order in the window stays, with a count of 0.
+
+Here are three customers on their windows.
 
 <figure>
-<svg viewBox="0 0 360 320" width="360" role="img" aria-labelledby="fn-bars-title fn-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="fn-bars-title">Customer funnel: signup, first, second and third order within 30 days</title>
-<desc id="fn-bars-desc">A funnel of four bars. Signed up: 49 customers, 100 percent. First order: 40 customers, 81.6 percent of the step above and 81.6 percent of signups. Second order: 33 customers, 82.5 percent of the step above and 67.3 percent of signups. Third order: 24 customers, 72.7 percent of the step above and 49.0 percent of signups. The customers signed up from January 2 to May 30, 2026, and a step counts completed orders within 30 days of signup.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">Signup to third order, in 30 days</text>
-<text x="10" y="38" font-size="11" opacity="0.8">49 customers who signed up from Jan 2 to May 30, 2026</text>
-<rect x="110" y="52" width="200.0" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
-<text x="316.0" y="71" font-weight="600">49</text>
-<text x="10" y="65" font-size="11" font-weight="600">signed up</text>
-<text x="10" y="77" font-size="9" opacity="0.8">100.0% of signups</text>
-<path d="M120 83 V102 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="132" y="98" font-size="10">40 of 49 = 81.6% of the step above</text>
-<rect x="110" y="118" width="163.3" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
-<text x="279.3" y="137" font-weight="600">40</text>
-<text x="10" y="131" font-size="11" font-weight="600">1st order</text>
-<text x="10" y="143" font-size="9" opacity="0.8">81.6% of signups</text>
-<path d="M120 149 V168 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="132" y="164" font-size="10">33 of 40 = 82.5% of the step above</text>
-<rect x="110" y="184" width="134.7" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
-<text x="250.7" y="203" font-weight="600">33</text>
-<text x="10" y="197" font-size="11" font-weight="600">2nd order</text>
-<text x="10" y="209" font-size="9" opacity="0.8">67.3% of signups</text>
-<path d="M120 215 V234 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="132" y="230" font-size="10">24 of 33 = 72.7% of the step above</text>
-<rect x="110" y="250" width="98.0" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
-<text x="214.0" y="269" font-weight="600">24</text>
-<text x="10" y="263" font-size="11" font-weight="600">3rd order</text>
-<text x="10" y="275" font-size="9" opacity="0.8">49.0% of signups</text>
-<text x="10" y="298" font-size="10" opacity="0.8">Completed orders, from day 0 to day 30 after signup.</text>
-<text x="10" y="312" font-size="10" opacity="0.8">The counting unit is the customer, not the order.</text>
-</svg>
 <svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="fn-time-title fn-time-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="fn-time-title">Three customers on a 30-day window</title>
 <desc id="fn-time-desc">A day axis from day 0, the signup day, to day 60, with days 0 to 30 shaded as the window. Customer 86, signed up January 2: one order inside the window, on day 10; the next is on day 98. Customer 87, signed up January 3: three orders inside the window, on days 15, 26 and 29, so the third step is reached; the fourth is on day 31, just outside. Customer 92, signed up January 20: no order inside the window; the first order is on day 92.</desc>
@@ -168,221 +143,217 @@ whole group, with the conversion of each step and what it is a share of.
 </svg>
 </figure>
 
-## How it works
+**Try it**. Grain: one row per customer.
 
-A **funnel** counts how many people reach each step of a path, so you can see where they drop out. Write its definition
-as one sentence before any SQL: *by reaching step k we mean … , counted over … , excluding …*. That sentence fixes the
-**steps**, the **counting unit** (what one count stands for: here a customer, and "the same customer" means the same
-`customer_id`), the **window** (the time allowed to reach a step) and who is left out. Ours opens the worked example.
-Conceptually, the query then does five things:
-
-1. It fixes the group: one row per customer you will judge.
-2. It gives each customer a window that starts on their own signup date, day 0 to day 30. In the picture above, every
-   customer's line starts at their own signup, and the shaded strip is the window.
-3. It counts each customer's completed orders inside that window. A `LEFT JOIN` keeps every customer, so someone with no
-   order in the window stays, with a count of 0.
-4. It says a customer reaches step k when that count is at least k, and counts customers at each step.
-5. It divides one count by another.
-
-The rules:
-
-- **A step counts customers, once each.** Whoever reaches step 3 has also reached steps 1 and 2, so the counts can only
-  shrink as you go down.
-- **The window is a number of days after signup, not a calendar range.** Subtracting one date from another gives a number
-  of days.
-- **Step conversion** divides a step by the step above; **overall conversion** divides it by the signups. They answer
-  different questions, so say which one you report.
-- **`LEFT JOIN` keeps every row of the left table**, and the right table's columns are empty for a row with no partner.
-
-**Excel.** A step is a `COUNTIFS` (E7, *Conditional totals with SUMIFS and COUNTIFS*) over a column that holds each
-customer's orders in the window, with the criterion `">=2"` for the second step.
-
-**A common misconception: "a funnel counts the orders at each step."** The unit is the person. If you counted orders, a
-customer with many of them would sit in the top and the bottom of one ratio several times, and "step 2 over step 1" would
-stop being a share of people.
-
-## Worked example
-
-Our definition:
-
-> A customer reaches step k when they have at least k completed orders within 30 days of signing up (day 0 to day 30).
-> We count customers, identified by `customer_id`, not orders. We count the 49 customers who signed up from January 1 to
-> May 31, 2026, and leave out three groups: the 85 who signed up before 2026 (the data starts on January 1, so their first
-> days are missing), the 16 who signed up in June (the data ends on June 30, so their 30 days are not over), and order
-> 1335, which has no customer to follow.
-
-Question: **of 49 new customers, how many place a first, a second and a third order within 30 days?** Run the notebook's
-setup cell, then one cell per step. Each step gives the shape of the result to expect. Orders are completed orders only.
-
-1. **Fix the group.**
-
-   ```sql
-   SELECT COUNT(*) AS signed_up, MIN(signup_date) AS first_signup, MAX(signup_date) AS last_signup
-   FROM customers
-   WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31';
-   ```
-
-   Expected: 1 row, 3 columns: `49`, `2026-01-02` and `2026-05-30`. *Why:* May 31 plus 30 days is June 30, the last day of
-   the data, so every customer here has a full window.
-
-2. **Count each customer's orders in the window.** Grain: one row per customer.
-
-   ```sql
-   WITH cohort AS (
-     SELECT customer_id, signup_date
-     FROM customers
-     WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
-   ),
-   in_window AS (
-     SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
-     FROM cohort c
-     LEFT JOIN orders o
-       ON o.customer_id = c.customer_id
-      AND o.status = 'completed'
-      AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
-      AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
-     GROUP BY c.customer_id
-   )
-   SELECT * FROM in_window
-   ORDER BY customer_id
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 2 columns; customer 86 has 1 order in the window, 87 has 3, and 89 has 0. *Why:* the
-   `LEFT JOIN` keeps customers with no order in the window, and all three conditions sit in `ON`, so they decide what
-   matches, not who stays (S20). `date - date` gives days (S11). `COUNT(o.order_id)` counts matched orders only.
-
-3. **Check the grain.** Replace the last `SELECT` of step 2 with:
-
-   ```sql
-   SELECT COUNT(*) AS customers, SUM(orders_30d) AS orders
-   FROM in_window;
-   ```
-
-   Expected: 1 row, 2 columns: `49` and `143`. *Why:* one row per customer, so 49; 143 is the number of orders the
-   funnel will be built from. Keep it for the check in step 6.
-
-4. **Count the customers at each step.**
-
-   ```sql
-   WITH cohort AS (
-     SELECT customer_id, signup_date
-     FROM customers
-     WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
-   ),
-   in_window AS (
-     SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
-     FROM cohort c
-     LEFT JOIN orders o
-       ON o.customer_id = c.customer_id
-      AND o.status = 'completed'
-      AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
-      AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
-     GROUP BY c.customer_id
-   )
-   SELECT COUNT(*) AS signed_up,
-          COUNT(CASE WHEN orders_30d >= 1 THEN 1 END) AS first_order,
-          COUNT(CASE WHEN orders_30d >= 2 THEN 1 END) AS second_order,
-          COUNT(CASE WHEN orders_30d >= 3 THEN 1 END) AS third_order
-   FROM in_window;
-   ```
-
-   Expected: 1 row, 4 columns. *Why:* conditional aggregation (S9) over customers, so each customer counts once per step.
-   A funnel of different events (viewed, then paid) would compare their timestamps instead.
-
-5. **Add the conversion.** Add a third step, `steps`, and read it:
-
-   ```sql
-   WITH cohort AS (
-     SELECT customer_id, signup_date
-     FROM customers
-     WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
-   ),
-   in_window AS (
-     SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
-     FROM cohort c
-     LEFT JOIN orders o
-       ON o.customer_id = c.customer_id
-      AND o.status = 'completed'
-      AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
-      AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
-     GROUP BY c.customer_id
-   ),
-   steps AS (
-     SELECT COUNT(*) AS signed_up,
-            COUNT(CASE WHEN orders_30d >= 1 THEN 1 END) AS first_order,
-            COUNT(CASE WHEN orders_30d >= 2 THEN 1 END) AS second_order,
-            COUNT(CASE WHEN orders_30d >= 3 THEN 1 END) AS third_order
-     FROM in_window
-   )
-   SELECT *,
-          ROUND(100.0 * first_order / signed_up, 1) AS conv_1,
-          ROUND(100.0 * second_order / first_order, 1) AS conv_2,
-          ROUND(100.0 * third_order / second_order, 1) AS conv_3,
-          ROUND(100.0 * third_order / signed_up, 1) AS overall
-   FROM steps;
-   ```
-
-   Expected: 1 row, 8 columns: `49 | 40 | 33 | 24 | 81.6 | 82.5 | 72.7 | 49.0`.
-   *Why:* `conv_1` to `conv_3` divide by the step above and `overall` by the signups (How it works).
-
-6. **Verify.** A second method, with no `LEFT JOIN`: count the orders in the window directly.
-
-   ```sql
-   SELECT COUNT(*) AS orders_in_window
-   FROM customers c
-   JOIN orders o ON o.customer_id = c.customer_id
-   WHERE c.signup_date >= DATE '2026-01-01' AND c.signup_date <= DATE '2026-05-31'
-     AND o.status = 'completed'
-     AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
-     AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30;
-   ```
-
-   Expected: 1 row, 1 column: `143`, the same as step 3. Answer: **40 of 49 customers (81.6%) place a first order within 30
-   days, and 24 (49.0%) a third.** The steps lose 9, 7 and 9 customers, so no step is the one big leak; the third order
-   has the lowest conversion, 72.7%.
-
-<details>
-<summary>Explain it in your own words: why are the conditions in ON, not in WHERE?</summary>
-
-A `WHERE` on `o.status` or the date would remove the customers who have no order in the window, so `signed_up` would
-shrink to 40 and every conversion would be computed over customers who had already ordered. In `ON`, the customer stays
-with a count of 0.
-
-</details>
-
-## Finish it
-
-<Exercise id="sql-funnels-1">
-
-**What does the funnel look like with a 7-day window?** Use the Exercise 1 cell. Expected: 1 row, 4 columns (signed up,
-first, second and third order).
-
-Done for you: the shape. Finish it by choosing the two numbers marked `...`: the last signup date that has a full window in the
-data, and the number of days.
-
-```sql
-WITH cohort AS (
+<RunSQL query={`WITH cohort AS (
   SELECT customer_id, signup_date
   FROM customers
-  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '...'
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
 ),
 in_window AS (
-  SELECT c.customer_id, COUNT(o.order_id) AS orders_7d
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
   FROM cohort c
   LEFT JOIN orders o
     ON o.customer_id = c.customer_id
    AND o.status = 'completed'
    AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
-   AND CAST(o.ordered_at AS DATE) - c.signup_date <= ...
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
+  GROUP BY c.customer_id
+)
+SELECT * FROM in_window
+ORDER BY customer_id
+LIMIT 5;`} />
+
+Expected: 5 rows, 2 columns; customer 86 has 1 order in the window, 87 has 3, and 89 has 0. *Why:* `COUNT(o.order_id)` counts matched orders only.
+
+<details>
+<summary>Explain it in your own words: why are the conditions in ON, not in WHERE?</summary>
+
+A `WHERE` on `o.status` or the date would remove the customers who have no order in the window, so `signed_up` would
+shrink to 40 and every conversion would be computed over customers who had already ordered.
+
+</details>
+
+**Try it**: check the grain. The same two steps, a different last `SELECT`.
+
+<RunSQL query={`WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
+  GROUP BY c.customer_id
+)
+SELECT COUNT(*) AS customers, SUM(orders_30d) AS orders
+FROM in_window;`} />
+
+Expected: 1 row, 2 columns: `49` and `143`. *Why:* one row per customer, so 49; 143 is the number of orders the funnel will be built from. Keep it for unit 5.
+
+### 3. Count customers at each step
+
+A step counts customers, once each. Whoever reaches step 3 has also reached steps 1 and 2, so the counts can only shrink as you go down. Conditional aggregation (S9) does it: one `COUNT(CASE WHEN …)` per step.
+
+**Try it**.
+
+<RunSQL query={`WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
   GROUP BY c.customer_id
 )
 SELECT COUNT(*) AS signed_up,
-       COUNT(CASE WHEN orders_7d >= 1 THEN 1 END) AS first_order,
-       COUNT(CASE WHEN orders_7d >= 2 THEN 1 END) AS second_order,
-       COUNT(CASE WHEN orders_7d >= 3 THEN 1 END) AS third_order
-FROM in_window;
-```
+       COUNT(CASE WHEN orders_30d >= 1 THEN 1 END) AS first_order,
+       COUNT(CASE WHEN orders_30d >= 2 THEN 1 END) AS second_order,
+       COUNT(CASE WHEN orders_30d >= 3 THEN 1 END) AS third_order
+FROM in_window;`} />
+
+Expected: 1 row, 4 columns. *Excel:* a step is a `COUNTIFS` (E7, *Conditional totals with SUMIFS and COUNTIFS*) over a column that holds each customer's orders in the window, with the criterion `">=2"` for the second step. *Why:* a funnel of different events (viewed, then paid) would compare their timestamps instead.
+
+### 4. Two ways to divide
+
+Step conversion divides a step by the step above; overall conversion divides it by the signups. They answer different questions, so say which one you report.
+
+**Try it**: add the conversions. A third step, `steps`, holds the counts.
+
+<RunSQL query={`WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
+  GROUP BY c.customer_id
+),
+steps AS (
+  SELECT COUNT(*) AS signed_up,
+         COUNT(CASE WHEN orders_30d >= 1 THEN 1 END) AS first_order,
+         COUNT(CASE WHEN orders_30d >= 2 THEN 1 END) AS second_order,
+         COUNT(CASE WHEN orders_30d >= 3 THEN 1 END) AS third_order
+  FROM in_window
+)
+SELECT *,
+       ROUND(100.0 * first_order / signed_up, 1) AS conv_1,
+       ROUND(100.0 * second_order / first_order, 1) AS conv_2,
+       ROUND(100.0 * third_order / second_order, 1) AS conv_3,
+       ROUND(100.0 * third_order / signed_up, 1) AS overall
+FROM steps;`} />
+
+Expected: 1 row, 8 columns: `49 | 40 | 33 | 24 | 81.6 | 82.5 | 72.7 | 49.0`. *Why:* `conv_1` to `conv_3` divide by the step above and `overall` by the signups.
+
+<figure>
+<svg viewBox="0 0 360 320" width="360" role="img" aria-labelledby="fn-bars-title fn-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="fn-bars-title">Customer funnel: signup, first, second and third order within 30 days</title>
+<desc id="fn-bars-desc">A funnel of four bars. Signed up: 49 customers, 100 percent. First order: 40 customers, 81.6 percent of the step above and 81.6 percent of signups. Second order: 33 customers, 82.5 percent of the step above and 67.3 percent of signups. Third order: 24 customers, 72.7 percent of the step above and 49.0 percent of signups. The customers signed up from January 2 to May 30, 2026, and a step counts completed orders within 30 days of signup.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Signup to third order, in 30 days</text>
+<text x="10" y="38" font-size="11" opacity="0.8">49 customers who signed up from Jan 2 to May 30, 2026</text>
+<rect x="110" y="52" width="200.0" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="316.0" y="71" font-weight="600">49</text>
+<text x="10" y="65" font-size="11" font-weight="600">signed up</text>
+<text x="10" y="77" font-size="9" opacity="0.8">100.0% of signups</text>
+<path d="M120 83 V102 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="132" y="98" font-size="10">40 of 49 = 81.6% of the step above</text>
+<rect x="110" y="118" width="163.3" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="279.3" y="137" font-weight="600">40</text>
+<text x="10" y="131" font-size="11" font-weight="600">1st order</text>
+<text x="10" y="143" font-size="9" opacity="0.8">81.6% of signups</text>
+<path d="M120 149 V168 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="132" y="164" font-size="10">33 of 40 = 82.5% of the step above</text>
+<rect x="110" y="184" width="134.7" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="250.7" y="203" font-weight="600">33</text>
+<text x="10" y="197" font-size="11" font-weight="600">2nd order</text>
+<text x="10" y="209" font-size="9" opacity="0.8">67.3% of signups</text>
+<path d="M120 215 V234 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="132" y="230" font-size="10">24 of 33 = 72.7% of the step above</text>
+<rect x="110" y="250" width="98.0" height="28" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="214.0" y="269" font-weight="600">24</text>
+<text x="10" y="263" font-size="11" font-weight="600">3rd order</text>
+<text x="10" y="275" font-size="9" opacity="0.8">49.0% of signups</text>
+<text x="10" y="298" font-size="10" opacity="0.8">Completed orders, from day 0 to day 30 after signup.</text>
+<text x="10" y="312" font-size="10" opacity="0.8">The counting unit is the customer, not the order.</text>
+</svg>
+</figure>
+
+### 5. Check with a second route
+
+Count the same orders without the `LEFT JOIN`.
+
+**Try it**.
+
+<RunSQL query={`SELECT COUNT(*) AS orders_in_window
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id
+WHERE c.signup_date >= DATE '2026-01-01' AND c.signup_date <= DATE '2026-05-31'
+  AND o.status = 'completed'
+  AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+  AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30;`} />
+
+Expected: 1 row, 1 column: `143`, the same as unit 2. Answer: **40 of 49 customers (81.6%) place a first order within 30 days, and 24 (49.0%) a third.** The steps lose 9, 7 and 9 customers, so no step is the one big leak; the third order has the lowest conversion, 72.7%.
+
+<Aside type="tip" title="Remember">
+
+- Write the definition first: steps, counting unit, window and who is left out.
+- Count customers, once each; the counts can only shrink down the funnel.
+- The window is days after each customer's own signup, and a `LEFT JOIN` keeps customers with no orders.
+- Step conversion divides by the step above; overall conversion divides by the signups.
+
+**Common trap: "a funnel counts the orders at each step."** The unit is the person. If you counted orders, a customer with many of them would sit in the top and the bottom of one ratio several times, and "step 2 over step 1" would stop being a share of people.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-funnels-1">
+
+**What does the funnel look like with a 7-day window?** Use the editor below. Expected: 1 row, 4 columns (signed up,
+first, second and third order).
+
+The first steps are done for you: the whole funnel query, as it runs for the 30-day window.
+
+<RunSQL query={`WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-05-31'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_in_window
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
+  GROUP BY c.customer_id
+)
+SELECT COUNT(*) AS signed_up,
+       COUNT(CASE WHEN orders_in_window >= 1 THEN 1 END) AS first_order,
+       COUNT(CASE WHEN orders_in_window >= 2 THEN 1 END) AS second_order,
+       COUNT(CASE WHEN orders_in_window >= 3 THEN 1 END) AS third_order
+FROM in_window;`} />
+
+Now finish it: change two things, for a 7-day window: the last signup date that has a full window in the data, and the
+number of days.
 
 <details>
 <summary>Hint</summary>
@@ -400,7 +371,30 @@ The data ends on June 30. A window of 7 days is complete for anyone who signed u
 
 <Solution>
 
-Use `DATE '2026-06-23'` and `<= 7`.
+Use `DATE '2026-06-23'` and `<= 7`:
+
+```sql
+WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01' AND signup_date <= DATE '2026-06-23'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_in_window
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 7
+  GROUP BY c.customer_id
+)
+SELECT COUNT(*) AS signed_up,
+       COUNT(CASE WHEN orders_in_window >= 1 THEN 1 END) AS first_order,
+       COUNT(CASE WHEN orders_in_window >= 2 THEN 1 END) AS second_order,
+       COUNT(CASE WHEN orders_in_window >= 3 THEN 1 END) AS third_order
+FROM in_window;
+```
 
 The result is `62 | 29 | 11 | 2`. A shorter window lets 13 more customers in (the cohort grows from 49 to 62) and
 lowers every step: 29 of 62 place a first order in a week (46.8%), against 40 of 49 in a month.
@@ -413,14 +407,16 @@ lowers every step: 29 of 62 place a first order in a week (46.8%), against 40 of
 
 <Exercise id="sql-funnels-2">
 
-**Does the funnel differ by loyalty tier?** Work in the Exercise 2 cells. Use the 30-day window and the 49 customers of the
+**Does the funnel differ by loyalty tier?** Use the editor below. Use the 30-day window and the 49 customers of the
 worked example.
 
-Before you run anything, write one sentence in the first cell: what one row of the result is, and how many customers
+Before you run anything, write one sentence as a comment in the editor: what one row of the result is, and how many customers
 you expect in the smallest tier. Then add `loyalty_tier` to the cohort and group the last step by it.
 
 Expected shape, to check your sentence against: 3 rows (one per tier), 5 columns (the tier, the signups and the three
 steps).
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -492,13 +488,28 @@ earlier signups, the June signups and the walk-in order are left out.
 <Exercise id="sql-funnels-3">
 
 **Spot the flaw.** A colleague builds the funnel for every customer who signed up in 2026, and reports that only 41.5%
-reach a third order. Only the `cohort` step differs from the worked example:
+reach a third order. Only the `cohort` step differs from unit 3:
 
-```sql
-SELECT customer_id, signup_date
-FROM customers
-WHERE signup_date >= DATE '2026-01-01'
-```
+<RunSQL query={`WITH cohort AS (
+  SELECT customer_id, signup_date
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+in_window AS (
+  SELECT c.customer_id, COUNT(o.order_id) AS orders_30d
+  FROM cohort c
+  LEFT JOIN orders o
+    ON o.customer_id = c.customer_id
+   AND o.status = 'completed'
+   AND CAST(o.ordered_at AS DATE) - c.signup_date >= 0
+   AND CAST(o.ordered_at AS DATE) - c.signup_date <= 30
+  GROUP BY c.customer_id
+)
+SELECT COUNT(*) AS signed_up,
+       COUNT(CASE WHEN orders_30d >= 1 THEN 1 END) AS first_order,
+       COUNT(CASE WHEN orders_30d >= 2 THEN 1 END) AS second_order,
+       COUNT(CASE WHEN orders_30d >= 3 THEN 1 END) AS third_order
+FROM in_window;`} />
 
 Expected from the colleague's query: 1 row, 4 columns: `65 | 51 | 39 | 27`. What went wrong, and what is the fair figure?
 
@@ -516,7 +527,7 @@ Cut the group at the last signup that has a full window, May 31, as in the worke
 
 **Can you do it?** *I can define a funnel's steps, counting unit, window and exclusions before I write SQL, count
 customers at each step and give both the step and the overall conversion.*
-Test: Exercise sql-funnels-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-funnels-2, done in an empty editor without opening the hints.
 
 The pattern to remember: **write the definition sentence, count customers at each step inside a window every customer can
 complete, then divide by the step above and by the signups.** The next lesson, *Cohorts and retention* (S26), follows the

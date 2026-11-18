@@ -21,7 +21,6 @@ prerequisites:
   - sql-subqueries
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-cohort-retention.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Date functions'
@@ -33,54 +32,8 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
-A **cohort** is a group of customers who start in the same period. **Retention** asks how many of each cohort are active
-again, one month after another. Here the cohorts are the customers who signed up in each month of 2026, followed through
-the six months of orders. It is the funnel of *Funnels: where do people drop off?* (S25) stretched over time.
-
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
-Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
-notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. The stub planned an app-events dataset that does not exist, so the lesson uses cafe-sales signups and orders; confirm that this cohort definition is acceptable for the stage. The stub's DataLemur page does not mention cohorts and the Interview Query page could not be opened (HTTP 429), so neither is listed. Time the lesson against its 30 minutes. When you have checked it, set
+TODO(owner): The stub planned an app-events dataset that does not exist, so the lesson uses cafe-sales signups and orders; confirm that this cohort definition is acceptable for the stage. The stub's DataLemur page does not mention cohorts and the Interview Query page could not be opened (HTTP 429), so neither is listed. Run every block on this page after a fresh load and check each result against its Expected line. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *Working with dates and time* (S11), write an expression that gives the first day of the month of `signup_date`, as a
-   date.
-
-   <details>
-   <summary>Answer</summary>
-
-   `CAST(DATE_TRUNC('month', signup_date) AS DATE)`. `DATE_TRUNC` returns a timestamp, so the `CAST` turns it back into a
-   date. For `2026-01-02` it gives `2026-01-01`.
-
-   </details>
-
-2. In S25, what does overall conversion divide by, and what does step conversion divide by?
-
-   <details>
-   <summary>Answer</summary>
-
-   Overall conversion divides a step by the signups; step conversion divides it by the step above.
-
-   </details>
-
-3. In *Comparing to the previous row: LAG, LEAD and moving averages* (S16), what does `LAG` return on the first row of its
-   partition?
-
-   <details>
-   <summary>Answer</summary>
-
-   `NULL`: there is no row above it.
-
-   </details>
 
 ## The question
 
@@ -97,10 +50,177 @@ Three customers and the cohort each one belongs to:
 | 87 | 2026-01-03 | 2026-01-01 |
 | 97 | 2026-02-03 | 2026-02-01 |
 
-By the end you will have a table with one row per cohort and one column per month since signup, every percentage with its
-denominator, and a clear line between a month that had no activity and a month the data does not cover yet.
+## Warm-up
 
-## The picture
+From memory first, then click to check.
+
+1. In *Working with dates and time* (S11), write an expression that gives the first day of the month of `signup_date`, as a
+   date.
+
+   <details>
+   <summary>Answer</summary>
+
+   `CAST(DATE_TRUNC('month', signup_date) AS DATE)`. `DATE_TRUNC` returns a timestamp, so the `CAST` turns it back into a
+   date. For `2026-01-02` it gives `2026-01-01`.
+
+   </details>
+
+2. In *Funnels: where do people drop off?* (S25), what does overall conversion divide by, and what does step conversion
+   divide by?
+
+   <details>
+   <summary>Answer</summary>
+
+   Overall conversion divides a step by the signups; step conversion divides it by the step above.
+
+   </details>
+
+## The big idea
+
+A **cohort** is a group of customers who start in the same month, and **retention** is the share of each cohort that is active again, month after month.
+
+{/* CONCEPT: concept-cohort */}
+
+## Learn by doing
+
+Five small steps. Each gives you one idea, then you try it in the editor under it. It is the funnel of S25 stretched over time, for the 65 customers who signed up in 2026. Every order here is a completed order, and the walk-in order 1335 has no customer, so the joins drop it.
+
+### 1. One cohort per customer
+
+A customer's cohort is the first day of their signup month. `DATE_TRUNC` cuts the signup date down to it, and `CAST` turns the result back into a date.
+
+Retention divides by the **size** of the cohort: everyone who signed up that month, whether or not they ever ordered. It is the same number for every cell of a row.
+
+**Try it**. Grain: one row per customer.
+
+<RunSQL query={`SELECT customer_id, signup_date,
+       CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+FROM customers
+WHERE signup_date >= DATE '2026-01-01'
+ORDER BY customer_id
+LIMIT 5;`} />
+
+Expected: 5 rows, 3 columns; customer 86 is in the cohort `2026-01-01`. Now the size of each cohort.
+
+<RunSQL query={`SELECT CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month, COUNT(*) AS cohort_size
+FROM customers
+WHERE signup_date >= DATE '2026-01-01'
+GROUP BY cohort_month
+ORDER BY cohort_month;`} />
+
+Expected: 6 rows, 2 columns; the sizes add up to 65. *Why:* these are the denominators of the whole lesson.
+
+### 2. Months since signup
+
+A customer is **active** in a month when at least one completed order, at any store, falls in it. This is the lesson's own definition; other conventions are in use.
+
+Months are calendar months, not blocks of 30 days. The DuckDB documentation says `DATE_DIFF` counts the part boundaries between two dates, inclusive of the later date and exclusive of the earlier one. From the first day of the cohort month, that gives whole **months since**: month 0 is the signup month.
+
+**Try it**. Grain: one row per customer per active month.
+
+<RunSQL query={`WITH cohorts AS (
+  SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+activity AS (
+  SELECT DISTINCT c.cohort_month, c.customer_id,
+         DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
+  FROM cohorts c
+  JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+)
+SELECT * FROM activity
+ORDER BY customer_id, months_since
+LIMIT 6;`} />
+
+Expected: 6 rows, 3 columns. Customer 86 has months 0, 3, 4 and 5, with no row for February and March. *Why:* `DISTINCT` keeps one row per customer per month, however many orders. The inner join leaves out customers with no order: they stay in the denominator, not here.
+
+### 3. Count a cell, then divide
+
+A **cell** is one cohort in one month since signup. Count the customers active in it, and divide by the cohort size. Each cell is judged on its own month: a customer active in month 3 but not in month 2 counts in month 3 only.
+
+**Try it**. Before you run it: each cohort is followed from its own month to June. How many cells, so how many rows, will the result have?
+
+<RunSQL query={`WITH cohorts AS (
+  SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+cohort_sizes AS (
+  SELECT cohort_month, COUNT(*) AS cohort_size
+  FROM cohorts
+  GROUP BY cohort_month
+),
+activity AS (
+  SELECT DISTINCT c.cohort_month, c.customer_id,
+         DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
+  FROM cohorts c
+  JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+),
+retained AS (
+  SELECT cohort_month, months_since, COUNT(*) AS customers
+  FROM activity
+  GROUP BY cohort_month, months_since
+),
+retention AS (
+  SELECT r.cohort_month, r.months_since, s.cohort_size, r.customers,
+         ROUND(100.0 * r.customers / s.cohort_size, 1) AS pct
+  FROM retained r
+  JOIN cohort_sizes s ON s.cohort_month = r.cohort_month
+)
+SELECT * FROM retention
+ORDER BY cohort_month, months_since;`} />
+
+Expected: 21 rows, 5 columns. The first row is January, month 0. *Excel:* a PivotTable (E16, *Grouping and share of total in pivots*) can group dates into months. It shows these counts only from a list with one row per customer and active month, with the months since worked out in a helper column: put the cohort month in Rows, the months since in Columns and a count in Values. Its "% of Row Total" divides by the row's total, the sum of the counts, not by the cohort size.
+
+*Why:* 21 is 6 + 5 + 4 + 3 + 2 + 1, the cells of the triangle. A cell where nobody was active would not appear at all, so the right row count is the check that none is missing.
+
+### 4. Turn it into the triangle
+
+Pivot the table (S9): one row per cohort, one column per month since, with `MAX` because each cell has exactly one value. A month the data does not cover stays empty. The data ends on June 30, so a later month was never observed, and 0% would claim that nobody came.
+
+**Try it**: the same five steps, with a different last `SELECT`.
+
+<RunSQL query={`WITH cohorts AS (
+  SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+cohort_sizes AS (
+  SELECT cohort_month, COUNT(*) AS cohort_size
+  FROM cohorts
+  GROUP BY cohort_month
+),
+activity AS (
+  SELECT DISTINCT c.cohort_month, c.customer_id,
+         DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
+  FROM cohorts c
+  JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+),
+retained AS (
+  SELECT cohort_month, months_since, COUNT(*) AS customers
+  FROM activity
+  GROUP BY cohort_month, months_since
+),
+retention AS (
+  SELECT r.cohort_month, r.months_since, s.cohort_size, r.customers,
+         ROUND(100.0 * r.customers / s.cohort_size, 1) AS pct
+  FROM retained r
+  JOIN cohort_sizes s ON s.cohort_month = r.cohort_month
+)
+SELECT cohort_month,
+       MAX(cohort_size) AS cohort_size,
+       MAX(CASE WHEN months_since = 0 THEN pct END) AS m0,
+       MAX(CASE WHEN months_since = 1 THEN pct END) AS m1,
+       MAX(CASE WHEN months_since = 2 THEN pct END) AS m2,
+       MAX(CASE WHEN months_since = 3 THEN pct END) AS m3,
+       MAX(CASE WHEN months_since = 4 THEN pct END) AS m4,
+       MAX(CASE WHEN months_since = 5 THEN pct END) AS m5
+FROM retention
+GROUP BY cohort_month
+ORDER BY cohort_month;`} />
+
+Expected: 6 rows, 8 columns; January's row is `54.5, 63.6, 63.6, 100.0, 100.0, 90.9`, and each later row has one `NULL` more at the end. *Why:* the `NULL` cells are the months the data does not cover.
 
 <figure>
 <svg viewBox="0 0 360 286" width="360" role="img" aria-labelledby="rt-tri-title rt-tri-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -208,6 +328,37 @@ denominator, and a clear line between a month that had no activity and a month t
 <text x="10" y="264" font-size="10" opacity="0.8">Empty cells: not observable, the data ends June 30.</text>
 <text x="10" y="278" font-size="10" opacity="0.8">Months observed: Jan 6, Feb 5, Mar 4, Apr 3, May 2, Jun 1.</text>
 </svg>
+</figure>
+
+<details>
+<summary>Explain it in your own words: why does month 0 not show 100%?</summary>
+
+A customer who joins on the 26th and
+first orders in the next month is in the cohort but not active in month 0. Five customers who signed up in June never
+ordered at all.
+
+</details>
+
+### 5. Check one cell a second way
+
+Take one cell and count it without the pipeline. The February cohort in month 2 is April.
+
+**Try it**.
+
+<RunSQL query={`SELECT COUNT(*) AS cohort_size,
+       COUNT(CASE WHEN april_orders > 0 THEN 1 END) AS active_in_april
+FROM (
+  SELECT c.customer_id,
+         (SELECT COUNT(*) FROM orders o
+          WHERE o.customer_id = c.customer_id AND o.status = 'completed'
+            AND o.ordered_at >= DATE '2026-04-01' AND o.ordered_at < DATE '2026-05-01') AS april_orders
+  FROM customers c
+  WHERE c.signup_date >= DATE '2026-02-01' AND c.signup_date < DATE '2026-03-01'
+) AS feb_customers;`} />
+
+Expected: 1 row, 2 columns: `11 | 9`. 9 of 11 is 81.8%, the cell of unit 4.
+
+<figure>
 <svg viewBox="0 0 360 308" width="360" role="img" aria-labelledby="rt-trace-title rt-trace-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="rt-trace-title">One cell of the retention triangle traced back to its customers</title>
 <desc id="rt-trace-desc">The eleven customers who signed up in February 2026, customers 97 to 107, with their completed orders in April, which is month 2 for this cohort. 97: 4; 98: 4; 99: 5; 100: 2; 101: 2; 102: 0; 103: 3; 104: 7; 105: 0; 106: 3; 107: 3. Nine customers have at least one, so 9 of 11 are counted; customers 102 and 105 are not.</desc>
@@ -327,198 +478,61 @@ denominator, and a clear line between a month that had no activity and a month t
 </svg>
 </figure>
 
-## How it works
+Answer: **between 50% and 78% of a cohort orders in its signup month, and in the months after, between 64% and 100% are active each month**, with no sign that newer cohorts do worse. Read it with care: each cohort has 8 to 16 customers, so one customer moves a cell by 6 to 12 points, and "active" is not "never left": customer 86 skipped February and March.
 
-A **cohort** is a group of customers who start in the same period, and **retention** is the share of a cohort that is
-active again in the periods after. Here the periods are months and the start is the signup, for the 65 customers who
-signed up in 2026. Conceptually the query builds the triangle in the picture above in five steps:
+<Aside type="tip" title="Remember">
 
-1. It gives each customer one cohort: the first day of their signup month.
-2. It places each completed order by its **months since**: the number of calendar months from the cohort month to the
-   order's month. Month 0 is the signup month.
-3. It marks a customer **active** in month k when at least one completed order, at any store, falls in that
-   month. This is the lesson's own definition; other conventions are in use.
-4. It counts, for each cell (one cohort, one month since), the customers active in it. The second picture traces one
-   cell back to its customers.
-5. It divides each count by the size of the cohort.
+- A cohort is the customers who start in the same month. Retention is the share of it active in each later month.
+- The denominator is the size of the cohort, whether or not they ever ordered.
+- Months are calendar months from the cohort month. Active means at least one completed order that month.
+- Count each customer once per month. An empty cell is not 0%.
 
-The rules:
+**Common trap: "retention can only go down, like a funnel."** A funnel step counts people who reached it, and reaching step 3 includes reaching step 2, so the counts shrink. A retention cell counts people active in one month. A customer who skips a month is missing from it and is counted again on return, so a row can rise.
 
-- **Months are calendar months, not blocks of 30 days.** The DuckDB documentation says `DATE_DIFF` counts the part
-  boundaries between two dates, inclusive of the later date and exclusive of the earlier one. From the first day of the
-  cohort month, that gives whole months.
-- **The denominator is the size of the cohort**: everyone who signed up that month, whether or not they ever ordered. It
-  is the same number for every cell of a row.
-- **Each cell is judged on its own month.** A customer active in month 3 but not in month 2 counts in month 3 only.
-- **An empty cell is not 0%.** The data ends on June 30, so a later month was never observed. Leave it empty: 0% would
-  claim that nobody came.
-
-**Excel.** A PivotTable (E16, *Grouping and share of total in pivots*) can group dates into months. It shows the
-triangle's counts only from a list with one row per customer and active month, with the months since worked out in a
-helper column: put the cohort month in Rows, the months since in Columns and a count in Values. Its "% of Row Total"
-divides by the row's total, the sum of the counts, not by the cohort size.
-
-**A common misconception: "retention can only go down, like a funnel."** A funnel step counts people who reached it, and
-reaching step 3 includes reaching step 2, so the counts shrink. A retention cell counts people active in one month. A
-customer who skips a month is missing from it and is counted again on return, so a row can rise.
-
-## Worked example
-
-Question: **what share of each signup cohort ordered in month 0, 1, 2 and so on?** Run the notebook's setup cell, then
-one cell per step. Each step gives the shape of the result to expect. Orders are completed orders only; the walk-in
-order 1335 has no customer, so the join drops it.
-
-1. **Assign each customer to a cohort.** Grain: one row per customer.
-
-   ```sql
-   SELECT customer_id, signup_date,
-          CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
-   FROM customers
-   WHERE signup_date >= DATE '2026-01-01'
-   ORDER BY customer_id
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 3 columns; customer 86 is in the cohort `2026-01-01`. *Why:* every customer gets one cohort, from the
-   first event we can see. Now the size of each cohort:
-
-   ```sql
-   SELECT CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month, COUNT(*) AS cohort_size
-   FROM customers
-   WHERE signup_date >= DATE '2026-01-01'
-   GROUP BY cohort_month
-   ORDER BY cohort_month;
-   ```
-
-   Expected: 6 rows, 2 columns; the sizes add up to 65. *Why:* these are the denominators of the whole lesson.
-
-2. **List who was active in which month.** Grain: one row per customer per active month.
-
-   ```sql
-   WITH cohorts AS (
-     SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
-     FROM customers
-     WHERE signup_date >= DATE '2026-01-01'
-   ),
-   activity AS (
-     SELECT DISTINCT c.cohort_month, c.customer_id,
-            DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
-     FROM cohorts c
-     JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
-   )
-   SELECT * FROM activity
-   ORDER BY customer_id, months_since
-   LIMIT 6;
-   ```
-
-   Expected: 6 rows, 3 columns. Customer 86 has months 0, 3, 4 and 5, with no row for February and March. *Why:*
-   `DATE_DIFF('month', a, b)` gives the months since (How it works). `DISTINCT` keeps one row per customer per month, however many orders. The inner join leaves out customers
-   with no order: they stay in the denominator, not here.
-
-3. **Count active customers per cell and divide by the cohort size.** Build on step 2:
-
-   ```sql
-   WITH cohorts AS (
-     SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
-     FROM customers
-     WHERE signup_date >= DATE '2026-01-01'
-   ),
-   cohort_sizes AS (
-     SELECT cohort_month, COUNT(*) AS cohort_size
-     FROM cohorts
-     GROUP BY cohort_month
-   ),
-   activity AS (
-     SELECT DISTINCT c.cohort_month, c.customer_id,
-            DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
-     FROM cohorts c
-     JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
-   ),
-   retained AS (
-     SELECT cohort_month, months_since, COUNT(*) AS customers
-     FROM activity
-     GROUP BY cohort_month, months_since
-   ),
-   retention AS (
-     SELECT r.cohort_month, r.months_since, s.cohort_size, r.customers,
-            ROUND(100.0 * r.customers / s.cohort_size, 1) AS pct
-     FROM retained r
-     JOIN cohort_sizes s ON s.cohort_month = r.cohort_month
-   )
-   SELECT * FROM retention
-   ORDER BY cohort_month, months_since;
-   ```
-
-   Expected: 21 rows, 5 columns. The first row is January, month 0. *Why:* 21 is 6 + 5 + 4 + 3 + 2 + 1, the cells of the
-   triangle. A cell where nobody was active would not appear at all, so the right row count is the check that none is
-   missing.
-
-4. **Turn it into the triangle.** Replace the last `SELECT` of step 3 with:
-
-   ```sql
-   SELECT cohort_month,
-          MAX(cohort_size) AS cohort_size,
-          MAX(CASE WHEN months_since = 0 THEN pct END) AS m0,
-          MAX(CASE WHEN months_since = 1 THEN pct END) AS m1,
-          MAX(CASE WHEN months_since = 2 THEN pct END) AS m2,
-          MAX(CASE WHEN months_since = 3 THEN pct END) AS m3,
-          MAX(CASE WHEN months_since = 4 THEN pct END) AS m4,
-          MAX(CASE WHEN months_since = 5 THEN pct END) AS m5
-   FROM retention
-   GROUP BY cohort_month
-   ORDER BY cohort_month;
-   ```
-
-   Expected: 6 rows, 8 columns; January's row is `54.5, 63.6, 63.6, 100.0, 100.0, 90.9`, and each later row has one `NULL` more at
-   the end. *Why:* the pivot of S9, with `MAX` because each cell has exactly one value. The `NULL` cells are the months
-   the data does not cover.
-
-5. **Verify one cell by a second method.** The February cohort in month 2 is April. Count it without the pipeline:
-
-   ```sql
-   SELECT COUNT(*) AS cohort_size,
-          COUNT(CASE WHEN april_orders > 0 THEN 1 END) AS active_in_april
-   FROM (
-     SELECT c.customer_id,
-            (SELECT COUNT(*) FROM orders o
-             WHERE o.customer_id = c.customer_id AND o.status = 'completed'
-               AND o.ordered_at >= DATE '2026-04-01' AND o.ordered_at < DATE '2026-05-01') AS april_orders
-     FROM customers c
-     WHERE c.signup_date >= DATE '2026-02-01' AND c.signup_date < DATE '2026-03-01'
-   ) AS feb_customers;
-   ```
-
-   Expected: 1 row, 2 columns: `11 | 9`. 9 of 11 is 81.8%, the cell of step 4. Answer: **between 50% and 78% of a cohort orders in
-   its signup month, and in the months after, between 64% and 100% are active each month**, with no sign that newer
-   cohorts do worse. Read it with care: each cohort has 8 to 16 customers, so one customer moves a cell by 6 to 12 points,
-   and "active" is not "never left": customer 86 skipped February and March.
-
-<details>
-<summary>Explain it in your own words: why does month 0 not show 100%?</summary>
-
-A customer who joins on the 26th and
-first orders in the next month is in the cohort but not active in month 0. Five customers who signed up in June never
-ordered at all.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-cohort-retention-1">
 
-**By how many percentage points did the January cohort's share change from each month to the one before?** Use the Exercise 1
-cell: it holds the five steps of step 3, written for you. Only the last `SELECT` is yours. Expected: 6 rows, 4 columns
+**By how many percentage points did the January cohort's share change from each month to the one before?** The editor below holds the five steps of unit 3, written for you. Only the last `SELECT` is yours. Expected: 6 rows, 4 columns
 (the cohort month, the months since signup, the share and the change); the first change is `NULL`.
 
-Done for you: the shape. Finish it by filling the window.
+The first steps are done for you: the five steps, and a last `SELECT` that lists January's shares.
 
-```sql
-SELECT cohort_month, months_since, pct,
-       ROUND(pct - LAG(pct) OVER (PARTITION BY ... ORDER BY ...), 1) AS change
+<RunSQL query={`WITH cohorts AS (
+  SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+cohort_sizes AS (
+  SELECT cohort_month, COUNT(*) AS cohort_size
+  FROM cohorts
+  GROUP BY cohort_month
+),
+activity AS (
+  SELECT DISTINCT c.cohort_month, c.customer_id,
+         DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
+  FROM cohorts c
+  JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+),
+retained AS (
+  SELECT cohort_month, months_since, COUNT(*) AS customers
+  FROM activity
+  GROUP BY cohort_month, months_since
+),
+retention AS (
+  SELECT r.cohort_month, r.months_since, s.cohort_size, r.customers,
+         ROUND(100.0 * r.customers / s.cohort_size, 1) AS pct
+  FROM retained r
+  JOIN cohort_sizes s ON s.cohort_month = r.cohort_month
+)
+SELECT cohort_month, months_since, pct
 FROM retention
 WHERE cohort_month = DATE '2026-01-01'
-ORDER BY months_since;
-```
+ORDER BY months_since;`} />
+
+Now finish it: add a fourth column, `change`, that shows `pct` minus the share of the month before.
 
 <details>
 <summary>Hint</summary>
@@ -557,21 +571,22 @@ The changes are `NULL`, `9.1`, `0.0`, `36.4`, `0.0` and `-9.1`. The biggest step
 
 <Exercise id="sql-cohort-retention-2">
 
-**How many customers have their first completed order in each month, and what do you notice about January?** Work in the Exercise 2
-cells.
+**How many customers have their first completed order in each month, and what do you notice about January?** Use the editor below.
 
-Before you run anything, write one sentence in the first cell: what you expect of January compared with the other
+Before you run anything, write one sentence as a comment in the editor: what you expect of January compared with the other
 months. Then count the customers by the month of their first completed order. Finally, count how many of January's
 customers signed up before 2026.
 
 Expected shape, to check your sentence against: the first query returns 2 columns (the month and a count); the second query
 1 row, 1 column. Leave out the walk-in order.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
 A first order is `MIN(ordered_at)` per customer: one step with one row per customer, then count the customers by month,
-as in step 1.
+as in unit 1.
 
 </details>
 
@@ -645,18 +660,40 @@ are not observed yet, so they are empty, not 0%.
 
 <Exercise id="sql-cohort-retention-3">
 
-**Spot the flaw.** A colleague drops the `DISTINCT` from the `activity` step of step 3:
+**Spot the flaw.** A colleague drops the `DISTINCT` from the `activity` step of unit 3 and looks at January:
 
-```sql
+<RunSQL query={`WITH cohorts AS (
+  SELECT customer_id, CAST(DATE_TRUNC('month', signup_date) AS DATE) AS cohort_month
+  FROM customers
+  WHERE signup_date >= DATE '2026-01-01'
+),
+cohort_sizes AS (
+  SELECT cohort_month, COUNT(*) AS cohort_size
+  FROM cohorts
+  GROUP BY cohort_month
+),
 activity AS (
   SELECT c.cohort_month, c.customer_id,
          DATE_DIFF('month', c.cohort_month, CAST(o.ordered_at AS DATE)) AS months_since
   FROM cohorts c
   JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
 ),
-```
+retained AS (
+  SELECT cohort_month, months_since, COUNT(*) AS customers
+  FROM activity
+  GROUP BY cohort_month, months_since
+),
+retention AS (
+  SELECT r.cohort_month, r.months_since, s.cohort_size, r.customers,
+         ROUND(100.0 * r.customers / s.cohort_size, 1) AS pct
+  FROM retained r
+  JOIN cohort_sizes s ON s.cohort_month = r.cohort_month
+)
+SELECT * FROM retention
+WHERE cohort_month = DATE '2026-01-01'
+ORDER BY months_since;`} />
 
-Expected from the triangle: January, month 1, reads `209.1`. What went wrong, and what is the fix?
+Expected: 6 rows, 5 columns; January, month 1, reads `209.1`. What went wrong, and what is the fix?
 
 <Solution>
 
@@ -670,7 +707,7 @@ Put `DISTINCT` back, so each customer counts once per month: 7 of 11, 63.6%.
 
 **Can you do it?** *I can assign customers to a cohort by their first event, compute the months since the cohort started, and
 build a retention table whose denominator and meaning of "active" I can state.*
-Test: Exercise sql-cohort-retention-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-cohort-retention-2, done in an empty editor without opening the hints.
 
 The pattern to remember: **fix the cohort and the denominator, count each customer once per month since the start, and leave
 the months the data does not cover empty.** The core stage returns to this question when it asks whether a drop is age or
