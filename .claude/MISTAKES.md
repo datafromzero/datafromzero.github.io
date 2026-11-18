@@ -218,6 +218,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   rule more widely than the doc sentence it rested on. → **State each rule at exactly the scope of its doc sentence
   (name the join type, say "lists columns" not "selects"), and run one counter-case before writing "always", "never" or
   "makes no difference".**
+- 2026-11-18 — "How it works" sentences used "always", "each" and "either… or" about a whole function family ("a date
+  function either takes a part or cuts"; "a query of aggregates returns one row", true only without `GROUP BY`), and
+  the lesson's own later steps contradicted them. → **Never write an "always / each / every / either… or" sentence about
+  a function family or clause without checking it against the whole lesson and its neighbors; say "two common kinds" or
+  name the condition.**
 
 ## Agents and reviews
 
