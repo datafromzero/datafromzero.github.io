@@ -1,0 +1,403 @@
+---
+id: sql-views
+title: Saving a query as a view
+description: Name a query with CREATE VIEW, reuse it like a table, share only the columns people need, and know what a trigger is.
+stage: sql
+order: 280
+level: intermediate
+duration: 20
+objectives:
+  - Create a view and query it like a table
+  - Tell when a view helps and when a CTE is enough
+  - Use a view to share only some columns
+  - Say what a trigger does
+prerequisites:
+  - sql-ctes
+  - sql-self-and-multi-table-joins
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-views.ipynb
+reviewed: 2026-11-18
+sources:
+  - title: 'DuckDB documentation: CREATE VIEW statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_view
+  - title: 'DuckDB documentation: WITH clause (CTEs)'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/with
+  - title: 'DuckDB documentation: Python API overview'
+    url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'PostgreSQL documentation: Overview of trigger behavior'
+    url: https://www.postgresql.org/docs/current/trigger-definition.html
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
+A query that every report pastes in is one definition copied many times, and copies drift apart. A **view** saves the
+query once under a name, and other queries read that name like a table.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
+notebook cells leave out the closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Check that the `CREATE TRIGGER` cell (step 8 of the notebook) ends in a Parser Error in Colab too, and look in the DuckDB documentation for a statement on triggers (no page was opened for it). Time the lesson against its 20 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Readable queries with CTEs* (S13), write the skeleton of a query with one named step.
+
+   <details>
+   <summary>Answer</summary>
+
+   `WITH step AS (SELECT ...) SELECT ... FROM step;`
+
+   </details>
+
+2. In *Tables, keys and grain* (S18), what is one row of `order_items`?
+
+   <details>
+   <summary>Answer</summary>
+
+   One product line inside one order. An order with three products has three rows.
+
+   </details>
+
+3. In *Joining three tables and a table to itself* (S22), write the condition that links `order_items AS i` to
+   `orders AS o`.
+
+   <details>
+   <summary>Answer</summary>
+
+   `ON o.order_id = i.order_id`: the foreign key of `order_items` against the primary key of `orders`.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Two of you gave me total sales: 22,754.25 and 22,749.25. Which is right? And can we make sure everyone uses the same
+> one?
+
+The difference is 5.00: the one canceled order. Both figures include the extra-zero line (order 2075). Our definition of
+sales is **completed orders only**, but each analyst pastes a join into every report and has to remember the filter.
+The first rows of that join, with the amount of each line (some columns left out):
+
+| order_item_id | order_id | product_name | quantity | amount_usd |
+|---:|---:|---|---:|---:|
+| 5001 | 1001 | Croissant | 1 | 3.25 |
+| 5002 | 1001 | Cold Brew | 1 | 4.75 |
+| 5003 | 1001 | Espresso | 2 | 6.00 |
+
+By the end you will have saved that join once, as a view that holds the definition, and answered the owner.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 372" width="360" role="img" aria-labelledby="view-title view-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="view-title">One saved query, read by many queries</title>
+<desc id="view-desc">Three tables at the top: order_items with 3,287 rows, orders with 1,800 rows and products with 16 rows. Arrows lead down to a box for the view sales_lines, a saved query that keeps only completed orders and stores no rows of its own. Read as a table, it gives 3,286 rows and 8 columns. Two queries read the view. Sales per store give 3 rows: Old Town 9,144.25, Campus 8,998.75 and Harbor 4,606.25. Sales per category give 4 rows: coffee 10,802.00, food 4,890.50, bakery 3,824.25 and tea 3,232.50. Both add up to 22,749.25.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Define once, read many times</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.6">
+<rect x="10" y="32" width="106" height="44" /><rect x="127" y="32" width="106" height="44" /><rect x="244" y="32" width="106" height="44" />
+</g>
+<g font-size="11">
+<text x="18" y="50" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">order_items</text><text x="18" y="67">3,287 rows</text>
+<text x="135" y="50" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">orders</text><text x="135" y="67">1,800 rows</text>
+<text x="252" y="50" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">products</text><text x="252" y="67">16 rows</text>
+</g>
+<path d="M63 78 v16 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M180 78 v16 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M297 78 v16 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="10" y="100" width="340" height="86" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5" />
+<text x="20" y="120" font-size="12" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">VIEW sales_lines</text>
+<text x="20" y="139" font-size="11">a saved query: it keeps no rows of its own</text>
+<text x="20" y="156" font-size="11">joins the three tables, keeps WHERE status = 'completed'</text>
+<text x="20" y="173" font-size="11" font-weight="600">read as a table: 3,286 rows, 8 columns</text>
+<path d="M100 188 v16 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M260 188 v16 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="10" y="210" width="165" height="104" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<text x="18" y="228" font-size="11" font-weight="600">sales per store: 3 rows</text>
+<text x="18" y="246" font-size="11">Old Town</text><text x="167" y="246" font-size="11" text-anchor="end">9,144.25</text>
+<text x="18" y="264" font-size="11">Campus</text><text x="167" y="264" font-size="11" text-anchor="end">8,998.75</text>
+<text x="18" y="282" font-size="11">Harbor</text><text x="167" y="282" font-size="11" text-anchor="end">4,606.25</text>
+<text x="18" y="300" font-size="11" font-weight="600">sum</text><text x="167" y="300" font-size="11" text-anchor="end" font-weight="600">22,749.25</text>
+<rect x="185" y="210" width="165" height="104" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<text x="193" y="228" font-size="11" font-weight="600">sales per category: 4 rows</text>
+<text x="193" y="246" font-size="11">coffee</text><text x="342" y="246" font-size="11" text-anchor="end">10,802.00</text>
+<text x="193" y="264" font-size="11">food</text><text x="342" y="264" font-size="11" text-anchor="end">4,890.50</text>
+<text x="193" y="282" font-size="11">bakery</text><text x="342" y="282" font-size="11" text-anchor="end">3,824.25</text>
+<text x="193" y="300" font-size="11">tea</text><text x="342" y="300" font-size="11" text-anchor="end">3,232.50</text>
+<text x="10" y="340" font-size="11" font-weight="600">Both queries add up to 22,749.25: one definition, one total.</text>
+<text x="10" y="357" font-size="11" opacity="0.8">Completed orders only, including the extra-zero line (order 2075).</text>
+</svg>
+</figure>
+
+`CREATE VIEW name AS query` saves a query. The DuckDB documentation: "The view is not physically materialized.
+Instead, the query is run every time the view is referenced in a query." So a view keeps the question, not the answer:
+read it later and you get today's rows. It looks like a CTE (S13), and the documentation says: "Regular
+(non-recursive) common-table-expressions are essentially views that are limited in scope to a particular query."
+
+| | CTE | View |
+|---|---|---|
+| Lives | for one query | in the database, until dropped |
+| Use it when | one query needs the step | several queries or people need the same definition |
+
+## Worked example
+
+Question: **what is the one definition of sales, and what do the stores and categories add up to?** Run the notebook's
+setup cell, then one cell per step. Everything is completed orders, 3,286 lines in 1,799 orders.
+
+1. **Write the query once.** The amount of a line is `quantity × unit_price_usd − discount_usd`.
+
+   ```sql
+   SELECT i.order_item_id, o.order_id, CAST(o.ordered_at AS DATE) AS order_day, o.store_id,
+          p.product_name, p.category, i.quantity,
+          i.quantity * p.unit_price_usd - i.discount_usd AS amount_usd
+   FROM order_items AS i
+   JOIN orders AS o ON o.order_id = i.order_id
+   JOIN products AS p ON p.product_id = i.product_id
+   WHERE o.status = 'completed'
+   ORDER BY i.order_item_id
+   LIMIT 5;
+   ```
+
+   Expected: 5 rows, 8 columns, the first being line 5001. *Why:* look at it before you save it. The grain is one row
+   per line, as in `order_items`. `ORDER BY` and `LIMIT` are for looking, so they stay out of the view.
+
+2. **Save it as a view.** Run the same query without the last two lines, after `CREATE OR REPLACE VIEW sales_lines AS`.
+
+   ```sql
+   CREATE OR REPLACE VIEW sales_lines AS
+   SELECT i.order_item_id, ...   -- the query from step 1, without ORDER BY and LIMIT
+   ```
+
+   Expected: no result rows (the notebook prints an empty table with a `Count` column). *Why:* nothing is computed yet.
+   `OR REPLACE` lets you run the cell again; without it, a second `CREATE VIEW` stops with `Catalog Error: View with name
+   "sales_lines" already exists!`.
+
+3. **Read the view like a table.**
+
+   ```sql
+   SELECT store_id, COUNT(*) AS lines, ROUND(SUM(amount_usd), 2) AS sales
+   FROM sales_lines
+   GROUP BY store_id
+   ORDER BY store_id;
+   ```
+
+   Expected: 3 rows, 3 columns: lines 1337, 1304 and 645, sales 9144.25, 8998.75 and 4606.25. *Why:* the join and the
+   filter are inside the view, so the report only groups. The same view feeds a query by `category` (4 rows).
+
+4. **Verify.**
+
+   ```sql
+   SELECT COUNT(*) AS lines, ROUND(SUM(amount_usd), 2) AS sales FROM sales_lines;
+   ```
+
+   Expected: 1 row, 2 columns: `3286 | 22749.25`. A second route, for all lines of every status, without the view:
+
+   ```sql
+   SELECT ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd), 2) AS all_sales
+   FROM order_items AS i
+   JOIN products AS p ON p.product_id = i.product_id;
+   ```
+
+   Expected: 1 row, 1 column: `22754.25`. Minus the canceled 5.00 it is 22,749.25: the same. The three stores add up to
+   22,749.25 too. Answer: **22,749.25 is the completed-orders total, and a view now holds that definition for everyone.**
+
+5. **See what is stored.**
+
+   ```sql
+   SELECT sql FROM duckdb_views() WHERE view_name = 'sales_lines';
+   ```
+
+   Expected: 1 row, 1 column: the text of the `CREATE VIEW`, not any rows. *Why:* this is what runs each time you read
+   the view. (The DuckDB documentation shows this query.)
+
+6. **Share only some columns.** A partner needs the orders but not who placed them:
+
+   ```sql
+   CREATE OR REPLACE VIEW orders_shared AS
+   SELECT order_id, store_id, ordered_at, status, payment_method FROM orders;
+   SELECT * FROM orders_shared LIMIT 3;
+   ```
+
+   Expected: the second cell shows 3 rows, 5 columns; `orders` has 6, and `customer_id` is missing. *Why:* the view
+   lists the columns it exposes, so even `SELECT *` on it cannot return the rest. It is not a lock: "Regular views can
+   expose data that the view query would filter out (for example via stats())." DuckDB 2.0 added `CREATE SECURE VIEW` for
+   that case. Treat a view as a convenient shape unless your database's documentation promises more.
+
+7. **Views live in the database that made them.**
+
+   ```python
+   other = duckdb.connect()   # a second, empty in-memory database
+   other.sql("SELECT COUNT(*) FROM sales_lines").show()
+   ```
+
+   Expected: an error that starts with `Catalog Error`: `Table with name sales_lines does not exist!`. *Why:* the DuckDB
+   documentation says an in-memory database means "no tables are persisted on disk". Your views are in the notebook's
+   database and go with it: after a restart, run the setup cell and the `CREATE` cells again.
+
+<Aside type="note" title="Triggers: know the word">
+A view runs when you read it. A **trigger** runs when data changes. The PostgreSQL documentation: "A trigger is a
+specification that the database should automatically execute a particular function whenever a certain type of
+operation is performed." For example, a database can write a line to a log table whenever a row is inserted into
+`orders`. You will not write one here: in the notebook's step 8 cell, `CREATE TRIGGER` ends in a Parser Error on DuckDB 2.0.0.
+</Aside>
+
+<details>
+<summary>Explain it in your own words: when is a CTE enough, and when do you want a view?</summary>
+
+A CTE is enough when one query needs the step. A view is better when several queries or people need the same
+definition, because the definition then lives in one place and a fix reaches everyone.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-views-1">
+
+**Save daily sales as a view, built on the view you already have.** Needs `sales_lines` from step 2. Use the Exercise 1
+cells. Expected: the check returns 1 row, 3 columns.
+
+The first steps are done for you:
+
+```sql
+CREATE OR REPLACE VIEW daily_sales AS
+SELECT order_day, ...
+FROM sales_lines
+GROUP BY order_day;
+```
+
+Now finish it: replace `...` with the number of lines and the rounded sum of `amount_usd`, named `lines` and `sales`.
+Then check it with one query: the number of rows of `daily_sales`, the sum of `sales` and the sum of `lines`.
+
+<details>
+<summary>Hint</summary>
+
+Copy the two aggregates from step 3. A view can read another view, because a view is read like a table.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT order_day, COUNT(*) AS lines, ... AS sales
+```
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE VIEW daily_sales AS
+SELECT order_day, COUNT(*) AS lines, ROUND(SUM(amount_usd), 2) AS sales
+FROM sales_lines
+GROUP BY order_day;
+
+SELECT COUNT(*) AS days, ROUND(SUM(sales), 2) AS sales, SUM(lines) AS lines FROM daily_sales;
+```
+
+`181 | 22749.25 | 3286`. One row per day, and the totals match step 4: nothing was lost between the view and
+the view of the view.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-views-2">
+
+**How many completed orders did each store take, using `sales_lines`?** Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: what one row of `sales_lines` is, and what that means
+for counting orders. Then write the query.
+
+Expected shape, to check your sentence against: 3 rows, 2 columns (the store and its orders). Check it against a count
+straight from `orders`. Counts cover completed orders, not units, so the extra-zero line does not matter.
+
+<details>
+<summary>Hint</summary>
+
+An order with three products appears three times in the view. Which aggregate counts each order once?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three stores, each with the number of different `order_id` values in the view."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT store_id, COUNT(DISTINCT order_id) AS orders
+FROM sales_lines
+GROUP BY store_id
+ORDER BY store_id;
+```
+
+`729`, `715` and `355`. One row of the view is a line, so `COUNT(*)` would return the lines (1337, 1304 and 645).
+`COUNT(DISTINCT order_id)` counts each order once. Check:
+`SELECT store_id, COUNT(*) FROM orders WHERE status = 'completed' GROUP BY store_id;` gives the same three numbers. A
+view keeps the grain of its query: read it with that grain in mind.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does a view store, and when does it run?
+
+   <details>
+   <summary>Answer</summary>
+
+   It stores the query, not the rows. The query runs every time something reads the view.
+
+   </details>
+
+<Exercise id="sql-views-3">
+
+**Spot the flaw.** The team's reports all read a view `team_sales`, which is `sales_lines` under another name. In the
+Exercise 3 cells it is built for you, and its total is 22,749.25. A colleague wants the canceled lines too, for an
+audit, and runs the same view query without the `WHERE o.status = 'completed'` line, under the name `team_sales`:
+
+```sql
+CREATE OR REPLACE VIEW team_sales AS
+SELECT ...   -- the query of step 1, without the WHERE line
+```
+
+Then they run `SELECT ROUND(SUM(amount_usd), 2) AS sales FROM team_sales;`. Expected: 1 row, 1 column. What went wrong,
+and what should they have done?
+
+<Solution>
+
+The check returns `22754.25`, and the view now has 3,287 lines. `OR REPLACE` changed the definition that every report
+reads, so every total on the team went up by the canceled 5.00 without anyone touching a report: the two-totals problem
+of the owner's question, made by one cell.
+
+An audit view needs its own name:
+
+```sql
+CREATE OR REPLACE VIEW team_sales_audit AS
+SELECT ...   -- the query without the WHERE line
+```
+
+The shared name keeps its meaning, and the audit reads `team_sales_audit`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can save a query as a view, read it like a table, hand over only some columns, say what one row
+of the view is, and tell when a CTE is enough.*
+Test: Exercise sql-views-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **name a definition once with `CREATE VIEW`, and let every query read the name.** The next
+lesson, *Star schema: facts and dimensions* (S29), builds a small set of views that BI tools like.

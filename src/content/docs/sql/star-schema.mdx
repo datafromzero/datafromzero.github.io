@@ -1,0 +1,407 @@
+---
+id: sql-star-schema
+title: 'Star schema: facts and dimensions'
+description: 'See the shape BI tools expect: one fact table at a clear grain with dimension tables around it, built as views on cafe-sales.'
+stage: sql
+order: 290
+level: intermediate
+duration: 25
+objectives:
+  - Tell a fact table from a dimension table
+  - State the grain of a fact table
+  - Build a small star schema with views
+  - Explain why BI tools prefer this shape
+prerequisites:
+  - sql-relational-model
+  - sql-views
+  - sql-dates-and-time
+  - sql-recursive-ctes-date-spine
+  - sql-join-fanout
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-star-schema.ipynb
+reviewed: 2026-11-18
+sources:
+  - title: 'Kimball Group: Star schemas and OLAP cubes'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/star-schema-olap-cube/
+  - title: 'Microsoft Learn: Understand star schema and the importance for Power BI'
+    url: https://learn.microsoft.com/en-us/power-bi/guidance/star-schema
+  - title: 'DuckDB documentation: CREATE VIEW statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_view
+  - title: 'DuckDB documentation: Timestamp functions'
+    url: https://duckdb.org/docs/stable/sql/functions/timestamp
+  - title: 'DuckDB documentation: Date functions'
+    url: https://duckdb.org/docs/stable/sql/functions/date
+  - title: 'DuckDB documentation: Date part functions'
+    url: https://duckdb.org/docs/stable/sql/functions/datepart
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
+In *Saving a query as a view* (S28) you saved one query. Here you save a small set of views in one particular shape, the
+**star schema**, which reporting tools expect. This is a preview: the core stage has *Grain, facts and dimensions* and
+*Designing a star schema from business questions*, and goes deeper. Here you build one star on cafe-sales and check it.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
+notebook cells leave out the closing `;` that this page shows. The views live in the notebook's in-memory database, so
+after a restart you run the setup cell and the `CREATE` cells again.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Tables, keys and grain* (S18), state the grain of `orders` and of `order_items`, each in one sentence.
+
+   <details>
+   <summary>Answer</summary>
+
+   One row of `orders` is an order, one visit to the till. One row of `order_items` is one product line inside one
+   order.
+
+   </details>
+
+2. In *Saving a query as a view* (S28), what does a view store?
+
+   <details>
+   <summary>Answer</summary>
+
+   The query, not the rows. The query runs each time something reads the view.
+
+   </details>
+
+3. In *Join fan-out* (S21), a join can multiply rows. Write the query that checks that `product_id` is unique in
+   `products` before you join on it.
+
+   <details>
+   <summary>Answer</summary>
+
+   `SELECT COUNT(*), COUNT(DISTINCT product_id) FROM products;` Equal numbers (16 and 16) mean one row per key, so a
+   join on it cannot multiply rows.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Our reporting tool wants one tidy model it can filter by store, product and day. Today every report re-joins the
+> tables. What does that model look like, and how do I know its totals are right?
+
+The middle of that model is one row per order line, with keys that point to descriptive tables and the numbers to add
+up (some columns left out):
+
+| order_item_id | order_date | store_id | product_id | quantity | amount_usd |
+|---:|---|---:|---:|---:|---:|
+| 5001 | 2026-01-01 | 2 | 10 | 1 | 3.25 |
+| 5002 | 2026-01-01 | 2 | 6 | 1 | 4.75 |
+| 5003 | 2026-01-01 | 2 | 1 | 2 | 6.00 |
+
+By the end you will have built it from five tables with four views, asked it a question, and checked that it gives the
+same totals as the source.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 454" width="360" role="img" aria-labelledby="star-title star-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="star-title">A star schema built from the cafe-sales tables</title>
+<desc id="star-desc">A central fact table, fact_sales, with 3,287 rows, one row per order line. Four dimension tables surround it. At the top, dim_date with 181 rows, one per day from January 1 to June 30, and dim_product with 16 rows. At the bottom, dim_store with 3 rows and dim_customer with 150 rows, which Exercise 2 builds. Each dimension has one row per key. Each line joins a dimension key, marked 1, to the matching key column of the fact table, marked many. The fact table holds the measures quantity, discount_usd and amount_usd.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One fact table, dimensions around it</text>
+<rect x="10" y="32" width="165" height="92" fill="none" stroke="currentColor" stroke-opacity="0.6" /><rect x="10" y="32" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" /><text x="18" y="47" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_date</text><text x="18" y="70" font-size="10" opacity="0.8">181 rows: one per day</text><text x="18" y="86" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_date  (key)</text><text x="18" y="100" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">year  month</text><text x="18" y="114" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">weekday  is_weekend</text>
+<rect x="185" y="32" width="165" height="92" fill="none" stroke="currentColor" stroke-opacity="0.6" /><rect x="185" y="32" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" /><text x="193" y="47" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_product</text><text x="193" y="70" font-size="10" opacity="0.8">16 rows: one per product</text><text x="193" y="86" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_id  (key)</text><text x="193" y="100" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_name</text><text x="193" y="114" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">category</text>
+<path d="M92 124 V160" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M267 124 V160" fill="none" stroke="currentColor" stroke-width="1.5" />
+<g font-size="10" font-weight="600"><text x="97" y="137">1</text><text x="97" y="155">many</text><text x="272" y="137">1</text><text x="272" y="155">many</text></g>
+<rect x="10" y="160" width="340" height="124" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5" />
+<text x="18" y="178" font-size="12" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">fact_sales</text>
+<text x="18" y="194" font-size="10">3,287 rows. Grain: one row per order line.</text>
+<text x="18" y="214" font-size="10" font-weight="600">identifiers</text><text x="100" y="214" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_item_id  order_id  order_status</text>
+<text x="18" y="234" font-size="10" font-weight="600">dimension keys</text><text x="100" y="234" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_date  store_id</text>
+<text x="100" y="248" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_id  product_id</text>
+<text x="18" y="268" font-size="10" font-weight="600">measures</text><text x="100" y="268" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">quantity  discount_usd  amount_usd</text>
+<path d="M92 284 V320" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M267 284 V320" fill="none" stroke="currentColor" stroke-width="1.5" />
+<g font-size="10" font-weight="600"><text x="97" y="297">many</text><text x="97" y="315">1</text><text x="272" y="297">many</text><text x="272" y="315">1</text></g>
+<rect x="10" y="320" width="165" height="78" fill="none" stroke="currentColor" stroke-opacity="0.6" /><rect x="10" y="320" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" /><text x="18" y="335" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_store</text><text x="18" y="358" font-size="10" opacity="0.8">3 rows: one per store</text><text x="18" y="374" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_id  (key)</text><text x="18" y="388" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_name  city</text>
+<rect x="185" y="320" width="165" height="78" fill="none" stroke="currentColor" stroke-opacity="0.6" /><rect x="185" y="320" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" /><text x="193" y="335" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_customer</text><text x="193" y="358" font-size="10" opacity="0.8">150 rows: one per customer</text><text x="193" y="374" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_id  (key)</text><text x="193" y="388" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">loyalty_tier  city</text>
+<text x="10" y="418" font-size="10" opacity="0.85">dim_customer is built in Exercise 2. Order 1335 has no</text>
+<text x="10" y="432" font-size="10" opacity="0.85">customer, so its fact rows have an empty customer_id and</text>
+<text x="10" y="446" font-size="10" opacity="0.85">match no dim_customer row.</text>
+</svg>
+</figure>
+
+Kimball Group: "Star schemas characteristically consist of fact tables linked to associated dimension tables via
+primary/foreign key relationships." The vocabulary:
+
+- A **fact table** holds events and their numbers. Microsoft's Power BI documentation: "Fact tables store observations
+  or events, and can be sales orders, stock balances, exchange rates, temperatures, and more." Here: `fact_sales`.
+- A **dimension table** describes the things: who, what, where, when. The same documentation: "Dimension tables describe
+  business entities—the things you model." Here: store, product and date.
+- The **grain** of the fact table is what one row stands for, said first (S18): here, **one order line**.
+- Why a reporting tool likes this shape: "Dimension tables enable filtering and grouping." and "Fact tables enable
+  summarization." You filter and group by a dimension column, and add up a fact column. The same page adds: "It's also
+  important that fact tables always load data at a consistent grain."
+
+## Worked example
+
+Question: **can we model sales as a star, and does it give the same totals as the source?** Run the notebook's setup
+cell, then one cell per step. Totals include the extra-zero line (order 2075); "completed" excludes the canceled order.
+
+1. **Declare the grain, then build the fact view.** One row per order line, so the fact view starts from
+   `order_items`. It joins `orders` for the keys and `products` only to price the line.
+
+   ```sql
+   CREATE OR REPLACE VIEW fact_sales AS
+   SELECT i.order_item_id, i.order_id,
+          CAST(o.ordered_at AS DATE) AS order_date,
+          o.store_id, o.customer_id, i.product_id,
+          o.status AS order_status,
+          i.quantity, i.discount_usd,
+          i.quantity * p.unit_price_usd - i.discount_usd AS amount_usd
+   FROM order_items AS i
+   JOIN orders AS o ON o.order_id = i.order_id
+   JOIN products AS p ON p.product_id = i.product_id;
+   ```
+
+   Expected: no result rows (an empty table with a `Count` column). *Why:* the view keeps every line, canceled order
+   included, with its status, so its counts match the source. Filter on the status when you ask a question.
+
+2. **Check the grain.**
+
+   ```sql
+   SELECT COUNT(*) AS lines, COUNT(DISTINCT order_item_id) AS distinct_lines,
+          ROUND(SUM(amount_usd), 2) AS sales
+   FROM fact_sales;
+   ```
+
+   Expected: 1 row, 3 columns: `3287 | 3287 | 22754.25`. *Why:* as many distinct line ids as rows: one row per line.
+   The 3,287 equals `order_items` (S18), and 22,754.25 is all lines of every status.
+
+3. **Build the dimensions.** Each has one row per key.
+
+   ```sql
+   CREATE OR REPLACE VIEW dim_store AS
+   SELECT store_id, store_name, city FROM stores;
+
+   CREATE OR REPLACE VIEW dim_product AS
+   SELECT product_id, product_name, category FROM products;
+
+   CREATE OR REPLACE VIEW dim_date AS
+   SELECT CAST(generate_series AS DATE) AS order_date,
+          year(generate_series) AS year, month(generate_series) AS month,
+          dayname(generate_series) AS weekday,
+          isodow(generate_series) >= 6 AS is_weekend
+   FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-06-30', INTERVAL 1 DAY);
+   ```
+
+   Expected: three cells, none with result rows. *Why:* `dim_date` is the date spine of *Complete time series and
+   recursive CTEs* (S27) with the date parts of *Working with dates and time* (S11) added. Power BI's documentation:
+   "The most consistent table you'll find in a star schema is a date dimension table." `isodow` is 6 or 7 on Saturday and
+   Sunday.
+
+4. **Check every key.**
+
+   ```sql
+   SELECT COUNT(*) AS dim_rows, COUNT(DISTINCT product_id) AS distinct_keys FROM dim_product;
+   ```
+
+   Expected: 1 row, 2 columns: `16 | 16`. Run it for `dim_store` (3 and 3) and `dim_date` (181 and 181, on
+   `order_date`). *Why:* a dimension key that repeats would multiply fact rows in every join (S21).
+
+5. **Ask a question through the star.** Completed sales by category, weekdays against weekends:
+
+   ```sql
+   SELECT p.category, d.is_weekend, ROUND(SUM(f.amount_usd), 2) AS sales
+   FROM fact_sales AS f
+   JOIN dim_product AS p ON p.product_id = f.product_id
+   JOIN dim_date AS d ON d.order_date = f.order_date
+   WHERE f.order_status = 'completed'
+   GROUP BY p.category, d.is_weekend
+   ORDER BY p.category, d.is_weekend;
+   ```
+
+   Expected: 8 rows, 3 columns: for example bakery on weekdays 2341.50 and on weekends 1482.75. *Why:* the question uses one
+   column of each dimension and one measure: group by the dimensions, sum the fact.
+
+6. **Verify.** Joining the fact to the three dimensions must keep every line:
+
+   ```sql
+   SELECT COUNT(*) AS lines, ROUND(SUM(f.amount_usd), 2) AS sales
+   FROM fact_sales AS f
+   JOIN dim_store AS s ON s.store_id = f.store_id
+   JOIN dim_product AS p ON p.product_id = f.product_id
+   JOIN dim_date AS d ON d.order_date = f.order_date;
+   ```
+
+   Expected: 1 row, 2 columns: `3287 | 22754.25`, the same as step 2. Then add up step 5: its eight numbers sum to
+   22,749.25, the completed-sales total of *Saving a query as a view* (S28) and of the Excel pivot lessons. Answer:
+   **yes, the star gives the same totals as the source.**
+
+<details>
+<summary>Explain it in your own words: why must the step 6 join return exactly 3,287 lines?</summary>
+
+Every line has one store, one product and one day, and each dimension has exactly one row per key, so each fact row finds
+exactly one match and the join neither drops nor repeats a line.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-star-schema-1">
+
+**What were completed sales for each store in each month?** Use the Exercise 1 cell. Expected: 15 rows, 3 columns (the
+store, the month number and the sales).
+
+The first steps are done for you:
+
+```sql
+FROM fact_sales AS f
+JOIN dim_store AS s ON s.store_id = f.store_id
+JOIN dim_date AS d ON d.order_date = f.order_date
+```
+
+Now finish it: add the `SELECT` (store name, month, rounded sum of `amount_usd`), the filter on completed orders, the
+`GROUP BY` and an `ORDER BY`.
+
+<details>
+<summary>Hint</summary>
+
+Copy the shape of step 5, and swap the product dimension for the store dimension.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT s.store_name, d.month, ... AS sales
+FROM fact_sales AS f
+...
+GROUP BY s.store_name, d.month
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT s.store_name, d.month, ROUND(SUM(f.amount_usd), 2) AS sales
+FROM fact_sales AS f
+JOIN dim_store AS s ON s.store_id = f.store_id
+JOIN dim_date AS d ON d.order_date = f.order_date
+WHERE f.order_status = 'completed'
+GROUP BY s.store_name, d.month
+ORDER BY s.store_name, d.month;
+```
+
+15 rows: Campus and Old Town have six months each, Harbor three (April to June, 1,596.50, 1,546.50 and 1,463.25), because
+it opened on April 1.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-star-schema-2">
+
+**What were completed sales for each loyalty tier?** Add a customer dimension first. Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: what the tiers must add up to. Then create `dim_customer`
+(`customer_id`, `loyalty_tier`, `city` from `customers`), join it to the fact on `customer_id`, and group by tier.
+Compare the sum of the tiers with your sentence, and repair the query if they differ.
+
+Expected shape, to check your sentence against: 2 columns (the tier and its sales). Completed orders only; the
+extra-zero line is included.
+
+<details>
+<summary>Hint</summary>
+
+If the sum falls short, count the fact rows whose `customer_id` is empty. Which join keeps rows with no match (S20)?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"A tier and its sales for every tier, and the sales add up to the completed total."* Use a LEFT JOIN from the
+fact, and `COALESCE` to give the empty tier a label.
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE VIEW dim_customer AS
+SELECT customer_id, loyalty_tier, city FROM customers;
+
+SELECT COALESCE(c.loyalty_tier, 'unknown') AS loyalty_tier, ROUND(SUM(f.amount_usd), 2) AS sales
+FROM fact_sales AS f
+LEFT JOIN dim_customer AS c ON c.customer_id = f.customer_id
+WHERE f.order_status = 'completed'
+GROUP BY COALESCE(c.loyalty_tier, 'unknown')
+ORDER BY loyalty_tier;
+```
+
+Bronze 13,312.50, gold 2,081.25, silver 7,348.50 and unknown 7.00: together 22,749.25. With an inner join the `unknown`
+row disappears and the tiers add up to 22,742.25, 7.00 short: order 1335, the walk-in with no customer. Its fact row has an
+empty `customer_id`, so it matches no dimension row. A LEFT JOIN keeps it; the core stage shows the usual repair, an
+"unknown customer" row inside the dimension.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what is a fact table, what is a dimension table, and what is the grain of `fact_sales`?
+
+   <details>
+   <summary>Answer</summary>
+
+   A fact table holds events and their numbers; a dimension table describes who, what, where and when. The grain of
+   `fact_sales` is one row per order line.
+
+   </details>
+
+<Exercise id="sql-star-schema-3">
+
+**Spot the flaw.** A colleague wants a product dimension that lists only products that have sold, and builds it from the
+lines:
+
+```sql
+CREATE OR REPLACE VIEW dim_product_sold AS
+SELECT p.product_id, p.product_name, p.category
+FROM products AS p
+JOIN order_items AS i ON i.product_id = p.product_id;
+```
+
+Then they join `fact_sales` to `dim_product_sold` on `product_id` and add up `amount_usd` over all lines, and report
+5,441,687.00. Expected from that query: 1 row, 2 columns (the lines and the sales). What went wrong, and what is the
+fix?
+
+<Solution>
+
+The join returns `817661 | 5441687.00`, not `3287 | 22754.25`. The view has 3,287 rows but only 15 different
+`product_id` values: it has one row per *line*, not per product, because the join to `order_items` repeats each product
+once per line. Espresso, for example, appears 192 times, so every Espresso fact row is matched 192 times. The key check
+of step 4 would have caught it: `COUNT(*)` and `COUNT(DISTINCT product_id)` differ.
+
+Use `dim_product` as it is, with one row per key (Pumpkin Spice Latte, never sold, may stay on the menu), or write the
+sold-products view with `SELECT DISTINCT`. Either way, check `COUNT(*) = COUNT(DISTINCT key)` after building a dimension.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say the grain of a fact table, tell a fact from a dimension, build a small star as views, and
+check that the star's totals match the source.*
+Test: Exercise sql-star-schema-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **one fact table at a stated grain, one row per key in every dimension, and a total check after
+every join.** The next lesson, *Using an AI assistant for SQL, with checks* (S30), turns that habit of checking into a
+routine for drafts you did not write.
