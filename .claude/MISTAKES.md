@@ -155,6 +155,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
   convention per quantity across lessons, or name both.**
+- 2026-11-18 — A lesson listed the DuckDB Subqueries page as a source for a claim about anti joins, which sits on the
+  FROM page; the page had not been opened. → **Every `sources` URL must be the page where one of the lesson's claims
+  sits: open it and find the sentence (and quote or paraphrase that sentence); drop any source you cannot tie to a claim.**
 
 - 2026-11-18 — Notebook cells that error on purpose (fix-the-query exercises, error demos) would stop Colab's Run all.
   → **Run `scripts/wrap-notebook-error-cells.py`; it wraps every erroring cell in try/except.**
