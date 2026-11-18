@@ -1,0 +1,549 @@
+---
+id: sql-normalization
+title: 'Normalization: one fact in one place'
+description: Split a wide table into related tables in plain language, and see the duplication and update problems normalization prevents.
+stage: sql
+order: 330
+level: intermediate
+duration: 25
+objectives:
+  - Spot repeated facts in a wide table
+  - Split a table into related tables with keys
+  - Explain update, insert and delete anomalies with an example
+  - Explain why analysts sometimes denormalize on purpose
+prerequisites:
+  - sql-create-table-constraints
+  - sql-inner-join
+  - sql-left-join-anti-join
+  - sql-modify-data-transactions
+  - sql-group-by-having
+  - sql-set-operations
+  - sql-views
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-normalization.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Microsoft Learn: Description of the database normalization basics'
+    url: https://learn.microsoft.com/en-us/office/troubleshoot/access/database-normalization-description
+  - title: 'Microsoft Learn: Understand data models (Azure Architecture Center)'
+    url: https://learn.microsoft.com/en-us/azure/architecture/data-guide/technology-choices/understand-data-store-models
+  - title: 'DuckDB documentation: CREATE TABLE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_table
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
+(S1). You have joined five tables many times. Here you ask why the data lives in five tables: you glue them into one
+wide table, watch it go wrong, and take it apart again.
+
+**Your practice notebook** loads the five tables of **cafe-sales** and builds the wide table as a copy. The cafe-sales
+tables are never changed, and every trial change to the copy runs inside a transaction that you roll back, as in
+*Inserting, updating and deleting safely* (S32). The notebook cells wrap each query as in S1 and leave out the closing `;`.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. Read the wording of the three normal forms against a course text you trust; the Microsoft Learn page is an archived support article. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Tables, keys and grain* (S18), what does the grain of `order_items` say?
+
+   <details>
+   <summary>Answer</summary>
+
+   One row is one product line inside one order.
+
+   </details>
+
+2. In *LEFT JOIN and finding rows with no match* (S20), order 1335 has no customer. Which join keeps its line when you attach customers, and why?
+
+   <details>
+   <summary>Answer</summary>
+
+   `LEFT JOIN`. It keeps every row of the left table and fills the right side with `NULL` when nothing matches. An `INNER JOIN` would drop the line.
+
+   </details>
+
+3. In S32, which four statements let you try a change and then take it back?
+
+   <details>
+   <summary>Answer</summary>
+
+   `BEGIN;`, the change, a `SELECT` to look at it, then `ROLLBACK;`.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Our analyst keeps one big table with a row for every product line sold. Someone typed "Harbor Point" on some of
+> Harbor's rows but not all, and the Harbor report split in two. Why does the database keep five tables? And if we
+> split the big one, do any of our numbers change?
+
+In the big table, each store's name and city are written on every one of its lines:
+
+| store_name | store_city | lines |
+|---|---|---:|
+| Old Town | Oakland | 1,337 |
+| Campus | Berkeley | 1,305 |
+| Harbor | Alameda | 645 |
+
+By the end you will have split the big table into five, shown what the big one gets wrong, and proved with queries that
+the known answers stay the same.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 292" width="360" role="img" aria-labelledby="wide-title wide-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="wide-title">Three lines of order 1001 in the wide table, with the repeated facts shaded</title>
+<desc id="wide-desc">The first three rows of the wide table, all for order 1001, drawn as three value columns with one row per wide-table column. The order_item_id values are 5001, 5002 and 5003, and order_id is 1001 on all three. The store facts Campus and Berkeley, and the customer facts Oakland and silver, are the same on all three lines and are shaded. Only the product columns differ: Croissant 3.25, Cold Brew 4.75 and Espresso 3.00.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Wide table: order 1001, three lines</text>
+<rect x="10" y="100" width="340" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="122" width="340" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="144" width="340" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="166" width="340" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="34" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="34" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="34" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="34" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="56" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="56" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="56" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="56" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="78" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="78" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="78" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="78" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="100" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="100" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="100" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="100" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="122" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="122" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="122" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="122" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="144" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="144" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="144" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="144" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="166" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="166" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="166" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="166" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="188" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="188" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="188" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="188" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="210" width="118" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="128" y="210" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="202" y="210" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="276" y="210" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="49.0" font-size="11" font-weight="600">column</text>
+<text x="133" y="49.0" font-size="11" font-weight="600">line 1</text>
+<text x="207" y="49.0" font-size="11" font-weight="600">line 2</text>
+<text x="281" y="49.0" font-size="11" font-weight="600">line 3</text>
+<text x="15" y="71.0" font-size="11">order_item_id</text>
+<text x="133" y="71.0" font-size="11">5001</text>
+<text x="207" y="71.0" font-size="11">5002</text>
+<text x="281" y="71.0" font-size="11">5003</text>
+<text x="15" y="93.0" font-size="11">order_id</text>
+<text x="133" y="93.0" font-size="11">1001</text>
+<text x="207" y="93.0" font-size="11">1001</text>
+<text x="281" y="93.0" font-size="11">1001</text>
+<text x="15" y="115.0" font-size="11">store_name</text>
+<text x="133" y="115.0" font-size="11">Campus</text>
+<text x="207" y="115.0" font-size="11">Campus</text>
+<text x="281" y="115.0" font-size="11">Campus</text>
+<text x="15" y="137.0" font-size="11">store_city</text>
+<text x="133" y="137.0" font-size="11">Berkeley</text>
+<text x="207" y="137.0" font-size="11">Berkeley</text>
+<text x="281" y="137.0" font-size="11">Berkeley</text>
+<text x="15" y="159.0" font-size="11">customer_city</text>
+<text x="133" y="159.0" font-size="11">Oakland</text>
+<text x="207" y="159.0" font-size="11">Oakland</text>
+<text x="281" y="159.0" font-size="11">Oakland</text>
+<text x="15" y="181.0" font-size="11">loyalty_tier</text>
+<text x="133" y="181.0" font-size="11">silver</text>
+<text x="207" y="181.0" font-size="11">silver</text>
+<text x="281" y="181.0" font-size="11">silver</text>
+<text x="15" y="203.0" font-size="11">product_name</text>
+<text x="133" y="203.0" font-size="11">Croissant</text>
+<text x="207" y="203.0" font-size="11">Cold Brew</text>
+<text x="281" y="203.0" font-size="11">Espresso</text>
+<text x="15" y="225.0" font-size="11">unit_price_usd</text>
+<text x="133" y="225.0" font-size="11">3.25</text>
+<text x="207" y="225.0" font-size="11">4.75</text>
+<text x="281" y="225.0" font-size="11">3.00</text>
+<text x="10" y="250" font-size="11" font-weight="600">Campus, Berkeley is written on 1,305 lines in all.</text>
+<text x="10" y="266" font-size="11" font-weight="600">Oakland, silver is written on all 33 lines of customer 15.</text>
+<text x="10" y="284" font-size="11" opacity="0.8">Shaded: facts about the store and the customer, repeated.</text>
+</svg>
+<svg viewBox="0 0 360 488" width="360" role="img" aria-labelledby="split-title split-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="split-title">The wide table split into five tables, with the row count of each</title>
+<desc id="split-desc">Five boxes. n_store, 3 rows, and n_customer, 145 rows, sit at the top. n_order, 1,800 rows, sits in the middle with foreign keys store_id and customer_id. n_line, 3,287 rows, and n_product, 15 rows, sit at the bottom. n_line holds foreign keys order_id and product_id. Lines join n_order to n_store and to n_customer, n_line to n_order, and n_line to n_product, each with many at the foreign key end and 1 at the key end. The product and order facts leave the lines in the second normal form step. The store and customer facts leave the orders in the third normal form step.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Five tables, one fact in one place</text>
+<rect x="10" y="34" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="34" width="150" height="78" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="16" y="49" font-weight="600">n_store</text>
+<text x="154" y="49" font-size="11" text-anchor="end">3 rows</text>
+<text x="16" y="69" font-size="11"><tspan font-weight="700">PK</tspan> store_id</text>
+<text x="16" y="85" font-size="10.5" opacity="0.75">store_name,</text>
+<text x="16" y="101" font-size="10.5" opacity="0.75">store_city</text>
+<rect x="200" y="34" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="200" y="34" width="150" height="78" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="206" y="49" font-weight="600">n_customer</text>
+<text x="344" y="49" font-size="11" text-anchor="end">145 rows</text>
+<text x="206" y="69" font-size="11"><tspan font-weight="700">PK</tspan> customer_id</text>
+<text x="206" y="85" font-size="10.5" opacity="0.75">customer_city,</text>
+<text x="206" y="101" font-size="10.5" opacity="0.75">loyalty_tier</text>
+<rect x="75" y="150" width="210" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="75" y="150" width="210" height="110" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="81" y="165" font-weight="600">n_order</text>
+<text x="279" y="165" font-size="11" text-anchor="end">1,800 rows</text>
+<text x="81" y="185" font-size="11"><tspan font-weight="700">PK</tspan> order_id</text>
+<text x="81" y="201" font-size="11"><tspan font-weight="700">FK</tspan> store_id</text>
+<text x="81" y="217" font-size="11"><tspan font-weight="700">FK</tspan> customer_id</text>
+<text x="81" y="233" font-size="10.5" opacity="0.75">ordered_at, status,</text>
+<text x="81" y="249" font-size="10.5" opacity="0.75">payment_method</text>
+<rect x="10" y="296" width="175" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="296" width="175" height="94" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="16" y="311" font-weight="600">n_line</text>
+<text x="179" y="311" font-size="11" text-anchor="end">3,287 rows</text>
+<text x="16" y="331" font-size="11"><tspan font-weight="700">PK</tspan> order_item_id</text>
+<text x="16" y="347" font-size="11"><tspan font-weight="700">FK</tspan> order_id</text>
+<text x="16" y="363" font-size="11"><tspan font-weight="700">FK</tspan> product_id</text>
+<text x="16" y="379" font-size="10.5" opacity="0.75">quantity, discount_usd</text>
+<rect x="225" y="326" width="125" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="225" y="326" width="125" height="94" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="231" y="341" font-weight="600">n_product</text>
+<text x="344" y="341" font-size="11" text-anchor="end">15 rows</text>
+<text x="231" y="361" font-size="11"><tspan font-weight="700">PK</tspan> product_id</text>
+<text x="231" y="377" font-size="10.5" opacity="0.75">product_name,</text>
+<text x="231" y="393" font-size="10.5" opacity="0.75">category,</text>
+<text x="231" y="409" font-size="10.5" opacity="0.75">unit_price_usd</text>
+<g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M75 197 H50 V112" /><path d="M285 213 H320 V112" /><path d="M110 296 V260" /><path d="M185 359 H225" /></g>
+<g fill="currentColor" stroke="none"><circle cx="75" cy="197" r="3" /><circle cx="285" cy="213" r="3" /><circle cx="110" cy="296" r="3" /><circle cx="185" cy="359" r="3" /></g>
+<g font-size="11" font-weight="600"><text x="42" y="211">many</text><text x="54" y="126">1</text><text x="288" y="227">many</text><text x="324" y="126">1</text><text x="116" y="291">many</text><text x="116" y="274">1</text><text x="188" y="373">many</text><text x="214" y="353">1</text></g>
+<text x="10" y="444" font-size="11" font-weight="600">2NF step: product and order facts leave the lines.</text>
+<text x="10" y="460" font-size="11" font-weight="600">3NF step: store and customer facts leave the orders.</text>
+<text x="10" y="478" font-size="11" opacity="0.8">The 16th product and 5 customers never ordered: not here.</text>
+</svg>
+</figure>
+
+**Normalization** is organizing data into tables so that each fact is stored once. The Microsoft Learn description
+gives rules called normal forms; in plain words:
+
+| Form | Rule | In the cafe data |
+|---|---|---|
+| First (1NF) | no repeating groups: one row per thing, not `product_1`, `product_2`, `product_3` columns | an order with three products is three rows, as in the wide table |
+| Second (2NF) | facts that belong to something else, and apply to many rows, go in their own table | product facts leave the lines; order facts leave the lines |
+| Third (3NF) | every column depends on the key, not on another column | store name and city depend on `store_id`, not on the order; customer city and tier on `customer_id` |
+
+A sheet that puts order 1001 on one row (`product_1`, `quantity_1`, `product_2`, ...) breaks the first rule: a fourth
+product needs a new column, and counting Espressos needs one sum per column. The wide table's rows are already product
+lines, and `order_item_id` is the key (the pair of order and product is unique too).
+
+A badly shaped table fails in three ways, the **anomalies**:
+
+- **Update:** one fact is stored on many rows, so a change that misses some rows leaves two versions.
+- **Insert:** you cannot record a fact until something else exists. A new product needs a sale first.
+- **Delete:** removing one row also removes a fact. Deleting the only sale of a customer erases the customer.
+
+## Worked example
+
+Question: **what goes wrong in one wide table, and does splitting it change any answer?** Run the notebook's setup
+cell, then one cell per step. Each step gives the shape of the result to expect. Revenue counts completed orders only,
+all lines, including the extra-zero line of order 2075.
+
+1. **Build the wide table.**
+
+   ```sql
+   CREATE TABLE orders_wide AS
+   SELECT oi.order_item_id, oi.order_id, oi.product_id, oi.quantity, oi.discount_usd,
+          o.ordered_at, o.status, o.payment_method,
+          o.store_id, s.store_name, s.city AS store_city,
+          o.customer_id, c.city AS customer_city, c.loyalty_tier,
+          p.product_name, p.category, p.unit_price_usd
+   FROM order_items AS oi
+   JOIN orders AS o ON o.order_id = oi.order_id
+   JOIN stores AS s ON s.store_id = o.store_id
+   LEFT JOIN customers AS c ON c.customer_id = o.customer_id
+   JOIN products AS p ON p.product_id = oi.product_id;
+   ```
+
+   Expected: a `Count` table, 1 row, 1 column. The new table has 17 columns. *Why:* one row per line, with the store,
+   customer and product facts glued on. The `LEFT JOIN` keeps order 1335, which has no customer.
+
+2. **Spot the repeated facts.**
+
+   ```sql
+   SELECT store_id, store_name, store_city, COUNT(*) AS lines
+   FROM orders_wide
+   GROUP BY store_id, store_name, store_city
+   ORDER BY store_id;
+   ```
+
+   Expected: 3 rows, 4 columns, as in the table of the question. *Why:* the three lines counts add up to the whole
+   table: every line repeats its store's name and city.
+
+3. **Update anomaly, then undo it.** Four cells: `BEGIN`, the `UPDATE`, the `SELECT`, `ROLLBACK`.
+
+   ```sql
+   UPDATE orders_wide SET store_name = 'Harbor Point' WHERE store_id = 3 AND ordered_at < '2026-05-01';
+   SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP BY store_name ORDER BY store_name;
+   ```
+
+   Expected: the `UPDATE` reports a `Count`; the `SELECT` returns 2 rows, 2 columns. *Why:* the `WHERE` reached 223 of
+   Harbor's 645 lines, so Harbor now has two names, 422 lines as `Harbor` and 223 as `Harbor Point`. A report grouped
+   by name splits in two. After `ROLLBACK`, the name is `Harbor` everywhere again.
+
+4. **Insert and delete anomalies.** Two cells.
+
+   ```sql
+   SELECT COUNT(DISTINCT product_id) AS sold_products, COUNT(DISTINCT customer_id) AS ordering_customers FROM orders_wide;
+   SELECT COUNT(*) AS lines FROM orders_wide WHERE customer_id = 42;
+   ```
+
+   Expected: the first returns 1 row, 2 columns; the second 1 row, 1 column. *Why:* the menu has 16 products and
+   `customers` has 150 rows, but the wide table knows only products and customers with a sale: the Pumpkin Spice Latte
+   and five members who never ordered cannot be in it (insert anomaly). Customer 42 has one line in the whole table, on
+   the canceled order, so deleting that line would erase everything the table knows about customer 42 (delete anomaly).
+
+5. **Split out the product facts (2NF).**
+
+   ```sql
+   CREATE TABLE n_product (
+     product_id INTEGER PRIMARY KEY,
+     product_name VARCHAR NOT NULL,
+     category VARCHAR NOT NULL,
+     unit_price_usd DECIMAL(6, 2) NOT NULL
+   );
+   INSERT INTO n_product
+   SELECT DISTINCT product_id, product_name, category, unit_price_usd FROM orders_wide;
+   ```
+
+   Expected: a `Count` table with 1 row. *Why:* `DISTINCT` keeps each product once, and the primary key
+   (from S31) would refuse a product with two different names. The new table has 15 rows, not 16, for the reason of step 4.
+
+6. **Split out the store facts (3NF), then the rest.**
+
+   ```sql
+   CREATE TABLE n_store (store_id INTEGER PRIMARY KEY, store_name VARCHAR NOT NULL, store_city VARCHAR NOT NULL);
+   INSERT INTO n_store SELECT DISTINCT store_id, store_name, store_city FROM orders_wide;
+   ```
+
+   Expected: a `Count` table, 1 row. The next notebook cell, done for you, builds `n_customer`, `n_order` and `n_line`
+   with the same recipe, each with its primary key, and `n_order` and `n_line` with foreign keys as in the picture.
+   *Why:* `n_customer` needs `WHERE customer_id IS NOT NULL`: without it, the walk-in's empty row hits the `NOT NULL`
+   rule and the insert fails.
+
+7. **Prove the answers did not change.** Rebuild the wide table as a view over the five new tables, then compare.
+
+   ```sql
+   CREATE VIEW orders_rebuilt AS
+   SELECT l.order_item_id, l.order_id, l.product_id, l.quantity, l.discount_usd,
+          o.ordered_at, o.status, o.payment_method,
+          o.store_id, s.store_name, s.store_city,
+          o.customer_id, c.customer_city, c.loyalty_tier,
+          p.product_name, p.category, p.unit_price_usd
+   FROM n_line AS l
+   JOIN n_order AS o ON o.order_id = l.order_id
+   JOIN n_store AS s ON s.store_id = o.store_id
+   LEFT JOIN n_customer AS c ON c.customer_id = o.customer_id
+   JOIN n_product AS p ON p.product_id = l.product_id;
+
+   SELECT COUNT(*) AS only_in_rebuilt FROM (SELECT * FROM orders_rebuilt EXCEPT SELECT * FROM orders_wide);
+   SELECT COUNT(*) AS only_in_wide FROM (SELECT * FROM orders_wide EXCEPT SELECT * FROM orders_rebuilt);
+   SELECT store_name, SUM(quantity * unit_price_usd - discount_usd) AS revenue
+   FROM orders_wide WHERE status = 'completed' GROUP BY store_name ORDER BY store_name;
+   ```
+
+   Expected: the view returns a `Count` table; each `EXCEPT` check returns 1 row, 1 column; the revenue query returns
+   3 rows, 2 columns. Run the revenue query again with `orders_rebuilt` in place of `orders_wide`. *Why:* `EXCEPT`
+   lists rows in one table and not in the other, so two 0s mean the same 3,287 rows both ways. Both revenue tables read
+   Campus \$8,998.75, Harbor \$4,606.25 and Old Town \$9,144.25: \$22,749.25 for completed orders, the same total as from
+   the five original tables. Splitting lost nothing.
+
+<details>
+<summary>Explain it in your own words: why does <code>n_product</code> have 15 rows when the menu has 16?</summary>
+
+The wide table has one row per line sold, so a product nobody bought has no row, and the split can only keep what
+the wide table held. This is the insert anomaly: the five tables could record the Pumpkin Spice Latte, the wide one
+could not.
+
+</details>
+
+The wide table is not useless. For reading it is handy: one table to filter and group, with no joins. Analysts build it
+on purpose, as a view like step 7 or as a star schema (S29), from tables that stay normalized, and rebuild it instead of
+editing it. This is **denormalizing**: one fact stored many times, accepted as the price of easy reading. Microsoft Learn
+says normalization adds tables that some find cumbersome, and the Azure Architecture Center notes the join cost for read-heavy views.
+
+## Finish it
+
+<Exercise id="sql-normalization-1">
+
+**Split out the customer facts.** Use the Exercise 1 cells. Expected: the `INSERT` returns a `Count` table with 1 row; the
+check returns 1 row, 2 columns.
+
+Done for you, the empty table:
+
+```sql
+CREATE TABLE n_customer_ex1 (
+  customer_id INTEGER PRIMARY KEY,
+  customer_city VARCHAR NOT NULL,
+  loyalty_tier VARCHAR NOT NULL
+);
+```
+
+Now finish it: write the `INSERT ... SELECT DISTINCT` from `orders_wide`, then check with `COUNT(*)` and
+`COUNT(DISTINCT customer_id)` that the new table has one row per customer.
+
+<details>
+<summary>Hint</summary>
+
+Copy step 5. Order 1335 has no customer: leave its row out with `WHERE customer_id IS NOT NULL`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+INSERT INTO n_customer_ex1
+SELECT DISTINCT customer_id, customer_city, loyalty_tier
+FROM orders_wide
+WHERE ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+INSERT INTO n_customer_ex1
+SELECT DISTINCT customer_id, customer_city, loyalty_tier
+FROM orders_wide
+WHERE customer_id IS NOT NULL;
+
+SELECT COUNT(*) AS row_count, COUNT(DISTINCT customer_id) AS distinct_ids FROM n_customer_ex1;
+```
+
+The result is `145 | 145`: one row per customer who ordered, so `customer_id` can be the key. Without the `WHERE`, the
+insert ends in `Constraint Error: NOT NULL constraint failed: n_customer_ex1.customer_city`, because the walk-in's row is
+empty. The five members who never ordered are not here: the wide table never held them.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-normalization-2">
+
+**Did splitting change the units sold per category?** Use the Exercise 2 cells, after steps 5 to 7. The known answer comes
+from `orders_wide`; the view `orders_rebuilt` is the rebuilt table.
+
+Before you run anything, write one sentence in the first cell: how will the two result tables compare? Then write the
+units sold per category (the sum of `quantity`) from `orders_wide`, the same from `orders_rebuilt`, and a query that compares
+them with `EXCEPT`.
+
+Expected shape, to check your sentence against: each units query returns one row per category and 2 columns; the comparison
+has the same 2 columns. Units count all 3,287 lines, the canceled one included, and the quantity-20 line of order 2075 (a Turkey Sandwich)
+is in the food total, because this question counts units, not dollars.
+
+<details>
+<summary>Hint</summary>
+
+Group by `category` and sum `quantity`. For the comparison, put each query on one side of `EXCEPT`, and run it both ways.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Two identical tables of four rows, one per category; each `EXCEPT` returns no rows, because ..."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT category, SUM(quantity) AS units FROM orders_wide GROUP BY category ORDER BY category;
+SELECT category, SUM(quantity) AS units FROM orders_rebuilt GROUP BY category ORDER BY category;
+SELECT category, SUM(quantity) FROM orders_wide GROUP BY category
+EXCEPT
+SELECT category, SUM(quantity) FROM orders_rebuilt GROUP BY category;
+```
+
+Both tables read bakery 1,114, coffee 2,546, food 696 and tea 806, 5,162 units in all. The comparison returns 0 rows;
+run the other way round, it also returns 0 rows. The split changed no answer, because the rebuilt table holds the same
+rows as the wide table.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the three anomalies, and give one cafe example of each.
+
+<details>
+<summary>Answer</summary>
+
+Update: changing the store name on some lines but not all gives Harbor two names. Insert: the Pumpkin Spice Latte
+cannot be recorded until it is sold. Delete: deleting the only line of customer 42 erases the customer. Splitting the
+facts into tables with keys fixes all three.
+
+</details>
+
+<Exercise id="sql-normalization-3">
+
+**Spot the flaw.** A colleague rebuilds the wide table, but joins the customers table with `JOIN` instead of `LEFT JOIN`
+and calls the result `orders_rebuilt_bad`. The check below does not return 0, so the colleague says the split lost a line
+and the five tables must be wrong:
+
+```sql
+SELECT COUNT(*) AS only_in_wide FROM (SELECT * FROM orders_wide EXCEPT SELECT * FROM orders_rebuilt_bad);
+```
+
+Expected: 1 row, 1 column. What went wrong, and what is the right join?
+
+<details>
+<summary>Hint</summary>
+
+Which line has no customer? What does an `INNER JOIN` do with a row that has nothing to match?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "The tables are fine. The line of order ... has an empty customer, so the inner join ..."
+
+</details>
+
+<Solution>
+
+The check returns 1: the line of order 1335, the walk-in, which has no customer. An `INNER JOIN` keeps only rows that
+match on both sides, so it dropped that line. The five tables are fine: `n_order.customer_id` is empty for order
+1335, and a foreign key may be empty. The rebuilt view needs `LEFT JOIN n_customer`, as in step 7. The bug would also
+change a known answer: completed revenue would read \$22,742.25 instead of \$22,749.25, a \$7.00 difference, which is
+the two Americanos at \$3.50 on order 1335.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can spot a repeated fact in a wide table, split it into tables with keys, show the update, insert and delete
+anomalies, and prove with queries that the split kept the answers.*
+Test: Exercise sql-normalization-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **one fact in one place, then prove the answers did not move.** The next lesson, *Indexes and
+reading a query plan*, asks how the database finds rows fast.

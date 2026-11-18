@@ -1,0 +1,524 @@
+---
+id: sql-modify-data-transactions
+title: Inserting, updating and deleting safely
+description: Change data with INSERT, UPDATE and DELETE using a restrictive WHERE, and wrap a change in a transaction you can roll back.
+stage: sql
+order: 320
+level: intermediate
+duration: 25
+objectives:
+  - Insert one row and many rows, including INSERT ... SELECT
+  - Write an UPDATE and a DELETE with a restrictive WHERE
+  - Preview an UPDATE with a SELECT first
+  - Use BEGIN, COMMIT and ROLLBACK
+  - Explain what an idempotent load means
+prerequisites:
+  - sql-create-table-constraints
+  - sql-where-filtering
+  - sql-expressions-and-types
+  - sql-aggregate-functions
+  - sql-group-by-having
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-modify-data-transactions.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: INSERT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/insert
+  - title: 'DuckDB documentation: Transaction management'
+    url: https://duckdb.org/docs/stable/sql/statements/transactions
+  - title: 'DuckDB documentation: Concurrency'
+    url: https://duckdb.org/docs/stable/connect/concurrency
+  - title: 'DuckDB documentation: Multiple Python threads'
+    url: https://duckdb.org/docs/stable/guides/python/multiple_threads
+  - title: 'PostgreSQL documentation: Transactions (tutorial)'
+    url: https://www.postgresql.org/docs/current/tutorial-transactions.html
+  - title: 'PostgreSQL documentation: Glossary (ACID, consistency, durability, isolation)'
+    url: https://www.postgresql.org/docs/current/glossary.html
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
+(S1). *Creating tables and constraints* (S31) built tables and rules. Now you change the rows inside them, and learn
+the habits that keep a change from going wrong.
+
+**Your practice notebook** loads the five tables of **cafe-sales** and, in its second cell, builds a small `stock`
+table for this lesson: one row per product and store, with a key and a `CHECK` as in S31. You change only `stock`,
+never the cafe-sales tables, and the setup cell gives you a clean start. The notebook cells wrap each query as in S1
+and leave out the closing `;`.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Check that `con.cursor()` gives two independent sessions in step 5 and that the conflict error of step 5 reads the same. Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Creating tables and constraints* (S31), what happens to a row that breaks a `CHECK` rule?
+
+   <details>
+   <summary>Answer</summary>
+
+   The statement ends in an error that starts `Constraint Error:`, and the row is not stored.
+
+   </details>
+
+2. In *Filtering rows with WHERE* (S3), write the `WHERE` that keeps only product 10 in store 1 of a table `stock`.
+
+   <details>
+   <summary>Answer</summary>
+
+   `WHERE store_id = 1 AND product_id = 10`. Both conditions must hold, so only the one row matching both stays.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> At Old Town the croissant count says 25. Ben took a delivery of 24, and Ana sold one at the till. How do we change a
+> stock sheet without losing a change, and without a typo wiping the sheet?
+
+The `stock` rows of store 1 (Old Town) at the start. Product 1 is Espresso, 6 Cold Brew, 7 Green Tea and 10 Croissant:
+
+| store_id | product_id | units_on_hand |
+|---:|---:|---:|
+| 1 | 1 | 40 |
+| 1 | 6 | 12 |
+| 1 | 10 | 25 |
+
+By the end you will have inserted, updated and deleted stock rows with a `WHERE` you checked first, undone a mistake
+with `ROLLBACK`, and seen why two people editing one count need a transaction.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 300" width="360" role="img" aria-labelledby="before-title before-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="before-title">The stock rows of store 1 before and after an update and a delete</title>
+<desc id="before-desc">Two small tables with the columns store_id, product_id and units_on_hand. Before: store 1 holds product 1 with 40 units, product 6 with 12, product 7 with 18 and product 10 with 25. The UPDATE adds 24 to product 10, and the DELETE removes product 7. After: store 1 holds product 1 with 40 units, product 6 with 12 and product 10 with 49. The changed row and the removed row are shaded.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">stock, store 1: before and after</text>
+<text x="10" y="42" font-size="11" font-weight="600">Before: 4 rows</text>
+<rect x="10" y="108" width="250" height="20" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="128" width="250" height="20" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="48" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="48" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="48" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="68" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="68" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="68" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="88" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="88" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="88" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="108" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="108" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="108" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="128" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="128" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="128" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="75" y="62.0" font-size="10" font-weight="600" text-anchor="end">store_id</text>
+<text x="155" y="62.0" font-size="10" font-weight="600" text-anchor="end">product_id</text>
+<text x="255" y="62.0" font-size="10" font-weight="600" text-anchor="end">units_on_hand</text>
+<text x="75" y="82.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="82.0" font-size="11" text-anchor="end">1</text>
+<text x="255" y="82.0" font-size="11" text-anchor="end">40</text>
+<text x="75" y="102.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="102.0" font-size="11" text-anchor="end">6</text>
+<text x="255" y="102.0" font-size="11" text-anchor="end">12</text>
+<text x="75" y="122.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="122.0" font-size="11" text-anchor="end">7</text>
+<text x="255" y="122.0" font-size="11" text-anchor="end">18</text>
+<text x="75" y="142.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="142.0" font-size="11" text-anchor="end">10</text>
+<text x="255" y="142.0" font-size="11" text-anchor="end">25</text>
+<text x="266" y="122" font-size="11" opacity="0.8">deleted</text>
+<text x="266" y="142" font-size="11" opacity="0.8">updated +24</text>
+<text x="10" y="170" font-size="11" font-weight="600">After: 3 rows</text>
+<rect x="10" y="236" width="250" height="20" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="176" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="176" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="176" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="196" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="196" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="196" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="216" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="216" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="216" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="236" width="70" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="80" y="236" width="80" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="160" y="236" width="100" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="75" y="190.0" font-size="10" font-weight="600" text-anchor="end">store_id</text>
+<text x="155" y="190.0" font-size="10" font-weight="600" text-anchor="end">product_id</text>
+<text x="255" y="190.0" font-size="10" font-weight="600" text-anchor="end">units_on_hand</text>
+<text x="75" y="210.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="210.0" font-size="11" text-anchor="end">1</text>
+<text x="255" y="210.0" font-size="11" text-anchor="end">40</text>
+<text x="75" y="230.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="230.0" font-size="11" text-anchor="end">6</text>
+<text x="255" y="230.0" font-size="11" text-anchor="end">12</text>
+<text x="75" y="250.0" font-size="11" text-anchor="end">1</text>
+<text x="155" y="250.0" font-size="11" text-anchor="end">10</text>
+<text x="255" y="250.0" font-size="11" text-anchor="end">49</text>
+<text x="10" y="274" font-size="11" opacity="0.8">Shaded: the row the UPDATE changed,</text>
+<text x="10" y="290" font-size="11" opacity="0.8">and the row the DELETE removed.</text>
+</svg>
+<svg viewBox="0 0 360 284" width="360" role="img" aria-labelledby="two-title two-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="two-title">Two tills change the same croissant count</title>
+<desc id="two-desc">A timeline in five steps with three columns: Ana, Ben and the stored count. Step 1: Ana begins a transaction and subtracts 1, and sees 48; the stored count is still 49. Step 2: Ben reads the count and sees 49, because Ana has not committed. Step 3: Ben begins and tries to subtract 1 from the same row, and gets a conflict. Step 4: Ana commits, so the stored count is 48, and Ben rolls back. Step 5: Ben begins, subtracts 1 and commits, so the stored count is 47.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Two tills, one count</text>
+<rect x="10" y="136" width="340" height="34" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="34" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="34" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="34" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="34" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="68" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="68" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="68" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="68" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="102" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="102" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="102" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="102" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="136" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="136" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="136" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="136" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="170" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="170" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="170" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="170" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="204" width="24" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="34" y="204" width="118" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="152" y="204" width="128" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="280" y="204" width="70" height="34" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="55.0" font-size="11" font-weight="600">#</text>
+<text x="39" y="55.0" font-size="11" font-weight="600">Ana (till 1)</text>
+<text x="157" y="55.0" font-size="11" font-weight="600">Ben (till 2)</text>
+<text x="345" y="55.0" font-size="11" font-weight="600" text-anchor="end">stored</text>
+<text x="15" y="89.0" font-size="11">1</text>
+<text x="39" y="82.5" font-size="11">Ana: BEGIN,</text>
+<text x="39" y="95.5" font-size="11">UPDATE -1: sees 48</text>
+<text x="345" y="89.0" font-size="11" text-anchor="end">49</text>
+<text x="15" y="123.0" font-size="11">2</text>
+<text x="157" y="116.5" font-size="11">Ben: SELECT</text>
+<text x="157" y="129.5" font-size="11">sees 49</text>
+<text x="345" y="123.0" font-size="11" text-anchor="end">49</text>
+<text x="15" y="157.0" font-size="11">3</text>
+<text x="157" y="150.5" font-size="11">Ben: BEGIN,</text>
+<text x="157" y="163.5" font-size="11">UPDATE -1: conflict</text>
+<text x="345" y="157.0" font-size="11" text-anchor="end">49</text>
+<text x="15" y="191.0" font-size="11">4</text>
+<text x="39" y="191.0" font-size="11">Ana: COMMIT</text>
+<text x="157" y="191.0" font-size="11">Ben: ROLLBACK</text>
+<text x="345" y="191.0" font-size="11" text-anchor="end">48</text>
+<text x="15" y="225.0" font-size="11">5</text>
+<text x="157" y="218.5" font-size="11">Ben: BEGIN,</text>
+<text x="157" y="231.5" font-size="11">UPDATE -1, COMMIT</text>
+<text x="345" y="225.0" font-size="11" text-anchor="end">47</text>
+<text x="10" y="256" font-size="11" opacity="0.8">Croissants at Old Town, store 1. Time runs downward.</text>
+<text x="10" y="272" font-size="11" opacity="0.8">Shaded: the step DuckDB refuses.</text>
+</svg>
+</figure>
+
+Three statements change data. `INSERT` adds rows, `UPDATE` changes values in rows that exist, and `DELETE` removes
+rows. `UPDATE` and `DELETE` act on **every row** unless a `WHERE` narrows them. So the habit of this lesson: **write
+the `WHERE` as a `SELECT` first**, read the rows it returns, and only then change them.
+
+A **transaction** is a group of statements that succeed or fail as one. `BEGIN` opens it, `COMMIT` keeps its changes
+and `ROLLBACK` throws them away. Without `BEGIN`, DuckDB commits each statement as soon as it succeeds. The four
+letters of **ACID** describe what a database promises about transactions (the PostgreSQL glossary names them):
+
+| Letter | In plain words | Where you meet it |
+|---|---|---|
+| Atomicity | all of a transaction's changes happen, or none | step 4, `ROLLBACK` |
+| Consistency | the data always obeys its rules, such as the key of S31 | step 6 and exercise 2, a repeated key is refused |
+| Isolation | others do not see your changes until you commit | step 5, Ben still sees 49 |
+| Durability | once committed, a change survives a crash | cannot be shown here |
+
+The notebook's database lives in memory, so durability cannot be shown. DuckDB's documentation says that a commit
+writes the changes to disk when the database is a file.
+
+An **idempotent** load gives the same result when you run it twice as when you run it once. It matters because jobs
+are re-run after a failure, and a re-run must not double the data.
+
+## Worked example
+
+Question: **how do we change the stock sheet safely, and let two people edit the same count?** Run the notebook's
+setup cell and the `stock` cell, then one cell per step. Each step gives the shape of the result to expect.
+
+1. **Insert one row, then many.**
+
+   ```sql
+   INSERT INTO stock VALUES (1, 7, 18);
+   INSERT INTO stock SELECT 2, product_id, 10 FROM stock WHERE store_id = 1;
+   SELECT * FROM stock ORDER BY store_id, product_id;
+   ```
+
+   Expected: one notebook cell, showing the last result: 8 rows, 3 columns. *Why:* the second statement copies the
+   products of store 1 to store 2, each at 10 units. `INSERT ... SELECT` stores every row the `SELECT` returns.
+
+2. **Preview, then update.** Three cells: the preview, the `UPDATE`, the check.
+
+   ```sql
+   SELECT * FROM stock WHERE store_id = 1 AND product_id = 10;
+   UPDATE stock SET units_on_hand = units_on_hand + 24 WHERE store_id = 1 AND product_id = 10;
+   SELECT * FROM stock WHERE store_id = 1 AND product_id = 10;
+   ```
+
+   Expected: the preview returns 1 row, 3 columns; the `UPDATE` returns a `Count` table with 1 row, the rows it
+   changed; the check returns 1 row, 3 columns. *Why:* the preview uses the same `WHERE` as the `UPDATE`. If it
+   returned more rows than you meant, you would stop. The `Count` must match the preview. Croissants are now 49.
+
+3. **Delete the same way.** Green Tea is dropped from store 1: preview with a `SELECT`, then delete.
+
+   ```sql
+   SELECT * FROM stock WHERE store_id = 1 AND product_id = 7;
+   DELETE FROM stock WHERE store_id = 1 AND product_id = 7;
+   SELECT COUNT(*) AS rows_left FROM stock;
+   ```
+
+   Expected: the preview returns 1 row; the `DELETE` returns a `Count` table with 1 row; the last query returns
+   1 row, 1 column, which is 7.
+
+4. **Make a mistake, then undo it.** Five cells.
+
+   ```sql
+   BEGIN;
+   DELETE FROM stock;
+   SELECT COUNT(*) AS rows_left FROM stock;
+   ROLLBACK;
+   SELECT COUNT(*) AS rows_left FROM stock;
+   ```
+
+   Expected: the first cell prints a `Success` table, the `DELETE` a `Count` table, and each `SELECT` 1 row, 1
+   column. Inside the transaction the count is 0; after `ROLLBACK` it is back to 7. *Why:* a `DELETE` without a
+   `WHERE` removes every row, but the transaction kept the change private until you decided. This is atomicity:
+   all of it, or none.
+
+5. **Two tills, one count.** Ana and Ben each sell a croissant at the same moment. `con.cursor()` gives each of them
+   their own session on the same database.
+
+   ```python
+   ana = con.cursor()
+   ben = con.cursor()
+   ```
+
+   ```sql
+   -- Ana's session
+   BEGIN;
+   UPDATE stock SET units_on_hand = units_on_hand - 1 WHERE store_id = 1 AND product_id = 10;
+   SELECT units_on_hand FROM stock WHERE store_id = 1 AND product_id = 10;
+   -- Ben's session
+   SELECT units_on_hand FROM stock WHERE store_id = 1 AND product_id = 10;
+   BEGIN;
+   UPDATE stock SET units_on_hand = units_on_hand - 1 WHERE store_id = 1 AND product_id = 10;
+   ```
+
+   Expected: Ana's `SELECT` returns 1 row, 1 column. Ben's `SELECT` returns 1 row, 1 column. Ben's `UPDATE` prints
+   an error that starts `TransactionContext Error:` (the notebook catches it). *Why:* Ana sees her own change (48), Ben still sees 49: isolation.
+   DuckDB's documentation says that when two transactions change the same row, the second fails and you rerun it.
+   Do that: Ben runs `ROLLBACK`, Ana runs `COMMIT`, then Ben runs `BEGIN`, the same `UPDATE` and `COMMIT`. The check
+   `SELECT units_on_hand ...` now returns 47, because both sales count. Notice `units_on_hand - 1`: the database
+   subtracts from the number as it is now, not from one that someone read earlier.
+
+6. **Reload one store, safely.** `campus_count` is a staging table of Campus's new counts: three rows, for products
+   1, 10 and 6.
+
+   ```sql
+   BEGIN;
+   DELETE FROM stock WHERE store_id = 2;
+   INSERT INTO stock SELECT * FROM campus_count;
+   COMMIT;
+   ```
+
+   Run this cell twice, then `SELECT COUNT(*) AS products, SUM(units_on_hand) AS units FROM stock WHERE store_id = 2;`.
+   Expected: 1 row, 2 columns; the same after one run and after two. *Why:* the block deletes store 2's rows and
+   inserts the new ones, so a second run starts from the same place: it is **idempotent**. A plain `INSERT` of the same
+   rows into a table that already holds them fails: store 2 and product 1 are already there (the key of S31). If the
+   `INSERT` fails inside the block, `ROLLBACK` brings the old rows back (consistency and atomicity at work).
+   DuckDB also has `INSERT OR IGNORE` and `ON CONFLICT` for this; the data engineer stage returns to them.
+
+7. **Verify.**
+
+   ```sql
+   SELECT store_id, COUNT(*) AS products, SUM(units_on_hand) AS units
+   FROM stock GROUP BY store_id ORDER BY store_id;
+   ```
+
+   Expected: 2 rows, 3 columns. Store 1 has 3 products and 99 units: Espresso 40, Cold Brew 12 and Croissants 47,
+   which is 25 + 24 delivered - 2 sold. Store 2 has 3 products and 53 units, the sum of `campus_count`.
+
+<details>
+<summary>Explain it in your own words: why does Ben's update fail instead of waiting or overwriting?</summary>
+
+Ana's change is not committed yet, so Ben cannot build on it, and overwriting would lose it. DuckDB refuses the
+second change to the same row, and Ben reruns it after Ana commits.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-modify-data-transactions-1">
+
+**Campus sold 4 Espressos since the last count. Record it.** Use the Exercise 1 cells on `stock_ex1`, which holds
+Espresso (product 1) at both store 1 and store 2. Expected: the preview returns 1 row, 3 columns; the `UPDATE`
+returns a `Count` table with 1 row.
+
+Done for you, the preview:
+
+```sql
+SELECT * FROM stock_ex1 WHERE store_id = 2 AND product_id = 1;
+```
+
+Now finish it: write the `UPDATE` that subtracts 4 for that one row, run it, and select the row to check it.
+
+<details>
+<summary>Hint</summary>
+
+Copy step 2: `SET units_on_hand = units_on_hand + 24` becomes a subtraction, with the same `WHERE` as the preview.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+UPDATE stock_ex1
+SET units_on_hand = units_on_hand ...
+WHERE store_id = ... AND product_id = ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+UPDATE stock_ex1
+SET units_on_hand = units_on_hand - 4
+WHERE store_id = 2 AND product_id = 1;
+```
+
+The `Count` is 1, and the check shows 6 units (10 - 4). Without `store_id = 2`, the `WHERE` would match Espresso at both
+stores, and store 1's 40 units would drop to 36 too.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-modify-data-transactions-2">
+
+**Reload Campus's counts from a staging table.** `stock_ex2` holds Espresso at store 1 and three Campus rows at 10
+units. `campus_count_ex2` holds the new Campus counts, typed from a paper sheet: four rows. Look at it with a `SELECT`
+before you predict.
+
+Before you run anything, write one sentence in the first cell: what will happen when you run the reload from step 6
+against `campus_count_ex2`, and what will Campus's rows look like afterward? Then run it. When it fails, run
+`ROLLBACK`, check that Campus still has its old rows, fix the staging query, and run the reload twice.
+
+Expected shape, to check your sentence against: if a run prints an error, it starts `Constraint Error:`; each
+check (`COUNT(*) AS products, SUM(units_on_hand) AS units` for store 2) returns 1 row, 2 columns.
+
+<details>
+<summary>Hint</summary>
+
+The key of `stock_ex2` is the pair of store and product, so a repeated pair cannot be inserted. In the `INSERT`, pick
+each row of the staging table once.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"The first run fails on the repeated row, so ROLLBACK leaves Campus's three old rows. After the fix, `INSERT INTO stock_ex2 SELECT ... FROM campus_count_ex2` stores each row once, so Campus has ... products."*
+
+</details>
+
+<Solution>
+
+```sql
+BEGIN;
+DELETE FROM stock_ex2 WHERE store_id = 2;
+INSERT INTO stock_ex2 SELECT DISTINCT * FROM campus_count_ex2;
+COMMIT;
+```
+
+The first attempt, with `SELECT *`, prints an error: the repeated row would store product 10 twice for store 2.
+The transaction is left open, and a query sent now would be refused with `Current transaction is aborted (please ROLLBACK)`.
+After `ROLLBACK`, the check shows 3 products and 30 units, the old rows, so the failed reload changed nothing.
+With `SELECT DISTINCT` the repeated row counts once. After one run and after two, the check shows **3 products and 53
+units**: 30 + 9 + 14.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: say the four ACID letters in plain words, and what an idempotent load means.
+
+<details>
+<summary>Answer</summary>
+
+Atomicity: all of a transaction's changes happen, or none. Consistency: the data always obeys its rules. Isolation:
+others do not see your changes until you commit. Durability: a committed change survives a crash. An idempotent load
+leaves the same result whether you run it once or twice.
+
+</details>
+
+<Exercise id="sql-modify-data-transactions-3">
+
+**Spot the flaw.** A colleague's till program counts a sale in three moves: read the count, subtract 1 in the program,
+write the new number back. Ana's till and Ben's till each sell a croissant at the same moment, with 49 in stock:
+
+```sql
+SELECT units_on_hand FROM stock_ex3 WHERE store_id = 1 AND product_id = 10;
+UPDATE stock_ex3 SET units_on_hand = 48 WHERE store_id = 1 AND product_id = 10;
+```
+
+Both tills read 49 before either writes, and both write 48. The colleague says it worked, because no error appeared.
+Expected from the final `SELECT`: 1 row, 1 column. What went wrong, and what is the fix?
+
+<details>
+<summary>Hint</summary>
+
+Two croissants were sold. How many should be left, and which write did the second `UPDATE` overwrite?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "The count ends at 48, but it should be ... The second write replaced the first, because each till wrote a number it had read ..."
+
+</details>
+
+<Solution>
+
+The count ends at **48**, and it should be 47. Both tills read 49, so both wrote 48, and the second write overwrote
+the first: one sale vanished, and nothing reported an error. Plain statements commit one at a time, so nothing made
+the tills wait for each other.
+
+Let the database do the arithmetic in one statement:
+
+```sql
+UPDATE stock_ex3 SET units_on_hand = units_on_hand - 1 WHERE store_id = 1 AND product_id = 10;
+```
+
+Each statement subtracts from the number as it is now, so two sales leave 47. When a change needs several statements,
+wrap them in `BEGIN` and `COMMIT`; if DuckDB reports a conflict, roll back and rerun.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can preview a change with a `SELECT`, write an `UPDATE` or `DELETE` with a restrictive `WHERE`, wrap steps in
+`BEGIN` and `COMMIT` or `ROLLBACK`, and say what an idempotent load is.*
+Test: Exercise sql-modify-data-transactions-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **`SELECT` it first, change it inside a transaction, and make the reload safe to repeat.** The
+next lesson, *Normalization: one fact in one place*, asks why the data was split into five tables.
