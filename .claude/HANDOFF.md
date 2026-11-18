@@ -40,7 +40,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
    names) and sends Google Sheets `/copy` links; each link becomes a `sheet` field plus `<OpenInSheets />`.
-2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/`), then Python and core. Use the
+2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/` loading `cafe-sales.sql` from the
+   `v0.1.0` tag, D39), then Python and core. Use the
    lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
    `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
    lesson first (the lead or one writer drafts it; the owner approves it before the other batches start).
