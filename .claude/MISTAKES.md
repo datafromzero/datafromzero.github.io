@@ -45,6 +45,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-18 — A commit and push ran after `npm run check` failed (a description over 160 characters), because the
+  commands were joined with `;`. → **Join check, commit and push with `&&`, so nothing is committed after a failed check.**
+
 - 2026-11-17 — Editing `.claude/HANDOFF.md` made CI fail on a stale knowledge graph. → **After changing any `.md`, SPEC,
   CLAUDE.md, `src/`, `scripts/` or config, run `npm run kb`, then `npm run check`, before committing.**
 - 2026-11-17 — Sorting `project-words.txt` rewrote 85 lines. → **Append new words at the end; never re-sort.**
