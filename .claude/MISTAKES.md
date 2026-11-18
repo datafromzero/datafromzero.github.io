@@ -213,6 +213,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   spot-the-flaw query of Exercise 3 as the misconception example; one lesson also ran 43 words over its duration. →
   **Before finalizing a theory section, list every predict and spot-the-flaw prompt in the lesson. No sentence of the
   section may state a prompt's answer or reuse its query. Then recount body words against `duration`.**
+- 2026-11-18 — A theory sentence said what an `EXISTS` subquery "selects" makes no difference, but
+  `EXISTS (SELECT COUNT(*) … WHERE false)` is true, because an aggregate always returns one row; another stated a join
+  rule more widely than the doc sentence it rested on. → **State each rule at exactly the scope of its doc sentence
+  (name the join type, say "lists columns" not "selects"), and run one counter-case before writing "always", "never" or
+  "makes no difference".**
 
 ## Agents and reviews
 
