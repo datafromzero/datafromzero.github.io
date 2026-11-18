@@ -171,7 +171,38 @@ you when the last month is only partly there.
 </svg>
 </figure>
 
-A **date** has a day; a **timestamp** has a day and a time. `ordered_at` is a timestamp. The functions of this lesson:
+## How it works
+
+A **date** names a day. A **timestamp** names a day and a time of day, and `ordered_at` is one. A date function either
+takes a part out of it (`year`, `month`, `dayname`) or cuts it back to the start of a period with `date_trunc`. The cut
+is what turns orders into months: rows cut to the same value belong together.
+
+In the first picture above, 1,800 orders become six bars. Logically, SQL does this:
+
+1. `FROM orders` supplies every order with its `ordered_at`. A `WHERE` on that column would remove rows here.
+2. For each row, `date_trunc('month', ordered_at)` keeps the year and the month and sets everything after them to its
+   starting value, so `2026-01-01 08:02:00` becomes `2026-01-01 00:00:00`. Every order of one month gets the same value.
+3. `GROUP BY` that value puts those orders in one group, and `COUNT(*)` counts it. `ORDER BY` runs last and puts the
+   months in time order.
+
+The rules:
+
+- `date_trunc` returns a `TIMESTAMP`, even when you give it a `DATE`. Wrap it in `CAST(... AS DATE)` to show a day
+  without the time.
+- A part keeps less than a cut: `month(x)` returns 1 to 12 with no year, so January 2026 and January 2027 give the same
+  number, while `date_trunc('month', x)` keeps the year.
+- A `TIMESTAMP` holds no time zone: DuckDB calls it a timestamp without time zone, usually a local reading of the clock
+  in an unspecified zone. The column cannot say which zone; the dataset notes do. In cafe-sales, `ordered_at` is local
+  time at the cafes in the San Francisco Bay Area (Pacific time), so 08:02 is 8:02 on the cafe's clock. Data from
+  another zone needs converting first.
+
+**Excel.** Excel stores a date as a serial number so that dates can be used in calculations, such as `=B2-A2` for the
+days between two of them (*Dates as numbers*, E11). `YEAR`, `MONTH` and `DAY` take a date apart, and `EOMONTH` returns
+the last day of a month.
+
+**A common misconception: "`date_trunc` rounds to the nearest month."** It cuts down, never up. The last order in the
+data, order 2800, was placed at 16:30 on 2026-06-30, on the last day of June, and `date_trunc('month', ordered_at)`
+still gives `2026-06-01`, not July 1.
 
 | Function | What it returns | In Excel (E11) |
 |---|---|---|
@@ -181,11 +212,6 @@ A **date** has a day; a **timestamp** has a day and a time. `ordered_at` is a ti
 | `last_day(x)` | the last day of the month of `x` | `EOMONTH(date, 0)` |
 | `x + INTERVAL 7 DAY` | a date or timestamp moved by an interval | |
 | `date1 - date2` | the days between two dates | subtraction |
-
-**Time zone.** A `TIMESTAMP` holds no time zone: the DuckDB documentation lists it as `TIMESTAMP WITHOUT TIME ZONE` and
-says such timestamps are usually local readings of the clock in an unspecified zone. So the column cannot tell you the
-zone; the dataset notes do. For cafe-sales, `ordered_at` is the local time at the cafes, in the San Francisco Bay Area
-(Pacific time), so 08:02 is 8:02 on the cafe's clock. Data from another zone would need converting first.
 
 ## Worked example
 

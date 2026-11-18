@@ -5,7 +5,7 @@ description: Use CASE inside SUM and COUNT to compute several conditional metric
 stage: sql
 order: 90
 level: intermediate
-duration: 25
+duration: 30
 objectives:
   - Write SUM and COUNT with a CASE inside
   - Compute a percentage and name its denominator
@@ -51,7 +51,7 @@ closing `;` that this page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that step 4 prints the not-a-number value as `-nan` (the DuckDB documentation pages opened for this lesson do not describe it, and older DuckDB versions may print `NULL` for 0 divided by 0, so consider `%pip install duckdb==2.0.0` in the setup cell) and that exercise 3 runs without an error. Time the lesson against its 25 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that step 4 prints the not-a-number value as `-nan` (the DuckDB documentation pages opened for this lesson do not describe it, and older DuckDB versions may print `NULL` for 0 divided by 0, so consider `%pip install duckdb==2.0.0` in the setup cell) and that exercise 3 runs without an error. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -134,14 +134,40 @@ division safe.
 </svg>
 </figure>
 
-**Conditional aggregation** puts a `CASE` inside an aggregate. For each row, the `CASE` decides whether the row counts
-toward this column; the aggregate then adds up the rows inside each group. There are two forms for a count:
+## How it works
+
+**Conditional aggregation** gives each group several answers side by side. A `CASE` (S6) sits inside an aggregate
+(S7): for every row, the `CASE` says what that row contributes to this column, and the aggregate folds those
+contributions over the group.
+
+In the picture above, the columns `card`, `mobile` and `cash` all come from one query. Logically, SQL does this:
+
+1. `FROM orders` supplies the 1,800 rows. A `WHERE` here would remove rows from every column at once.
+2. `GROUP BY store_id` sorts the rows into three groups.
+3. Inside a group, each `CASE` is worked out on one row at a time, and gives that row a value.
+4. Each aggregate then folds the values of its own `CASE` over the group. `COUNT(*)` has no `CASE` and counts the
+   group's rows.
+5. `SELECT` returns one row per group, with a column for each aggregate.
+
+The rules:
 
 - `SUM(CASE WHEN test THEN 1 ELSE 0 END)` gives 1 to the rows that pass and 0 to the others, and adds them up.
-- `COUNT(CASE WHEN test THEN 1 END)` has no `ELSE`, so the other rows become `NULL` (S6), and `COUNT` skips `NULL` (S7).
+- `COUNT(CASE WHEN test THEN 1 END)` has no `ELSE`, so the other rows give `NULL` (S6), and `COUNT` skips `NULL` (S7).
+  Both forms give the same number.
+- To add up an amount instead of counting, put the amount where the 1 is, as in
+  `SUM(CASE WHEN test THEN quantity ELSE 0 END)`.
+- A percentage is a part divided by a whole, both aggregates over the same group. Which rows are in the whole changes
+  the answer, so name them before you write the query.
+- A division can meet a denominator of 0 inside a group. Step 4 shows what happens and how to guard against it.
+- DuckDB's `FILTER` clause is a shorter way to write the same columns; this lesson keeps `CASE`, as in S6.
 
-Both give the same number. To add up an amount instead of counting, put the amount where the 1 is, for example
-`SUM(CASE WHEN test THEN quantity ELSE 0 END)`.
+**Excel.** `COUNTIFS` counts, and `SUMIFS` adds, only what meets the conditions you give
+(*Conditional totals with SUMIFS and COUNTIFS*, E7). In SQL the condition moves inside the aggregate as a `CASE`, and
+`GROUP BY` repeats it for every group.
+
+**A common misconception: "a `CASE` inside an aggregate filters rows, like `WHERE`."** Every row still goes into the
+aggregate; the `CASE` only decides what that row adds. So `COUNT(*)` can sit beside a card count in one result row:
+store 1 shows 729 orders next to its 421 card orders. A `WHERE` on the payment method would change every column.
 
 | SQL | In Excel |
 |---|---|
@@ -149,9 +175,6 @@ Both give the same number. To add up an amount instead of counting, put the amou
 | `SUM(CASE WHEN test THEN quantity ELSE 0 END)` | `SUMIFS` (E7) |
 | `GROUP BY store_id` plus one `CASE` column per method | PivotTable: `store` in Rows, `payment_method` in Columns (E15) |
 | `100.0 * part / COUNT(*)` | the share of the row total in a pivot (E16) |
-
-DuckDB also has a shorter way to write the same thing, the `FILTER` clause. This lesson keeps `CASE`, the form you
-already know from S6.
 
 ## Worked example
 
@@ -188,8 +211,7 @@ expect.
    ```
 
    Expected: 3 rows, 5 columns. Store 1 reads 729, 421, 217, 91. *Excel:* the PivotTable with `payment_method` in
-   Columns. *Why:* three rows now, instead of nine. The mobile and cash columns have no `ELSE`, so rows that fail the
-   test are `NULL` and `COUNT` skips them. Pick one form and keep it.
+   Columns. *Why:* three rows now, instead of nine. Pick one form and keep it.
 
 3. **A percentage, with its denominator named.** The part is the store's mobile orders. The whole is *all orders of
    that store, canceled included*.
