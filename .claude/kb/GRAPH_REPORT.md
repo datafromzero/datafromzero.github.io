@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 801 nodes, 800 edges, 97 communities (385 isolated nodes).
+- 801 nodes, 803 edges, 97 communities (384 isolated nodes).
 - Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 40, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 64, skill 1, spec-section 25, starlight-component 6, style 5, symbol 141, template 2, token 12.
-- Edges: defines 141, imports 36, mentions 503, overrides 6, references 26, runs 10, specified-by 4, uses 47, uses-token 22, validated-by 5.
+- Edges: defines 141, imports 36, mentions 503, overrides 6, references 26, runs 10, specified-by 4, uses 50, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -16,8 +16,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 1 | `astro.config.mjs` | config | 40 | astro.config.mjs:1 |
 | 2 | `.claude/HANDOFF.md` | doc | 30 | .claude/HANDOFF.md:1 |
 | 3 | `src/site.ts` | module | 29 | src/site.ts:1 |
-| 4 | `src/components/content/Solution.astro` | component | 25 | src/components/content/Solution.astro:1 |
-| 5 | `src/components/content/Exercise.astro` | component | 24 | src/components/content/Exercise.astro:1 |
+| 4 | `src/components/content/Solution.astro` | component | 26 | src/components/content/Solution.astro:1 |
+| 5 | `src/components/content/Exercise.astro` | component | 25 | src/components/content/Exercise.astro:1 |
 | 6 | `design/README.md` | doc | 22 | design/README.md:1 |
 | 7 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
 | 8 | `D31` Bottom taskbar (amended by D3… | decision | 20 | SPEC.md:58 |
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C69 to C67, src/lib/content-schemas.ts:96)
+- `ctype:career` -specified-by-> `S5.4` (C70 to C68, src/lib/content-schemas.ts:96)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C84 to C81, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C45 to C1, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C15 to C29, design/README.md:181)
 - `M8` -mentions-> `S4` (C1 to C4, CLAUDE.md:65)
-- `DG6` -mentions-> `DG2` (C60 to C13, design/README.md:226)
+- `DG6` -mentions-> `DG2` (C61 to C13, design/README.md:226)
 - `M7` -mentions-> `D34` (C44 to C15, CLAUDE.md:60)
 - `S5.2` -mentions-> `D18` (C51 to C46, SPEC.md:230)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C43 to C44, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C44 to C68, SPEC.md:32)
+- `D5` -mentions-> `S9` (C44 to C69, SPEC.md:32)
 - `M6` -mentions-> `D27` (C49 to C47, CLAUDE.md:57)
-- `S15` -mentions-> `S1` (C63 to C4, SPEC.md:464)
+- `S15` -mentions-> `S1` (C64 to C4, SPEC.md:464)
 
 ## Decisions (SPEC §1)
 
