@@ -40,7 +40,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
    names) and sends Google Sheets `/copy` links; each link becomes a `sheet` field plus `<OpenInSheets />`.
-2. **Next stages:** SQL (30 lessons, DuckDB in Colab, notebooks in `notebooks/sql/` loading `cafe-sales.sql` from the
+2. **Next stages:** SQL (35 lessons, D40, DuckDB in Colab, notebooks in `notebooks/sql/` loading `cafe-sales.sql` from the
    `v0.1.0` tag, D39), then Python and core. Use the
    lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
    `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
@@ -50,7 +50,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
    200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
    `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.
-5. **Release `v1.0.0`** when the four core stages (102 lessons) are published; then enable Zenodo (SPEC §9, §14).
+5. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
 
 ## Open items and owner decisions still pending
 

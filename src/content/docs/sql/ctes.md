@@ -3,7 +3,7 @@ id: sql-ctes
 title: Readable queries with CTEs
 description: Split a query into named steps with WITH, build one stage at a time and check each stage's row count.
 stage: sql
-order: 170
+order: 190
 level: intermediate
 duration: 25
 objectives:

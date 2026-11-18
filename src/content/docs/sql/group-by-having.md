@@ -3,7 +3,7 @@ id: sql-group-by-having
 title: GROUP BY and HAVING
 description: Collapse rows into one row per group with GROUP BY, filter groups with HAVING, and state the output grain first.
 stage: sql
-order: 80
+order: 90
 level: beginner
 duration: 25
 objectives:

@@ -3,7 +3,7 @@ id: sql-text-functions
 title: Cleaning text in SQL
 description: Trim, change case, replace and split text, and build a normalized matching key while keeping the original column.
 stage: sql
-order: 110
+order: 130
 level: intermediate
 duration: 25
 objectives:

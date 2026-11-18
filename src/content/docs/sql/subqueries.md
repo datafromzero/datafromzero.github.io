@@ -3,7 +3,7 @@ id: sql-subqueries
 title: Subqueries and EXISTS
 description: 'Put a query inside a query: scalar subqueries, IN, EXISTS and derived tables, and when each fits.'
 stage: sql
-order: 160
+order: 180
 level: intermediate
 duration: 25
 objectives:

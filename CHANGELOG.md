@@ -7,6 +7,9 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D40 (owner decisions, research issue #52): the SQL stage has 35 lessons, starting with an Excel-side first lesson
+  ("From a spreadsheet to SQL: your first queries") and adding query execution order, views, star schema, and scale and
+  NoSQL; each task publishes its expected result. All SQL lessons are still drafts.
 - SPEC D39 (owner decision): version 0.1.0 and a pre-release tag `v0.1.0`, so SQL notebooks can load the cafe-sales
   data from a fixed URL before `v1.0.0`.
 - Link previews (owner request): every page now declares a 1200×630 preview card (`og:image`, `twitter:image`),

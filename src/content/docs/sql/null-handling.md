@@ -3,7 +3,7 @@ id: sql-null-handling
 title: 'NULL: unknown is not zero'
 description: 'Treat NULL as unknown: test with IS NULL, see why comparisons with NULL fail, and avoid the NOT IN trap.'
 stage: sql
-order: 40
+order: 50
 level: beginner
 duration: 20
 objectives:

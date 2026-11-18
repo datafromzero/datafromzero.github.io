@@ -3,7 +3,7 @@ id: sql-self-and-multi-table-joins
 title: Joining three tables and a table to itself
 description: Chain several joins in one query, join a table to itself, and keep the grain correct through every step.
 stage: sql
-order: 150
+order: 170
 level: intermediate
 duration: 25
 objectives:

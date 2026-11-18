@@ -3,7 +3,7 @@ id: sql-case-expressions
 title: Labels and buckets with CASE
 description: Turn conditions into labels and buckets with CASE WHEN, the SQL form of the Excel flag column.
 stage: sql
-order: 60
+order: 70
 level: beginner
 duration: 20
 objectives:

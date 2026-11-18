@@ -3,7 +3,7 @@ id: sql-normalization
 title: 'Normalization: one fact in one place'
 description: Split a wide table into related tables in plain language, and see the duplication and update problems normalization prevents.
 stage: sql
-order: 280
+order: 310
 level: intermediate
 duration: 25
 objectives:

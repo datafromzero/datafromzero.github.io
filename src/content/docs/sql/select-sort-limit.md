@@ -3,7 +3,7 @@ id: sql-select-sort-limit
 title: SELECT, ORDER BY and LIMIT
 description: 'Write your first query: choose columns, name them with aliases, sort with a tie-breaker, and preview a table with LIMIT.'
 stage: sql
-order: 20
+order: 30
 level: beginner
 duration: 25
 objectives:

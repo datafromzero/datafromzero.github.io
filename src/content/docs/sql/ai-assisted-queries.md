@@ -3,7 +3,7 @@ id: sql-ai-assisted-queries
 title: Using an AI assistant for SQL, with checks
 description: Draft a query with an assistant by supplying the schema and the grain, then verify it with row counts and a hand check.
 stage: sql
-order: 300
+order: 350
 level: advanced
 duration: 20
 objectives:

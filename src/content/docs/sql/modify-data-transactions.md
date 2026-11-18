@@ -3,7 +3,7 @@ id: sql-modify-data-transactions
 title: Inserting, updating and deleting safely
 description: Change data with INSERT, UPDATE and DELETE using a restrictive WHERE, and wrap a change in a transaction you can roll back.
 stage: sql
-order: 270
+order: 300
 level: intermediate
 duration: 25
 objectives:
