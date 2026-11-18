@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 824 nodes, 947 edges, 103 communities (353 isolated nodes).
-- Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 41, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 75, skill 1, spec-section 25, starlight-component 6, style 6, symbol 151, template 2, token 12.
-- Edges: defines 151, imports 36, mentions 533, overrides 6, references 27, runs 10, specified-by 4, uses 149, uses-token 26, validated-by 5.
+- 826 nodes, 949 edges, 104 communities (353 isolated nodes).
+- Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 41, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 76, skill 1, spec-section 25, starlight-component 6, style 6, symbol 152, template 2, token 12.
+- Edges: defines 152, imports 36, mentions 534, overrides 6, references 27, runs 10, specified-by 4, uses 149, uses-token 26, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -51,8 +51,8 @@ Label propagation; each community is named by its top-degree node.
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
 - `ctype:career` -specified-by-> `S5.4` (C69 to C67, src/lib/content-schemas.ts:96)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C74 to C5, scripts/animations/concept-join.mjs:1)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C90 to C87, src/layouts/HomeLayout.astro:39)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C75 to C5, scripts/animations/concept-join.mjs:1)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C91 to C88, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C45 to C2, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C16 to C31, design/README.md:181)
 - `M8` -mentions-> `S4` (C2 to C4, CLAUDE.md:65)

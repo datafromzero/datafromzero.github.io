@@ -116,6 +116,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — A contact sheet sampled only at whole seconds showed empty highlights: a part is invisible at the instant its
   phase starts. → **Sample loops every 0.25 s and also inside each phase, and read the sheet before concluding a part is missing.**
 
+- 2026-11-18 — Sliding chips crossed a bucket label and, in the logical-order animation, a dropped row's text was still over the
+  row that rose into its place. → **Draw labels where nothing passes or show them after the part has arrived, and let one part
+  leave before the next follows (`half: 'a'` then `'b'`); check text overlap every 0.1 s, counting only what is inside the picture.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

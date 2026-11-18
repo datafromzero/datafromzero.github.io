@@ -119,18 +119,27 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
 
 - **Where:** at the top of "How it works", before its prose, one per lesson (the join lessons use the variant of their
   join type). Never in place of the data stepper of "The picture".
+- **One metaphor, in plain words:** each animation has one picture the learner can say aloud, written as its title line
+  ("Many rows → one answer", "Every row keeps its seat and gets a note", "Keys shake hands", "A CTE is a named scratch table").
+  A small step label under it (`tags`) changes with the phase ("1 · rows" → "2 · grouped" → "3 · one row each").
+- **Motion where it carries the idea:** rows, keys and tables really slide (`move`, ease-in-out, one phase), not just fade.
+  `half: 'a'` or `'b'` makes one part leave in the first half of a phase and the next follow in the second. Rounded chips
+  (`chip`), a soft ring where something landed (`pulse: true`), empty dashed seats where a part left (`ghost`). Distances are
+  multiples of 10 px.
 - **Abstract only:** no cafe-sales values and no real numbers. Rows are plain cells with labels such as Row 1, Col 3, t1,
   t2, A, B, C, x1, Σ. Original drawing, our tokens and clause colors; nothing taken from other sites' diagrams.
 - **How:** a spec `scripts/animations/concept-<name>.mjs` that calls `anim({ id, h, loop: { cycle }, title, desc,
   caption })` (cycle 4 to 8 s; copy `concept-aggregate-window.mjs`). The loop is 8 phases. A part has an effect
   `{ in: k, hide: m }` (appears at phase k, gone from phase m; default: stays to the end), an arrow or line `{ in: k, draw: true }`.
-  Parts that are always there have no effect. Draw with `row`/`grid`, `box`, `badge`, `arrow`, `venn`, `ghost`.
+  Parts that are always there have no effect. Draw with `chip`, `move`, `tags`, `row`/`grid`, `box`, `badge`, `arrow`, `venn`, `ghost`. Ready animations (paste with the command
+  after the name): `concept-group-by` (S8), `concept-aggregate-window` (S14), `concept-cte-kinds`, `concept-join:inner|left|right|full|cross`,
+  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`.
   `node scripts/make-animation.mjs concept-join:left --stats` prints the markup for the lesson (variants after a colon).
-  About 5 KB of markup per animation; the CSS is shared.
+  About 5 KB of markup per animation (two of them are about 7 KB); the CSS is shared.
 - **Pause:** every concept animation has the native-checkbox Pause / Play button (44 px, WCAG 2.2.2). Never remove it.
 - **Static view:** reduced motion and print show the final state (everything that stays to the end, arrows drawn) and no
   button, so design the last phase as the picture you would print. Hold it for about a second: leave the last phase idle.
-- **No overlap:** text never over text at any moment. Two labels that share a slot get windows that touch without
+- **No overlap:** text never over text at any moment. A moving part never crosses a label: put the label where nothing passes, or show it after the part has arrived. Two labels that share a slot get windows that touch without
   overlapping (`{ in: 5, hide: 6 }` then `{ in: 6, hide: 7 }`). Check the frames every 0.25 s in Playwright, and sample
   the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins).
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.

@@ -1,48 +1,65 @@
-// Concept animation (SPEC D41, no real data): an aggregate collapses the rows of a group into ONE row; a window function
-// keeps every row and gives each its own Σ. Two stacked panels (they stack for phones); 6 s loop of 8 phases:
-// 1 the rows, 2 to 4 one arrow per row draws, 3 to 5 the results appear, 6 the row counts, 7 and 8 hold.
+// Concept animation (SPEC D41, no real data). Two metaphors, stacked so they fit a phone, 8 s loop of 8 phases.
+// Aggregate, "many rows -> one answer": 1 three rows, each holding a value; 2 to 4 the values slide, one row at a time, into one
+// spot; 5 the rows are gone and one Σ row stands; 6 its row count. Window function, "every row keeps its seat and gets a
+// note": 1 the same rows; 2 to 4 arrows read the group into one Σ bubble; 5 to 7 a copy of Σ slides back to each row, one per
+// phase; 8 hold.
 import { anim, tint } from '../lib/step-animation.mjs';
 
-const ARROW_PHASE = [2, 3, 4];
+const H = 140; // top of the second panel
 
 export default function make({ id = 'cw' } = {}) {
 	const a = anim({
 		id,
-		h: 250,
-		loop: { cycle: 6 },
+		h: 272,
+		loop: { cycle: 8 },
 		title: 'An aggregate returns one row; a window function keeps every row',
 		desc:
-			'Two panels. First, an aggregate: three rows, each with a Col 3 value, send their values by arrows into one result row that holds Σ, so 3 rows become 1 row. Second, a window function: the same three rows each send their value by an arrow to a result row of their own, which keeps the row and adds Σ, so 3 rows stay 3 rows.',
-		caption: 'An aggregate (GROUP BY) turns a group of rows into one row. A window function (OVER) keeps every row and adds the group result to each one.',
+			'Two panels. First, an aggregate, many rows into one answer: three rows each hold a value x1, x2 or x3. The values slide, one after another, into one spot, the rows leave empty seats, and one result row holds Σ: 3 rows become 1 row. Second, a window function, every row keeps its seat and gets a note: the same three rows stay in place, arrows read the group into one Σ bubble, and a copy of Σ slides back next to each row: 3 rows stay 3 rows.',
+		caption: 'An aggregate (GROUP BY) turns a group of rows into one row. A window function (OVER) keeps every row and adds the group result as a new column.',
 	});
-	for (const [y0, title, role] of [[0, 'Aggregate: GROUP BY', 'out'], [132, 'Window function: OVER', 'win']]) {
+	for (const [y0, title, role, tags] of [
+		[0, 'Many rows → one answer', 'out', [[1, '1 · rows, each with a value'], [2, '2 · the values flow into one spot'], [5, '3 · one answer']]],
+		[H, 'Every row keeps its seat and gets a note', 'win', [[1, '1 · rows, each with a value'], [2, '2 · the group is read'], [5, '3 · a note is delivered to each row']]],
+	]) {
 		a.text(10, y0 + 14, title, 'f11 b');
-		const ty = y0 + 22;
-		// source table: Col 3 holds the values that flow
-		[0, 1, 2].forEach((i) => a.rect(70, ty + 22 + 22 * i, 50, 22, tint('src', 2)));
-		a.grid(10, ty, [60, 50], 4, 22);
-		a.text(15, ty + 15, 'Row', 'f10 b');
-		a.text(75, ty + 15, 'Col 3', 'f10 b');
-		[1, 2, 3].forEach((n) => {
-			a.text(15, ty + 22 * n + 15, `Row ${n}`, 'f11');
-			a.text(75, ty + 22 * n + 15, `x${n}`, 'f11');
-		});
-		const cy = (i) => ty + 33 + 22 * i; // center of data row i (0 to 2)
+		a.tags(10, y0 + 29, tags);
+		const ry = (i) => y0 + 38 + 30 * i;
+		const row = (i) => {
+			a.rect(10, ry(i), 96, 26, tint('src', 2), undefined, 6);
+			a.text(20, ry(i) + 17, `Row ${i + 1}`, 'f11');
+		};
+		a.ghost(245, y0 + 66, 90, 30);
 		if (role === 'out') {
-			ARROW_PHASE.forEach((p, i) => a.arrow(124, cy(i), 236, cy(1), 's-out', { in: p, draw: true }));
-			a.ghost(240, cy(1) - 11, 80, 22);
+			[0, 1, 2].forEach((i) => a.rect(10, ry(i), 96, 26, 'bx dsh', undefined, 6));
+			[0, 1, 2].forEach((i) => {
+				a.g({ hide: 5 }, () => row(i));
+				a.move({ dx: 200, dy: 30 * (1 - i), at: 2 + i, fx: { hide: 3 + i } }, () => {
+					a.rect(77, ry(i) + 4, 26, 18, tint('out', 3), undefined, 5);
+					a.text(90, ry(i) + 17, `x${i + 1}`, 'f10 b', undefined, 'm');
+				});
+			});
 			a.g({ in: 5 }, () => {
-				a.rect(240, cy(1) - 11, 80, 22, tint('out', 3));
-				a.rect(240, cy(1) - 11, 80, 22, 'bx');
-				a.text(280, cy(1) + 5, 'Σ', 'f14 b', undefined, 'm');
+				a.rect(245, y0 + 66, 90, 30, tint('out', 3), undefined, 8);
+				a.text(290, y0 + 87, 'Σ', 'f14 b', undefined, 'm');
 			});
-			a.text(326, cy(1) + 4, '1 row', 'f10 b', { in: 6 });
+			a.rect(243, y0 + 64, 94, 34, 's-out', { in: 5, hide: 7, pulse: true }, 10);
+			a.text(290, y0 + 114, '1 row', 'f10 b', { in: 6 }, 'm');
 		} else {
-			ARROW_PHASE.forEach((p, i) => {
-				a.arrow(124, cy(i), 214, cy(i), 's-win', { in: p, draw: true });
-				a.row(218, cy(i) - 11, [{ w: 50, text: `Row ${i + 1}` }, { w: 50, text: 'Σ', align: 'e', c: 'f11 b' }], { h: 22, fx: { in: p + 1 }, tint: tint('win', 3), tintCols: [1, 1] });
+			[0, 1, 2].forEach((i) => {
+				row(i);
+				a.rect(120, ry(i), 42, 26, 'bx dsh', undefined, 6);
+				a.arrow(110, ry(i) + 13, 241, y0 + 81, 's-win', { in: 2 + i, hide: 5, draw: true });
 			});
-			a.text(324, cy(1) + 4, '3 rows', 'f10 b', { in: 6 });
+			a.g({ in: 5 }, () => {
+				a.rect(245, y0 + 66, 90, 30, tint('win', 3), undefined, 8);
+				a.text(318, y0 + 87, 'Σ', 'f14 b', undefined, 'm');
+			});
+			[0, 1, 2].forEach((i) =>
+				a.move({ dx: -130, dy: 30 * (i - 1), at: 5 + i, fx: { in: 5 + i } }, () => {
+					a.rect(250, y0 + 68, 42, 26, tint('win', 3), undefined, 6);
+					a.text(271, y0 + 85, 'Σ', 'f11 b', undefined, 'm');
+				}),
+			);
 		}
 	}
 	return a;

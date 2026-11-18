@@ -20,6 +20,10 @@
  *   arrow(x1, y1, x2, y2)       a line with a head, for pipelines and "from the row above"
  *   ghost(x, y, w, h)           a dashed slot where a row would be but does not exist
  *   grid(x, y, widths, nrows, rh)  all the borders of a table in one path (with `row(..., { cells: false })`)
+ *   chip(x, y, label, opts)     a rounded row chip (opts: role, level, w, h, flags: layers drawn UNDER the text, fx)
+ *   move({ dx, dy, at, half, fx }, body)  `body()` slides by (dx, dy) px (multiples of 10) during phase `at`, ease-in-out;
+ *                               half 'a' or 'b' uses only the first or the second half of the phase (one part leaves, then another follows)
+ *   tags(x, y, [[phase, text], ...])  a small label that changes with the phase (windows touch, never overlap)
  * `anim({ loop: { cycle }, caption })` makes a concept animation instead of a stepper (see `loopFx` below).
  *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
@@ -49,7 +53,8 @@ export const edge = (role) => `s-${role}`;
  * primitives as a stepper. The loop has 8 phases of cycle/8 seconds. An effect is `{ in: k, hide: m, draw }` with phases
  * 1 to 8: the part fades in at the start of phase k and is gone at the start of phase m (default: stays to the end of the
  * loop, which is the final state that reduced motion and print show). `draw: true` on a path (an arrow) draws it along
- * its length. A part with no effect is always there. A part that goes away before the end gets class `tmp`, which the
+ * its length; `pulse: true` makes a soft glow that rises and fades inside its window (it is not part of the final state if
+ * the window ends before the loop does). A part with no effect is always there. A part that goes away before the end gets class `tmp`, which the
  * static view hides.
  */
 const loopFx = (id) => (fx) => {
@@ -57,8 +62,8 @@ const loopFx = (id) => (fx) => {
 	const k = fx.in ?? 1;
 	const m = fx.hide ?? PHASES + 1;
 	if (!Number.isInteger(k) || !Number.isInteger(m) || k < 1 || m <= k || m > PHASES + 1) throw new Error(`${id}: in:${k} hide:${m} must be phases 1 to ${PHASES + 1}`);
-	if (k === 1 && m === PHASES + 1 && !fx.draw) return [];
-	const c = [`${fx.draw ? 'p' : 'w'}${m - k}`];
+	if (k === 1 && m === PHASES + 1 && !fx.draw && !fx.pulse && !fx.always) return [];
+	const c = [`${fx.draw ? 'p' : fx.pulse ? 'u' : 'w'}${m - k}`];
 	if (k > 1) c.push(`d${k}`);
 	if (m <= PHASES) c.push('tmp');
 	return c;
@@ -119,6 +124,36 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
 		},
 		path(d, c = 'ln', fx) {
 			push(`<path${cls(c, fx?.draw ? 'dr' : '', fxClasses(fx))}${fx?.draw ? ' pathLength="1"' : ''} d="${d}" />`);
+		},
+		/**
+		 * A rounded row chip with a centered label. `flags` are extra tinted layers under the text (a state that turns on
+		 * or off: [{ role, level, fx }]); text is never under a shade it does not own.
+		 */
+		chip(x, y, label, { role = 'src', level = 2, w = 64, h = 24, flags = [], c = 'f11', fx } = {}) {
+			api.g(fx, () => {
+				api.rect(x, y, w, h, tint(role, level), undefined, 6);
+				for (const f of flags) api.rect(x, y, w, h, tint(f.role, f.level ?? 3), f.fx, 6);
+				api.text(x + w / 2, y + h / 2 + 4, label, c, undefined, 'm');
+			});
+		},
+		/**
+		 * Slides `body()` by (dx, dy) during phase `at` (1 to 7), ease-in-out; dx and dy are multiples of 10 px. The part
+		 * stays where it ends (the static view draws it there). It fades with the loop (or with `fx`), so the jump back
+		 * at the start of the next loop is never seen. Moves nest: the inner one is relative to the outer one.
+		 */
+		move({ dx = 0, dy = 0, at, half = '', fx }, body) {
+			if (!loop) throw new Error(`${id}: move is for concept animations`);
+			if (!Number.isInteger(at) || at < 1 || at >= PHASES || dx % 10 || dy % 10) throw new Error(`${id}: move needs at 1 to 7 and dx, dy in multiples of 10`);
+			if (half !== '' && half !== 'a' && half !== 'b') throw new Error(`${id}: half is 'a' or 'b'`);
+			const ax = Math.abs(dx / 10);
+			const ay = Math.abs(dy / 10);
+			if (ax > 35 || ay > 30) throw new Error(`${id}: move is too long`);
+			const k = (n, a) => `${a}${n < 0 ? 'n' : ''}${Math.abs(n)}`;
+			api.g(fx ?? { always: true }, () => api.g(undefined, body, 'mv', `m${at}${half}`, k(dx / 10, 'x'), k(dy / 10, 'y')));
+		},
+		/** A small label that changes with the phase: [[phase, text], ...]; each lasts until the next one, the last stays. */
+		tags(x, y, list, c = 'f10 b', align = 's') {
+			list.forEach(([phase, text], i) => api.text(x, y, text, c, { in: phase, ...(list[i + 1] ? { hide: list[i + 1][0] } : {}) }, align));
 		},
 		/** A dashed slot where a row would be but does not exist (the start of a window, the row above the first). */
 		ghost(x, y, width, height, fx) {

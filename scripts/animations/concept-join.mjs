@@ -1,97 +1,186 @@
 // Concept animations (SPEC D41, no real data), one per join type: `node scripts/make-animation.mjs concept-join:left`
-// (variants inner, left, right, full, cross). Two small tables with keys A B C and B C D (labels only). 6 s loop of 8 phases:
-// 1 the tables, 2 matching keys light up and pair, 3 the matched rows enter the result, 4 the rows the join also keeps
-// (with NULL cells) or drops (a red x) and the kept keys fill the circles, 5 the row count, 6 to 8 hold.
-// CROSS has no keys to match: every pairing is drawn and every pairing is a row.
+// (variants inner, left, right, full, cross) and a cycling overview `concept-join:all`. Two small tables of labels, keys A B C and
+// B C D. Metaphor: keys shake hands. 8 s loop of 8 phases for inner, left, right and full:
+// 1 the tables; 2 the matching keys slide together and shake hands (violet); 3 each pair moves into the result; 4 the rows the join
+// also keeps move in (with NULL cells), or are marked red and stay behind; 5 the row count; 6 to 8 hold.
+// CROSS has no keys to match: every row meets every row, and every pairing is a result row, three at a time.
+// `all` steps through LEFT, RIGHT, INNER and FULL, two phases each, with the type name lit.
 import { anim, tint } from '../lib/step-animation.mjs';
 
-const LEFT = [['A', 'l1'], ['B', 'l2'], ['C', 'l3']];
-const RIGHT = [['B', 'r1'], ['C', 'r2'], ['D', 'r3']];
-const TEXT = {
-	inner: ['INNER JOIN', 'INNER JOIN keeps only the pairs whose keys match. A row with no partner is dropped.'],
-	left: ['LEFT JOIN', 'LEFT JOIN keeps every row of the first table. A row with no partner is kept, with NULL in the columns of the second table.'],
-	right: ['RIGHT JOIN', 'RIGHT JOIN keeps every row of the second table. A row with no partner is kept, with NULL in the columns of the first table.'],
-	full: ['FULL JOIN', 'FULL JOIN keeps every row of both tables. A row with no partner is kept, with NULL in the other table’s columns.'],
-	cross: ['CROSS JOIN', 'CROSS JOIN has no keys to match: it pairs every row of the first table with every row of the second.'],
+const L = [['A', 'l1'], ['B', 'l2'], ['C', 'l3']];
+const R = [['B', 'r1'], ['C', 'r2'], ['D', 'r3']];
+const TITLE = {
+	inner: 'INNER JOIN · only handshakes get through',
+	left: 'LEFT JOIN · every left row gets through',
+	right: 'RIGHT JOIN · every right row gets through',
+	full: 'FULL JOIN · every row gets through',
+	cross: 'CROSS JOIN · everyone meets everyone',
+	all: 'Join types · who gets through?',
 };
+const CAPTION = {
+	inner: 'INNER JOIN keeps only the pairs whose keys match. A row with no partner is not kept.',
+	left: 'LEFT JOIN keeps every row of the first table. A row with no partner is kept, with NULL in the second table’s columns.',
+	right: 'RIGHT JOIN keeps every row of the second table. A row with no partner is kept, with NULL in the first table’s columns.',
+	full: 'FULL JOIN keeps every row of both tables. A row with no partner is kept, with NULL in the other table’s columns.',
+	cross: 'CROSS JOIN has no keys to match: every row of the first table meets every row of the second.',
+	all: 'The four joins differ only in which unpaired rows they keep: LEFT the first table’s, RIGHT the second’s, INNER neither, FULL both.',
+};
+const Y = (i) => 44 + 30 * i; // row i of a source column or of the result
+const W = 52;
 
 export default function make({ id, variant = 'left' } = {}) {
-	if (!TEXT[variant]) throw new Error(`concept-join: unknown variant "${variant}" (${Object.keys(TEXT).join(', ')})`);
-	const [name, caption] = TEXT[variant];
-	const cross = variant === 'cross';
-	const keepLeft = variant === 'left' || variant === 'full';
-	const keepRight = variant === 'right' || variant === 'full';
-	// result rows: [left cell, right cell, phase, role]
-	let rows;
-	if (cross) {
-		rows = LEFT.flatMap(([k, v], i) => RIGHT.map(([k2, v2], j) => [`${k} ${v}`, `${k2} ${v2}`, i * 3 + j < 5 ? 3 : 4, 'src']));
-	} else {
-		rows = [];
-		if (keepLeft) rows.push(['A l1', 'NULL', 4, 'flt']);
-		rows.push(['B l2', 'B r1', 3, 'mat'], ['C l3', 'C r2', 3, 'mat']);
-		if (keepRight) rows.push(['NULL', 'D r3', 4, 'flt']);
-	}
-	const H = 24 + 20 * (rows.length + 1);
+	if (!TITLE[variant]) throw new Error(`concept-join: unknown variant "${variant}" (${Object.keys(TITLE).join(', ')})`);
+	id ??= `jn-${variant}`;
+	if (variant === 'cross') return cross(id);
+	if (variant === 'all') return all(id);
+	const keepL = variant === 'left' || variant === 'full';
+	const keepR = variant === 'right' || variant === 'full';
+	const rows = 2 + (keepL ? 1 : 0) + (keepR ? 1 : 0);
 	const a = anim({
-		id: id ?? `jn-${variant}`,
-		h: Math.max(cross ? 0 : 196, H + 30),
-		loop: { cycle: 6 },
-		title: `${name}: matched pairs and kept rows`,
-		desc: `Two small tables of labels: the first table has keys A, B and C, the second has keys B, C and D. ${
-			cross
-				? 'CROSS JOIN draws a line from every row of the first table to every row of the second and returns all 9 pairings.'
-				: `Keys B and C match and are paired by lines. ${
-						{ inner: 'INNER JOIN returns the 2 matched rows; the rows with keys A and D have no partner and are dropped.', left: 'LEFT JOIN returns the 2 matched rows and the row with key A, with NULL in the second table’s column: 3 rows.', right: 'RIGHT JOIN returns the 2 matched rows and the row with key D, with NULL in the first table’s column: 3 rows.', full: 'FULL JOIN returns the 2 matched rows, the row with key A with NULL on the right and the row with key D with NULL on the left: 4 rows.' }[variant]
-					} Two circles in the corner show which keys are kept.`
-		}`,
-		caption,
+		id,
+		h: 226,
+		loop: { cycle: 8 },
+		title: `${TITLE[variant]}`,
+		desc: `Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Keys B and C match: they slide together, shake hands and move into the result as pairs. ${
+			{
+				inner: 'INNER JOIN keeps only those 2 pairs; the rows with keys A and D have no partner, are marked red and stay behind: 2 rows.',
+				left: 'LEFT JOIN also moves the row with key A into the result, with NULL in the second table’s column: 3 rows.',
+				right: 'RIGHT JOIN also moves the row with key D into the result, with NULL in the first table’s column: 3 rows.',
+				full: 'FULL JOIN also moves the row with key A, with NULL on the right, and the row with key D, with NULL on the left, into the result: 4 rows.',
+			}[variant]
+		} Two circles in the corner show which keys are kept.`,
+		caption: CAPTION[variant],
 	});
-	const ty = 24;
-	const cy = (i) => ty + 30 + 20 * i; // center of data row i
-	// key tints (before text): matching keys light up in phase 2, a key without a partner turns red in phase 4
-	if (!cross) {
-		for (const i of [1, 2]) {
-			a.rect(10, ty + 20 + 20 * i, 28, 20, tint('mat', 3), { in: 2 });
-			a.rect(112, ty + 20 + 20 * (i - 1), 28, 20, tint('mat', 3), { in: 2 });
-		}
-		a.rect(10, ty + 20, 28, 20, tint('flt', 3), { in: 4 });
-		a.rect(112, ty + 60, 28, 20, tint('flt', 3), { in: 4 });
+	a.text(10, 14, TITLE[variant], 'f11 b');
+	a.tags(10, 27, [
+		[1, '1 · two tables, each with keys'],
+		[2, '2 · matching keys shake hands'],
+		[3, '3 · the pairs move into the result'],
+		[4, { inner: '4 · no partner: not kept', left: '4 · left rows with no partner are kept', right: '4 · right rows with no partner are kept', full: '4 · rows with no partner are kept' }[variant]],
+	]);
+	a.text(10, 41, 't1', 'f10 mu');
+	a.text(150, 41, 't2', 'f10 mu');
+	a.text(220, 41, 'result', 'f10 mu');
+	// the circles of kept keys (they count keys, not rows)
+	const v = a.venn({ x1: 44, x2: 78, y: 190, r: 26 });
+	v.region('O', tint('mat', 3), { in: 3 });
+	if (keepL) v.region('L', tint('src', 3), { in: 4 });
+	if (keepR) v.region('R', tint('src', 3), { in: 4 });
+	v.outline();
+	a.text(v.center('L').x, 194, 't1', 'f10 b', undefined, 'm');
+	a.text(v.center('R').x, 194, 't2', 'f10 b', undefined, 'm');
+	// the seats the rows leave behind
+	for (let i = 0; i < 3; i++) {
+		a.rect(10, Y(i), W, 24, 'bx dsh', undefined, 6);
+		a.rect(150, Y(i + 1), W, 24, 'bx dsh', undefined, 6);
 	}
-	for (const [x, label, t] of [[10, 't1', LEFT], [112, 't2', RIGHT]]) {
-		a.grid(x, ty, [28, 36], 4, 20);
-		a.text(x + 5, ty + 14, 'key', 'f10 b');
-		a.text(x + 33, ty + 14, label, 'f10 b');
-		t.forEach(([k, v], i) => {
-			a.text(x + 5, cy(i) + 4, k, 'f11 b');
-			a.text(x + 33, cy(i) + 4, v, 'f11');
+	const mat = [{ role: 'mat', level: 3, fx: { in: 2 } }];
+	const red = [{ role: 'flt', level: 3, fx: { in: 4 } }];
+	// the two matched pairs: the right key slides to the left one, then the pair moves into the result
+	const pairDy = variant === 'inner' || variant === 'right' ? -30 : 0;
+	for (const k of [0, 1]) {
+		a.move({ dx: 210, dy: pairDy, at: 3 }, () => {
+			a.chip(10, Y(k + 1), `${L[k + 1][0]} ${L[k + 1][1]}`, { w: W, flags: mat });
+			a.rect(62, Y(k + 1) + 8, 8, 8, tint('mat', 3), { in: 3 }, 2);
+			a.move({ dx: -80, at: 2 }, () => a.chip(150, Y(k + 1), `${R[k][0]} ${R[k][1]}`, { w: W, flags: mat }));
+			a.rect(6, Y(k + 1) - 4, 120, 32, 's-mat', { in: 3, hide: 4, pulse: true }, 10);
 		});
 	}
-	// the pairs
-	const pairs = cross
-		? LEFT.flatMap((_, i) => RIGHT.map((__, j) => `M74 ${cy(i)}L112 ${cy(j)}`)).join('')
-		: `M74 ${cy(1)}L112 ${cy(0)}M74 ${cy(2)}L112 ${cy(1)}`;
-	a.path(pairs, 's-mat', { in: 2, draw: true });
-	if (variant === 'inner') {
-		a.text(84, cy(0) + 5, '×', 'f14 b', { in: 4 });
-		a.text(100, cy(2) + 5, '×', 'f14 b', { in: 4 });
-	}
-	// result table
-	a.g({ in: 3 }, () => a.row(200, ty, [{ w: 75, text: 't1' }, { w: 75, text: 't2' }], { head: true, tint: tint('out', 2), cells: false }));
-	rows.forEach(([l, r, p, role], i) => {
-		const y = ty + 20 * (i + 1);
-		a.row(200, y, [{ w: 75, text: l, c: l === 'NULL' ? 'f11 mu' : 'f11' }, { w: 75, text: r, c: r === 'NULL' ? 'f11 mu' : 'f11' }], { fx: { in: p }, tint: tint(role, 2), cells: false });
+	// the unpaired rows
+	if (keepL) {
+		a.move({ dx: 210, at: 4 }, () => a.chip(10, Y(0), 'A l1', { w: W }));
+		a.chip(280, Y(0), 'NULL', { role: 'ord', level: 2, w: W, fx: { in: 5 } });
+	} else a.chip(10, Y(0), 'A l1', { w: W, flags: red });
+	if (keepR) {
+		const yd = variant === 'full' ? 3 : 2;
+		a.move({ dx: 130, dy: (yd - 3) * 30, at: 4 }, () => a.chip(150, Y(3), 'D r3', { w: W }));
+		a.chip(220, Y(yd), 'NULL', { role: 'ord', level: 2, w: W, fx: { in: 5 } });
+	} else a.chip(150, Y(3), 'D r3', { w: W, flags: red });
+	a.text(220, Y(rows - 1) + 40, `${rows} rows`, 'f11 b', { in: 5 });
+	return a;
+}
+
+function cross(id) {
+	const a = anim({
+		id,
+		h: 250,
+		loop: { cycle: 8 },
+		title: TITLE.cross,
+		desc: 'Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Lines join every row of the first table to every row of the second. Every pairing becomes a row of the result, three at a time, 9 rows in all.',
+		caption: CAPTION.cross,
 	});
-	a.grid(200, ty, [75, 75], rows.length + 1, 20, { in: 3 });
-	a.text(200, ty + 20 * (rows.length + 1) + 16, `${rows.length} rows`, 'f11 b', { in: 5 });
-	// the kept keys, as circles of keys (they count keys, not rows)
-	if (!cross) {
-		const v = a.venn({ x1: 52, x2: 86, y: 154, r: 28 });
-		v.region('O', tint('mat', 3), { in: 3 });
-		if (keepLeft) v.region('L', tint('src', 3), { in: 4 });
-		if (keepRight) v.region('R', tint('src', 3), { in: 4 });
-		v.outline();
-		a.text(v.center('L').x, 158, 't1', 'f10 b', undefined, 'm');
-		a.text(v.center('R').x, 158, 't2', 'f10 b', undefined, 'm');
-	}
+	a.text(10, 14, TITLE.cross, 'f11 b');
+	a.tags(10, 27, [[1, '1 · two tables, each with keys'], [2, '2 · every row meets every row'], [3, '3 · every pairing is a row']]);
+	a.text(10, 41, 't1', 'f10 mu');
+	a.text(100, 41, 't2', 'f10 mu');
+	a.text(220, 41, 'result', 'f10 mu');
+	a.path(L.flatMap((_, i) => R.map((__, j) => `M62 ${Y(i) + 12}L100 ${Y(j) + 12}`)).join(''), 's-mat', { in: 2, draw: true });
+	L.forEach(([k, v], i) => a.chip(10, Y(i), `${k} ${v}`, { w: W }));
+	R.forEach(([k, v], j) => a.chip(100, Y(j), `${k} ${v}`, { w: W }));
+	L.forEach(([k, v], i) =>
+		R.forEach(([k2, v2], j) => {
+			const y = 46 + 20 * (3 * i + j);
+			a.move({ dx: 30, at: 3 + i, fx: { in: 3 + i } }, () => a.chip(190, y, `${k} ${v} · ${k2} ${v2}`, { role: 'mat', level: 2, w: 120, h: 18, c: 'f10' }));
+		}),
+	);
+	a.text(220, 244, '9 rows', 'f11 b', { in: 6 });
+	return a;
+}
+
+// the overview: LEFT, RIGHT, INNER, FULL, two phases each; the kept keys light up, the unpaired rows that are not kept turn red,
+// and the result lists the kept rows
+function all(id) {
+	const types = [
+		{ name: 'LEFT JOIN', note: 'keeps every row of the first table', from: 1, to: 3, keepL: true, keepR: false },
+		{ name: 'RIGHT JOIN', note: 'keeps every row of the second table', from: 3, to: 5, keepL: false, keepR: true },
+		{ name: 'INNER JOIN', note: 'keeps only the pairs', from: 5, to: 7, keepL: false, keepR: false },
+		{ name: 'FULL JOIN', note: 'keeps every row of both tables', from: 7, to: 9, keepL: true, keepR: true },
+	];
+	const a = anim({
+		id,
+		h: 228,
+		loop: { cycle: 8 },
+		title: TITLE.all,
+		desc: 'Two small tables of labels: keys A, B and C, and keys B, C and D. Keys B and C match. The animation steps through LEFT JOIN, RIGHT JOIN, INNER JOIN and FULL JOIN, naming each, lighting the rows it keeps and listing its result: LEFT 3 rows, RIGHT 3 rows, INNER 2 rows, FULL 4 rows. Rows with no partner that a join does not keep are marked red.',
+		caption: CAPTION.all,
+	});
+	a.text(10, 14, TITLE.all, 'f11 b');
+	a.text(10, 41, 't1', 'f10 mu');
+	a.text(80, 41, 't2', 'f10 mu');
+	a.text(180, 41, 'result', 'f10 mu');
+	// red layers first (under the chips' text), per type window
+	const red = (key) => types.filter((t) => !t[key]).map((t) => ({ role: 'flt', level: 3, fx: { in: t.from, hide: t.to } }));
+	const mat = [{ role: 'mat', level: 3 }];
+	// the type name and what it keeps, one at a time
+	types.forEach((t, i) => {
+		const fx = { in: t.from, ...(i < 3 ? { hide: t.to } : {}) };
+		a.text(10, 27, `${i + 1} · ${t.name}`, 'f10 b', fx);
+		a.text(110, 27, t.note, 'f10', fx);
+	});
+	L.forEach(([k, v], i) => a.chip(10, Y(i), `${k} ${v}`, { w: W, flags: i === 0 ? red('keepL') : mat }));
+	R.forEach(([k, v], j) => a.chip(80, Y(j + 1), `${k} ${v}`, { w: W, flags: j === 2 ? red('keepR') : mat }));
+	a.path(`M62 ${Y(1) + 12}L80 ${Y(1) + 12}M62 ${Y(2) + 12}L80 ${Y(2) + 12}`, 's-mat');
+	// results
+	types.forEach((t, i) => {
+		const rows = [];
+		if (t.keepL) rows.push(['A l1', 'NULL', 'src']);
+		rows.push(['B l2', 'B r1', 'mat'], ['C l3', 'C r2', 'mat']);
+		if (t.keepR) rows.push(['NULL', 'D r3', 'src']);
+		const fx = { in: t.from, ...(i < 3 ? { hide: t.to } : {}) };
+		rows.forEach(([l, r, role], j) => {
+			const c = (x, label) => a.chip(x, Y(j), label, { role: label === 'NULL' ? 'ord' : role, level: 2, w: W, fx });
+			c(180, l);
+			c(240, r);
+		});
+		a.text(300, Y(rows.length - 1) + 16, `${rows.length} rows`, 'f11 b', fx);
+	});
+	const v = a.venn({ x1: 44, x2: 78, y: 190, r: 26 });
+	types.forEach((t, i) => {
+		const fx = { in: t.from, ...(i < 3 ? { hide: t.to } : {}) };
+		v.region('O', tint('mat', 3), fx);
+		if (t.keepL) v.region('L', tint('src', 3), fx);
+		if (t.keepR) v.region('R', tint('src', 3), fx);
+	});
+	v.outline();
 	return a;
 }
