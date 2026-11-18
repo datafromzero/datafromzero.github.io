@@ -289,6 +289,19 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   DAYS` query as if the docs page showed it; another sentence called a DuckDB result "the only way". → **When a docs page
   shows a phrase with its own example, quote the phrase but do not attribute our example to the page ("the documentation
   uses X; ours is Y"). Never write "the only way" without a source.**
+- 2026-11-18 — Figures placed before a Predict printed the answers (per-order and per-line averages, a completed total, a
+  note about the customer-less order), and an Idea gave away the next Predict (a default value, the effect of a `DELETE`
+  with no `WHERE`, "two versions"). → **A figure placed before a Predict shows only inputs; its text and `<desc>` carry no
+  totals or answers. An Idea states the rule, never the result of the next Predict; move the outcome into the Why.**
+- 2026-11-18 — Converting an exercise's "Use the Exercise 1 cell" sentence left dangling fragments (`** . It needs`, `** which
+  holds`, `. . Expected`). → **After converting exercises, grep every lesson for `\*\* \.`, `\*\* [a-z]` and `\. \.`, and read
+  each exercise's first paragraph.**
+- 2026-11-18 — Expected lines quoted `Constraint Error:` and `TransactionContext Error:`, but the runner strips the label
+  (`src/scripts/sql-errors.ts`), so the learner sees only the rest of the message. → **An error Expected line describes
+  the visible text: the message after the label, exactly as the page prints it. Run the block in the page and copy it.**
+- 2026-11-18 — A plan figure and a sentence ("a newer version prints more lines") were drawn from DuckDB 2.0.0, while the
+  page's engine (1.4.3) prints other box titles and no `Row Groups Scanned` line. → **A figure or sentence about engine
+  output shows only the lines that read the same in the page's engine and in the lesson's engine, and says so plainly.**
 
 - 2026-11-18 — The S18 and S20 to S23 rollout left stale "step N" references after the steps became units, and two unit
   Ideas stated the result of the Predict under them (the finer grain of a join, a join of one row with one row). →

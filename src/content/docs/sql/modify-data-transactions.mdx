@@ -125,8 +125,7 @@ each.
 
 ### 2. Preview, then change
 
-`UPDATE` changes the named columns in every row that satisfies its `WHERE`, and `DELETE` removes those rows. With no
-`WHERE`, `DELETE` removes every row. So make a habit: **write the `WHERE` as a `SELECT` first**, read the rows it returns,
+`UPDATE` changes the named columns in every row that satisfies its `WHERE`, and `DELETE` removes those rows. So make a habit: **write the `WHERE` as a `SELECT` first**, read the rows it returns,
 and only then change them.
 
 **Try it.** Croissants at Old Town got a delivery of 24. Before you run it: how many rows should this
@@ -231,7 +230,8 @@ A **transaction** is a group of statements that succeed or fail as one. `BEGIN` 
 auto-commit mode).
 
 **Try it.** Make a mistake on purpose: a `DELETE` with no `WHERE`. Before you run it: what does the count
-read inside the transaction, and what after the `ROLLBACK`? Run the blocks in order.
+read inside the transaction, and what after the `ROLLBACK`? Run the blocks in order. If a block says a transaction is already
+open or aborted, run `ROLLBACK`, or press **Reset data**.
 
 <RunSQL query={`BEGIN;
 DELETE FROM stock;
@@ -241,15 +241,13 @@ SELECT COUNT(*) AS rows_left FROM stock;`} />
 SELECT COUNT(*) AS rows_left FROM stock;`} />
 
 Expected: 1 row, 1 column each time. *Why:* the first block leaves the transaction open on purpose, so run the second next.
-The `DELETE` reached every row, and the count inside is **0**. After `ROLLBACK` it is back to **7**: all of it, or none
+With no `WHERE`, `DELETE` removes every row, so the count inside is **0**. After `ROLLBACK` it is back to **7**: all of it, or none
 (**atomicity**).
 
 ### 4. Two tills, one count
 
-Ana and Ben each sell a croissant at the same moment. A transaction is all-or-nothing, and the changes of an open
-transaction are invisible to other transactions until it completes (the PostgreSQL tutorial); DuckDB's concurrency model
-gives snapshot isolation. When two transactions change the same row at the same time, the second to try fails with a
-conflict error, and DuckDB's advice is to rerun that transaction.
+Ana and Ben each sell a croissant at the same moment. Each works in a session of their own, inside a transaction, on the
+same row.
 
 **Read it.** This needs two sessions, one for Ana and one for Ben, and a page has only one, so read it instead of
 running it.
@@ -267,8 +265,11 @@ UPDATE stock SET units_on_hand = units_on_hand - 1 WHERE store_id = 1 AND produc
 
 **Predict:** what does Ben's `SELECT` show, and what happens to his `UPDATE`?
 
-Result: Ana sees her own change (48) and Ben still sees 49: isolation. Ben's `UPDATE` fails with the message
-`Conflict on update!`. Rerun as DuckDB advises: Ben runs `ROLLBACK`, Ana runs `COMMIT`, then Ben runs `BEGIN`, the
+Result: Ana sees her own change (48) and Ben still sees 49, because the changes of an open transaction are invisible to
+other transactions until it completes (the PostgreSQL tutorial): isolation. DuckDB's Concurrency page describes
+multi-version concurrency control with optimistic concurrency. When two transactions change the same row at the same time,
+the second to try fails with a conflict error: Ben's `UPDATE` fails with the message `Conflict on update!`, and DuckDB's
+advice is to rerun that transaction. The rerun: Ben runs `ROLLBACK`, Ana runs `COMMIT`, then Ben runs `BEGIN`, the
 same `UPDATE` and `COMMIT`.
 
 <figure>
@@ -402,7 +403,7 @@ active`.
 
 <Exercise id="sql-modify-data-transactions-1">
 
-**Campus sold 4 Espressos since the last count. Record it.** which holds Espresso
+**Campus sold 4 Espressos since the last count. Record it.** Use `stock_ex1`, which holds Espresso
 (product 1) at both store 1 and store 2. Expected: the preview returns 1 row, 3 columns; the `UPDATE` returns a `Count`
 of 1.
 

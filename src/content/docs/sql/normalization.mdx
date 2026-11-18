@@ -217,12 +217,13 @@ repeats its store's name and city.
 
 ### 2. Three ways a wide table fails
 
-A badly shaped table fails in three ways, the **anomalies**. *Update:* a fact stored on many rows can be changed on some
-and not others, leaving two versions. *Insert:* a fact cannot be recorded until a row for something else exists. *Delete:*
+A badly shaped table fails in three ways, the **anomalies**. *Update:* a fact stored on many rows has to be changed on every
+one of them. *Insert:* a fact cannot be recorded until a row for something else exists. *Delete:*
 removing a row also removes a fact.
 
 **Try it** (the update anomaly). The `UPDATE` below reaches only Harbor's lines before May 1. Before you run it: what will a
-report of Harbor's lines grouped by name show? The block leaves the transaction open, so run the second block next.
+report of Harbor's lines grouped by name show? The block leaves the transaction open, so run the second block next. If a block says a transaction is already open or
+aborted, run `ROLLBACK`, or press **Reset data**.
 
 <RunSQL query={`BEGIN;
 UPDATE orders_wide SET store_name = 'Harbor Point' WHERE store_id = 3 AND ordered_at < '2026-05-01';
@@ -231,7 +232,7 @@ SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP B
 <RunSQL query={`ROLLBACK;
 SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP BY store_name ORDER BY store_name;`} />
 
-Expected: 2 columns each time. *Why:* the `WHERE` reached 223 of Harbor's 645 lines, so Harbor has two names, 422 lines as
+Expected: 2 columns each time. *Why:* the `WHERE` reached 223 of Harbor's 645 lines and missed the rest, so Harbor has two names, 422 lines as
 `Harbor` and 223 as `Harbor Point`, and a report grouped by name splits in two. After `ROLLBACK`, one name is left, on all
 645 lines.
 
@@ -265,16 +266,7 @@ different names.
 INSERT INTO n_product
 SELECT DISTINCT product_id, product_name, category, unit_price_usd FROM orders_wide;`} />
 
-Expected: 1 row, 1 column: the 15 products stored, not 16, for the reason of unit 2.
-
-<details>
-<summary>Explain it in your own words: why does <code>n_product</code> have 15 rows when the menu has 16?</summary>
-
-The wide table has one row per line sold, so a product nobody bought has no row, and the split can only keep what
-the wide table held. This is the insert anomaly: the five tables could record the Pumpkin Spice Latte, the wide one
-could not.
-
-</details>
+Expected: 1 row, 1 column: the 15 products stored.
 
 The third form (3NF) says no non-key column depends on another non-key column. Store name and city depend on `store_id`,
 not on the order, so they leave the orders, as do customer city and tier.
@@ -319,6 +311,14 @@ SELECT (SELECT COUNT(*) FROM n_store) AS stores, (SELECT COUNT(*) FROM n_custome
        (SELECT COUNT(*) FROM n_product) AS products;`} />
 
 Expected: 1 row, 5 columns: 3 stores, 145 customers, 1,800 orders, 3,287 lines and 15 products.
+
+<details>
+<summary>Explain it in your own words: after the split, how many rows must you change to rename Harbor, and why can a report no longer show two names?</summary>
+
+One: Harbor's row in `n_store`. Every order points to the store by `store_id`, so no second copy of the name is left to
+forget.
+
+</details>
 
 *Excel:* in E8 (*Bring in a value by key with XLOOKUP*) a price sits on one sheet and each line holds only the code.
 Normalizing does that for every repeated fact.
