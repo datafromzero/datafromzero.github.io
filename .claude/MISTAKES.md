@@ -174,6 +174,15 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
   convention per quantity across lessons, or name both.**
+
+- 2026-11-18 — A "How it works" draft cut the claim that DuckDB skips row groups by min-max range as unsourced, though the
+  Indexing performance guide, already in `sources`, states it. → **Before cutting a claim for lack of a source, search
+  every page already in `sources` for it, following the `/stable/` to `/docs/2.0/` redirect.**
+- 2026-11-18 — A self-explanation answer restated a "How it works" bullet and the misconception. → **A self-explanation
+  prompt asks something the section does not answer; its answer must not restate a How it works bullet.**
+- 2026-11-18 — A section said ART indexes serve queries "under 0.1%" of the rows, but the lesson's own exercises showed
+  Index Scans on 0.9% and 20% of the rows (the engine's rule is 2,048 rows or 0.1%, whichever is larger). → **Check any
+  threshold or limit a section states against the row counts in the lesson's own exercises and steps.**
 - 2026-11-18 — A lesson listed the DuckDB Subqueries page as a source for a claim about anti joins, which sits on the
   FROM page; the page had not been opened. → **Every `sources` URL must be the page where one of the lesson's claims
   sits: open it and find the sentence (and quote or paraphrase that sentence); drop any source you cannot tie to a claim.**
