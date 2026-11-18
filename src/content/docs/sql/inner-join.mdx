@@ -5,7 +5,7 @@ description: Combine two tables on a key with INNER JOIN, predict the row count 
 stage: sql
 order: 190
 level: beginner
-duration: 25
+duration: 30
 objectives:
   - Explain a join as pairing rows that share a key
   - Write an INNER JOIN with table aliases
@@ -24,6 +24,8 @@ reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Joins'
     url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+  - title: 'DuckDB documentation: NULL values'
+    url: https://duckdb.org/docs/stable/sql/data_types/nulls
   - title: 'Microsoft Support: XLOOKUP function'
     url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
 status: draft
@@ -42,7 +44,7 @@ closing `;` that this page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. The DuckDB page opened for this lesson does not say that an empty key never pairs; the lesson shows it by a result and calls it standard SQL. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -200,10 +202,35 @@ INNER JOIN products AS p ON oi.product_id = p.product_id
 - `INNER` keeps only the rows that got a pair, and `JOIN` alone means the same. A row with no pair, in either table,
   does not appear in the result.
 
-Before you run a join, **predict its row count** from the keys. If the key is unique in the table you join to, each row
-pairs at most once, so the count cannot grow; it falls if some rows find no partner. If the key repeats there, a row
-pairs once per match and the count can grow. In E8, `XLOOKUP` returned the item for the first match it found (Microsoft's
-page says so); a join returns every match, and every match is a row.
+## How it works
+
+An `INNER JOIN` builds one wider row from one row of each table whenever the `ON` condition is true for that pair.
+Think of it in three steps:
+
+1. List every possible pair, one row from `order_items` and one from `products`. With 3,287 lines and 16 products that
+   is 52,592 pairs, exactly what a `CROSS JOIN` returns.
+2. Keep the pairs where `ON` is true. `oi.product_id = p.product_id` keeps 3,287 of them.
+3. Each kept pair becomes one row with the columns of both tables, and `WHERE`, `GROUP BY` and the rest of the query
+   work on that wider table.
+
+In the picture above, each line pairs with one product row, and a product that no line points at has no pair.
+
+The rules:
+
+- Only rows that get paired are returned. A row with no partner, from either table, is missing from the result.
+- `NULL` never equals anything, not even another `NULL`: the comparison gives `NULL`, not true. So a row whose key is
+  `NULL` pairs with nothing.
+- The count follows the pairs. If the key is unique in the table you join to, each row has at most one partner and the
+  count cannot grow. If a key value appears *a* times on one side and *b* times on the other, it gives *a* × *b* rows:
+  order 1001 has 3 lines, so a copy of `order_items` joined to itself on `order_id` gives 3 × 3 = 9 rows for it. This
+  is why you predict the count from the keys before you run a join.
+
+**Excel.** `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) returns the first match for one key; a join returns
+every match, for every row at once, and each match is a row.
+
+**A common misconception: "a join is a Venn diagram of two sets."** The circles are right about which keys have a
+partner: an inner join keeps the overlap. They say nothing about row counts, because a join counts pairs, not keys.
+Order 1001 is one key, but its 3 lines make 3 rows, and 1,800 orders joined to their lines give 3,287 rows.
 
 | In Excel (E8) | In SQL |
 |---|---|

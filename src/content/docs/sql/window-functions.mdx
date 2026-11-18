@@ -173,20 +173,36 @@ columns, and you will know why a running total can show the same number on two r
 </svg>
 </figure>
 
-`GROUP BY` collapses: seven rows go in, one comes out. A window function keeps all seven and adds a value computed
-from related rows. The part after `OVER` describes which rows are related:
+## How it works
 
-- `PARTITION BY store_id` splits the rows into groups, one block per cafe. The function works inside each block.
-  Leave it out and the whole result is one block; `OVER ()` with nothing inside means exactly that.
-- `ORDER BY day` inside `OVER` puts each block in order and makes the function work from the first row up to the
-  current row. That is a running total.
-- The **frame** is the set of rows the function uses for the current row. With an `ORDER BY` and nothing else
-  written, DuckDB's default frame runs from the first row of the block to the current row, including every row that
-  ties with the current row on the `ORDER BY` value (its peers). Step 6 shows what that means.
+`GROUP BY` collapses: seven rows go in, one comes out. A **window function** keeps all seven. It works out a value for
+each row from a set of related rows and writes the answer in a new column of that same row. The part after `OVER`
+says which rows are related. For every row, the engine does three things:
 
-Window functions run after `WHERE` and `GROUP BY` (*How a query runs: the order of the clauses*, S12), so they add
-columns and never remove rows. The same ideas exist in the spreadsheet; this table assumes the columns day, store_id
-and orders in A, B and C, with data in rows 2 to 15:
+1. **Partition.** `PARTITION BY store_id` fences the rows into separate blocks, one per cafe, and the function never
+   looks outside the current row's block. Leave it out and the whole result is one block; `OVER ()` means exactly that.
+2. **Order.** `ORDER BY day` inside `OVER` sorts each block, for this calculation only.
+3. **Frame.** The **frame** is the part of the block that the function reads for the current row. In the picture above,
+   the frame of January 4 is January 1 to 4.
+
+The rules:
+
+- The row count never changes. Window functions run after `FROM`, `WHERE`, `GROUP BY` and `HAVING` (*How a query runs:
+  the order of the clauses*, S12), so they only add a column and never remove a row.
+- `PARTITION BY` fences rows; it does not merge them. Only `GROUP BY` merges.
+- With no `ORDER BY` inside `OVER`, the frame is the whole block. With an `ORDER BY` and nothing else written, it is
+  `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`: from the block's first row to the current row, where "current
+  row" includes every row tied with it on the `ORDER BY` value (its **peers**). Step 6 shows what that means.
+- Aggregates used as window functions skip `NULL` values.
+
+**Excel.** A `SUMIF` filled down gives every row its block's total, and `=SUM(C$2:C2)` copied down is a frame that
+grows. `SUMIFS`, the version with several conditions, is *Conditional totals with SUMIFS and COUNTIFS* (E7).
+
+**A common misconception: "I can filter on a window result with `WHERE`."** Windows run after `WHERE`, so DuckDB
+answers `Binder Error: WHERE clause cannot contain window functions!`. Compute the window in a CTE (S13) and filter in
+the next step.
+
+This table assumes the columns day, store_id and orders in A, B and C, with data in rows 2 to 15:
 
 | SQL | Reads as | In Excel or Google Sheets |
 |---|---|---|

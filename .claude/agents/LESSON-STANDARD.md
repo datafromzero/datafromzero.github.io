@@ -13,15 +13,32 @@ No frontmatter `name`, so it is not loaded as an agent. Past mistakes and their 
 3. Your lessons' entries in `research/curriculum/06-curriculum-map.yaml` (`visual`, `notes`, `research`).
 4. `datasets/cafe-sales/README.md` (tables, row counts, built-in surprises). Not the whole SPEC.
 
-## Shape (seven `##` headings, exactly)
+## Shape (seven `##` headings, exactly; SQL lessons have eight)
 
-Warm-up · The question · The picture · Worked example · Finish it · On your own · Check yourself.
+Warm-up · The question · The picture · **How it works (SQL lessons only)** · Worked example · Finish it · On your own ·
+Check yourself.
 
 - **Warm-up:** 2–3 recall prompts from earlier lessons (use their frontmatter objectives), at least one asks the
   learner to produce something; answers in lowercase `<details>`.
 - **The question:** one business question with the data visible (a small table); promise the answer.
 - **The picture:** one static inline SVG (at most two stacked), labels on the grid itself. A concept where rows move may use
   a step animation instead of one of them (see Step animations below).
+- **How it works** (SQL lessons; the owner added it because the stage lacked theory): 200–400 words of prose right
+  after the picture and before the worked example, in our own words with cafe-sales numbers. In this order: (1) the
+  idea in one or two sentences; (2) the mechanism, a numbered list of what SQL does to the rows in logical order
+  (`FROM` first for a query with several clauses), tied to the picture with "in the picture above…" without depending
+  on it; (3) the rules, stated precisely, one bullet each (`GROUP BY`: every selected column is a key or inside an
+  aggregate, and `WHERE` and `HAVING` run at different moments; windows: the row count never changes, and the default
+  frame; joins: a join keeps every pair of rows where `ON` is true, `NULL` never equals anything, and a repeated key
+  multiplies rows); (4) one **Excel** sentence that names the E-lesson by code and title; (5) one **common
+  misconception** and why it is wrong. A tiny snippet only if it clarifies a rule; no new exercises. Do not give away a
+  count that a step or exercise asks the learner to predict. Define each term on first use.
+  Theory lives here only: the prose after the picture and the later sections must not restate it (the Excel mapping
+  table may stay at the end of the section). **Sourcing:** each rule rests on a sentence in a page you opened (the
+  DuckDB 2.0 docs, the engine the lesson runs), written in your own words; add the page to `sources` only if a claim of
+  the section sits there. A rule the docs do not state is shown by a result you ran, or goes in `TODO(owner)`, and the
+  report says which. Recompute every number with DuckDB 2.0.0. Never copy or closely paraphrase another teaching site's
+  text, examples or diagrams. Count the section in the lesson's body words and raise `duration` by the length rule.
 - **Worked example:** numbered steps, each with *why*; the last step verifies (row count, reconciled total, a
   second method); then a self-explanation `<details>`.
 - **Finish it:** `<Exercise>` 1, faded: first steps given, learner finishes.
@@ -106,7 +123,8 @@ and never copy its layout, colors, characters, captions or sample tables.
   in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what
   the lesson's prerequisites have not taught yet; name earlier lessons by title and code at first use.
 - Length: about 100 body words per minute of `duration` (a 20-minute lesson is at most about 2,200 words with the
-  exercises); report the count.
+  exercises); report the count. Body words: everything after the frontmatter except the `<svg>` blocks, code and the
+  `TODO(owner)` paragraph included, split on whitespace.
 
 ## Done means
 

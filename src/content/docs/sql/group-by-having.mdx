@@ -48,7 +48,7 @@ closing `;` that this page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB pages used here do not say where the `SELECT` list falls between `HAVING` and `ORDER BY`, so the order in the text and in Check yourself rests on general SQL knowledge; source it in *How a query runs* (S12). When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB SELECT page says the `SELECT` list is evaluated only at the end and that `ORDER BY` and `LIMIT` are applied at the very end; it gives no explicit sequence between those two, so the `SELECT`-then-`ORDER BY` step in How it works and in Check yourself rests on that reading; source it in *How a query runs* (S12). When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -179,17 +179,35 @@ and answered both questions.
 </svg>
 </figure>
 
-`GROUP BY` sorts the rows into buckets by the value of a column, or of several columns together. Then every aggregate
-in `SELECT` works inside its own bucket, and the result has one row per bucket. What one result row means is the
-**grain** of the result. Say it in words before you write the query: *one row per store*. A bucket exists only if at
-least one row falls into it. Every column in `SELECT` is either in `GROUP BY` or inside an aggregate.
+## How it works
 
-`WHERE` and `HAVING` both filter, but at different moments. `WHERE` keeps or drops **rows**, before grouping. `HAVING`
-keeps or drops **groups**, after the counting. So only `HAVING` can test `COUNT(*)`. The engine works through the
-clauses in this order: `FROM` first, then `WHERE`, then `GROUP BY`, then `HAVING`, then the `SELECT` list, and `ORDER BY`
-and `LIMIT` at the very end. The DuckDB documentation says that `FROM` is where a query starts, that `WHERE` comes
-right after it, that `HAVING` comes after the grouping, and that `ORDER BY` and `LIMIT` are applied at the very end. The
-lesson *How a query runs: the order of the clauses* (S12) goes deeper.
+`GROUP BY` sorts rows into **groups**, one pile for each distinct key, and then replaces every pile with a single row.
+The key is the column, or the columns together, that you name. Logically the engine works through the clauses in this
+order, and the picture above follows it from the first step to the last:
+
+1. `FROM orders` starts with all 1,800 rows.
+2. `WHERE` drops single rows: `status = 'completed'` leaves 1,799.
+3. `GROUP BY store_id` puts rows with the same store into one group: three groups of 729, 715 and 355 rows.
+4. Each group collapses into one row, and each aggregate (`COUNT(*)`, `SUM(...)`) is worked out inside its own group.
+5. `HAVING` drops whole groups: `COUNT(*) >= 500` removes Harbor's 355 and leaves two.
+6. `SELECT` builds the output columns, and `ORDER BY` and `LIMIT` run last.
+
+The lesson *How a query runs: the order of the clauses* (S12) goes deeper. The rules that follow from this order:
+
+- What one result row stands for is the **grain**. Say it in words before you write the query: *one row per store*. A
+  group exists only if at least one row falls into it, so a key combination that never occurs gives no row.
+- After step 4 a group has one value for each key column but many values for every other column. So every column in
+  `SELECT` must be a key or sit inside an aggregate. Otherwise DuckDB stops with a `Binder Error` saying the column
+  "must appear in the GROUP BY clause".
+- `WHERE` runs before any group exists, so it can test a row's own columns but never a count. `HAVING` runs after the
+  groups are built, so it can test the count.
+
+**Excel.** A PivotTable (E15, *Summarize with a PivotTable*) is the same machine: `store` in Rows is the key,
+and `amount_usd` in Values is the aggregate. The table lines up the rest.
+
+**A common misconception: "`HAVING` is just a second `WHERE`."** The two are not interchangeable, because they run at
+different moments. `WHERE COUNT(*) > 500` fails, since no count exists yet. `HAVING status = 'completed'` fails too,
+since after step 4 a group holds many statuses, not one. Ask which you are judging, a row or a group.
 
 | SQL | In the PivotTable (E15) |
 |---|---|

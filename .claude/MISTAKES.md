@@ -180,6 +180,16 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   threshold has a 2,048-row floor, and a 355-row filter on a single-column index did use the index. → **Run the
   counter-case before explaining why an engine did or did not use a feature; quote a guideline as guidance.**
 
+- 2026-11-18 — Owner rule, given while the "How it works" pilot was written: everything published is our own work. →
+  **Write theory in our own words with our own cafe-sales examples; do not copy or closely paraphrase text, examples or
+  diagrams from other teaching sites; an engine's docs are a source for facts only, restated in our words, with at most
+  a short phrase quoted.**
+- 2026-11-18 — A draft Excel sentence said a PivotTable's Filters field acts as `WHERE`, but the Microsoft page opened
+  for it lists only the Rows, Columns and Values areas; another rule ("a missing key forms its own group") is on no
+  DuckDB page and would also have given away the exercise 2 prediction. → **Before a theory sentence stays, find its
+  sentence on an opened page; if none exists, cut it or show it by a result, and never state in theory the answer to a
+  count the exercises ask the learner to predict.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
