@@ -7,6 +7,8 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D39 (owner decision): version 0.1.0 and a pre-release tag `v0.1.0`, so SQL notebooks can load the cafe-sales
+  data from a fixed URL before `v1.0.0`.
 - Link previews (owner request): every page now declares a 1200×630 preview card (`og:image`, `twitter:image`),
   black with the logo and "From A1 to AI.", so chat apps and social sites show it instead of picking the first image on
   the page (they had picked the new author avatar). Source `design/og/card.html`, rendered by `scripts/build-og.mjs`.
