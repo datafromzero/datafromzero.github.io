@@ -13,11 +13,11 @@ objectives:
   - Name a filter that cannot use an index
   - Prove an optimized query returns the same result
 prerequisites:
-  - sql-join-fanout
   - sql-create-table-constraints
   - sql-where-filtering
   - sql-aggregate-functions
   - sql-set-operations
+  - sql-subqueries
 datasets:
   - cafe-sales
 notebook: notebooks/sql/sql-indexes-and-explain.ipynb
@@ -37,6 +37,8 @@ sources:
     url: https://duckdb.org/why_duckdb
   - title: 'PostgreSQL documentation: Introduction to indexes'
     url: https://www.postgresql.org/docs/current/indexes-intro.html
+  - title: 'PostgreSQL documentation: Index types'
+    url: https://www.postgresql.org/docs/current/indexes-types.html
 status: draft
 ---
 
@@ -217,13 +219,14 @@ index, and proved the answer never changed.
 <text x="16" y="270" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">Filters: order_id = 1001</text>
 <text x="16" y="287" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">Row Groups Scanned: 0 / 1</text>
 <text x="16" y="302" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">1 row</text>
-<text x="10" y="336" font-size="11" opacity="0.8">Output of EXPLAIN ANALYZE on DuckDB 2.0.0. Times are left out.</text>
+<text x="10" y="336" font-size="11" opacity="0.8">EXPLAIN ANALYZE on DuckDB 2.0.0, abridged. Times are left out.</text>
 </svg>
 </figure>
 
 An **index** works like the index at the back of a book: a short, alphabetical list of terms, each with page numbers,
 so that you do not read the whole book to find one (the PostgreSQL documentation uses the same comparison). A database
-index is a sorted copy of one column's values, each with the position of its rows. The price is upkeep: after an index
+index is a sorted copy of one column's values, each with the position of its rows. That picture is a mental model:
+DuckDB's index is an ART (an adaptive radix tree), and the PostgreSQL documentation says its default is a B-tree. The price is upkeep: after an index
 exists, the database must keep it in step with the table, which adds work to every insert and update.
 
 A **query plan** is the list of steps the engine will take. `EXPLAIN` in front of a query prints the plan without
@@ -235,9 +238,10 @@ DuckDB has two kinds of index, according to its documentation:
 - **Min-max indexes** (zonemaps) are created for you on columns of the general-purpose types. DuckDB stores a table in row groups
   and can skip a group whose smallest and largest value cannot match the filter. You never write them. The cafe tables
   are small enough to be one row group, so a scan shows `1 / 1`.
-- **ART indexes** are the kind `CREATE INDEX` builds. DuckDB also builds one for each `PRIMARY KEY`, `UNIQUE` and foreign
-  key. The documentation says they are mainly for enforcing keys and for speeding up point lookups and very highly
-  selective queries, under 0.1% of the rows. Its performance guide adds that an ART index does not affect joins,
+- **ART indexes** are the kind `CREATE INDEX` builds. DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE`
+  constraint. The documentation says they are mainly for enforcing keys and for speeding up point lookups and very highly
+  selective queries, under 0.1% of the rows. That figure is guidance: the engine's settings also allow an index scan of up
+  to 2,048 rows, which covers small tables. Its performance guide adds that an ART index does not affect joins,
   aggregations or sorting, that index scans serve equality and `IN` filters, and that only single-column indexes without
   expressions qualify.
 
@@ -308,8 +312,7 @@ step. Each step gives the shape of the result to expect. Ignore the times in a p
 
    Expected: a `Table Scan` box, and above it a `Projection` box. *Why:* the plan scans every row and returns 180
    rows, so DuckDB did not use the composite index: its documentation says index scans use single-column indexes only.
-   And 180 rows is 10% of the table, far above the 0.1% the documentation names for ART indexes. The index was built and
-   kept up to date for nothing.
+   An index on `store_id` alone is used for `store_id = 3`. The composite index was built and kept up to date for nothing.
 
 7. **Verify: the same answer with and without the index.**
 
@@ -374,8 +377,8 @@ EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;
 ```
 
 Before: `Type: Sequential Scan`, `Row Groups Scanned: 1 / 1`, 3 rows. After: `Type: Index Scan`, `Row Groups Scanned: 0 / 1`,
-still 3 rows. The same 3 lines come back; only the way they are found changed. Three of 3,287 rows is under 0.1%, which is
-the kind of filter an ART index is for.
+still 3 rows. The same 3 lines come back; only the way they are found changed. A lookup of a few rows by an indexed column is the
+kind of filter an ART index is for.
 
 </Solution>
 
@@ -439,7 +442,7 @@ Without looking back: explain an index with the book-index picture, and say whic
 
 An index is a short sorted list of one column's values with pointers to the rows, like a book's index of terms with page
 numbers: you look in the list instead of reading everything. It costs upkeep on every insert and update. DuckDB builds
-min-max (zonemap) indexes on its own, and an ART index for each primary key, `UNIQUE` column and foreign key.
+min-max (zonemap) indexes on its own, and an ART index for each primary key and `UNIQUE` column.
 
 </details>
 

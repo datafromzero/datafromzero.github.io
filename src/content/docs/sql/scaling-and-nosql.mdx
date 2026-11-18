@@ -15,6 +15,7 @@ prerequisites:
   - sql-create-table-constraints
   - sql-inner-join
   - sql-group-by-having
+  - sql-dates-and-time
 datasets:
   - cafe-sales
 notebook: notebooks/sql/sql-scaling-and-nosql.ipynb
@@ -35,17 +36,17 @@ sources:
 status: draft
 ---
 
-This is a **preview** of distributed databases, partitions and NoSQL, on the small cafe-sales data. The core stage,
-after Python, goes deeper. No NoSQL engine runs here; the documents are small pieces of JSON text that DuckDB can read.
+This is a **preview** of distributed databases, partitions and NoSQL, on the small cafe-sales data. The core stage, after
+Python, goes deeper. No NoSQL engine runs here; the documents are small pieces of JSON text that DuckDB can read.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, as in *From a spreadsheet to SQL: your first
-queries* (S1). Step 5 writes a small folder next to the notebook. The cells leave out the closing `;`.
+**Your practice notebook** loads the five tables of **cafe-sales**, as in S1 (*From a spreadsheet to SQL*). Step 5 writes a
+small folder next to it.
 
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that step 5 can create its folder and that the `Scanning Files` line of step 6 is smaller than its total there. Time the lesson against its 15 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that step 5 can create its folder and that step 6 reads the same there. Time the lesson against its 15 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -181,9 +182,9 @@ when each fits.
 </figure>
 
 A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it
-(its documentation says so). A **distributed** database spreads data over several machines. Microsoft's partitioning
-guidance gives the reason: a single system that you make bigger hits a hardware limit, while data divided across servers
-can scale out much further.
+(its documentation says so). A **distributed** database spreads data over several machines, because a single system that
+you make bigger hits a hardware limit (Microsoft's partitioning guidance). Copies of the data, called replicas, keep it
+available, but they take time to synchronize, so for a while two copies can differ: that is eventual consistency.
 
 **Partitioning** splits a table's rows by a key, such as the store, into pieces that can be stored, read and managed on
 their own. Pieces on separate servers are called shards, and a bad key makes a hot partition with far more work than the rest.
@@ -235,15 +236,14 @@ then one cell per step. Each step gives the shape of the result to expect.
    Expected: 3 rows, 4 columns. *Why:* `->>` reads a field as text, and `[0]` is the first item (JSON counts from 0, says the
    DuckDB documentation). Order 1335's document has no `customer` field, so the result is `NULL`.
 
-4. **A lookup by key, then a question about the contents.**
+4. **A lookup by key.**
 
    ```sql
    SELECT doc FROM order_docs WHERE doc_key = 'order:1001';
-   SELECT doc_key FROM order_docs WHERE doc->>'$.store' = 'Old Town' ORDER BY doc_key;
    ```
 
-   Expected: the first returns 1 row, 1 column; the second 1 column, a row per matching document. *Why:* the first uses only
-   the key, all a key-value store does well. The second looks inside every document, which DuckDB can as a SQL engine.
+   Expected: 1 row, 1 column. *Why:* the key is all a key-value store needs. A question about the contents, such as every
+   Old Town order, means looking inside every document: DuckDB can as a SQL engine, a store that works only by key could not.
 
 5. **Partition the orders by store.**
 
@@ -267,18 +267,18 @@ then one cell per step. Each step gives the shape of the result to expect.
    WHERE store_id = 3;
    ```
 
-   Expected: the first returns 3 rows, 2 columns. The plan has a `Read Parquet` box with `File Filters: store_id = 3` and a
-   `Scanning Files` line whose first number is smaller than its second. *Why:* a filter on the partition key lets DuckDB skip
-   the folders that cannot match.
+   Expected: the first returns 3 rows, 2 columns. The plan (printed with `print(...)`) has a `Read Parquet` box with
+   `File Filters: store_id = 3` and a `Scanning Files` line whose first number is smaller than its second. *Why:* a filter on
+   the partition key lets DuckDB skip the folders that cannot match.
 
-7. **Verify.** The counts are 729, 716 and 355, and they add to 1,800.
+7. **Verify.**
 
    ```sql
    SELECT COUNT(*) AS orders FROM orders;
-   SELECT COUNT(*) AS orders FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true);
    ```
 
-   Expected: each returns 1 row, 1 column. Harbor opened on April 1, so its folder is about half the size of the others.
+   Expected: 1 row, 1 column. The 729, 716 and 355 of step 6 add to the same 1,800. Harbor opened on April 1, so its folder
+   is about half the size of the others.
 
 <details>
 <summary>Explain it in your own words: why can SQL still answer questions across the documents?</summary>
@@ -289,8 +289,7 @@ by key leaves that work to the application.
 </details>
 
 **When SQL is still the answer:** for questions across many rows (totals, comparisons, joins), when rules and multi-row
-changes must hold, and when the data fits one machine. Cafe-sales has 1,800 orders and 3,287 lines; one machine holds them
-easily.
+changes must hold, and when the data fits one machine, as the 1,800 orders of cafe-sales do.
 
 ## Finish it
 
@@ -298,14 +297,8 @@ easily.
 
 **Read two fields from each document.** Use the Exercise 1 cells on `order_docs` from step 2. Expected: 3 rows, 3 columns.
 
-Done for you:
-
-```sql
-SELECT doc_key, doc->>'$.store' AS store
-FROM order_docs ...
-```
-
-Now finish it: add the product of each order's second item (`$.items[1].product`) and an `ORDER BY`.
+Done for you: `SELECT doc_key, doc->>'$.store' AS store FROM order_docs ...`. Now finish it: add the product of each order's second
+item (`$.items[1].product`) and an `ORDER BY`.
 
 <details>
 <summary>Hint</summary>
@@ -368,8 +361,7 @@ SELECT payment_method, COUNT(*) AS orders FROM orders GROUP BY payment_method OR
 ```
 
 Store: 729, 716 and 355, the biggest 40.5%. Month: 242, 218, 258, 349, 380 and 353, the biggest 21.1%. Payment: card 1,001, mobile 546
-and cash 253, card 55.6%. Month is the most even, though the first three months are smaller because Harbor opened in April. A real
-choice also depends on how the data is read and written.
+and cash 253, card 55.6%. Month is the most even, though the first three months are smaller because Harbor opened in April.
 
 </Solution>
 
@@ -394,28 +386,27 @@ fast." Check the size first:
 
 ```sql
 SELECT COUNT(*) AS orders FROM orders;
-SELECT COUNT(*) AS lines FROM order_items;
 ```
 
-Expected: each returns 1 row, 1 column. What is wrong with the proposal?
+Expected: 1 row, 1 column. What is wrong with the proposal?
 
 <details>
 <summary>Hint</summary>
 
-Compare the counts with what one laptop holds, and recall the three folders of step 7.
+Compare the count with what one laptop holds, and recall the folders of steps 5-6.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Start from: "1,800 orders and 3,287 lines are tiny, so ... The three shards would also be uneven, and ..."
+Start from: "1,800 orders are tiny, so ... The three shards would also be uneven, and ..."
 
 </details>
 
 <Solution>
 
-There are 1,800 orders and 3,287 lines: one machine holds that easily, and Microsoft's guidance says partitioning is not important when
+There are 1,800 orders (and 3,287 lines): one machine holds that easily, and Microsoft's guidance says partitioning is not important when
 one server can handle the data. Sharding also adds work: the shards would be uneven (Harbor about half the size of the others), a total
 across stores must ask all three, and a change touching two servers is no longer one simple transaction.
 

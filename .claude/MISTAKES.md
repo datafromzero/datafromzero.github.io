@@ -162,6 +162,12 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   scripts. → **Each agent works only in its own scratchpad subfolder (`scratchpad/batchX/`, `scratchpad/revX/`).**
 - 2026-11-18 — A predict-first exercise named the surprise in its own question ("why is January so large?"). → **The
   title and lead sentence of a predict-first task never name the result; every bound in a definition is in the SQL.**
+- 2026-11-18 — The normalization lesson called a split "2NF" while naming a one-column key, which cannot have a 2NF
+  violation. → **Label each normalization step by the dependency it removes, checked against the key the lesson names
+  (2NF: a column depends on part of the key; 3NF: a column depends on another non-key column).**
+- 2026-11-18 — An index lesson explained a plan with a docs figure (0.1%) as if it were a hard rule; the engine's
+  threshold has a 2,048-row floor, and a 355-row filter on a single-column index did use the index. → **Run the
+  counter-case before explaining why an engine did or did not use a feature; quote a guideline as guidance.**
 
 ## Agents and reviews
 
