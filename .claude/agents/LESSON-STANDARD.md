@@ -31,8 +31,9 @@ Check yourself.
   aggregate, and `WHERE` and `HAVING` run at different moments; windows: the row count never changes, and the default
   frame; joins: a join keeps every pair of rows where `ON` is true, `NULL` never equals anything, and a repeated key
   multiplies rows); (4) one **Excel** sentence that names the E-lesson by code and title; (5) one **common
-  misconception** and why it is wrong. A tiny snippet only if it clarifies a rule; no new exercises. Do not give away a
-  count that a step or exercise asks the learner to predict. Define each term on first use.
+  misconception** and why it is wrong. A tiny snippet only if it clarifies a rule; no new exercises. List every predict
+  and spot-the-flaw prompt in the lesson first: no sentence of the section may state a prompt's answer or reuse its
+  query. Define each term on first use.
   Theory lives here only: the prose after the picture and the later sections must not restate it (the Excel mapping
   table may stay at the end of the section). **Sourcing:** each rule rests on a sentence in a page you opened (the
   DuckDB 2.0 docs, the engine the lesson runs), written in your own words; add the page to `sources` only if a claim of

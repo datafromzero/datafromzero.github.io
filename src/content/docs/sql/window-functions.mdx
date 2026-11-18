@@ -5,7 +5,7 @@ description: Add a running total or a share of the group without collapsing rows
 stage: sql
 order: 140
 level: intermediate
-duration: 30
+duration: 35
 objectives:
   - Explain how a window function differs from GROUP BY
   - Write an aggregate with OVER and PARTITION BY
@@ -50,7 +50,7 @@ page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the outputs of steps 5 and 6 with Colab's version (the sums print as plain integers). Time the lesson against its 30 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the outputs of steps 5 and 6 with Colab's version (the sums print as plain integers). Time the lesson against its 35 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -177,30 +177,31 @@ columns, and you will know why a running total can show the same number on two r
 
 `GROUP BY` collapses: seven rows go in, one comes out. A **window function** keeps all seven. It works out a value for
 each row from a set of related rows and writes the answer in a new column of that same row. The part after `OVER`
-says which rows are related. For every row, the engine does three things:
+says which rows are related. Conceptually, for every row, the engine does three things:
 
 1. **Partition.** `PARTITION BY store_id` fences the rows into separate blocks, one per cafe, and the function never
-   looks outside the current row's block. Leave it out and the whole result is one block; `OVER ()` means exactly that.
+   looks outside the current row's block. Leave it out and the whole result is one block.
 2. **Order.** `ORDER BY day` inside `OVER` sorts each block, for this calculation only.
-3. **Frame.** The **frame** is the part of the block that the function reads for the current row. In the picture above,
-   the frame of January 4 is January 1 to 4.
+3. **Frame.** The **frame** is the part of the block that the function reads for the current row. Only aggregates and
+   a few other functions use one. In the picture above, the frame of January 4 is January 1 to 4.
 
 The rules:
 
-- The row count never changes. Window functions run after `FROM`, `WHERE`, `GROUP BY` and `HAVING` (*How a query runs:
-  the order of the clauses*, S12), so they only add a column and never remove a row.
+- The row count never changes: a window function computes one value for each row and adds it as a column. Window
+  functions run after `WHERE` and `HAVING` (*How a query runs: the order of the clauses*, S12), so neither can filter
+  on a window result.
 - `PARTITION BY` fences rows; it does not merge them. Only `GROUP BY` merges.
 - With no `ORDER BY` inside `OVER`, the frame is the whole block. With an `ORDER BY` and nothing else written, it is
   `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`: from the block's first row to the current row, where "current
   row" includes every row tied with it on the `ORDER BY` value (its **peers**). Step 6 shows what that means.
-- Aggregates used as window functions skip `NULL` values.
+- `SUM` used as a window function skips `NULL` values.
 
 **Excel.** A `SUMIF` filled down gives every row its block's total, and `=SUM(C$2:C2)` copied down is a frame that
 grows. `SUMIFS`, the version with several conditions, is *Conditional totals with SUMIFS and COUNTIFS* (E7).
 
 **A common misconception: "I can filter on a window result with `WHERE`."** Windows run after `WHERE`, so DuckDB
 answers `Binder Error: WHERE clause cannot contain window functions!`. Compute the window in a CTE (S13) and filter in
-the next step.
+the next step (`QUALIFY` also exists; it comes later).
 
 This table assumes the columns day, store_id and orders in A, B and C, with data in rows 2 to 15:
 
