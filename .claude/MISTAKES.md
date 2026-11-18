@@ -223,6 +223,14 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   the lesson's own later steps contradicted them. → **Never write an "always / each / every / either… or" sentence about
   a function family or clause without checking it against the whole lesson and its neighbors; say "two common kinds" or
   name the condition.**
+- 2026-11-18 — A "How it works" list ordered the constraint checks (row alone, then stored rows, then other table), but
+  DuckDB 2.0.0 names the key for a row that also breaks a `CHECK`, and the foreign key for another row that also breaks
+  one; a step of the same lesson already said so. → **A "logical order" list of engine checks must match what the
+  lesson's own runs report; run a row that breaks two rules before ordering them, or say only that the row is refused
+  once.**
+- 2026-11-18 — Rule bullets in "How it works" carried the reason that an Explain-it asks for (a table is built first
+  because a foreign key needs its key) and the fix of a Spot-the-flaw. → **A rule bullet states the rule, never the reason
+  that an Explain-it asks for; read each Explain-it and Spot-the-flaw answer against the section before finishing.**
 
 ## Agents and reviews
 
