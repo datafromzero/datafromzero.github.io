@@ -1,0 +1,394 @@
+---
+id: sql-aggregate-functions
+title: 'Counting and summing: aggregate functions'
+description: Summarize a whole table with COUNT, SUM, AVG, MIN and MAX, and know why COUNT(*), COUNT(column) and COUNT(DISTINCT) differ.
+stage: sql
+order: 70
+level: beginner
+duration: 25
+objectives:
+  - Compute COUNT, SUM, AVG, MIN and MAX
+  - Explain the difference between COUNT(*), COUNT(column) and COUNT(DISTINCT column)
+  - Predict how NULL changes an aggregate
+  - Reconcile an aggregate against a total from the Excel stage
+prerequisites:
+  - sql-null-handling
+  - sql-expressions-and-types
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-aggregate-functions.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Aggregate functions'
+    url: https://duckdb.org/docs/stable/sql/functions/aggregates
+  - title: 'DuckDB documentation: Numeric functions'
+    url: https://duckdb.org/docs/stable/sql/functions/numeric
+  - title: 'DuckDB documentation: VALUES clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/values
+  - title: 'Microsoft Support: COUNTA function'
+    url: https://support.microsoft.com/en-us/office/counta-function-7dc98875-d5c1-46f1-9a82-53f3219e2509
+  - title: 'Microsoft Support: SUM function'
+    url: https://support.microsoft.com/en-us/office/sum-function-043e1c7d-7726-4e80-8f32-07b23e057f89
+status: draft
+---
+
+This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
+Colab notebook, so there is nothing to install. You have counted rows with `COUNT(*)` since S1. Here you meet the other
+**aggregate functions**, and the three ways of counting that give three different numbers on the same column.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
+closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has (if it is not installed, add `%pip install duckdb`), that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. The warm-up and the prerequisites name *NULL: unknown is not zero* (S4) and *Computed columns and data types* (S5) from their objectives, so reread both when they are final. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *NULL: unknown is not zero* (S4), why does `WHERE customer_id = NULL` return no rows, and what do you write instead?
+   Write the query that counts the walk-in orders, the ones with no customer.
+
+   <details>
+   <summary>Answer</summary>
+
+   A comparison with an unknown value is never true, so no row passes. Write `IS NULL`:
+   `SELECT COUNT(*) FROM orders WHERE customer_id IS NULL;` returns `1`, the walk-in order 1335.
+
+   </details>
+
+2. In *Summarize with a PivotTable* (E15), what did the status bar show for the 3,287 order lines, and which number did
+   it call Count?
+
+   <details>
+   <summary>Answer</summary>
+
+   **Count: 3287**, the number of lines. The **Sum** next to it was 22,754.25, the control total of all line amounts.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> How big is the business so far? How many order lines and units have we sold, how big is a typical line, and how many
+> different customers have ordered?
+
+Every row of `order_items` is one line of an order. Its first four rows:
+
+| order_item_id | order_id | product_id | quantity | discount_usd |
+|---:|---:|---:|---:|---:|
+| 5001 | 1001 | 10 | 1 | 0.00 |
+| 5002 | 1001 | 6 | 1 | 0.00 |
+| 5003 | 1001 | 1 | 2 | 0.00 |
+| 5004 | 1002 | 10 | 1 | 0.00 |
+
+By the end you will have answered all of it with one-row queries, and checked the unit total against the Excel stage.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 286" width="360" role="img" aria-labelledby="counts-title counts-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="counts-title">Three counts on the same eight orders</title>
+<desc id="counts-desc">Eight real rows of the orders table, order 1329 to order 1336, with their customer_id: 9, 32, 15, 22, 100, 9, NULL and 70. COUNT(*) counts all eight rows. COUNT(customer_id) skips order 1335, whose customer_id is NULL, and counts seven. COUNT(DISTINCT customer_id) also skips the second row of customer 9, on order 1334, and counts six.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Three counts, the same 8 orders</text>
+<g font-size="10" font-weight="600">
+<text x="14" y="42">order_id</text><text x="70" y="42">customer_id</text>
+<text x="160" y="36" text-anchor="middle">COUNT</text><text x="160" y="48" text-anchor="middle">(*)</text>
+<text x="242" y="36" text-anchor="middle">COUNT</text><text x="242" y="48" text-anchor="middle">(customer_id)</text>
+<text x="324" y="36" text-anchor="middle">COUNT(DISTINCT</text><text x="324" y="48" text-anchor="middle">customer_id)</text>
+</g>
+<g fill="currentColor" stroke="none" fill-opacity="0.12">
+<rect x="10" y="134" width="340" height="20" />
+<rect x="10" y="114" width="340" height="20" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="54" width="340" height="160" />
+<path d="M10 74H350M10 94H350M10 114H350M10 134H350M10 154H350M10 174H350M10 194H350" stroke-opacity="0.25" />
+<path d="M10 218H350" />
+</g>
+<g>
+<text x="14" y="68">1329</text><text x="70" y="68">9</text>
+<text x="14" y="88">1330</text><text x="70" y="88">32</text>
+<text x="14" y="108">1331</text><text x="70" y="108">15</text>
+<text x="14" y="128">1332</text><text x="70" y="128">22</text>
+<text x="14" y="148">1333</text><text x="70" y="148">100</text>
+<text x="14" y="168">1334</text><text x="70" y="168">9</text>
+<text x="14" y="188">1335</text><text x="70" y="188">NULL</text>
+<text x="14" y="208">1336</text><text x="70" y="208">70</text>
+</g>
+<g fill="currentColor">
+<circle cx="160" cy="64" r="4" /><circle cx="160" cy="84" r="4" /><circle cx="160" cy="104" r="4" /><circle cx="160" cy="124" r="4" /><circle cx="160" cy="144" r="4" /><circle cx="160" cy="164" r="4" /><circle cx="160" cy="184" r="4" /><circle cx="160" cy="204" r="4" />
+<circle cx="242" cy="64" r="4" /><circle cx="242" cy="84" r="4" /><circle cx="242" cy="104" r="4" /><circle cx="242" cy="124" r="4" /><circle cx="242" cy="144" r="4" /><circle cx="242" cy="164" r="4" /><circle cx="242" cy="204" r="4" />
+<circle cx="324" cy="64" r="4" /><circle cx="324" cy="84" r="4" /><circle cx="324" cy="104" r="4" /><circle cx="324" cy="124" r="4" /><circle cx="324" cy="144" r="4" /><circle cx="324" cy="204" r="4" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.6">
+<circle cx="242" cy="184" r="4" />
+<circle cx="324" cy="164" r="4" /><circle cx="324" cy="184" r="4" />
+</g>
+<g font-size="13" font-weight="600" text-anchor="middle">
+<text x="160" y="238">8</text><text x="242" y="238">7</text><text x="324" y="238">6</text>
+</g>
+<text x="14" y="238" font-size="11" font-weight="600">Result</text>
+<g font-size="11" opacity="0.8">
+<text x="10" y="258">Filled dot: counted. Open dot: skipped.</text>
+<text x="10" y="274">Order 1335 has no customer; order 1334 repeats customer 9.</text>
+</g>
+</svg>
+</figure>
+
+An **aggregate function** turns many rows into one value. A query that has aggregates and nothing else returns exactly
+one row, however many rows it read. All of them skip `NULL`, except `COUNT(*)`, which counts rows.
+
+| SQL | Reads as | In Excel |
+|---|---|---|
+| `COUNT(*)` | how many rows | the status-bar Count of a full column (E1) |
+| `COUNT(col)` | how many rows have a value in `col` (not `NULL`) | `COUNTA`, which counts cells that are not empty |
+| `COUNT(DISTINCT col)` | how many different values | list them with `UNIQUE` (E19), then count the list |
+| `SUM(col)` | add the values | `SUM` |
+| `AVG(col)` | the average of the values | `AVERAGE` |
+| `MIN(col)`, `MAX(col)` | the smallest and the largest | `MIN`, `MAX` |
+
+The picture shows the three counts on eight real orders. On the whole table the same three queries return 1,800, 1,799
+and 145; you run them in step 3.
+
+## Worked example
+
+Question: **how many lines and units have we sold, how big is a typical line, and how many customers have ordered?**
+Run the notebook's setup cell, then one cell per step. Each step shows the shape of the result to expect.
+
+1. **Count the lines.**
+
+   ```sql
+   SELECT COUNT(*) AS order_lines FROM order_items;
+   ```
+
+   Expected: 1 row, 1 column: `3287`. *Excel:* the status-bar Count (E15). *Why:* one row of `order_items` is one
+   line, so the number of rows is the number of lines.
+
+2. **Five aggregates in one query.**
+
+   ```sql
+   SELECT COUNT(*) AS lines,
+          SUM(quantity) AS units,
+          ROUND(AVG(quantity), 2) AS avg_units,
+          MIN(quantity) AS min_units,
+          MAX(quantity) AS max_units
+   FROM order_items;
+   ```
+
+   Expected: 1 row, 5 columns: 3287 lines, 5162 units, an average of 1.57, a smallest line of 1 and a largest of 20.
+   *Why:* each function collapses all 3,287 rows into one value, so the result has one row however many columns you
+   ask for. `ROUND(value, 2)` keeps two decimals. These figures include every line: the one on the canceled order 1461
+   and the extra-zero line (order 2075). Read the `MAX`: most lines have 1 to 3 units, so 20 stands out. `MIN` and
+   `MAX` are a quick check for odd values.
+
+3. **Three counts on one column.**
+
+   ```sql
+   SELECT COUNT(*) AS orders,
+          COUNT(customer_id) AS with_customer,
+          COUNT(DISTINCT customer_id) AS customers
+   FROM orders;
+   ```
+
+   Expected: 1 row, 3 columns: 1800, 1799, 145. *Why:* `COUNT(*)` counts rows: 1,800 orders. `COUNT(customer_id)` skips
+   the `NULL` of the walk-in order 1335 and returns 1,799. `COUNT(DISTINCT customer_id)` counts each customer once:
+   145 different customers placed those 1,799 orders. That answers the last question.
+
+4. **Predict what `NULL` does.** Test it on a table you build on the spot. The `VALUES` list makes three rows of one
+   column named `x`, one of them `NULL`:
+
+   ```sql
+   SELECT COUNT(*) AS n,
+          COUNT(x) AS non_null,
+          SUM(x) AS total,
+          AVG(x) AS average
+   FROM (VALUES (4), (6), (NULL)) AS t(x);
+   ```
+
+   Before you run it: will `average` be 5 or 3.33? Expected: 1 row, 4 columns. *Why:* `SUM` and `AVG` skip the `NULL`.
+   The total is 4 + 6 = 10, and `AVG` divides by the two values it saw, not by the three rows. A zero would have pulled
+   the average down to 3.33; you know from S4 that `NULL` is not zero.
+
+5. **An empty group.**
+
+   ```sql
+   SELECT COUNT(*) AS lines, SUM(quantity) AS units
+   FROM order_items
+   WHERE quantity > 20;
+   ```
+
+   Expected: 1 row, 2 columns: `0` and `NULL`. *Why:* no line has more than 20 units, so no rows are left. The count
+   of nothing is 0, but the `SUM` of nothing is `NULL`, not 0: "no data" and "zero" are different answers. The
+   DuckDB documentation says every general aggregate except `COUNT` returns `NULL` on empty input.
+
+6. **Verify against Excel and a second route.**
+
+   ```sql
+   SELECT SUM(quantity) AS units FROM order_items WHERE order_id <> 1461;
+   SELECT COUNT(*) AS customers_in_table FROM customers;
+   ```
+
+   Expected: 1 row, 1 column each: `5161` and `150`. *Why:* the product sales sheet of *Relative and absolute
+   references* (E3) counted the units of completed orders, and its total was 5,161. The SQL total of all lines, 5,162,
+   minus the one unit on the canceled order 1461, gives the same number. The 3,287 lines of step 1 are the Count of
+   E15. For the 145 customers: the `customers` table has 150, and five of them signed up but never ordered. A total in
+   dollars needs the price from the `products` table, so it waits for *INNER JOIN: pairing rows on a key* (S19).
+
+<details>
+<summary>Explain it in your own words: why are the three counts in step 3 different?</summary>
+
+`COUNT(*)` counts rows, so the walk-in order counts. `COUNT(customer_id)` counts only rows that have a customer, so it
+skips the `NULL`. `COUNT(DISTINCT customer_id)` also merges repeats: 145 customers placed 1,799 orders, so most of them
+ordered many times.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-aggregate-functions-1">
+
+**How many order lines are there, and how many different products do they cover?** Use the Exercise 1 cell. Expected: 1
+row, 2 columns.
+
+The first steps are done for you: the table is `order_items`, and the query starts
+
+```sql
+SELECT COUNT(*) AS lines,
+```
+
+Now finish it: add a second column that counts the different `product_id` values, call it `products_sold`, and name the
+table.
+
+<details>
+<summary>Hint</summary>
+
+Step 3 counts different values with `COUNT(DISTINCT ...)`. A comma separates the two columns.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS lines,
+       COUNT(DISTINCT ...) AS products_sold
+FROM ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS lines,
+       COUNT(DISTINCT product_id) AS products_sold
+FROM order_items;
+```
+
+The result is 3287 lines and 15 products. The menu has 16 products: the Pumpkin Spice Latte was never sold, so no line
+mentions it, and an aggregate over `order_items` can only see products that appear in it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-aggregate-functions-2">
+
+**How many customers are there, how many were referred by another customer, and how many different customers made
+the referrals?** The `customers` table has a column `referred_by`; it is empty (`NULL`) when nobody referred the
+customer. Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: what each of the three numbers will be, and which of
+them is smaller than the others. Expected shape, to check your sentence against: 1 row, 3 columns.
+
+<details>
+<summary>Hint</summary>
+
+Count the rows as in step 1. Then use the two other forms of `COUNT` from step 3 on the column `referred_by`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One row with three numbers. The first is the number of rows of `customers`. The second counts only the
+customers who have a value in `referred_by`. The third counts the different values in `referred_by`, so it is no
+larger than the second."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS customers,
+       COUNT(referred_by) AS referred,
+       COUNT(DISTINCT referred_by) AS referrers
+FROM customers;
+```
+
+The result is 150, 30 and 29. Thirty of the 150 customers were referred, exactly one in five. Twenty-nine different
+customers made those 30 referrals, so exactly one customer referred two people. `COUNT(*)` is not
+affected by the empty `referred_by` values, but the other two skip them.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which of `COUNT(*)`, `COUNT(col)` and `COUNT(DISTINCT col)` counts a row whose `col` is `NULL`,
+   and what does `SUM` return when no rows are left?
+
+   <details>
+   <summary>Answer</summary>
+
+   Only `COUNT(*)` counts that row. `SUM` over no rows returns `NULL`, while `COUNT(*)` over no rows returns 0.
+
+   </details>
+
+<Exercise id="sql-aggregate-functions-3">
+
+**Spot the flaw.** A colleague wants the average discount on a discounted line. They run this query and report "about 3
+cents":
+
+```sql
+SELECT AVG(discount_usd) AS avg_discount FROM order_items;
+```
+
+Expected: 1 row, 1 column, a number near 0.0256. What did the average include that it should not have? Then fix the
+query.
+
+<Solution>
+
+`discount_usd` holds `0.00` on a line with no discount. That is a zero, not a `NULL`, so `AVG` counts it: the query
+averages all 3,287 lines, and the 84.00 of total discount is spread over all of them (84.00 / 3,287 = 0.0256). Only
+168 lines carry a discount. Keep those lines with `WHERE`:
+
+```sql
+SELECT AVG(discount_usd) AS avg_discount
+FROM order_items
+WHERE discount_usd > 0;
+```
+
+Expected: 1 row, 1 column: `0.5`. Every discounted line is 0.50 off. An aggregate skips `NULL`, never zero, so you
+choose the rows it sees with `WHERE`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can pick the right aggregate and the right `COUNT`, say what each one skips, and check the result
+against a number from the Excel stage.*
+Test: Exercise sql-aggregate-functions-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **an aggregate turns many rows into one value and skips `NULL`; only `COUNT(*)` counts rows.**
+The next lesson, *GROUP BY and HAVING* (S8), gives you one such row for each group instead of one for the whole table.

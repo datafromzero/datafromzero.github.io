@@ -1,0 +1,401 @@
+---
+id: sql-case-expressions
+title: Labels and buckets with CASE
+description: Turn conditions into labels and buckets with CASE WHEN, the SQL form of the Excel flag column.
+stage: sql
+order: 60
+level: beginner
+duration: 20
+objectives:
+  - Write a searched CASE with an ELSE branch
+  - Bucket a numeric column into labeled ranges
+  - Order the branches so the first match wins
+  - Predict what an unmatched row returns
+prerequisites:
+  - sql-expressions-and-types
+  - sql-null-handling
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-case-expressions.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: CASE expression'
+    url: https://duckdb.org/docs/stable/sql/expressions/case
+  - title: 'Microsoft Support: IF function'
+    url: https://support.microsoft.com/en-us/office/if-function-69aed7c9-4e8a-4755-a9bc-aa8bbff73be2
+status: draft
+---
+
+This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
+Colab notebook, so there is nothing to install. You learn the SQL form of the flag column you built with `IF` in Excel.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
+closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has (if it is not installed, add `%pip install duckdb`), that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 20 minutes. The warm-up names *NULL: unknown is not zero* (S4) from its objectives, so reread it when S4 is final. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Decisions with IF, AND and OR* (E6) you flagged the cash orders that put money in the till. Write the formula
+   that shows `in till` when `payment_method` (column E) is cash and `status` (column F) is completed, and `skip`
+   otherwise.
+
+   <details>
+   <summary>Answer</summary>
+
+   `=IF(AND(E6="cash",F6="completed"),"in till","skip")`. The test is `AND(...)`; the second argument is the answer
+   when the test is true and the third is the answer when it is not.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), how do you keep only the orders with no customer? Write the `WHERE` line and
+   say how many rows you expect.
+
+   <details>
+   <summary>Answer</summary>
+
+   `WHERE customer_id IS NULL`. One row: order 1335, the walk-in order. `= NULL` would match nothing, because a
+   comparison with an unknown value is never true.
+
+   </details>
+
+## The question
+
+The owner is reprinting the menu and asks:
+
+> Mark every product premium, standard or budget. Premium starts at \$4.50, standard at \$3.50, and anything cheaper
+> is budget.
+
+In Excel you would add a column and write a nested `IF`. In SQL the same idea has its own expression, `CASE`. The
+`products` table has the prices but no tier. Its first four rows:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+| 4 | Cappuccino | coffee | 4.50 |
+
+By the end you will have added a `price_tier` column to a query, seen what a row gets when no branch fits, and
+rebuilt the E6 till flag in SQL.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 258" width="360" role="img" aria-labelledby="tiers-title tiers-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="tiers-title">Eight products sorted by price and caught by three CASE branches</title>
+<desc id="tiers-desc">Eight real rows of the products table, highest price first: Turkey Sandwich 9.25, Avocado Toast 8.50, Cold Brew 4.75, Latte 4.50, Bagel with Cream Cheese 4.25, Americano 3.50, Croissant 3.25 and Espresso 3.00. The first four are caught by the first test, price at least 4.50, and get premium. The next two are caught by the second test, price at least 3.50, and get standard. The last two match no test, so ELSE gives them budget. Latte at 4.50 and Americano at 3.50 sit exactly on a boundary and land in the higher tier.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">CASE: the first true test wins</text>
+<g font-size="10" font-weight="600">
+<text x="14" y="42">product_name</text><text x="186" y="42" text-anchor="end">unit_price_usd</text>
+</g>
+<g fill="currentColor" stroke="none">
+<rect x="198" y="48" width="152" height="88" fill-opacity="0.18" />
+<rect x="198" y="136" width="152" height="44" fill-opacity="0.1" />
+<rect x="198" y="180" width="152" height="44" fill-opacity="0.04" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="48" width="180" height="176" />
+<rect x="198" y="48" width="152" height="176" />
+<path d="M10 70H190M10 92H190M10 114H190M10 136H190M10 158H190M10 180H190M10 202H190" stroke-opacity="0.25" />
+<path d="M198 136H350M198 180H350" />
+</g>
+<g>
+<text x="14" y="63">Turkey Sandwich</text><text x="186" y="63" text-anchor="end">9.25</text>
+<text x="14" y="85">Avocado Toast</text><text x="186" y="85" text-anchor="end">8.50</text>
+<text x="14" y="107">Cold Brew</text><text x="186" y="107" text-anchor="end">4.75</text>
+<text x="14" y="129">Latte</text><text x="186" y="129" text-anchor="end">4.50</text>
+<text x="14" y="151">Bagel with Cream Cheese</text><text x="186" y="151" text-anchor="end">4.25</text>
+<text x="14" y="173">Americano</text><text x="186" y="173" text-anchor="end">3.50</text>
+<text x="14" y="195">Croissant</text><text x="186" y="195" text-anchor="end">3.25</text>
+<text x="14" y="217">Espresso</text><text x="186" y="217" text-anchor="end">3.00</text>
+</g>
+<g font-size="11">
+<text x="206" y="86">1st test: price &gt;= 4.50</text><text x="206" y="104" font-weight="600">premium</text>
+<text x="206" y="154">2nd test: price &gt;= 3.50</text><text x="206" y="172" font-weight="600">standard</text>
+<text x="206" y="198">no test left: ELSE</text><text x="206" y="216" font-weight="600">budget</text>
+</g>
+<text x="10" y="246" font-size="11" opacity="0.8">8 of the 16 products. 4.50 and 3.50 land in the higher tier.</text>
+</svg>
+</figure>
+
+A **`CASE`** expression looks at one row at a time and returns one value: a label, a number or a date. It reads from
+the top. The first `WHEN` whose test is true gives the answer, and `ELSE` is the answer when no test is true. It
+closes with `END`. Because it builds a value, it goes where a column goes: in the `SELECT` list, followed by `AS` and
+a name.
+
+| Excel | SQL |
+|---|---|
+| `=IF(B2>=4.5,"premium","regular")` | `CASE WHEN unit_price_usd >= 4.50 THEN 'premium' ELSE 'regular' END` |
+| a second `IF` inside the first | one more `WHEN` line |
+| `AND(x,y)` as the test | `x AND y` after `WHEN` |
+| the answer when no test is true | `ELSE` |
+
+The picture is the nested Excel formula `=IF(B2>=4.5,"premium",IF(B2>=3.5,"standard","budget"))` written as three
+lines. Text goes in single quotes in SQL, as in S1.
+
+## Worked example
+
+Question: **which tier does each product get, and which orders put cash in the till?** Run the notebook's setup cell,
+then one cell per step. Each step shows the shape of the result to expect.
+
+1. **Look at the prices.**
+
+   ```sql
+   SELECT product_name, unit_price_usd
+   FROM products
+   ORDER BY unit_price_usd DESC, product_name;
+   ```
+
+   Expected: 16 rows, 2 columns; Turkey Sandwich 9.25 first, Espresso 3.00 last. *Why:* look before you label. Two
+   products cost 4.50 and two cost 3.50, so the boundaries in the question fall on real prices and the `>=` matters.
+
+2. **A first CASE with two outcomes.**
+
+   ```sql
+   SELECT product_name, unit_price_usd,
+          CASE WHEN unit_price_usd >= 4.50 THEN 'premium'
+               ELSE 'regular'
+          END AS price_tier
+   FROM products;
+   ```
+
+   Read it: *when the price is at least 4.50, premium; otherwise regular*. Expected: 16 rows, 3 columns. *Excel:*
+   `=IF(B2>=4.5,"premium","regular")` filled down. *Why:* the `CASE` returns one value per row, and `AS price_tier`
+   names the new column. The table itself does not change.
+
+3. **Add the middle tier.**
+
+   ```sql
+   SELECT product_name, unit_price_usd,
+          CASE WHEN unit_price_usd >= 4.50 THEN 'premium'
+               WHEN unit_price_usd >= 3.50 THEN 'standard'
+               ELSE 'budget'
+          END AS price_tier
+   FROM products
+   ORDER BY unit_price_usd DESC, product_name;
+   ```
+
+   Expected: 16 rows, 3 columns, the tiers in blocks because of the sort. *Excel:* the nested `IF`. *Why:* a 4.75
+   product passes both tests, `>= 4.50` and `>= 3.50`. It is premium because that test is written first: the first
+   true `WHEN` wins. A 4.50 latte is premium too, because `>=` includes the boundary.
+
+4. **Predict what no match returns.** Take out the middle tier and the `ELSE`:
+
+   ```sql
+   SELECT product_name, unit_price_usd,
+          CASE WHEN unit_price_usd >= 4.50 THEN 'premium' END AS price_tier
+   FROM products
+   ORDER BY unit_price_usd DESC, product_name;
+   ```
+
+   Before you run it: how many rows show a tier, and what do the others show? Expected: 16 rows, 3 columns. *Why:*
+   with no `ELSE`, a row that matches no `WHEN` gets `NULL`, not an empty string and not an error. You know from S4
+   what `NULL` means: unknown. So write the `ELSE` every time, and a `NULL` in the output will not be a branch you
+   forgot.
+
+5. **Two conditions, as in E6.**
+
+   ```sql
+   SELECT order_id, payment_method, status,
+          CASE WHEN payment_method = 'cash' AND status = 'completed' THEN 'in till'
+               ELSE 'skip'
+          END AS till_flag
+   FROM orders
+   WHERE order_id IN (1458, 1461);
+   ```
+
+   Expected: 2 rows, 4 columns. Both orders were paid in cash; order 1461 is the canceled one. *Excel:*
+   `=IF(AND(E6="cash",F6="completed"),"in till","skip")`. *Why:* `AND` after `WHEN` is the `AND(...)` of the Excel
+   test. Order 1458 is in till, and order 1461 is skip.
+
+6. **Verify with a second route.** Count the same groups with `WHERE`, not `CASE`:
+
+   ```sql
+   SELECT COUNT(*) AS premium_products FROM products WHERE unit_price_usd >= 4.50;
+   SELECT COUNT(*) AS in_till FROM orders WHERE payment_method = 'cash' AND status = 'completed';
+   ```
+
+   Expected: 1 row, 1 column each. The first returns `8`, the number of `premium` rows in step 3. The second returns
+   `252`, the in-till count you got in E6. The canceled cash order is why there are 253 cash orders but 252 in till.
+
+<details>
+<summary>Explain it in your own words: in step 3, why is a 4.75 product premium and not standard?</summary>
+
+Both tests are true for it, and the first true `WHEN` wins. The premium test comes first, so it answers. If you swapped
+the two `WHEN` lines, every product at 3.50 or more would be standard. Exercise 3 shows that mistake.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-case-expressions-1">
+
+**Label each product as a drink or as food, for the two sections of the menu.** Use the Exercise 1 cell. Expected: 16
+rows, 3 columns (the name, the category and the new label). Coffee and tea are drinks; bakery and food are food.
+
+The first steps are done for you: the table is `products`, and the query starts
+
+```sql
+SELECT product_name, category,
+       CASE WHEN category IN ('coffee', 'tea') THEN 'drink'
+```
+
+Now finish it: add the branch for everything else, close the `CASE` with the name `menu_section`, and name the table.
+
+<details>
+<summary>Hint</summary>
+
+Look at step 3: the last line before `END` is the `ELSE`. Which label belongs to every row that is not a drink?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT product_name, category,
+       CASE WHEN category IN ('coffee', 'tea') THEN 'drink'
+            ELSE '...'
+       END AS ...
+FROM ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT product_name, category,
+       CASE WHEN category IN ('coffee', 'tea') THEN 'drink'
+            ELSE 'food'
+       END AS menu_section
+FROM products;
+```
+
+Ten products are drinks (7 coffee and 3 tea) and six are food (3 bakery and 3 food). The label comes from the
+`products` table, not from sales, so the Pumpkin Spice Latte, which was never sold, is still a drink.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-case-expressions-2">
+
+**Size the order lines and show the three biggest.** In `order_items`, one row is one line of an order. Label each line
+`single` when `quantity` is 1, `few` when it is 2 or 3, and `bulk` when it is 4 or more. Then show the three lines with
+the largest `quantity`, with `order_item_id` as the tie-breaker. Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: which label do you expect on the first row? Expected
+shape, to check your sentence against: 3 rows, 3 columns (`order_item_id`, `quantity` and the label). The data holds
+the extra-zero line (order 2075), so one line may surprise you.
+
+<details>
+<summary>Hint</summary>
+
+Test the smallest quantity first (`quantity = 1`), then "at most 3", and let `ELSE` catch the rest. Then sort as
+in *SELECT, ORDER BY and LIMIT* (S2), with `quantity` descending first, and add `LIMIT 3`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three rows. The first has the largest quantity in the table and the label for four or more. The other
+two share the next quantity and have the label for two or three."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT order_item_id, quantity,
+       CASE WHEN quantity = 1 THEN 'single'
+            WHEN quantity <= 3 THEN 'few'
+            ELSE 'bulk'
+       END AS line_size
+FROM order_items
+ORDER BY quantity DESC, order_item_id
+LIMIT 3;
+```
+
+The result is line 6952 with quantity 20, `bulk`, then lines 5017 and 5029 with quantity 3, `few`. Line 6952 is the extra-zero
+line: 20 Turkey Sandwiches in order 2075, where 2 was meant. The `CASE` does not know that, and it labels the typo
+`bulk`. It is also the only bulk line among the 3,287, so a label can point you to an odd row, but it cannot tell you
+that the row is wrong.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: write the skeleton of a `CASE` with two `WHEN` branches and an `ELSE`, and say what a row gets
+   when no branch matches and there is no `ELSE`.
+
+   <details>
+   <summary>Answer</summary>
+
+   `CASE WHEN test1 THEN a WHEN test2 THEN b ELSE c END`. Without the `ELSE`, a row that matches no `WHEN` gets
+   `NULL`.
+
+   </details>
+
+<Exercise id="sql-case-expressions-3">
+
+**Spot the flaw.** A colleague writes the price tiers with the tests in this order and says the result is fine, because
+there is no error:
+
+```sql
+SELECT product_name, unit_price_usd,
+       CASE WHEN unit_price_usd >= 3.50 THEN 'standard'
+            WHEN unit_price_usd >= 4.50 THEN 'premium'
+            ELSE 'budget'
+       END AS price_tier
+FROM products
+ORDER BY unit_price_usd DESC, product_name;
+```
+
+Expected: 16 rows, 3 columns, and no error. Run it and compare the tiers with the price list. Which tier is missing, and
+why? Then fix the query.
+
+<Solution>
+
+No product is premium. The first test, `>= 3.50`, is true for every product that costs 3.50 or more, including the 9.25
+Turkey Sandwich, so each one gets `standard` and the premium line is never reached. Thirteen products come out
+standard, where five should be, and three come out budget. Put the strictest test first:
+
+```sql
+SELECT product_name, unit_price_usd,
+       CASE WHEN unit_price_usd >= 4.50 THEN 'premium'
+            WHEN unit_price_usd >= 3.50 THEN 'standard'
+            ELSE 'budget'
+       END AS price_tier
+FROM products
+ORDER BY unit_price_usd DESC, product_name;
+```
+
+Expected: 16 rows, 3 columns, 8 premium, 5 standard and 3 budget. SQL gave no error because the colleague's query is
+valid: it just answers a different question than the one asked.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can turn a rule written in words, or an Excel `IF`, into a `CASE` with its branches in the right
+order, and say what a row gets when no branch matches.*
+Test: Exercise sql-case-expressions-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **the first true `WHEN` wins, and no `ELSE` means `NULL`.** The next lesson, *Counting and
+summing: aggregate functions* (S7), collapses many rows into one number, and *Several metrics in one pass* (S9) puts a
+`CASE` inside those functions.

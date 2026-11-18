@@ -1,0 +1,406 @@
+---
+id: sql-group-by-having
+title: GROUP BY and HAVING
+description: Collapse rows into one row per group with GROUP BY, filter groups with HAVING, and state the output grain first.
+stage: sql
+order: 80
+level: beginner
+duration: 25
+objectives:
+  - Group rows by one and by several columns
+  - State the grain of a grouped result before writing it
+  - Filter groups with HAVING and rows with WHERE
+  - Explain the order in which SQL runs the clauses
+  - Predict the number of output rows
+prerequisites:
+  - sql-aggregate-functions
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-group-by-having.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: GROUP BY clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/groupby
+  - title: 'DuckDB documentation: HAVING clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/having
+  - title: 'DuckDB documentation: SELECT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/select
+  - title: 'DuckDB documentation: WHERE clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/where
+  - title: 'DuckDB documentation: FROM and JOIN clauses'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from
+  - title: 'DuckDB documentation: Aggregate functions'
+    url: https://duckdb.org/docs/stable/sql/functions/aggregates
+  - title: 'Microsoft Support: Create a PivotTable to analyze worksheet data'
+    url: https://support.microsoft.com/en-us/office/create-a-pivottable-to-analyze-worksheet-data-a9a84538-bfe9-40a9-a8e9-f99134456576
+status: draft
+---
+
+This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
+Colab notebook, so there is nothing to install. One `COUNT(*)` answers a question about the whole table. The owner
+usually wants one answer per cafe, per payment method or per customer. `GROUP BY` gives you one result row for each.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
+closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has (if it is not installed, add `%pip install duckdb`), that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. The DuckDB pages used here do not say where the `SELECT` list falls between `HAVING` and `ORDER BY`, so the order in the text and in Check yourself rests on general SQL knowledge; source it in *How a query runs* (S12). When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Counting and summing: aggregate functions* (S7), write one query that returns the number of orders and the
+   number of different customers who placed them.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers FROM orders;
+   ```
+
+   One row, two columns: 1800 orders and 145 customers.
+
+   </details>
+
+2. In *Summarize with a PivotTable* (E15), where did you drag `store` and `category`, and what did each cell of the
+   pivot hold?
+
+   <details>
+   <summary>Answer</summary>
+
+   `store` went to Rows, `category` to Columns and `amount_usd` to Values. Each cell held the sum for one store and
+   one category: one group of rows, added up.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> How many orders did each cafe take, and how did customers pay at each one? Which cafes took at least 500 completed
+> orders?
+
+The `orders` table has the store and the payment method on every row. Four of its rows (the stores are 1 Old Town,
+2 Campus and 3 Harbor):
+
+| order_id | store_id | status | payment_method |
+|---:|---:|---|---|
+| 1105 | 2 | completed | cash |
+| 1106 | 1 | completed | card |
+| 1107 | 1 | completed | mobile |
+| 1108 | 1 | completed | card |
+
+By the end you will have said what one result row means before writing each query, grouped by one and by two columns,
+and answered both questions.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 268" width="360" role="img" aria-labelledby="flow-title flow-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="flow-title">A grouped query, clause by clause, with its real row counts</title>
+<desc id="flow-desc">Five stacked steps. FROM orders starts with 1,800 rows. WHERE status equals completed keeps rows before grouping, so canceled order 1461 drops and 1,799 rows are left. GROUP BY store_id makes one bucket per store with 729, 715 and 355 rows, which is 3 groups. HAVING COUNT(*) at least 500 keeps groups after counting, so Harbor's 355 drops and 2 groups are left. SELECT and ORDER BY then return 2 rows.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A grouped query, step by step</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="30" width="340" height="34" /><rect x="10" y="78" width="340" height="34" /><rect x="10" y="126" width="340" height="34" /><rect x="10" y="174" width="340" height="34" /><rect x="10" y="222" width="340" height="34" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.6">
+<path d="M176 66L180 72L184 66M176 114L180 120L184 114M176 162L180 168L184 162M176 210L180 216L184 210" />
+</g>
+<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" font-weight="600">
+<text x="18" y="45">FROM orders</text>
+<text x="18" y="93">WHERE status = 'completed'</text>
+<text x="18" y="141">GROUP BY store_id</text>
+<text x="18" y="189">HAVING COUNT(*) &gt;= 500</text>
+<text x="18" y="237">SELECT ... ORDER BY store_id</text>
+</g>
+<g font-size="11" opacity="0.8">
+<text x="18" y="58">start with every row</text>
+<text x="18" y="106">rows leave first: order 1461 drops</text>
+<text x="18" y="154">one bucket per store: 729, 715, 355</text>
+<text x="18" y="202">groups leave after counting: Harbor drops</text>
+<text x="18" y="250">one row per group left</text>
+</g>
+<g font-size="12" font-weight="600" text-anchor="end">
+<text x="342" y="45">1,800 rows</text><text x="342" y="93">1,799 rows</text><text x="342" y="141">3 groups</text><text x="342" y="189">2 groups</text><text x="342" y="237">2 rows</text>
+</g>
+</svg>
+<svg viewBox="0 0 360 150" width="360" role="img" aria-labelledby="buckets-title buckets-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="buckets-title">GROUP BY store_id: one bucket per store</title>
+<desc id="buckets-desc">Three horizontal bars, one per store, showing how many of the 1,800 orders each store took: store 1, Old Town, 729; store 2, Campus, 716; store 3, Harbor, 355. They add up to 1,800. The same buckets come from a PivotTable with store in Rows.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">GROUP BY store_id: three buckets</text>
+<g font-size="11">
+<text x="10" y="55">1 Old Town</text><text x="10" y="85">2 Campus</text><text x="10" y="115">3 Harbor</text>
+</g>
+<g fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-opacity="0.45">
+<rect x="90" y="40" width="200" height="20" /><rect x="90" y="70" width="196.4" height="20" /><rect x="90" y="100" width="97.4" height="20" />
+</g>
+<g font-size="12" font-weight="600">
+<text x="296" y="55">729</text><text x="292" y="85">716</text><text x="193" y="115">355</text>
+</g>
+<text x="10" y="142" font-size="11" opacity="0.8">All 1,800 orders: 729 + 716 + 355. A PivotTable puts store in Rows.</text>
+</svg>
+</figure>
+
+`GROUP BY` sorts the rows into buckets by the value of a column, or of several columns together. Then every aggregate
+in `SELECT` works inside its own bucket, and the result has one row per bucket. What one result row means is the
+**grain** of the result. Say it in words before you write the query: *one row per store*. A bucket exists only if at
+least one row falls into it. Every column in `SELECT` is either in `GROUP BY` or inside an aggregate.
+
+`WHERE` and `HAVING` both filter, but at different moments. `WHERE` keeps or drops **rows**, before grouping. `HAVING`
+keeps or drops **groups**, after the counting. So only `HAVING` can test `COUNT(*)`. The engine works through the
+clauses in this order: `FROM` first, then `WHERE`, then `GROUP BY`, then `HAVING`, then the `SELECT` list, and `ORDER BY`
+and `LIMIT` at the very end. The DuckDB documentation says that `FROM` is where a query starts, that `WHERE` comes
+right after it, that `HAVING` comes after the grouping, and that `ORDER BY` and `LIMIT` are applied at the very end. The
+lesson *How a query runs: the order of the clauses* (S12) goes deeper.
+
+| SQL | In the PivotTable (E15) |
+|---|---|
+| `GROUP BY store_id` | `store` in Rows |
+| `GROUP BY store_id, payment_method` | `store` in Rows and `payment_method` in Columns, as a list instead of a grid |
+| `COUNT(*)` | a count in Values |
+| `WHERE status = 'completed'` | `status` in Filters, set to completed |
+
+## Worked example
+
+Question: **how many orders did each cafe take, how did customers pay, and which cafes passed 500 completed orders?**
+Run the notebook's setup cell, then one cell per step. Each step starts with the grain and shows the shape of the
+result to expect.
+
+1. **Group by one column.** Grain: *one row per store*.
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   GROUP BY store_id
+   ORDER BY store_id;
+   ```
+
+   Expected: 3 rows, 2 columns: store 1 has 729 orders, store 2 has 716 and store 3 has 355. *Excel:* a PivotTable
+   with `store` in Rows. *Why:* there are three stores, so there are three groups and three rows. The counts add up to
+   1,800, every order, the canceled one included.
+
+2. **Group by two columns.** Grain: *one row per store and payment method*. Before you run it: how many rows?
+
+   ```sql
+   SELECT store_id, payment_method, COUNT(*) AS orders
+   FROM orders
+   GROUP BY store_id, payment_method
+   ORDER BY store_id, payment_method;
+   ```
+
+   Expected: 9 rows, 3 columns. *Excel:* `payment_method` in Columns, read as a list. *Why:* a group is one combination of
+   the two values: 3 stores times 3 methods is 9, because every store has orders in all three methods. A combination
+   with no orders would not appear at all. Store 1 reads card 421, cash 91, mobile 217.
+
+3. **Filter rows before grouping with `WHERE`.** Grain: *one row per store, completed orders only*.
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   WHERE status = 'completed'
+   GROUP BY store_id
+   ORDER BY store_id;
+   ```
+
+   Expected: 3 rows, 2 columns: 729, 715 and 355. *Excel:* `status` in Filters, set to completed. *Why:* `WHERE` runs
+   before the grouping, so the canceled order 1461 never reaches a bucket. Campus, store 2, goes from 716 to 715.
+
+4. **Filter groups after counting with `HAVING`.**
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   WHERE status = 'completed'
+   GROUP BY store_id
+   HAVING COUNT(*) >= 500
+   ORDER BY store_id;
+   ```
+
+   Expected: 2 rows, 2 columns: store 1 with 729 and store 2 with 715. *Why:* `HAVING` looks at one row per group,
+   after the count exists. Harbor's group has 355, so the whole group is dropped. `WHERE` could not do this, because
+   when it runs there is no count yet. This answers the owner: Old Town and Campus.
+
+5. **Verify with a second route.**
+
+   ```sql
+   SELECT COUNT(*) AS completed_orders FROM orders WHERE status = 'completed';
+   ```
+
+   Expected: 1 row, 1 column: `1799`. *Why:* it equals 729 + 715 + 355 from step 3, and the 1,799 completed orders
+   the till system reported in *A cleaning workflow you can defend* (E13). The groups lost no rows and counted none twice.
+
+<details>
+<summary>Explain it in your own words: why can step 4 drop Harbor, when step 3 could only drop single orders?</summary>
+
+`WHERE` sees one order at a time and has no idea how many orders a store has. `HAVING` runs after the grouping, so it
+sees the finished count per store and can drop a whole store at once.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-group-by-having-1">
+
+**How many completed orders were paid by card, by mobile and by cash, largest first?** Grain: one row per payment
+method. Use the Exercise 1 cell. Expected: 3 rows, 2 columns.
+
+The first steps are done for you: the table is `orders`, and the query starts
+
+```sql
+SELECT payment_method, COUNT(*) AS orders
+FROM orders
+```
+
+Now finish it: keep only the completed orders, group by the payment method, and sort by the count, largest first.
+
+<details>
+<summary>Hint</summary>
+
+Steps 3 and 1 have the `WHERE` and the `GROUP BY` lines. In the sort, use the name you gave the count.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT payment_method, COUNT(*) AS orders
+FROM orders
+WHERE ...
+GROUP BY ...
+ORDER BY ... DESC;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT payment_method, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY payment_method
+ORDER BY orders DESC;
+```
+
+The result is card 1001, mobile 546 and cash 252. The canceled order 1461 was paid in cash, so all orders show 253
+cash orders but only 252 completed ones.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-group-by-having-2">
+
+**How many orders did each customer place, and who placed at least 20?** Work in the Exercise 2 cells.
+
+Before you run anything, write two sentences in the first cell: the grain (one row per what?), and how many rows you
+expect from the query without a filter. Use what you know: the `customers` table has 150 customers, five of them never
+ordered, and one order has no customer.
+
+Then run the query without a filter, and add the filter. Expected shape for the filtered query: 34 rows, 2 columns
+(`customer_id` and the count), most orders first, ties broken by `customer_id`. Every order counts, canceled or not.
+
+<details>
+<summary>Hint</summary>
+
+Group `orders` by `customer_id`, as in step 1. The filter is on the count, so it goes in `HAVING`, as in step 4. For the
+sort, see *SELECT, ORDER BY and LIMIT* (S2): two columns, then the tie-breaker.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One row per customer who placed an order, plus one row for the order with no customer, so more rows than
+the customers who ordered. Then only the customers whose count is 20 or more."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id, COUNT(*) AS orders
+FROM orders
+GROUP BY customer_id;
+```
+
+This returns 146 rows: 145 customers who ordered, and one more group for the `NULL` of the walk-in order 1335, which
+has 1 order. `GROUP BY` puts all `NULL` values into one group of their own. Now filter the groups:
+
+```sql
+SELECT customer_id, COUNT(*) AS orders
+FROM orders
+GROUP BY customer_id
+HAVING COUNT(*) >= 20
+ORDER BY orders DESC, customer_id;
+```
+
+34 customers placed at least 20 orders. Customers 54, 61 and 81 lead with 29 orders each, so the tie-breaker decides
+their order.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in which order does SQL run `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT` and `ORDER BY`? And
+   how many rows does `SELECT category, COUNT(*) FROM products GROUP BY category` return?
+
+   <details>
+   <summary>Answer</summary>
+
+   `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`. The query returns 4 rows, one per category:
+   bakery 3, coffee 7, food 3 and tea 3.
+
+   </details>
+
+<Exercise id="sql-group-by-having-3">
+
+**Spot the flaw.** A colleague wants the stores with more than 500 orders and writes this. It gives an error, not a table:
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE COUNT(*) > 500
+GROUP BY store_id;
+```
+
+Expected: an error that starts with `Binder Error`. Read it, then fix the query.
+
+<Solution>
+
+The first line of the error reads `Binder Error: WHERE clause cannot contain aggregates!`. `WHERE` runs right after
+`FROM`, before any group exists, so there is no count to compare. A condition on a count belongs to `HAVING`:
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id
+HAVING COUNT(*) > 500;
+```
+
+Expected: 2 rows, 2 columns: store 1 with 729 orders and store 2 with 716 (all orders, canceled included). Harbor, with
+355, is dropped.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what one row of a grouped result means before I write it, group by one or two columns,
+choose `WHERE` or `HAVING`, and predict how many rows come back.*
+Test: Exercise sql-group-by-having-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **`WHERE` filters rows before the groups; `HAVING` filters groups after the count; the grain
+says what one result row is.** The next lesson, *Several metrics in one pass* (S9), puts several counts side by side in
+one row per group.
