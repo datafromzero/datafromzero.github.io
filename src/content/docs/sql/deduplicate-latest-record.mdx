@@ -15,7 +15,7 @@ prerequisites:
   - sql-rank-top-n
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-deduplicate-latest-record.ipynb
+
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: SELECT statement'
@@ -37,24 +37,38 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB**, a free database engine, inside a Google Colab notebook, so there is nothing to
-install. It works on a small practice table, then on `orders`.
+This lesson works on a small practice table, then on `orders`. Each query runs in the editor on this page, with the five tables of **cafe-sales**, the invented three-cafe chain we use
+from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. In the notebook, each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
-quotes is SQL, and `.show()` prints the result as a table. The notebook cells leave out the closing `;` that this
-page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check the practice-table cell and that step 4 prints 8 rows. Decide whether this hand-typed, temporary table fits the dataset rule. In Google Sheets, check which row Remove duplicates keeps (its help page does not say). Time the lesson against its 25 minutes. When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line, including the practice-table block (it must run first) and that unit 2 returns 8 rows. Decide whether this hand-typed, temporary table fits the dataset rule. In Google Sheets, check which row Remove duplicates keeps (its help page does not say). Time the lesson against its 25 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Our loyalty app writes a row every time a customer's record is saved, and sometimes it writes the same save twice.
+> I want one current row for each customer.
+
+The cafe-sales tables hold no repeated ids, so this lesson uses a small practice table, `customer_updates`: 10 invented
+rows for 5 customers, built by one block in unit 1.
+
+| update_id | customer_id | loyalty_tier | city | updated_at |
+|---:|---:|---|---|---|
+| 1 | 301 | bronze | Oakland | 2026-03-02 09:15:00 |
+| 2 | 301 | silver | Oakland | 2026-05-10 14:02:00 |
+| 3 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
+| 4 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
+| 5 | 303 | silver | Alameda | 2026-04-01 08:00:00 |
+| 6 | 303 | gold | Alameda | 2026-04-01 08:00:00 |
+| 7 | 304 | bronze | Oakland | 2026-04-20 16:45:00 |
+| 8 | 305 | bronze | Berkeley | 2026-02-11 11:11:00 |
+| 9 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
+| 10 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. Write a query that lists the stores with more than 500 orders (*GROUP BY and HAVING*, S8). Expected:
    2 rows, 2 columns.
@@ -85,34 +99,106 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+Deduplication keeps exactly one row for each entity: you write down which row survives, number each entity's rows by
+that rule, and keep number 1.
 
-> Our loyalty app writes a row every time a customer's record is saved, and sometimes it writes the same save twice.
-> I want one current row for each customer.
+{/* CONCEPT: concept-dedup */}
 
-The cafe-sales tables hold no repeated ids, so this lesson uses a small practice table, `customer_updates`: 10 invented
-rows for 5 customers, built by one notebook cell (step 2).
+## Learn by doing
 
-| update_id | customer_id | loyalty_tier | city | updated_at |
-|---:|---:|---|---|---|
-| 1 | 301 | bronze | Oakland | 2026-03-02 09:15:00 |
-| 2 | 301 | silver | Oakland | 2026-05-10 14:02:00 |
-| 3 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
-| 4 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
-| 5 | 303 | silver | Alameda | 2026-04-01 08:00:00 |
-| 6 | 303 | gold | Alameda | 2026-04-01 08:00:00 |
-| 7 | 304 | bronze | Oakland | 2026-04-20 16:45:00 |
-| 8 | 305 | bronze | Berkeley | 2026-02-11 11:11:00 |
-| 9 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
-| 10 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
+Five small steps. Each gives you one idea, then you try it in the editor.
 
-Some rows are history (customer 301 moved up a tier), some are copies (customer 302, and the last two of customer 305)
-and one is a conflict (customer 303 has two tiers at the same minute). By the end you will have five rows, one for
-each customer, and a written rule for why each survived.
+### 1. Find the repeats
 
-## The picture
+A **duplicate** is an entity that appears more than once in a table where it should appear once. To find repeats,
+`GROUP BY` the key and keep `HAVING COUNT(*) > 1`.
+
+**Try it:** check a table that should have no repeats.
+
+<RunSQL query={`SELECT order_id, COUNT(*) AS copies
+FROM orders
+GROUP BY order_id
+HAVING COUNT(*) > 1;`} />
+
+Read it: *show the order ids that appear more than once*. Expected: 0 rows, 2 columns. *Excel:* a COUNTIF column for the
+ids, filtered above 1. *Why:* a clean table returns nothing, and you can run this check on any id column.
+
+Now the practice table. This block builds it, and every later block of this lesson uses it; if you press Reset data, run
+it again. `VALUES` lists the rows, `TIMESTAMP '...'` types a timestamp, `t(update_id, ...)` names the columns, and `TEMP`
+keeps the table for this session only (*Creating tables and constraints*, S31).
+
+**Try it:**
+
+<RunSQL query={`CREATE OR REPLACE TEMP TABLE customer_updates AS
+SELECT * FROM (VALUES
+  (1,  301, 'bronze', 'Oakland',  TIMESTAMP '2026-03-02 09:15:00'),
+  (2,  301, 'silver', 'Oakland',  TIMESTAMP '2026-05-10 14:02:00'),
+  (3,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
+  (4,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
+  (5,  303, 'silver', 'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
+  (6,  303, 'gold',   'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
+  (7,  304, 'bronze', 'Oakland',  TIMESTAMP '2026-04-20 16:45:00'),
+  (8,  305, 'bronze', 'Berkeley', TIMESTAMP '2026-02-11 11:11:00'),
+  (9,  305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00'),
+  (10, 305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00')
+) AS t(update_id, customer_id, loyalty_tier, city, updated_at);
+
+SELECT * FROM customer_updates ORDER BY update_id;`} />
+
+Expected: 10 rows, 5 columns, the table from the question. *Why:* one row is one save, so a customer can have several
+rows by design.
+
+**Try it:** the repeated customer ids.
+
+<RunSQL query={`SELECT customer_id, COUNT(*) AS records
+FROM customer_updates
+GROUP BY customer_id
+HAVING COUNT(*) > 1
+ORDER BY customer_id;`} />
+
+Expected: 4 rows, 2 columns: customers 301, 302 and 303 with 2 rows each, and customer 305 with 3. *Why:* a repeated id is a question, not yet an error. Customer 301's rows are
+history, 302's are an exact copy, and 303's conflict.
+
+### 2. `DISTINCT` is not the fix
+
+`SELECT DISTINCT` returns only the unique rows of the result: rows identical in every selected column. It chooses no
+survivor, so two rows of one entity that differ in a selected column both stay.
+
+**Try it:**
+
+<RunSQL query={`SELECT DISTINCT customer_id, loyalty_tier, city, updated_at
+FROM customer_updates
+ORDER BY customer_id, updated_at;`} />
+
+Expected: 8 rows, 4 columns, with `update_id` left out. *Why:* `DISTINCT` merged the copies of customers 302 and 305, but
+customers 301 and 303 still have two rows.
+
+### 3. State the rule, then number the rows
+
+Which row survives is a rule about the business, not a trick of SQL, so write it down first. A **survivor rule** says
+which column orders the rows, in which direction, and what breaks a tie. `ROW_NUMBER()` (*Ranking and top-N per group*,
+S15) then numbers each customer's rows by that rule.
+
+*Excel:* Remove Duplicates (E13, *A cleaning workflow you can defend*) keeps the first occurrence of a value in the list
+and deletes the others, so the order of your rows is the survivor rule.
+
+Our rule, in words: *the survivor is the record with the latest `updated_at`; if two share the same time, the one that
+arrived later, the higher `update_id`.*
+
+**Try it:**
+
+<RunSQL query={`SELECT *,
+       ROW_NUMBER() OVER (PARTITION BY customer_id
+                          ORDER BY updated_at DESC, update_id DESC) AS rn
+FROM customer_updates
+ORDER BY customer_id, rn;`} />
+
+Read it: *for each customer, number the records newest first, and break a tie by the higher update_id*. Expected: 10
+rows, 6 columns, as in the picture. *Why:* `PARTITION BY customer_id` makes each customer a group, and the `ORDER BY` is
+the rule. Customer 303's rows share an `updated_at`, so `update_id` decides: update 6 (gold) gets 1. The rows numbered 1
+are the ones to keep.
 
 <figure>
 <svg viewBox="0 0 360 298" width="360" role="img" aria-labelledby="rows-title rows-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -262,6 +348,61 @@ each customer, and a written rule for why each survived.
 <text x="334" y="267" text-anchor="end"></text>
 <text x="10" y="292" font-size="11">Customer 303 ties at 04-01 08:00: higher update_id wins.</text>
 </svg>
+</figure>
+
+### 4. Keep number 1
+
+Keep number 1 in a later stage, a CTE (S13), because a filter cannot see a number that is still being made. With the
+rule "newest first", these steps give the **latest record per entity**.
+
+**Try it:**
+
+<RunSQL query={`WITH numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY updated_at DESC, update_id DESC) AS rn
+  FROM customer_updates
+)
+SELECT update_id, customer_id, loyalty_tier, city, updated_at
+FROM numbered
+WHERE rn = 1
+ORDER BY customer_id;`} />
+
+Expected: 5 rows, 5 columns: updates 2, 4, 6, 7 and 10. DuckDB's shortcut `QUALIFY` filters on a window function the
+way `HAVING` filters on an aggregate, without the extra stage. Learn the two-stage form first.
+
+**Try it:**
+
+<RunSQL query={`SELECT update_id, customer_id, loyalty_tier, city, updated_at
+FROM customer_updates
+QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id
+                           ORDER BY updated_at DESC, update_id DESC) = 1
+ORDER BY customer_id;`} />
+
+Expected: 5 rows, 5 columns, the same five rows.
+
+### 5. Check one row per customer
+
+Count the rows you kept and the customers they belong to.
+
+**Try it:**
+
+<RunSQL query={`WITH numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY updated_at DESC, update_id DESC) AS rn
+  FROM customer_updates
+),
+latest AS (
+  SELECT * FROM numbered WHERE rn = 1
+)
+SELECT COUNT(*) AS rows_kept, COUNT(DISTINCT customer_id) AS customers
+FROM latest;`} />
+
+Expected: 1 row, 2 columns: `5` and `5`. *Why:* rows kept equal customers, so each customer has exactly one row. The count
+alone is not enough, as Exercise 3 shows: also read the rows where the rule had to decide, here customer 303.
+
+<figure>
 <svg viewBox="0 0 360 140" width="360" role="img" aria-labelledby="counts-title counts-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="counts-title">How many rows are left after each approach</title>
 <desc id="counts-desc">The table has 10 rows for 5 customers. SELECT DISTINCT without update_id leaves 8 rows, so some customers still have two. ROW_NUMBER with a survivor rule leaves 5, one for each customer.</desc>
@@ -279,169 +420,6 @@ each customer, and a written rule for why each survived.
 </svg>
 </figure>
 
-## How it works
-
-A **duplicate** is an entity that appears more than once in a table where it should appear once. Which row survives is a
-rule about the business, not a trick of SQL, so write it down first.
-
-1. Find the repeats: `GROUP BY` the key and keep `HAVING COUNT(*) > 1`.
-2. State the **survivor rule**: which column orders the rows, in which direction, and what breaks a tie.
-3. Number each entity's rows with `ROW_NUMBER()` (*Ranking and top-N per group*, S15): `PARTITION BY` the key, `ORDER BY`
-   the rule. In the picture above, rows numbered 1 are kept.
-4. Keep number 1 in a later step (a CTE, S13), then count the rows per entity.
-
-With the rule "newest first", the same steps give the **latest record per entity**.
-
-The rule:
-
-- `SELECT DISTINCT` returns only the unique rows of the result: rows identical in every selected column. It chooses no
-  survivor, so two rows of one entity that differ in a selected column both stay.
-
-**Excel.** Remove Duplicates (E13, *A cleaning workflow you can defend*) keeps the first occurrence of a value in the
-list and deletes the others, so the order of your rows is the survivor rule.
-
-**A common misconception: "removing duplicates in SQL deletes the extra rows."** A `SELECT` only reads: after the query that
-keeps number 1, the practice table still holds its ten rows. Deleting needs `DELETE` (S32).
-
-## Worked example
-
-Question: **what is the current row for each customer in `customer_updates`?** Run the setup cell and the
-practice-table cell, then one cell per step.
-
-1. **Check a table that has no repeats.**
-
-   ```sql
-   SELECT order_id, COUNT(*) AS copies
-   FROM orders
-   GROUP BY order_id
-   HAVING COUNT(*) > 1;
-   ```
-
-   Read it: *show the order ids that appear more than once*. Expected: 0 rows, 2 columns: no rows. *Excel:* a COUNTIF
-   column for the ids, filtered above 1. *Why:* a clean table returns nothing, and you can run this check on any id
-   column.
-
-2. **Look at the practice table.**
-
-   ```sql
-   SELECT * FROM customer_updates ORDER BY update_id;
-   ```
-
-   Expected: 10 rows, 5 columns, the table from the question. *Why:* one row is one save, so a customer can have several
-   rows by design. The practice-table cell:
-
-   <details>
-   <summary>The practice-table cell</summary>
-
-   ```sql
-   CREATE OR REPLACE TEMP TABLE customer_updates AS
-   SELECT * FROM (VALUES
-     (1,  301, 'bronze', 'Oakland',  TIMESTAMP '2026-03-02 09:15:00'),
-     (2,  301, 'silver', 'Oakland',  TIMESTAMP '2026-05-10 14:02:00'),
-     (3,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
-     (4,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
-     (5,  303, 'silver', 'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
-     (6,  303, 'gold',   'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
-     (7,  304, 'bronze', 'Oakland',  TIMESTAMP '2026-04-20 16:45:00'),
-     (8,  305, 'bronze', 'Berkeley', TIMESTAMP '2026-02-11 11:11:00'),
-     (9,  305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00'),
-     (10, 305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00')
-   ) AS t(update_id, customer_id, loyalty_tier, city, updated_at);
-   ```
-
-   `VALUES` lists the rows, `TIMESTAMP '...'` types a timestamp, and `t(update_id, ...)` names the columns. `TEMP`
-   means the table lives only in this session. *Creating tables and constraints* (S31) explains `CREATE TABLE`.
-
-   </details>
-
-3. **Find the repeated customer ids.**
-
-   ```sql
-   SELECT customer_id, COUNT(*) AS records
-   FROM customer_updates
-   GROUP BY customer_id
-   HAVING COUNT(*) > 1
-   ORDER BY customer_id;
-   ```
-
-   Expected: 4 rows, 2 columns: customers 301, 302 and 303 with 2 rows each, and customer 305 with 3. *Excel:* a COUNTIF column
-   for the ids, filtered above 1. *Why:* a repeated id is a question, not yet an error: customer 301's rows are
-   history, 302's are an exact copy, and 303's conflict.
-
-4. **See why `SELECT DISTINCT` is not the fix.**
-
-   ```sql
-   SELECT DISTINCT customer_id, loyalty_tier, city, updated_at
-   FROM customer_updates
-   ORDER BY customer_id, updated_at;
-   ```
-
-   Expected: 8 rows, 4 columns, with `update_id` left out. *Why:* `DISTINCT` merged the copies of customers 302 and 305,
-   but customers 301 and 303 still have two rows, and it chose no survivor.
-
-5. **State the rule, then number the rows.** The rule, in words: *the survivor is the record with the latest
-   `updated_at`; if two share the same time, the one that arrived later, the higher `update_id`.*
-
-   ```sql
-   SELECT *,
-          ROW_NUMBER() OVER (PARTITION BY customer_id
-                             ORDER BY updated_at DESC, update_id DESC) AS rn
-   FROM customer_updates
-   ORDER BY customer_id, rn;
-   ```
-
-   Read it: *for each customer, number the records newest first, and break a tie by the higher update_id*. Expected:
-   10 rows, 6 columns, as in the first picture. *Why:* `PARTITION BY customer_id` makes each customer a group, and the
-   `ORDER BY` is the rule. Customer 303's rows share an `updated_at`, so `update_id` decides: update 6 (gold) gets 1.
-
-6. **Keep number 1.**
-
-   ```sql
-   WITH numbered AS (
-     SELECT *,
-            ROW_NUMBER() OVER (PARTITION BY customer_id
-                               ORDER BY updated_at DESC, update_id DESC) AS rn
-     FROM customer_updates
-   )
-   SELECT update_id, customer_id, loyalty_tier, city, updated_at
-   FROM numbered
-   WHERE rn = 1
-   ORDER BY customer_id;
-   ```
-
-   Expected: 5 rows, 5 columns: updates 2, 4, 6, 7 and 10. *Why:* the numbering sits in its own stage so the final `WHERE`
-   can use it. DuckDB's shortcut `QUALIFY` filters on a window function the way
-   `HAVING` filters on an aggregate, without the extra stage:
-
-   ```sql
-   SELECT update_id, customer_id, loyalty_tier, city, updated_at
-   FROM customer_updates
-   QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id
-                              ORDER BY updated_at DESC, update_id DESC) = 1
-   ORDER BY customer_id;
-   ```
-
-   Expected: 5 rows, 5 columns, the same five rows. Learn the two-stage form first.
-
-7. **Verify.**
-
-   ```sql
-   WITH numbered AS (
-     SELECT *,
-            ROW_NUMBER() OVER (PARTITION BY customer_id
-                               ORDER BY updated_at DESC, update_id DESC) AS rn
-     FROM customer_updates
-   ),
-   latest AS (
-     SELECT * FROM numbered WHERE rn = 1
-   )
-   SELECT COUNT(*) AS rows_kept, COUNT(DISTINCT customer_id) AS customers
-   FROM latest;
-   ```
-
-   Expected: 1 row, 2 columns: `5` and `5`. *Why:* rows kept equal customers, so each customer has exactly one row. The
-   count alone is not enough, as Exercise 3 shows: also read the rows where the rule had to decide, here customer 303.
-
 <details>
 <summary>Explain it in your own words: why did customers 302 and 305 need no business rule, yet 301 and 303 did?</summary>
 
@@ -450,33 +428,44 @@ conflict, so only a rule, here "latest wins", says which row is current.
 
 </details>
 
+<Aside type="tip" title="Remember">
+
+- Find repeats with `GROUP BY` the key and `HAVING COUNT(*) > 1`.
+- Write the survivor rule first: which column orders the rows, which direction, what breaks a tie.
+- Number the rows by that rule with `ROW_NUMBER()` and keep number 1 in the next stage.
+- `DISTINCT` merges only identical rows; it picks no survivor.
+
+**Common trap: "removing duplicates in SQL deletes the extra rows."** A `SELECT` only reads: after the query that keeps
+number 1, the practice table still holds its ten rows. Deleting needs `DELETE` (S32).
+
+</Aside>
+
 ## Finish it
 
 <Exercise id="sql-deduplicate-latest-record-1">
 
-**Each customer's first record.** Use the Exercise 1 cell. Expected: 5 rows, 5 columns. Keep the first record of each
-customer instead of the latest: the earliest `updated_at`, and the lower `update_id` on a tie.
+**Each customer's first record.** It uses the practice table from unit 1. Expected: 5 rows, 5 columns. Keep the first
+record of each customer instead of the latest: the earliest `updated_at`, and the lower `update_id` on a tie.
 
-The first steps are done for you: the `numbered` stage is started, and the final query lists its columns:
+The first steps are done for you: the `numbered` stage is started, with a placeholder `ORDER BY`, and the final query
+lists its columns.
 
-```sql
-WITH numbered AS (
+<RunSQL query={`WITH numbered AS (
   SELECT *,
          ROW_NUMBER() OVER (PARTITION BY customer_id
-                            ORDER BY ...) AS rn
+                            ORDER BY update_id) AS rn -- replace with your survivor rule
   FROM customer_updates
 )
 SELECT update_id, customer_id, loyalty_tier, city, updated_at
-FROM numbered;
-```
+FROM numbered;`} />
 
-Now finish it: replace `...` with the survivor rule, add the line that keeps one row per customer, and sort by
+Now finish it: put the survivor rule in the `ORDER BY`, add the line that keeps one row per customer, and sort by
 customer.
 
 <details>
 <summary>Hint</summary>
 
-Copy the `ORDER BY` of step 5 and take out the two `DESC`. Which number do you keep?
+Copy the `ORDER BY` of unit 3 and take out the two `DESC`. Which number do you keep?
 
 </details>
 
@@ -525,19 +514,21 @@ rows at the same minute.
 
 <Exercise id="sql-deduplicate-latest-record-2">
 
-**Each customer's latest completed order.** Work in the Exercise 2 cells, on `orders`. Return the columns
-`customer_id`, `order_id` and `ordered_at`.
+**Each customer's latest completed order.** This one runs on `orders`. Return the columns `customer_id`, `order_id` and
+`ordered_at`.
 
-Before you run anything, write one sentence in the first cell: how many rows do you expect? There are 150 customers in
-`customers`, but think about who has no completed order in `orders`.
+Before you run anything, write one sentence as a comment in the editor: how many rows do you expect? There are 150
+customers in `customers`, but think about who has no completed order in `orders`.
 
 Expected: 3 columns. Only completed orders count, so the canceled order is
 out, and so is the walk-in order, which has no customer.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
-Copy steps 5 and 6 and change the table and the columns. Put the two conditions in a `WHERE` inside the numbering
+Copy units 3 and 4 and change the table and the columns. Put the two conditions in a `WHERE` inside the numbering
 stage; the filter on `rn` stays outside it.
 
 </details>
@@ -590,11 +581,10 @@ and finding rows with no match* (S20).
 
 <Exercise id="sql-deduplicate-latest-record-3">
 
-**Spot the flaw.** A colleague keeps the latest record of each customer. The query returns 5 rows, one for each customer,
-so the count looks right:
+**Spot the flaw.** A colleague keeps the latest record of each customer, from the practice table of unit 1. The query
+returns 5 rows, one for each customer, so the count looks right:
 
-```sql
-WITH numbered AS (
+<RunSQL query={`WITH numbered AS (
   SELECT *,
          ROW_NUMBER() OVER (PARTITION BY customer_id
                             ORDER BY updated_at DESC) AS rn
@@ -603,8 +593,7 @@ WITH numbered AS (
 SELECT update_id, customer_id, loyalty_tier, updated_at
 FROM numbered
 WHERE rn = 1
-ORDER BY customer_id;
-```
+ORDER BY customer_id;`} />
 
 Expected: 5 rows, 4 columns. Look at customer 303, find the flaw and fix it.
 
@@ -612,7 +601,7 @@ Expected: 5 rows, 4 columns. Look at customer 303, find the flaw and fix it.
 
 Customer 303 shows silver (update 5), but gold (update 6) was the later save. The two rows share an `updated_at`, and
 the `ORDER BY` does not say which wins: DuckDB 2.0.0 returned update 5, but nothing in the query promises that. The
-row count cannot catch this; reading the rows where the rule had to decide can. The fix is the tie-breaker of step 5:
+row count cannot catch this; reading the rows where the rule had to decide can. The fix is the tie-breaker of unit 3:
 `ORDER BY updated_at DESC, update_id DESC`. Then customer 303 shows gold.
 
 </Solution>
@@ -621,7 +610,7 @@ row count cannot catch this; reading the rows where the rule had to decide can. 
 
 **Can you do it?** *I can find repeated ids, write the survivor rule in words, keep one row for each entity or the
 latest one, and say why `DISTINCT` is not enough.*
-Test: Exercise sql-deduplicate-latest-record-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-deduplicate-latest-record-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **find the repeats, state the survivor rule, number the rows by that rule and keep number 1,
 then check one row for each entity.** The next lesson, *Tables, keys and grain*, asks what makes a row unique.

@@ -16,7 +16,7 @@ prerequisites:
   - sql-expressions-and-types
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-ctes.ipynb
+
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: WITH clause (CTEs)'
@@ -26,23 +26,31 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). In a sheet you build a long calculation in steps, each in its own helper column, so you can see every step. A
-**CTE** (common table expression) gives a query the same habit: each step is a small table with a name.
+In a sheet you build a long calculation in steps, each in its own helper column, so you can see every step. A query can
+do the same. Each query runs in the editor on this page, with the five tables of **cafe-sales**, the invented
+three-cafe chain we use from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**. Each query sits between `con.sql("""` and
-`""").show()`: only the text inside the triple quotes is SQL. The notebook cells leave out the closing `;` that this
-page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line, including the error of exercise 3. Time the lesson against its 25 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Old Town took 729 orders and Harbor only 355. Is Harbor really that much slower?
+
+Harbor opened on April 1, 2026, so the totals do not cover the same days. A fair comparison is the **average day** of
+each store. That takes two steps: first the orders of each store on each day, then the average of those daily counts.
+
+| order_day | store_id | orders |
+|---|---:|---:|
+| 2026-01-01 | 1 | 2 |
+| 2026-01-01 | 2 | 2 |
+| 2026-01-02 | 1 | 3 |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In *GROUP BY and HAVING* (S8), `SELECT store_id, COUNT(*) FROM orders GROUP BY store_id` returns three rows. What
    is the grain: what does one row stand for?
@@ -64,34 +72,131 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In *Cleaning text with TRIM, LEFT and TEXTSPLIT* (E10) you built a key in a new column. Why a new column?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+A **CTE** (common table expression) gives one step of a query a name, like a helper column with a header, so the next
+step can read it like a table.
 
-   The source column stays untouched, so you can check each step against it.
+<figure class="ca not-content t8">
+<input class="ca-pp" type="checkbox" id="ck-pp" aria-label="Pause the animation" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 318" width="360" role="img" aria-labelledby="ck-t ck-d">
+<title id="ck-t">Three kinds of CTE: standalone, chained and recursive</title>
+<desc id="ck-d">Three scenes. Standalone: a card named CTE slides into a slot inside the box MAIN. Chained: a card named CTE 1 slides into a slot inside the box CTE 2, and then the box CTE 2, with CTE 1 inside it, slides into a slot inside MAIN. Recursive: a card named CTE with an arrow looping back to itself receives two new rows, one after the other, and then slides into MAIN.</desc>
+<text class="f10 b e w1 tmp" x="350" y="14">1 · name it, plug it in</text>
+<text class="f10 b e w2 d2 tmp" x="350" y="14">2 · tables feed tables</text>
+<text class="f10 b e w5 d4" x="350" y="14">3 · a table that feeds itself</text>
+<text class="f11 b" x="10" y="14">Standalone</text>
+<rect class="s-out" x="140" y="24" width="210" height="60" rx="8" />
+<text class="f11 b" x="150" y="78">MAIN</text>
+<rect class="bx dsh" x="260" y="32" width="70" height="44" rx="6" />
+<g class="w8"><g class="mv m1 x25 y0"><rect class="s-src" x="10" y="32" width="70" height="44" rx="6" /><text class="f11 b" x="18" y="48">CTE</text><rect class="f-src k3" x="18" y="56" width="54" height="6" rx="3" /><rect class="f-src k3" x="18" y="66" width="38" height="6" rx="3" /></g></g>
+<rect class="s-out u1 d2 tmp" x="256" y="28" width="78" height="52" rx="10" />
+<text class="f11 b" x="10" y="104">Chained</text>
+<rect class="s-out" x="210" y="114" width="140" height="100" rx="8" />
+<text class="f11 b" x="220" y="130">MAIN</text>
+<rect class="bx dsh" x="240" y="140" width="90" height="70" rx="6" />
+<g class="w8"><g class="mv m3 x14 y1"><rect class="s-src" x="100" y="130" width="90" height="70" rx="6" /><text class="f11 b" x="108" y="146">CTE 2</text><rect class="bx dsh" x="110" y="152" width="70" height="44" rx="6" /><g class="w8"><g class="mv m2 x10 y0"><rect class="s-src" x="10" y="152" width="70" height="44" rx="6" /><text class="f11 b" x="18" y="168">CTE 1</text><rect class="f-src k3" x="18" y="176" width="54" height="6" rx="3" /><rect class="f-src k3" x="18" y="186" width="38" height="6" rx="3" /></g></g><rect class="s-src u1 d3 tmp" x="106" y="148" width="78" height="52" rx="10" /></g></g>
+<rect class="s-out u1 d4 tmp" x="236" y="136" width="98" height="78" rx="10" />
+<text class="f11 b" x="10" y="236">Recursive</text>
+<rect class="s-out" x="140" y="246" width="210" height="70" rx="8" />
+<text class="f11 b" x="150" y="310">MAIN</text>
+<rect class="bx dsh" x="260" y="258" width="70" height="52" rx="6" />
+<g class="w8"><g class="mv m6 x25 y0"><rect class="s-src" x="10" y="258" width="70" height="52" rx="6" /><text class="f11 b" x="18" y="274">CTE</text><rect class="f-src k3" x="18" y="282" width="54" height="6" rx="3" /><rect class="bx dsh" x="18" y="292" width="54" height="6" rx="3" /><rect class="bx dsh" x="18" y="302" width="54" height="6" rx="3" /><path class="s-win dr p5 d4" pathLength="1" d="M66 258C66 236 24 236 24 254M19 247L24 255L30 247" /><g class="w5 d4"><g class="mv m4 xn9 y0"><rect class="f-win k3" x="108" y="292" width="54" height="6" rx="3" /></g></g><g class="w4 d5"><g class="mv m5 xn9 y1"><rect class="f-win k3" x="108" y="292" width="54" height="6" rx="3" /></g></g></g></g>
+<rect class="s-out u1 d7 tmp" x="256" y="254" width="78" height="60" rx="10" />
+</svg>
+<div class="ca-ctl">
+<label class="ca-btn" for="ck-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+</div>
+<p class="ca-cap">A CTE is a named scratch table. Standalone: MAIN uses it. Chained: CTE 2 uses CTE 1, and MAIN uses CTE 2. Recursive: a CTE feeds itself new rows until a round adds none.</p>
+</figure>
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Each gives you one idea, then you try it in the editor.
 
-The owner of the cafes asks:
+### 1. Write a step, then name it
 
-> Old Town took 729 orders and Harbor only 355. Is Harbor really that much slower?
+Write a step as an ordinary query first, and say its **grain**, what one row stands for (S8). A step's grain follows
+from its own `GROUP BY`: grouping `orders` by day and store gives one row per store per day.
 
-Harbor opened on April 1, 2026, so the totals do not cover the same days. A fair comparison is the **average day** of
-each store. That takes two steps: first the orders of each store on each day, then the average of those daily counts.
+**Try it:** the step on its own. `LIMIT 5` shows only the top.
 
-| order_day | store_id | orders |
-|---|---:|---:|
-| 2026-01-01 | 1 | 2 |
-| 2026-01-01 | 2 | 2 |
-| 2026-01-02 | 1 | 3 |
+<RunSQL query={`SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
+FROM orders
+GROUP BY CAST(ordered_at AS DATE), store_id
+ORDER BY order_day, store_id
+LIMIT 5;`} />
 
-This is the start of the first step. By the end you will have the second step too: each store's average day, with every
-stage checked.
+Expected: 5 rows, 3 columns.
 
-## The picture
+Now give it a name. `WITH daily AS (...)` wraps the step, the rest of the statement can use `daily` like a table, and
+the last `SELECT`, with no parentheses, reads it. Only that last result comes back.
+
+The name lasts for this one statement. DuckDB's documentation calls a regular CTE essentially a view (a saved query)
+limited in scope to one query.
+
+**Try it:**
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
+  FROM orders
+  GROUP BY CAST(ordered_at AS DATE), store_id
+)
+SELECT * FROM daily
+ORDER BY order_day, store_id
+LIMIT 5;`} />
+
+Expected: 5 rows, 3 columns, the same as before. *Excel:* a helper column with a header. *Why:* the sorting and the
+`LIMIT` stay in the last `SELECT`.
+
+### 2. Check each step
+
+After each step, check its row count and that its numbers add back up. A right step loses no rows and counts none twice.
+
+**Try it:**
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
+  FROM orders
+  GROUP BY CAST(ordered_at AS DATE), store_id
+)
+SELECT COUNT(*) AS store_days, SUM(orders) AS orders
+FROM daily;`} />
+
+Expected: 1 row, 2 columns: `453` and `1800`. *Why:* `orders` has 1,800 rows and `daily` has 453, one per store per
+day; the daily counts add back up to all 1,800 orders, so no order was lost.
+
+<details>
+<summary>Explain it in your own words: why does <code>daily</code> have 453 rows when <code>orders</code> has 1,800?</summary>
+
+Each row of `daily` stands for a store on a day, not an order. Several orders of the same store on the same day become
+one row, and Harbor has no rows before April. 181 + 181 + 91 days make 453.
+
+</details>
+
+### 3. Chain a second step
+
+After a comma, the next step is defined the same way, and it reads the step before it by name in its `FROM`. One `WITH`
+opens the chain, commas separate the steps, and there is no comma after the last one.
+
+**Try it.** `ROUND(x, 2)` keeps two decimals.
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
+  FROM orders
+  GROUP BY CAST(ordered_at AS DATE), store_id
+),
+average_day AS (
+  SELECT store_id, COUNT(*) AS days, ROUND(AVG(orders), 2) AS avg_orders
+  FROM daily
+  GROUP BY store_id
+)
+SELECT * FROM average_day
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 3 columns. *Excel:* the next column reads the one before it. *Why:* `average_day` reads `daily`, not
+`orders`; its grain is one row per store, and `days` counts the store-days. The picture shows the chain with the grain
+and row count of each step.
 
 <figure>
 <svg viewBox="0 0 360 414" width="360" role="img" aria-labelledby="cte-chain-title cte-chain-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -138,39 +243,6 @@ stage checked.
 </svg>
 </figure>
 
-## How it works
-
-A **common table expression** (CTE) gives a query a name for the length of one statement. You write
-`WITH name AS (query)`, and the rest of the statement can use `name` as if it were a table. Each CTE is one step of the
-calculation: its result is a small table with its own **grain**, what one row stands for (*GROUP BY and HAVING*, S8).
-
-1. `WITH daily AS (...)` defines the first step. Inside the parentheses it is an ordinary query, with its own `FROM`,
-   `WHERE` and `GROUP BY`, run in the usual order of clauses (*How a query runs: the order of the clauses*, S12). In the
-   picture above, each step is a named table, and `daily` is the one made by grouping `orders` by store and day.
-2. After a comma the next step is defined the same way, and it reads the step before it by name in its `FROM`.
-3. The last `SELECT` comes after the final step, with no parentheses. It reads one of the steps, and its result is the
-   only one you get back.
-
-The rules:
-
-- One `WITH` opens the chain and a comma separates the steps. There is no comma after the last step.
-- A step's grain follows from its own `GROUP BY`: grouping `products` by `category` gives one row per category.
-- A CTE exists only inside its own statement. DuckDB's documentation calls a regular CTE essentially a view (a saved
-  query) limited in scope to one query.
-
-**Excel.** *Cleaning text with TRIM, LEFT and TEXTSPLIT* (E10) builds each key in a new column so that the source column
-stays untouched; a CTE does the same for a whole table, one named step at a time.
-
-**A common misconception: "a CTE is a table the database keeps."** When the statement ends, the name ends with it, and
-the next statement cannot use `daily`. To keep a result you save it: *Saving a query as a view* (S28) and *Creating
-tables and constraints* (S31) show how.
-
-| In a sheet | In SQL |
-|---|---|
-| a helper column per step | a CTE per step |
-| the column header | the CTE name |
-| the next column reads the one before | the next CTE reads the one before |
-
 <details>
 <summary>What it replaces (read only: you do not write this yet)</summary>
 
@@ -188,130 +260,69 @@ GROUP BY store_id
 ORDER BY store_id;
 ```
 
-This works and returns the same table as the chain below, but you read it from the inside out. It is called a nested
-query; *Subqueries and EXISTS* (S23) teaches it. The CTE chain says the same thing top to bottom.
+This works and returns the same table, but you read it from the inside out. It is called a nested query; *Subqueries and
+EXISTS* (S23) teaches it. The chain says the same thing top to bottom.
 
 </details>
 
-## Worked example
+### 4. Debug by looking at one step
 
-Question: **what is the average day of each store?** Run the notebook's setup cell, then one cell per step. `ROUND(x, 2)`
-keeps two decimals.
+When a number looks odd, point the last `SELECT` at one step and run it. Harbor's `days` in unit 3 is smaller than the
+others.
 
-1. **Write the first step on its own.**
+**Try it:**
 
-   ```sql
-   SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
-   FROM orders
-   GROUP BY CAST(ordered_at AS DATE), store_id
-   ORDER BY order_day, store_id
-   LIMIT 5;
-   ```
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
+  FROM orders
+  GROUP BY CAST(ordered_at AS DATE), store_id
+)
+SELECT MIN(order_day) AS first_day, COUNT(*) AS days
+FROM daily
+WHERE store_id = 3;`} />
 
-   Expected: 5 rows, 3 columns. *Why:* state the grain first: one row per store per day.
+Expected: 1 row, 2 columns: first day `2026-04-01`, `91` days. *Why:* Harbor was open 91 days, the others 181.
 
-2. **Name it.**
+### 5. Check the answer
 
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
-     FROM orders
-     GROUP BY CAST(ordered_at AS DATE), store_id
-   )
-   SELECT * FROM daily
-   ORDER BY order_day, store_id
-   LIMIT 5;
-   ```
+A second method, without a CTE, must agree with the chain.
 
-   Expected: 5 rows, 3 columns, the same as step 1. *Excel:* a helper column with a header. *Why:* the step moves into
-   `WITH daily AS (...)`, and the last `SELECT` reads `daily` like a table. Sorting and `LIMIT` stay in the last
-   `SELECT`.
+**Try it:**
 
-3. **Check the grain and the row count.**
+<RunSQL query={`SELECT store_id, ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT CAST(ordered_at AS DATE)), 2) AS avg_orders
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
 
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
-     FROM orders
-     GROUP BY CAST(ordered_at AS DATE), store_id
-   )
-   SELECT COUNT(*) AS store_days, SUM(orders) AS orders
-   FROM daily;
-   ```
+Expected: 3 rows, 2 columns, the same `avg_orders` as unit 3: 4.03, 3.96 and 3.9, which is 3.90. Answer: Harbor
+took 355 orders against Old Town's 729 because it was open 91 days against 181. The **average day** is 4.03 orders at
+Old Town, 3.96 at Campus and 3.90 at Harbor: Harbor is not much slower. Every open day has at least one order at every
+store (`days` equals the days open), so the averages are over all open days.
 
-   Expected: 1 row, 2 columns: `453` and `1800`. *Why:* `orders` has 1,800 rows and `daily` has 453, one per store per
-   day; the daily counts add back up to all 1,800 orders, so no order was lost.
+<Aside type="tip" title="Remember">
 
-4. **Add the second step.**
+- `WITH name AS (query)` names a step; the rest of the statement uses `name` like a table.
+- One `WITH`, commas between the steps, no comma after the last.
+- A step's grain comes from its own `GROUP BY`. Check each step's row count.
+- To debug, point the last `SELECT` at one step.
 
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
-     FROM orders
-     GROUP BY CAST(ordered_at AS DATE), store_id
-   ),
-   average_day AS (
-     SELECT store_id, COUNT(*) AS days, ROUND(AVG(orders), 2) AS avg_orders
-     FROM daily
-     GROUP BY store_id
-   )
-   SELECT * FROM average_day
-   ORDER BY store_id;
-   ```
+**Common trap: "a CTE is a table the database keeps."** It lives for one statement. Run `SELECT * FROM daily;` on its
+own and you get an error: the table does not exist. To keep a result you save it: *Saving a query as a view* (S28) and
+*Creating tables and constraints* (S31) show how.
 
-   Expected: 3 rows, 3 columns. *Why:* a comma, then the next name. `average_day` reads `daily`, not `orders`: its grain
-   is one row per store, and `days` counts the store-days.
-
-5. **Debug by looking at one step.** Harbor's `days` is smaller than the others. To see why, point the last `SELECT` at
-   `daily`:
-
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
-     FROM orders
-     GROUP BY CAST(ordered_at AS DATE), store_id
-   )
-   SELECT MIN(order_day) AS first_day, COUNT(*) AS days
-   FROM daily
-   WHERE store_id = 3;
-   ```
-
-   Expected: 1 row, 2 columns: first day `2026-04-01`, `91` days. *Why:* running one CTE at a time shows where a number
-   comes from. Harbor was open 91 days, the others 181.
-
-6. **Verify.** A second method, without a CTE:
-
-   ```sql
-   SELECT store_id, ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT CAST(ordered_at AS DATE)), 2) AS avg_orders
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns, the same `avg_orders` as step 4: 4.03, 3.96 and 3.90 (the notebook prints 3.9). Answer: Harbor took 355 orders
-   against Old Town's 729 because it was open 91 days against 181. The **average day** is 4.03 orders at Old Town, 3.96
-   at Campus and 3.90 at Harbor: Harbor is not much slower. Every open day has at least one order at every store
-   (`days` equals the days open), so the averages are over all open days.
-
-<details>
-<summary>Explain it in your own words: why does `daily` have 453 rows when `orders` has 1,800?</summary>
-
-Each row of `daily` stands for a store on a day, not an order. Several orders of the same store on the same day become
-one row, and Harbor has no rows before April. 181 + 181 + 91 days make 453.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-ctes-1">
 
-**Count the busy days of each store.** A busy day is a store-day with 6 or more orders. Use the Exercise 1 cell.
-Expected: 3 rows, 2 columns (the store and its number of busy days).
+**Count the busy days of each store.** A busy day is a store-day with 6 or more orders. Expected: 3 rows, 2 columns (the
+store and its number of busy days).
 
-The first steps are done for you: the `daily` step is the one from the worked example, and the second step starts like this.
+The first steps are done for you: the `daily` step is the one from unit 1, and the second step is started. Replace the
+comment with the lines that keep only the busy store-days and make one group per store.
 
-```sql
-WITH daily AS (
+<RunSQL query={`WITH daily AS (
   SELECT CAST(ordered_at AS DATE) AS order_day, store_id, COUNT(*) AS orders
   FROM orders
   GROUP BY CAST(ordered_at AS DATE), store_id
@@ -319,13 +330,10 @@ WITH daily AS (
 busy_days AS (
   SELECT store_id, COUNT(*) AS busy_days
   FROM daily
-  ...
+  -- add your WHERE and GROUP BY lines here
 )
 SELECT * FROM busy_days
-ORDER BY store_id;
-```
-
-Now finish it: replace `...` with the lines that keep only the busy store-days and make one group per store.
+ORDER BY store_id;`} />
 
 <details>
 <summary>Hint</summary>
@@ -373,19 +381,21 @@ Store 1 has 22 busy days, store 2 has 17 and store 3 has 14. Harbor's 14 came in
 
 <Exercise id="sql-ctes-2">
 
-**What is the average day for each payment method, completed orders only?** Work in the Exercise 2 cells.
+**What is the average day for each payment method, completed orders only?**
 
-Before you run anything, write one sentence in the first cell: the grain of each step. Then build two CTEs: the first
-counts completed orders for each payment method on each day, the second averages them for each payment method.
+Before you run anything, write one sentence as a comment in the editor: the grain of each step. Then build two CTEs: the
+first counts completed orders for each payment method on each day, the second averages them for each payment method.
 
 Expected shape, to check your sentence against: the final query returns 3 rows, 3 columns (the method, the number of days
 and the average). The first step has 486 rows.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
-Copy the two steps of the worked example, swap `store_id` for `payment_method`, and add the `WHERE` on `status` to the
-first step. Run the first step alone to check that it has 486 rows.
+Copy the two steps of unit 3, swap `store_id` for `payment_method`, and add the `WHERE` on `status` to the first step.
+Run the first step alone to check that it has 486 rows.
 
 </details>
 
@@ -441,8 +451,7 @@ average is over days with at least one order of that method, so cash and mobile 
 
 **Spot the flaw.** A colleague writes the final step first and the daily step last:
 
-```sql
-WITH average_day AS (
+<RunSQL query={`WITH average_day AS (
   SELECT store_id, ROUND(AVG(orders), 2) AS avg_orders
   FROM daily
   GROUP BY store_id
@@ -452,14 +461,13 @@ daily AS (
   FROM orders
   GROUP BY CAST(ordered_at AS DATE), store_id
 )
-SELECT * FROM average_day;
-```
+SELECT * FROM average_day;`} />
 
-Expected: an error that starts with `Catalog Error`. Read it, then fix the query.
+Expected: an error that says a table does not exist. Read it, then fix the query.
 
 <Solution>
 
-The first line of the error reads `Catalog Error: Table with name daily does not exist!`. A step can read only the steps
+The first line of the error reads `Table with name daily does not exist!`. A step can read only the steps
 written above it, and `average_day` comes before `daily`. Swap the two steps:
 
 ```sql
@@ -484,7 +492,7 @@ Expected: 3 rows, 2 columns. Write the steps in the order the data flows, from t
 
 **Can you do it?** *I can split a query into named steps, say the grain of each step, check each step's row count and read
 the answer from the last one.*
-Test: Exercise sql-ctes-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-ctes-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **one named step per idea, and check each step's rows before the next.** The next lesson,
 *Window functions: keep the rows, add the context* (S14), adds a new kind of step.

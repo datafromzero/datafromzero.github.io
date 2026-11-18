@@ -15,7 +15,7 @@ prerequisites:
   - sql-window-functions
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-rank-top-n.ipynb
+
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Window functions'
@@ -27,24 +27,33 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB**, a free database engine, inside a Google Colab notebook, so there is nothing to
-install. It works on one table, `orders`, and reads `order_items` only through its ids.
+This lesson works on one table, `orders`, and reads `order_items` only through its ids. Each query runs in the editor on
+this page, with the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. In the notebook, each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
-quotes is SQL, and `.show()` prints the result as a table. The notebook cells leave out the closing `;` that this
-page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error of step 4, and `QUALIFY` in step 7, with Colab's version. Time the lesson against its 30 minutes. When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line, including the error of unit 4 and `QUALIFY` in unit 4. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> We have three gift cards for each cafe. Who are each cafe's three most frequent customers?
+
+Orders per customer and cafe, for the top of Harbor (store 3):
+
+| customer_id | orders |
+|---:|---:|
+| 104 | 11 |
+| 7 | 10 |
+| 13 | 10 |
+| 77 | 10 |
+| 103 | 10 |
+
+Customers 7, 13, 77 and 103 all have 10 orders, so "the top three" of Harbor is not obvious.
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In `SUM(orders) OVER (PARTITION BY store_id ORDER BY day)` (*Window functions: keep the rows, add the context*,
    S14), which part restarts the total for each cafe, and which part makes it a running total?
@@ -74,134 +83,116 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+A ranking function numbers the rows inside each group, best first, and every row stays; the real choice is what to do
+when two rows tie.
 
-> We have three gift cards for each cafe. Who are each cafe's three most frequent customers?
+{/* CONCEPT: concept-rank-ties */}
 
-Orders per customer and cafe, for the top of Harbor (store 3):
+## Learn by doing
 
-| customer_id | orders |
-|---:|---:|
-| 104 | 11 |
-| 7 | 10 |
-| 13 | 10 |
-| 77 | 10 |
-| 103 | 10 |
+Five small steps. Each gives you one idea, then you try it in the editor.
+Every query starts with the `per_customer` stage from the warm-up. It counts all orders with a customer, canceled
+included; the one canceled order is its customer's only order, far from the top.
 
-Customers 7, 13, 77 and 103 all have 10 orders, so "the top three" of Harbor is not obvious. This lesson ranks the
-customers inside each cafe, keeps the top three, and says in advance what happens to a tie. By the end you will have
-nine rows.
+### 1. Meet the ties
 
-## The picture
+A **rank** is a number that a window function writes beside each row to show its place inside a group. Every row stays
+and one column is added, as in S14. **Ties** are rows with the same value in the order you chose.
+
+**Try it:** Harbor's eight top customers, lower id first on a tie.
+
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+)
+SELECT customer_id, orders
+FROM per_customer
+WHERE store_id = 3
+ORDER BY orders DESC, customer_id
+LIMIT 8;`} />
+
+Read it: *for Harbor, list customers by number of orders, most first, lower id first on a tie*. Expected: 8 rows, 2
+columns: one customer with 11 orders, four tied at 10, then three at 9. *Excel:* sort the Harbor rows by orders, largest
+first (E5, *Tables, sorting and filtering*). *Why:* the whole `per_customer` stage has 306 rows. Look at one cafe first,
+because the ties are the difficulty.
+
+### 2. Number the rows three ways
+
+Before you write a top-N query, name the **tie policy**: what should happen to rows that tie at the cut-off? Each
+ranking function is one answer, and they differ only in how they number ties.
+
+- `ROW_NUMBER` never repeats a number, so tied rows still get different ones. To decide which gets which, add a
+  **tie-breaker**: a further `ORDER BY` column, such as `customer_id`, that tells the rows apart. The numbers are then the
+  same on every run.
+- `RANK` gives tied rows the same number and then skips ahead. DuckDB's documentation defines it as the row number of the
+  first row in the tie. Chai Latte and Cold Brew both cost \$4.75, at places 5 and 6 when the products are sorted from
+  dearest to cheapest. `RANK` gives both a 5, and the next price, \$4.50, gets 7.
+- `DENSE_RANK` also gives tied rows the same number but leaves no gaps, because it counts groups of tied rows. The same
+  two products share a 5, and \$4.50 gets 6.
+
+*Excel:* the `RANK` function returns a row's position without sorting, and tied numbers get the same rank.
+
+**Try it.** Predict first: what will `RANK` show for the three customers with 9 orders?
+
+<details>
+<summary>Prediction</summary>
+
+6 for all three. The four tied customers hold places 2 to 5, so the next place is 6. `DENSE_RANK` shows 3, the next
+number after 2.
+
+</details>
+
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+)
+SELECT customer_id, orders,
+       ROW_NUMBER() OVER (ORDER BY orders DESC, customer_id) AS row_num,
+       RANK()       OVER (ORDER BY orders DESC) AS rnk,
+       DENSE_RANK() OVER (ORDER BY orders DESC) AS dense_rnk
+FROM per_customer
+WHERE store_id = 3
+ORDER BY orders DESC, customer_id
+LIMIT 8;`} />
+
+Expected: 8 rows, 5 columns. *Why:* `ROW_NUMBER` numbers the four tied customers 2 to 5 only because `customer_id` breaks
+the tie; `RANK` and `DENSE_RANK` give them all 2. The `WHERE store_id = 3` runs before the ranking, which is fine here.
+
+### 3. Number inside each cafe, keep three
+
+`PARTITION BY store_id` restarts the numbering for each cafe, as in S14. The owner has exactly three cards per cafe, so
+the policy is *exactly three rows*: `ROW_NUMBER` with the tie-breaker, then keep the numbers 1 to 3.
+
+**Try it:**
+
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+),
+ranked AS (
+  SELECT store_id, customer_id, orders,
+         ROW_NUMBER() OVER (PARTITION BY store_id
+                            ORDER BY orders DESC, customer_id) AS row_num
+  FROM per_customer
+)
+SELECT store_id, customer_id, orders, row_num
+FROM ranked
+WHERE row_num <= 3
+ORDER BY store_id, row_num;`} />
+
+Read it: *number each cafe's customers by orders, then keep numbers 1 to 3*. Expected: 9 rows, 4 columns, three for each
+cafe. Harbor's three are customers 104, 7 and 13: customers 77 and 103 tie with 7 and 13 on 10 orders and lose only on
+the lower-id rule. The picture shows the restart on products: each category is numbered on its own, from 1.
 
 <figure>
-<svg viewBox="0 0 360 270" width="360" role="img" aria-labelledby="ties-title ties-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="ties-title">Three ranking functions on the same ties</title>
-<desc id="ties-desc">The eight dearest products of the products table, with three ranking columns. Turkey Sandwich 9.25: ROW_NUMBER 1, RANK 1, DENSE_RANK 1; Avocado Toast 8.50: ROW_NUMBER 2, RANK 2, DENSE_RANK 2; Pumpkin Spice Latte 5.50: ROW_NUMBER 3, RANK 3, DENSE_RANK 3; Mocha 5.00: ROW_NUMBER 4, RANK 4, DENSE_RANK 4; Chai Latte 4.75: ROW_NUMBER 5, RANK 5, DENSE_RANK 5; Cold Brew 4.75: ROW_NUMBER 6, RANK 5, DENSE_RANK 5; Cappuccino 4.50: ROW_NUMBER 7, RANK 7, DENSE_RANK 6; Latte 4.50: ROW_NUMBER 8, RANK 7, DENSE_RANK 6. The shaded rows tie on price. ROW_NUMBER breaks the ties by product name.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">Products by price, dearest first</text>
-<rect x="10" y="142" width="340" height="22" fill="currentColor" fill-opacity="0.12" />
-<rect x="10" y="164" width="340" height="22" fill="currentColor" fill-opacity="0.12" />
-<rect x="10" y="186" width="340" height="22" fill="currentColor" fill-opacity="0.12" />
-<rect x="10" y="208" width="340" height="22" fill="currentColor" fill-opacity="0.12" />
-<g fill="none" stroke="currentColor" stroke-opacity="0.45">
-<rect x="10" y="32" width="116" height="22" />
-<rect x="126" y="32" width="40" height="22" />
-<rect x="166" y="32" width="72" height="22" />
-<rect x="238" y="32" width="44" height="22" />
-<rect x="282" y="32" width="68" height="22" />
-<rect x="10" y="54" width="116" height="22" />
-<rect x="126" y="54" width="40" height="22" />
-<rect x="166" y="54" width="72" height="22" />
-<rect x="238" y="54" width="44" height="22" />
-<rect x="282" y="54" width="68" height="22" />
-<rect x="10" y="76" width="116" height="22" />
-<rect x="126" y="76" width="40" height="22" />
-<rect x="166" y="76" width="72" height="22" />
-<rect x="238" y="76" width="44" height="22" />
-<rect x="282" y="76" width="68" height="22" />
-<rect x="10" y="98" width="116" height="22" />
-<rect x="126" y="98" width="40" height="22" />
-<rect x="166" y="98" width="72" height="22" />
-<rect x="238" y="98" width="44" height="22" />
-<rect x="282" y="98" width="68" height="22" />
-<rect x="10" y="120" width="116" height="22" />
-<rect x="126" y="120" width="40" height="22" />
-<rect x="166" y="120" width="72" height="22" />
-<rect x="238" y="120" width="44" height="22" />
-<rect x="282" y="120" width="68" height="22" />
-<rect x="10" y="142" width="116" height="22" />
-<rect x="126" y="142" width="40" height="22" />
-<rect x="166" y="142" width="72" height="22" />
-<rect x="238" y="142" width="44" height="22" />
-<rect x="282" y="142" width="68" height="22" />
-<rect x="10" y="164" width="116" height="22" />
-<rect x="126" y="164" width="40" height="22" />
-<rect x="166" y="164" width="72" height="22" />
-<rect x="238" y="164" width="44" height="22" />
-<rect x="282" y="164" width="68" height="22" />
-<rect x="10" y="186" width="116" height="22" />
-<rect x="126" y="186" width="40" height="22" />
-<rect x="166" y="186" width="72" height="22" />
-<rect x="238" y="186" width="44" height="22" />
-<rect x="282" y="186" width="68" height="22" />
-<rect x="10" y="208" width="116" height="22" />
-<rect x="126" y="208" width="40" height="22" />
-<rect x="166" y="208" width="72" height="22" />
-<rect x="238" y="208" width="44" height="22" />
-<rect x="282" y="208" width="68" height="22" />
-</g>
-<g font-size="8" font-weight="600">
-<text x="15" y="47">product</text>
-<text x="131" y="47">price</text>
-<text x="171" y="47">ROW_NUMBER</text>
-<text x="243" y="47">RANK</text>
-<text x="287" y="47">DENSE_RANK</text>
-</g>
-<text x="15" y="69" font-size="10">Turkey Sandwich</text>
-<text x="161" y="69" text-anchor="end">9.25</text>
-<text x="233" y="69" text-anchor="end">1</text>
-<text x="277" y="69" text-anchor="end">1</text>
-<text x="345" y="69" text-anchor="end">1</text>
-<text x="15" y="91" font-size="10">Avocado Toast</text>
-<text x="161" y="91" text-anchor="end">8.50</text>
-<text x="233" y="91" text-anchor="end">2</text>
-<text x="277" y="91" text-anchor="end">2</text>
-<text x="345" y="91" text-anchor="end">2</text>
-<text x="15" y="113" font-size="10">Pumpkin Spice Latte</text>
-<text x="161" y="113" text-anchor="end">5.50</text>
-<text x="233" y="113" text-anchor="end">3</text>
-<text x="277" y="113" text-anchor="end">3</text>
-<text x="345" y="113" text-anchor="end">3</text>
-<text x="15" y="135" font-size="10">Mocha</text>
-<text x="161" y="135" text-anchor="end">5.00</text>
-<text x="233" y="135" text-anchor="end">4</text>
-<text x="277" y="135" text-anchor="end">4</text>
-<text x="345" y="135" text-anchor="end">4</text>
-<text x="15" y="157" font-size="10">Chai Latte</text>
-<text x="161" y="157" text-anchor="end">4.75</text>
-<text x="233" y="157" text-anchor="end">5</text>
-<text x="277" y="157" text-anchor="end">5</text>
-<text x="345" y="157" text-anchor="end">5</text>
-<text x="15" y="179" font-size="10">Cold Brew</text>
-<text x="161" y="179" text-anchor="end">4.75</text>
-<text x="233" y="179" text-anchor="end">6</text>
-<text x="277" y="179" text-anchor="end">5</text>
-<text x="345" y="179" text-anchor="end">5</text>
-<text x="15" y="201" font-size="10">Cappuccino</text>
-<text x="161" y="201" text-anchor="end">4.50</text>
-<text x="233" y="201" text-anchor="end">7</text>
-<text x="277" y="201" text-anchor="end">7</text>
-<text x="345" y="201" text-anchor="end">6</text>
-<text x="15" y="223" font-size="10">Latte</text>
-<text x="161" y="223" text-anchor="end">4.50</text>
-<text x="233" y="223" text-anchor="end">8</text>
-<text x="277" y="223" text-anchor="end">7</text>
-<text x="345" y="223" text-anchor="end">6</text>
-<text x="10" y="248" font-size="11">Shaded: products that tie on price.</text>
-<text x="10" y="264" font-size="11">ROW_NUMBER breaks each tie by product name.</text>
-</svg>
 <svg viewBox="0 0 360 314" width="360" role="img" aria-labelledby="part-title part-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="part-title">RANK starts again inside each group</title>
 <desc id="part-desc">Coffee and tea products with RANK computed inside each category, most expensive first. coffee Pumpkin Spice Latte 5.50: RANK 1; coffee Mocha 5.00: RANK 2; coffee Cold Brew 4.75: RANK 3; coffee Cappuccino 4.50: RANK 4; coffee Latte 4.50: RANK 4; coffee Americano 3.50: RANK 6; coffee Espresso 3.00: RANK 7; tea Chai Latte 4.75: RANK 1; tea Iced Lemon Tea 3.75: RANK 2; tea Green Tea 3.25: RANK 3. The numbering starts again at 1 for tea. Cappuccino and Latte tie on 4.50 and are shaded.</desc>
@@ -305,245 +296,144 @@ nine rows.
 </svg>
 </figure>
 
-## How it works
+*Why:* the numbering sits in its own stage, `ranked`. The next unit shows why.
 
-A **rank** is a number that a window function writes beside each row to show its place inside a group. Every row stays
-and one column is added, as in *Window functions: keep the rows, add the context* (S14). **Ties** are rows with the same
-value in the order you chose, and the three ranking functions differ only in how they number ties.
+### 4. Filter in the next stage
 
-1. `PARTITION BY` and `ORDER BY` inside `OVER` fence and order the rows as in S14, so each cafe is numbered on its own,
-   from 1.
-2. The function goes down each group's ordered rows and writes a number on each. In the picture above, two
-   products tie at one price and two more at another, and the three columns number them, and the rows after them,
-   differently.
+A window function runs after `WHERE` and `HAVING` (*How a query runs: the order of the clauses*, S12), so a filter in the
+same `SELECT` cannot see its result. Finish the ranking in one stage, a CTE (*Readable queries with CTEs*, S13), and
+filter in the next.
 
-The rules:
+**Try it.** This query puts the filter next to the window function:
 
-- `ROW_NUMBER` never repeats a number, so tied rows still get different ones. To decide which gets which, add a
-  **tie-breaker**: a further `ORDER BY` column, such as `customer_id`, that tells the rows apart. The numbers are then
-  the same on every run.
-- `RANK` gives tied rows the same number and then skips ahead. DuckDB's documentation defines it as the row number of
-  the first row in the tie. Chai Latte and Cold Brew both cost \$4.75, at places 5 and 6 when the products are sorted
-  from dearest to cheapest. `RANK` gives both a 5, and the next price, \$4.50, gets 7.
-- `DENSE_RANK` also gives tied rows the same number but leaves no gaps, because it counts groups of tied rows. The same
-  two products share a 5, and \$4.50 gets 6.
-- Name the **tie policy** before you write a top-N query: what should happen to rows that tie at the cut-off? Each of
-  the three functions is one answer.
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+)
+SELECT store_id, customer_id, orders,
+       ROW_NUMBER() OVER (PARTITION BY store_id
+                          ORDER BY orders DESC, customer_id) AS row_num
+FROM per_customer
+WHERE row_num <= 3;`} />
 
-**Excel.** Sorting a table (E5, *Tables, sorting and filtering*) puts rows in rank order by hand; Excel's `RANK` returns
-that position without sorting, and tied numbers get the same rank.
+Expected: an error that says `WHERE clause cannot contain window functions!`.
 
-**A common misconception: "a tie means something is wrong with the data."** Chai Latte and Cold Brew are both priced
-\$4.75 and nothing is wrong. Equal values are normal, which is why the ranking functions have a rule for them.
+The two-stage form works in any database with window functions, which the DuckDB documentation says major SQL databases
+have. DuckDB also has `QUALIFY`, which filters on a window function the way `HAVING` filters on an aggregate, without
+the extra stage. Learn the two-stage form first.
 
-## Worked example
+**Try it:**
 
-Question: **who are each cafe's three most frequent customers, exactly three per cafe?** The `per_customer` stage
-counts all orders with a customer, canceled included; the one canceled order is its customer's only order, far from
-the top. Run the setup cell, then one cell per step.
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+)
+SELECT store_id, customer_id, orders,
+       ROW_NUMBER() OVER (PARTITION BY store_id
+                          ORDER BY orders DESC, customer_id) AS row_num
+FROM per_customer
+QUALIFY row_num <= 3
+ORDER BY store_id, row_num;`} />
 
-1. **Look at Harbor's top rows.**
+Expected: 9 rows, 4 columns, the same rows as unit 3.
 
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   )
-   SELECT customer_id, orders
-   FROM per_customer
-   WHERE store_id = 3
-   ORDER BY orders DESC, customer_id
-   LIMIT 8;
-   ```
+### 5. Check the policy
 
-   Read it: *for Harbor, list customers by number of orders, most first, lower id first on a tie*. Expected:
-   8 rows, 2 columns: one customer with 11 orders, four tied at 10, then three at 9. *Excel:* sort the Harbor rows by
-   orders, largest first. *Why:* the whole `per_customer` stage has 306 rows. Look at one cafe first, because the ties
-   are the difficulty.
+A policy is a promise, so test it. First swap `RANK` into the same job.
 
-2. **Number the rows three ways.** Predict first: what will `RANK` show for the three customers with 9 orders?
+**Try it:**
 
-   <details>
-   <summary>Prediction</summary>
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+),
+ranked AS (
+  SELECT store_id, customer_id, orders,
+         RANK() OVER (PARTITION BY store_id ORDER BY orders DESC) AS rnk
+  FROM per_customer
+)
+SELECT store_id, customer_id, orders, rnk
+FROM ranked
+WHERE rnk <= 3
+ORDER BY store_id, rnk, customer_id;`} />
 
-   6 for all three. The four tied customers hold places 2 to 5, so the next place is 6. `DENSE_RANK` shows 3, the next
-   number after 2.
-
-   </details>
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   )
-   SELECT customer_id, orders,
-          ROW_NUMBER() OVER (ORDER BY orders DESC, customer_id) AS row_num,
-          RANK()       OVER (ORDER BY orders DESC) AS rnk,
-          DENSE_RANK() OVER (ORDER BY orders DESC) AS dense_rnk
-   FROM per_customer
-   WHERE store_id = 3
-   ORDER BY orders DESC, customer_id
-   LIMIT 8;
-   ```
-
-   Expected: 8 rows, 5 columns. *Excel:* `RANK` for the middle column. *Why:* `ROW_NUMBER` needs
-   `customer_id` in its `ORDER BY` to break the tie, and numbers the four tied customers 2 to 5. `RANK` and
-   `DENSE_RANK` give them all 2. The `WHERE store_id = 3` runs before the ranking, which is fine here.
-
-3. **Rank inside each cafe and keep the top 3.**
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   ),
-   ranked AS (
-     SELECT store_id, customer_id, orders,
-            ROW_NUMBER() OVER (PARTITION BY store_id
-                               ORDER BY orders DESC, customer_id) AS row_num
-     FROM per_customer
-   )
-   SELECT store_id, customer_id, orders, row_num
-   FROM ranked
-   WHERE row_num <= 3
-   ORDER BY store_id, row_num;
-   ```
-
-   Read it: *number each cafe's customers by orders, then keep numbers 1 to 3*. Expected: 9 rows, 4 columns, three for each
-   cafe. Harbor's three are customers 104, 7 and 13: customers 77 and 103 tie with 7 and 13 on 10 orders and lose
-   only on the lower-id rule. *Why:* `PARTITION BY store_id` restarts the numbering for each cafe, and the numbering
-   sits in its own stage, `ranked`, so the final `WHERE` can use it.
-
-4. **See why it needs a second stage.** This query puts the filter next to the window function. Run it:
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   )
-   SELECT store_id, customer_id, orders,
-          ROW_NUMBER() OVER (PARTITION BY store_id
-                             ORDER BY orders DESC, customer_id) AS row_num
-   FROM per_customer
-   WHERE row_num <= 3;
-   ```
-
-   Expected: an error that starts with `Binder Error`. *Why:* the window function runs after `WHERE` and `HAVING`
-   (*How a query runs: the order of the clauses*, S12), so the filter cannot see `row_num` yet. The first line of the
-   error reads `Binder Error: WHERE clause cannot contain window functions!`. A second stage, a CTE (*Readable queries
-   with CTEs*, S13), finishes the ranking first, and the next stage can filter on it.
-
-5. **Try `RANK` for the same job.**
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   ),
-   ranked AS (
-     SELECT store_id, customer_id, orders,
-            RANK() OVER (PARTITION BY store_id ORDER BY orders DESC) AS rnk
-     FROM per_customer
-   )
-   SELECT store_id, customer_id, orders, rnk
-   FROM ranked
-   WHERE rnk <= 3
-   ORDER BY store_id, rnk, customer_id;
-   ```
-
-   Expected: 13 rows, 4 columns: 4 rows more than step 3. *Why:* `RANK` gives tied customers the same number, so every
-   customer tied inside the top three stays: Old Town keeps 3 rows, Campus 5 (three tie for third place on 24 orders)
-   and Harbor 5 (four tie for second). `DENSE_RANK` would keep 4, 5 and 10, because it counts places, not rows. With
-   three cards per cafe, only `ROW_NUMBER` fits the policy.
-
-6. **Verify one row per group.**
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   ),
-   ranked AS (
-     SELECT store_id, customer_id, orders,
-            ROW_NUMBER() OVER (PARTITION BY store_id
-                               ORDER BY orders DESC, customer_id) AS row_num
-     FROM per_customer
-   ),
-   top3 AS (
-     SELECT store_id, customer_id, orders, row_num
-     FROM ranked
-     WHERE row_num <= 3
-   )
-   SELECT store_id, COUNT(*) AS rows_kept
-   FROM top3
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns, with `3` in every row of `rows_kept`. *Why:* the policy promised three rows per cafe, and a
-   count per cafe checks it: 3 cafes times 3 is the 9 rows of step 3.
-
-7. **The DuckDB shortcut: `QUALIFY`.** The two-stage form works in any database with window functions, which the
-   DuckDB documentation says major SQL databases have. DuckDB also has `QUALIFY`, which filters on a window function
-   the way `HAVING` filters on an aggregate, without the extra stage:
-
-   ```sql
-   WITH per_customer AS (
-     SELECT store_id, customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY store_id, customer_id
-   )
-   SELECT store_id, customer_id, orders,
-          ROW_NUMBER() OVER (PARTITION BY store_id
-                             ORDER BY orders DESC, customer_id) AS row_num
-   FROM per_customer
-   QUALIFY row_num <= 3
-   ORDER BY store_id, row_num;
-   ```
-
-   Expected: 9 rows, 4 columns, the same rows as step 3. Learn the two-stage form first.
+Expected: 13 rows, 4 columns: 4 rows more than unit 3. *Why:* Old Town keeps 3 rows, Campus 5 (three tie for third place
+on 24 orders) and Harbor 5 (four tie for second). `DENSE_RANK` would keep 4, 5 and 10, because it counts places, not
+rows. With three cards per cafe, only `ROW_NUMBER` fits the policy.
 
 <details>
-<summary>Explain it in your own words: why did RANK return more rows than ROW_NUMBER in step 5?</summary>
+<summary>Explain it in your own words: why did <code>RANK</code> return more rows than <code>ROW_NUMBER</code> in this unit?</summary>
 
-`ROW_NUMBER` always gives different numbers, so exactly three rows have numbers 1 to 3. `RANK` gives the same number
-to tied rows, so a tie at the cut-off puts more than three rows at rank 3 or better, and all of them stay.
+At Campus, three customers tie on 24 orders for third place. `ROW_NUMBER` hands them 3, 4 and 5, so only one passes
+`row_num <= 3`; `RANK` hands all three a 3, so all three pass `rnk <= 3`.
 
 </details>
+
+Now count the rows of the `ROW_NUMBER` version for each cafe.
+
+**Try it:**
+
+<RunSQL query={`WITH per_customer AS (
+  SELECT store_id, customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY store_id, customer_id
+),
+ranked AS (
+  SELECT store_id, customer_id, orders,
+         ROW_NUMBER() OVER (PARTITION BY store_id
+                            ORDER BY orders DESC, customer_id) AS row_num
+  FROM per_customer
+),
+top3 AS (
+  SELECT store_id, customer_id, orders, row_num
+  FROM ranked
+  WHERE row_num <= 3
+)
+SELECT store_id, COUNT(*) AS rows_kept
+FROM top3
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 2 columns, with `3` in every row of `rows_kept`. *Why:* 3 cafes times 3 is the 9 rows of unit 3.
+
+<Aside type="tip" title="Remember">
+
+- A rank is a number beside each row for its place in a group; ties are rows with the same value.
+- Name the tie policy first: `ROW_NUMBER` never repeats, `RANK` shares a number and skips, `DENSE_RANK` shares and never
+  skips.
+- `PARTITION BY` restarts the numbering for each group.
+- Filter on a rank in the next stage (or with `QUALIFY`), then count the rows of each group.
+
+**Common trap: "a tie means something is wrong with the data."** Equal values are normal: Chai Latte and Cold Brew both
+cost \$4.75, and four of Harbor's customers have 10 orders. A top-N query that ignores ties keeps the wrong number of
+rows: 13 with `RANK`, where the owner wanted 9.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-rank-top-n-1">
 
-**The three best-selling products.** Use the Exercise 1 cell. Expected: 3 rows, 3 columns: the product id, the units sold
-and the rank.
+**The three best-selling products.** Expected: 3 rows, 3 columns: the product id, the units sold and the rank.
 
 The first steps are done for you: the `per_product` stage adds up the units of each product in `order_items`, and the
-query lists its rows, most units first:
+query lists its rows, most units first.
 
-```sql
-WITH per_product AS (
+<RunSQL query={`WITH per_product AS (
   SELECT product_id, SUM(quantity) AS units
   FROM order_items
   GROUP BY product_id
 )
 SELECT product_id, units
 FROM per_product
-ORDER BY units DESC;
-```
+ORDER BY units DESC;`} />
 
 Now finish it: add a `ranked` stage that numbers the products by units, most first, and keep the top three. The result
 shows product ids only; the names are in the `products` table, and a later lesson, *INNER JOIN: pairing rows on a key*
@@ -552,7 +442,7 @@ shows product ids only; the names are in the `products` table, and a later lesso
 <details>
 <summary>Hint</summary>
 
-Copy the `ranked` stage of step 3. There is no `PARTITION BY` here: all products form one group.
+Copy the `ranked` stage of unit 3. There is no `PARTITION BY` here: all products form one group.
 
 </details>
 
@@ -602,14 +492,16 @@ Product 16 was never sold, so it has no row.
 
 <Exercise id="sql-rank-top-n-2">
 
-**The most frequent customer for each payment method.** Work in the Exercise 2 cells, over all orders with a customer.
-Keep every customer who ties for first place.
+**The most frequent customer for each payment method.** Work over all orders with a customer. Keep every customer who
+ties for first place.
 
-Before you run anything, write one sentence in the first cell: how many rows do you expect, and what do you do with a
-tie for first place? Then write the query.
+Before you run anything, write one sentence as a comment in the editor: how many rows do you expect, and what do you do
+with a tie for first place? Then write the query.
 
 Expected: 3 columns. The count covers orders of any status; the walk-in
 order makes no difference, because it cannot reach first place.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -690,8 +582,7 @@ each. `RANK() = 1` keeps both, which was the policy; `ROW_NUMBER() = 1` would ha
 **Spot the flaw.** The owner has exactly three gift cards for each cafe. A colleague runs this query for the winners.
 It runs and returns the right kind of table:
 
-```sql
-WITH per_customer AS (
+<RunSQL query={`WITH per_customer AS (
   SELECT store_id, customer_id, COUNT(*) AS orders
   FROM orders
   WHERE customer_id IS NOT NULL
@@ -705,8 +596,7 @@ ranked AS (
 SELECT store_id, customer_id, orders
 FROM ranked
 WHERE rnk <= 3
-ORDER BY store_id, orders DESC, customer_id;
-```
+ORDER BY store_id, orders DESC, customer_id;`} />
 
 Expected: a table with 3 columns. Count the rows of each cafe, find the flaw and fix it.
 
@@ -714,8 +604,8 @@ Expected: a table with 3 columns. Count the rows of each cafe, find the flaw and
 
 The result has 13 rows, not 9: Old Town has 3, but Campus and Harbor have 5. `RANK()` gives tied customers the same
 number, so every customer tied inside the top three stays: three tie for third at Campus, four for second at Harbor.
-The policy was *exactly three*, so the function must be `ROW_NUMBER()` with a tie-breaker, as in step 3. The row count
-per cafe, step 6, would have caught it. After the fix: 9 rows, 4 columns.
+The policy was *exactly three*, so the function must be `ROW_NUMBER()` with a tie-breaker, as in unit 3. The row count
+per cafe, unit 5, would have caught it. After the fix: 9 rows, 4 columns.
 
 </Solution>
 
@@ -723,7 +613,7 @@ per cafe, step 6, would have caught it. After the fix: 9 rows, 4 columns.
 
 **Can you do it?** *I can keep the top N rows of each group, say what happens to a tie before I write the query, and
 check that each group has the number of rows I promised.*
-Test: Exercise sql-rank-top-n-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-rank-top-n-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **state the tie policy, number the rows inside each group with the function that matches it,
 filter in the next stage, and count the rows per group.** The next lesson, *Comparing to the previous row: LAG, LEAD and
