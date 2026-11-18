@@ -137,6 +137,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   skills it uses. → **After any reorder, re-derive each lesson's `prerequisites` from the functions it uses, not from
   its old neighbors.**
 
+- 2026-11-18 — SQL drafts cited SQLite's documentation for how DuckDB ranks `AND` over `OR` and `*` over `+`, and for
+  integer division. → **Cite only the engine the lesson runs (DuckDB). A standard-SQL rule is shown by the results in the
+  steps and called "standard SQL"; the missing DuckDB page goes in `TODO(owner)`.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
