@@ -36,24 +36,40 @@ sources:
 status: draft
 ---
 
-This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
-Colab notebook, so there is nothing to install. One `COUNT(*)` answers a question about the whole table. The owner
-usually wants one answer per cafe, per payment method or per customer. `GROUP BY` gives you one result row for each.
-
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
-closing `;` that this page shows.
+This lesson runs in the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
+Colab notebook. There is nothing to install. The notebook loads **cafe-sales**, the invented three-cafe chain we use from
+Excel to Python. Each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the closing
+`;` that this page shows.
 
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB SELECT page says the `SELECT` list is evaluated only at the end and that `ORDER BY` and `LIMIT` are applied at the very end; it gives no explicit sequence between those two, so the `SELECT`-then-`ORDER BY` step in How it works and in Check yourself rests on that reading; source it in *How a query runs* (S12). When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB SELECT page says the `SELECT` list is evaluated only at the end and that `ORDER BY` and `LIMIT` are applied at the very end; it gives no explicit sequence between those two, so the `SELECT`-then-`ORDER BY` order in unit 4 and in Check yourself rests on that reading; source it in *How a query runs* (S12). When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> How many orders did each cafe take, and how did customers pay at each one? Which cafes took at least 500 completed
+> orders?
+
+One `COUNT(*)` gives one number for the whole table. The owner wants one for each cafe.
+
+Each order is one **row** of the `orders` table. Its store and payment method are **columns**. Four rows (the stores
+are 1 Old Town, 2 Campus and 3 Harbor):
+
+| order_id | store_id | status | payment_method |
+|---:|---:|---|---|
+| 1105 | 2 | completed | cash |
+| 1106 | 1 | completed | card |
+| 1107 | 1 | completed | mobile |
+| 1108 | 1 | completed | card |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In *Counting and summing: aggregate functions* (S7), write one query that returns the number of orders and the
    number of different customers who placed them.
@@ -80,27 +96,136 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+`GROUP BY` sorts your rows into **groups**, like buckets: one group for each different value of a column you pick.
+Then it turns every group into a single row.
 
-> How many orders did each cafe take, and how did customers pay at each one? Which cafes took at least 500 completed
-> orders?
+<figure class="ca not-content t8">
+<input class="ca-pp" type="checkbox" id="gb-pp" aria-label="Pause the animation" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 224" width="360" role="img" aria-labelledby="gb-t gb-d">
+<title id="gb-t">GROUP BY sorts rows into buckets, one bucket per key</title>
+<desc id="gb-d">Six rows, Row 1 to Row 6, each tagged with a key: A, B, A, C, B, A. The A rows slide into bucket A, the B rows into bucket B and the C row into bucket C. Each bucket then becomes one row with its count: A 3 rows, B 2 rows, C 1 row. HAVING then drops a whole bucket: bucket C, with one row, is marked dropped.</desc>
+<text class="f11 b" x="10" y="14">Rows → buckets → one row each</text>
+<text class="f10 b w1 tmp" x="10" y="29">1 · rows, each with a key</text>
+<text class="f10 b w3 d2 tmp" x="10" y="29">2 · rows slide into buckets</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">3 · one row per bucket</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · HAVING drops a bucket</text>
+<rect class="bx dsh" x="10" y="40" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="70" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="100" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="130" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="160" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="190" width="64" height="24" rx="6" />
+<rect class="bx" x="110" y="30" width="236" height="44" rx="8" />
+<text class="f14 b w6 d3" x="116" y="56">A</text>
+<rect class="bx" x="110" y="90" width="236" height="44" rx="8" />
+<text class="f14 b w5 d4" x="116" y="116">B</text>
+<rect class="bx" x="110" y="150" width="236" height="44" rx="8" />
+<text class="f14 b w4 d5" x="116" y="176">C</text>
+<g class="w4 tmp"><g class="mv m2 x12 y0"><g><rect class="f-grp k1" x="10" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="56">Row 1 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x12 y3"><g><rect class="f-grp k2" x="10" y="70" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="86">Row 2 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2 x19 yn6"><g><rect class="f-grp k1" x="10" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="116">Row 3 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m4 x12 y3"><g><rect class="f-grp k4" x="10" y="130" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="146">Row 4 · C</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x19 yn6"><g><rect class="f-grp k2" x="10" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="176">Row 5 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2 x26 yn15"><g><rect class="f-grp k1" x="10" y="190" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="206">Row 6 · A</text></g></g></g>
+<g class="w4 d5"><rect class="f-out k3" x="130" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="56">3 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="36" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="116">2 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="96" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="160" width="64" height="24" rx="6" /><rect class="f-flt k3 w3 d6" x="130" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="176">1 row</text></g>
+<rect class="s-flt u2 d5 tmp" x="126" y="156" width="72" height="32" rx="8" />
+<text class="f10 b w3 d6" x="204" y="176">dropped</text>
+</svg>
+<div class="ca-ctl">
+<label class="ca-btn" for="gb-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+</div>
+<p class="ca-cap">GROUP BY sorts the rows into one bucket per key, and each bucket becomes one row. HAVING then keeps or drops whole buckets.</p>
+</figure>
 
-The `orders` table has the store and the payment method on every row. Four of its rows (the stores are 1 Old Town,
-2 Campus and 3 Harbor):
+## Learn by doing
 
-| order_id | store_id | status | payment_method |
-|---:|---:|---|---|
-| 1105 | 2 | completed | cash |
-| 1106 | 1 | completed | card |
-| 1107 | 1 | completed | mobile |
-| 1108 | 1 | completed | card |
+Five small steps. Each gives you one idea, then you try it. Run the notebook's setup cell first, then one cell per step.
 
-By the end you will have said what one result row means before writing each query, grouped by one and by two columns,
-and answered both questions.
+### 1. One group per store
 
-## The picture
+The column you pick is the **key**. `GROUP BY store_id` makes one group for each store, and every group becomes one row.
+Say what that row stands for before you write the query: *one row per store*. That is the **grain**.
+
+**Try it** (notebook step 1):
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;
+```
+
+Read it: *count the orders in each store's group*. `COUNT(*)` is an **aggregate**: it turns a group into one number.
+
+Expected: 3 rows, 2 columns: store 1 has 729 orders, store 2 has 716 and store 3 has 355. *Excel:* a PivotTable (E15)
+is the same machine: `store` in Rows is the key, and a count in Values is the aggregate.
+
+*Why:* three stores, three groups, three rows. The counts add up to 1,800, every order, the canceled one included.
+
+### 2. Two columns, one group per pair
+
+Pick two columns and a group is one **pair**: store 1 with card is one group, store 1 with cash is another. To show a
+column beside the count, it must be in `GROUP BY`. Any other column has many values in a group, so DuckDB stops with a
+`Binder Error` saying the column "must appear in the GROUP BY clause".
+
+**Try it** (notebook step 2). Grain: *one row per store and payment method*. Before you run it: how many rows?
+
+```sql
+SELECT store_id, payment_method, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id, payment_method
+ORDER BY store_id, payment_method;
+```
+
+Expected: 3 columns. *Excel:* `payment_method` in Columns, read as a list.
+
+*Why:* 3 stores times 3 methods is 9, because every store has orders in all three. A pair with no orders gets no group,
+so no row. Store 1 reads card 421, cash 91, mobile 217.
+
+### 3. `WHERE` clears rows before the groups
+
+`WHERE` runs before any group exists, so it can test only a row's own columns, such as `status`.
+
+**Try it** (notebook step 3). Grain: *one row per store, completed orders only*.
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY store_id
+ORDER BY store_id;
+```
+
+Expected: 3 rows, 2 columns: 729, 715 and 355. *Excel:* `status` in Filters, set to completed.
+
+*Why:* the canceled order 1461 never reaches a group. Campus, store 2, goes from 716 to 715.
+
+### 4. `HAVING` clears groups after the count
+
+`HAVING` runs after the groups are built, so it can test what a group holds, such as its size. A group that fails is
+dropped whole.
+
+**Try it** (notebook step 4):
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY store_id
+HAVING COUNT(*) >= 500
+ORDER BY store_id;
+```
+
+Expected: 2 rows, 2 columns: store 1 with 729 and store 2 with 715. *Why:* Harbor's group has 355 orders, so its row
+is gone. That answers the owner: Old Town and Campus.
+
+Now watch ten orders go through the same steps.
 
 <figure class="sa not-content">
 <input class="sa-r r1" type="radio" name="gbh" id="gbh-r1" aria-label="Step 1 of 5: FROM" aria-describedby="gbh-c1" checked />
@@ -158,6 +283,10 @@ and answered both questions.
 </ol>
 </figure>
 
+SQL works through the clauses in this order: `FROM`, `WHERE`, `GROUP BY`, then each group's aggregates, `HAVING`,
+`SELECT`, and last `ORDER BY` and `LIMIT`. Here is your query with its real counts. *How a query runs: the order of the
+clauses* (S12) goes deeper.
+
 <figure>
 <svg viewBox="0 0 360 268" width="360" role="img" aria-labelledby="flow-title flow-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="flow-title">A grouped query, clause by clause, with its real row counts</title>
@@ -189,119 +318,39 @@ and answered both questions.
 </svg>
 </figure>
 
-## How it works
-
-`GROUP BY` puts rows into **groups**, one pile for each distinct key, and then replaces every pile with a single row.
-The key is the column, or the columns together, that you name. Logically the engine works through the clauses in this
-order, and the picture above follows it from the first step to the last:
-
-1. `FROM orders` starts with all 1,800 rows.
-2. `WHERE` drops single rows: `status = 'completed'` leaves 1,799.
-3. `GROUP BY store_id` puts rows with the same store into one group: three groups of 729, 715 and 355 rows.
-4. Each group collapses into one row, and each aggregate (`COUNT(*)`, `SUM(...)`) is worked out inside its own group.
-5. `HAVING` drops whole groups: `COUNT(*) >= 500` removes Harbor's 355 and leaves two.
-6. `SELECT` builds the output columns, and `ORDER BY` and `LIMIT` run last.
-
-The lesson *How a query runs: the order of the clauses* (S12) goes deeper. The rules that follow from this order:
-
-- What one result row stands for is the **grain**. Say it in words before you write the query: *one row per store*. A
-  group exists only if at least one row falls into it, so a key combination that never occurs gives no row.
-- After step 4 a group has one value for each key column but many values for every other column. So every column in
-  `SELECT` must be a key or sit inside an aggregate. Otherwise DuckDB stops with a `Binder Error` saying the column
-  "must appear in the GROUP BY clause".
-- `WHERE` runs before any group exists, so it can test only a row's own columns. `HAVING` runs after the
-  groups are built, so it can test what a group holds.
-
-**Excel.** A PivotTable (E15, *Summarize with a PivotTable*) is the same machine: `store` in Rows is the key,
-and `amount_usd` in Values is the aggregate.
-
-**A common misconception: "`HAVING` is just a second `WHERE`."** The two are not interchangeable, because they run at
-different moments. `WHERE MAX(order_id) > 1500` fails, since no maximum exists yet. `HAVING status = 'completed'` fails too,
-since after step 4 a group holds many statuses, not one. Ask which you are judging, a row or a group.
-
-| SQL | In the PivotTable (E15) |
-|---|---|
-| `GROUP BY store_id` | `store` in Rows |
-| `GROUP BY store_id, payment_method` | `store` in Rows and `payment_method` in Columns, as a list instead of a grid |
-| `COUNT(*)` | a count in Values |
-| `WHERE status = 'completed'` | `status` in Filters, set to completed |
-
-## Worked example
-
-Question: **how many orders did each cafe take, how did customers pay, and which cafes passed 500 completed orders?**
-Run the notebook's setup cell, then one cell per step. Each step starts with the grain and shows the shape of the
-result to expect.
-
-1. **Group by one column.** Grain: *one row per store*.
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns: store 1 has 729 orders, store 2 has 716 and store 3 has 355. *Excel:* a PivotTable
-   with `store` in Rows. *Why:* there are three stores, so there are three groups and three rows. The counts add up to
-   1,800, every order, the canceled one included.
-
-2. **Group by two columns.** Grain: *one row per store and payment method*. Before you run it: how many rows?
-
-   ```sql
-   SELECT store_id, payment_method, COUNT(*) AS orders
-   FROM orders
-   GROUP BY store_id, payment_method
-   ORDER BY store_id, payment_method;
-   ```
-
-   Expected: 3 columns. *Excel:* `payment_method` in Columns, read as a list. *Why:* a group is one combination of
-   the two values: 3 stores times 3 methods is 9, because every store has orders in all three methods. A combination
-   with no orders would not appear at all. Store 1 reads card 421, cash 91, mobile 217.
-
-3. **Filter rows before grouping with `WHERE`.** Grain: *one row per store, completed orders only*.
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   WHERE status = 'completed'
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns: 729, 715 and 355. *Excel:* `status` in Filters, set to completed. *Why:* `WHERE` runs
-   before the grouping, so the canceled order 1461 never reaches a bucket. Campus, store 2, goes from 716 to 715.
-
-4. **Filter groups after counting with `HAVING`.**
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   WHERE status = 'completed'
-   GROUP BY store_id
-   HAVING COUNT(*) >= 500
-   ORDER BY store_id;
-   ```
-
-   Expected: 2 rows, 2 columns: store 1 with 729 and store 2 with 715. *Why:* `HAVING` looks at one row per group,
-   after the count exists. Harbor's group has 355, so the whole group is dropped. `WHERE` could not do this, because
-   when it runs there is no count yet. This answers the owner: Old Town and Campus.
-
-5. **Verify with a second route.**
-
-   ```sql
-   SELECT COUNT(*) AS completed_orders FROM orders WHERE status = 'completed';
-   ```
-
-   Expected: 1 row, 1 column: `1799`. *Why:* it equals 729 + 715 + 355 from step 3, and the 1,799 completed orders
-   the till system reported in *A cleaning workflow you can defend* (E13). The groups lost no rows and counted none twice.
-
 <details>
-<summary>Explain it in your own words: why can step 4 drop Harbor, when step 3 could only drop single orders?</summary>
+<summary>Explain it in your own words: why can HAVING drop Harbor's whole row, when the WHERE of unit 3 could only drop single orders?</summary>
 
 `WHERE` sees one order at a time and has no idea how many orders a store has. `HAVING` runs after the grouping, so it
 sees the finished count per store and can drop a whole store at once.
 
 </details>
+
+### 5. Check that the groups add up
+
+After any `GROUP BY`, add the groups back together. They should give the whole.
+
+**Try it** (notebook step 5):
+
+```sql
+SELECT COUNT(*) AS completed_orders FROM orders WHERE status = 'completed';
+```
+
+Expected: 1 row, 1 column: `1799`. *Why:* it equals 729 + 715 + 355 from step 3, and the 1,799 completed orders the
+till system reported in *A cleaning workflow you can defend* (E13). The groups lost no rows and counted none twice.
+
+<Aside type="tip" title="Remember">
+
+- A key picks the groups, and every group becomes one row. Say the grain first.
+- Show only the key and aggregates.
+- `WHERE` filters rows before the groups; `HAVING` filters groups after the count.
+- The order: `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`.
+
+**Common trap: "`HAVING` is just a second `WHERE`."** They run at different moments. `WHERE MAX(order_id) > 1500` fails,
+because no maximum exists yet. `HAVING status = 'completed'` fails too, because a group holds many statuses, not one.
+Ask what you are judging: a row or a group.
+
+</Aside>
 
 ## Finish it
 
@@ -322,7 +371,7 @@ Now finish it: keep only the completed orders, group by the payment method, and 
 <details>
 <summary>Hint</summary>
 
-Steps 3 and 1 have the `WHERE` and the `GROUP BY` lines. In the sort, use the name you gave the count.
+Units 3 and 1 have the `WHERE` and the `GROUP BY` lines. In the sort, use the name you gave the count.
 
 </details>
 
@@ -372,7 +421,7 @@ Then run the query without a filter, and add the filter. Expected shape for the 
 <details>
 <summary>Hint</summary>
 
-Group `orders` by `customer_id`, as in step 1. The filter is on the count, so it goes in `HAVING`, as in step 4. For the
+Group `orders` by `customer_id`, as in unit 1. The filter is on the count, so it goes in `HAVING`, as in unit 4. For the
 sort, see *SELECT, ORDER BY and LIMIT* (S2): two columns, then the tie-breaker.
 
 </details>

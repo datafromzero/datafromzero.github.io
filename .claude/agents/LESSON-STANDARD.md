@@ -50,6 +50,51 @@ Check yourself.
 - Every exercise: hint `<details>`, half-solution `<details>`, then exactly one `<Solution>`.
 - One new idea per lesson. Keep within `duration`; say so in the report if it cannot fit.
 
+## Pilot shape (interleaved)
+
+**Status: pilot, waiting for the owner to approve or reject it.** Written for the owner's direction: "interleave theory
+and exercises so the learner can study easily, balancing knowledge and practice; no dry, wordy prose; animations must be
+beautiful and memorable; always stand where a learner who knows nothing about data analysis stands." Piloted on S8
+(`group-by-having`), S14 (`window-functions`) and S19 (`inner-join`). Until the owner decides, every other lesson keeps
+the shape above, and a lesson uses one shape or the other, never a mix. Everything outside "Shape" and "How it works"
+above (rules, figures, files, done means) applies unchanged.
+
+**Headings, in this order** (`##` unless marked): The question · Warm-up · The big idea · Learn by doing (with 3 to 5
+`###` units, numbered) · Remember · Finish it · On your own · Check yourself. The `How it works` and `The picture`
+headings are gone: their content moves as below.
+
+- **The question:** as above, in one or two human sentences, with the data visible. No "by the end you will" paragraph.
+- **Warm-up:** at most 2 recall prompts (use earlier lessons' objectives), at least one that produces something.
+- **The big idea:** one plain sentence saying what the tool does to the rows, then the concept animation on its own
+  line as an MDX comment marker, `{/* CONCEPT: concept-name */}`, which the lead replaces with the generated markup.
+  No other text between the sentence and the animation.
+- **Learn by doing:** one line of orientation, then the units. A unit is about 80 to 200 words of prose plus its
+  queries and carries exactly one rule:
+  1. **Idea:** the rule in one to three short sentences, plain words, with one Excel or cafe comparison only when it
+     helps. Define every new word in the sentence that uses it (row, column, key, aggregate, grain, NULL...); a lesson
+     never uses a term before it has been explained. Idea sentences never state the answer to a Predict in the unit.
+  2. **Try it:** the worked-example query, labeled with its notebook step ("Try it (notebook step 3)") so the page and the
+     notebook stay in step even when a unit holds two queries or the units reorder the steps.
+  3. **Predict:** keep the existing prompts, before the query.
+  4. **Result:** the Expected line (columns only after a "how many rows?" prompt), then the data **stepper** if this unit
+     is the one it illustrates (D41: byte for byte from the generator), and any static figure that the unit's rule
+     explains.
+  5. **Why:** one line. A unit may use a self-explanation `<details>` instead of the line.
+  The last unit is a short **check** (reconcile the result with a second route or an Excel total). Theory is never
+  stated twice: a rule appears in the unit where it is first needed and nowhere else except the Remember box. The
+  `Excel` mapping table is dropped: each unit carries its own Excel line.
+- **Remember:** an `<Aside type="tip" title="Remember">` after the last unit with 3 to 5 one-line rules and one bold
+  **Common trap:** line (the former misconception, still correct, with the failing result named). A summary, so very
+  short; no new rule appears in it.
+- **Practice:** Finish it, On your own and Check yourself unchanged; only wording fixes the new shape needs (a hint
+  that said "step 4" now says "unit 2").
+- **Voice:** speak to "you"; short sentences; paragraphs of at most 3 sentences; one idea per paragraph; the cafe
+  example first, the general rule second; no "it is important to note", no stacked definitions, no jokes or fluff. One
+  word for one thing: where a figure says "group" (or "partition"), the text says the same.
+- **Length:** the same limit, about 100 body words per minute of `duration`. The pilot should read lighter, so cut every
+  word a unit does not need; keep every rule, source, number and Predict.
+- **Sourcing and numbers:** unchanged. Each rule keeps the doc sentence it rested on; recompute every number with DuckDB.
+
 ## Rules the reviews kept catching
 
 - **Exercises never overwrite** the worked example's sheet, cells or output. Each exercise has its own pre-built

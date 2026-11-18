@@ -31,59 +31,17 @@ sources:
 status: draft
 ---
 
-This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
-Colab notebook, so there is nothing to install. Until now every query read one table. Money lives in two: `order_items`
-knows how many units each line sold, and `products` knows the price. A **join** pairs the rows of two tables. It is what
-XLOOKUP did in *Bring in a value by key with XLOOKUP* (E8), done for every row at once.
-
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
+This lesson runs in the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
+Colab notebook, so there is nothing to install. The notebook loads **cafe-sales**, the invented three-cafe chain we use
+from Excel to Python. Each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
 closing `;` that this page shows.
 
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The *a* × *b* rule in How it works is derived from the DuckDB FROM page's statement that a join matches pairs of rows; the page does not state it, and the 9-row result of `order_items` joined to a copy of itself on `order_id` for order 1001 checks it. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The *a* × *b* rule in unit 4 is derived from the DuckDB FROM page's statement that a join matches pairs of rows; the page does not state it, and the 9-row result of `order_items` joined to a copy of itself on `order_id` for order 1001 checks it. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *Tables, keys and grain* (S18), which column of `order_items` links it to `products`, and what is one row of
-   `order_items`?
-
-   <details>
-   <summary>Answer</summary>
-
-   `product_id`, a foreign key that holds values of `products.product_id`, the primary key. One row of `order_items`
-   is one product line inside one order.
-
-   </details>
-
-2. In E8, line 5003 has code 1 (Espresso at 3.00), quantity 2 and no discount. Write the Excel formula for its
-   amount, and say what it gives.
-
-   <details>
-   <summary>Answer</summary>
-
-   `=D2*F2-E2` (quantity times price, minus the discount), filled down: 2 × 3.00 − 0.00 = **6.00**.
-
-   </details>
-
-3. In *Counting and summing: aggregate functions* (S7), write one query for the number of lines and the units sold.
-
-   <details>
-   <summary>Answer</summary>
-
-   ```sql
-   SELECT COUNT(*) AS lines, SUM(quantity) AS units FROM order_items;
-   ```
-
-   One row, two columns: 3287 lines and 5162 units.
-
-   </details>
 
 ## The question
 
@@ -92,7 +50,8 @@ The owner of the cafes asks:
 > What have we sold in dollars, and which products earn the most? In Excel the total came to 22,754.25. Does the
 > database agree?
 
-Three lines of order 1001 in `order_items`, and the three products they point at in `products`:
+Until now every query read one table. The money lives in two. Three lines of order 1001 in `order_items`, and the three
+products they point at in `products`:
 
 | order_item_id | order_id | product_id | quantity | discount_usd |
 |---:|---:|---:|---:|---:|
@@ -107,10 +66,213 @@ Three lines of order 1001 in `order_items`, and the three products they point at
 | 10 | Croissant | bakery | 3.25 |
 
 A line is worth `quantity × unit_price_usd − discount_usd`. The quantity and the discount sit on the line; the price
-sits in `products`. The dollars need both tables. By the end you will have the total, the total for each product, and a
-check against Excel.
+sits in `products`. The dollars need both tables.
 
-## The picture
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Tables, keys and grain* (S18), which column of `order_items` links it to `products`, and what is one row of
+   `order_items`?
+
+   <details>
+   <summary>Answer</summary>
+
+   `product_id`, a foreign key that holds values of `products.product_id`, the primary key. One row of `order_items`
+   is one product line inside one order.
+
+   </details>
+
+2. In *Counting and summing: aggregate functions* (S7), write one query for the number of lines and the units sold.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS lines, SUM(quantity) AS units FROM order_items;
+   ```
+
+   One row, two columns: 3287 lines and 5162 units.
+
+   </details>
+
+## The big idea
+
+A **join** pairs up the rows of two tables that share a value, such as a product id, and gives you one wider row for
+each pair.
+
+<figure class="ca not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-inner-pp" aria-label="Pause the animation" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 226" width="360" role="img" aria-labelledby="jn-inner-t jn-inner-d">
+<title id="jn-inner-t">INNER JOIN · only handshakes get through</title>
+<desc id="jn-inner-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Keys B and C match: they slide together, shake hands and move into the result as pairs. INNER JOIN keeps only those 2 pairs; the rows with keys A and D have no partner, are marked red and stay behind: 2 rows. Two circles in the corner show which keys are kept.</desc>
+<text class="f11 b" x="10" y="14">INNER JOIN · only handshakes get through</text>
+<text class="f10 b w1 tmp" x="10" y="27">1 · two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · matching keys shake hands</text>
+<text class="f10 b w1 d3 tmp" x="10" y="27">3 · the pairs move into the result</text>
+<text class="f10 b w5 d4" x="10" y="27">4 · no partner: not kept</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="150" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="f-mat k3 w6 d3" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<g><circle class="ln" cx="44" cy="190" r="26" /><circle class="ln" cx="78" cy="190" r="26" /></g>
+<text class="f10 b m" x="35" y="194">t1</text>
+<text class="f10 b m" x="87" y="194">t2</text>
+<rect class="bx dsh" x="10" y="44" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="134" width="52" height="24" rx="6" />
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g><rect class="f-mat k3 w6 d3" x="62" y="82" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="90">B r1</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="70" width="120" height="32" rx="10" /></g></g>
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g><rect class="f-mat k3 w6 d3" x="62" y="112" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="120">C r2</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="100" width="120" height="32" rx="10" /></g></g>
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g><rect class="f-src k2" x="150" y="134" width="52" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="150" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="150">D r3</text></g>
+<text class="f11 b w4 d5" x="220" y="114">2 rows</text>
+</svg>
+<div class="ca-ctl">
+<label class="ca-btn" for="jn-inner-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+</div>
+<p class="ca-cap">INNER JOIN keeps only the pairs whose keys match. A row with no partner is not kept.</p>
+</figure>
+
+## Learn by doing
+
+Five small steps. Run the notebook's setup cell first, then the cells named in each step.
+
+### 1. Pair the rows on a key
+
+`INNER JOIN` lays out every possible pair, one line and one product, then keeps the pairs where the `ON` condition is
+true. Every possible pair is what a `CROSS JOIN` returns (every row with every row, no `ON`): 16 products and 3,287
+lines make 52,592 pairs. Each kept pair becomes one wider row, with the columns of both tables. If the key is unique in
+the table you join to, each row has at most one partner, so the count cannot grow.
+
+<figure class="ca not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-cross-pp" aria-label="Pause the animation" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 250" width="360" role="img" aria-labelledby="jn-cross-t jn-cross-d">
+<title id="jn-cross-t">CROSS JOIN · everyone meets everyone</title>
+<desc id="jn-cross-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Lines join every row of the first table to every row of the second. Every pairing becomes a row of the result, three at a time, 9 rows in all.</desc>
+<text class="f11 b" x="10" y="14">CROSS JOIN · everyone meets everyone</text>
+<text class="f10 b w1 tmp" x="10" y="27">1 · two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · every row meets every row</text>
+<text class="f10 b w6 d3" x="10" y="27">3 · every pairing is a row</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="100" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="s-mat dr p7 d2" pathLength="1" d="M62 56L100 56M62 56L100 86M62 56L100 116M62 86L100 56M62 86L100 86M62 86L100 116M62 116L100 56M62 116L100 86M62 116L100 116" />
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g>
+<g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g>
+<g><rect class="f-src k2" x="100" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="60">B r1</text></g>
+<g><rect class="f-src k2" x="100" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="90">C r2</text></g>
+<g><rect class="f-src k2" x="100" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="120">D r3</text></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="46" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="59">A l1 · B r1</text></g></g></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="66" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="79">A l1 · C r2</text></g></g></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="86" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="99">A l1 · D r3</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="106" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="119">B l2 · B r1</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="126" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="139">B l2 · C r2</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="146" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="159">B l2 · D r3</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="166" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="179">C l3 · B r1</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="186" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="199">C l3 · C r2</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="206" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="219">C l3 · D r3</text></g></g></g>
+<text class="f11 b w3 d6" x="220" y="244">9 rows</text>
+</svg>
+<div class="ca-ctl">
+<label class="ca-btn" for="jn-cross-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+</div>
+<p class="ca-cap">CROSS JOIN has no keys to match: every row of the first table meets every row of the second.</p>
+</figure>
+
+**Try it** (notebook step 1). Before you run it: every line has one `product_id`, and `product_id` is the primary key of
+`products`. How many rows will the join return?
+
+```sql
+SELECT COUNT(*) AS joined_rows
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id;
+```
+
+Read it: `AS oi` and `AS p` are **aliases**, short names for the tables, so `oi.product_id` (table, a dot, column)
+leaves no doubt about which table a column comes from. `ON` names the key on each side: the foreign key of the many
+side against the primary key of the other (S18). `JOIN` alone means the same as `INNER JOIN`.
+
+Expected: 1 row, 1 column. *Excel:* an XLOOKUP column filled down, with a price on every line, as in *Bring in a value
+by key with XLOOKUP* (E8).
+
+*Why:* each line meets exactly one product, so the answer is **3287**, the lines of `order_items` (S18). The grain (what one
+row is) is still one line. A different number would mean a line was lost or doubled.
+
+**Try it** (notebook step 2): now look at five of the pairs.
+
+```sql
+SELECT oi.order_item_id, oi.order_id, p.product_name,
+       oi.quantity, p.unit_price_usd, oi.discount_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+ORDER BY oi.order_item_id
+LIMIT 5;
+```
+
+Expected: 5 rows, 6 columns; the first row is line 5001, a Croissant at 3.25. *Why:* the columns come from both tables,
+named through the aliases. `ORDER BY` fixes the order, because a join promises none.
+
+### 2. Use the wider table
+
+After the join, every pair is one row of a wider table, and `WHERE`, `GROUP BY` and the rest of the query work on it.
+The price lives in `products`, so now a line's amount can use it.
+
+**Try it** (notebook step 3): the amount of each line.
+
+```sql
+SELECT oi.order_item_id,
+       p.product_name,
+       oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+ORDER BY oi.order_item_id
+LIMIT 5;
+```
+
+Expected: 5 rows, 3 columns; line 5003 reads 6.00, as in E8. *Excel:* `=D2*F2-E2`. *Why:* the dataset's rule is quantity times
+price, minus the discount on the line. The price needs the join; `oi.quantity` and `oi.discount_usd` do not.
+
+**Try it** (notebook step 4): add it up.
+
+```sql
+SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id;
+```
+
+Expected: 1 row, 1 column: `22754.25`. *Why:* this covers all 3,287 lines of all 1,800 orders. It includes the one
+canceled order, 1461 (a Mocha line of 5.00), and the extra-zero line of order 2075 (20 Turkey Sandwiches, 185.00, where
+2 was meant). It is the total E8 reached with XLOOKUP and a `SUM`, and the status-bar Sum of *Summarize with a
+PivotTable* (E15), so the database agrees.
+
+### 3. A row with no partner disappears
+
+Only paired rows are returned. A row with no partner, from either table, is missing from the result. That includes a
+row whose key is `NULL`, an empty value: in an `=` test `NULL` is never equal to anything, not even another `NULL`, so
+it pairs with nothing.
+
+**Try it** (notebook step 5). Grain: *one row per product sold*. Before you run it: the menu has 16 products. How many
+rows?
+
+```sql
+SELECT p.product_name,
+       SUM(oi.quantity) AS units,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+GROUP BY p.product_name
+ORDER BY sales_usd DESC;
+```
+
+Expected: 3 columns. *Why:* **15** rows. The Pumpkin Spice Latte is in `products` but on no line, so nothing pairs with
+it and the inner join drops it: the product S18 found unsold. The Latte (product 3) leads with 2,927.00, and Green Tea
+is last with 783.75. That answers the owner's second question.
+
+Watch the same thing on a few rows.
 
 <figure class="sa not-content">
 <input class="sa-r r1" type="radio" name="ij" id="ij-r1" aria-label="Step 1 of 5: JOIN" aria-describedby="ij-c1" checked />
@@ -186,6 +348,12 @@ check against Excel.
 </ol>
 </figure>
 
+### 4. A repeated key multiplies rows
+
+If a key value appears *a* times on one side and *b* times on the other, it gives *a* × *b* rows. Order 1001 has 3
+lines, so a copy of `order_items` joined to itself on `order_id` gives 3 × 3 = 9 rows for it. *Excel:* `XLOOKUP`
+returns the first match for one key; a join returns every match, and each match is a row.
+
 <figure>
 <svg viewBox="0 0 360 402" width="360" role="img" aria-labelledby="ij-grow-title ij-grow-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="ij-grow-title">One order pairs with all of its lines</title>
@@ -205,148 +373,24 @@ check against Excel.
 </svg>
 </figure>
 
-## How it works
-
-A **join** combines two tables side by side. An `INNER JOIN` builds one wider row from one row of each table whenever
-the `ON` condition is true for that pair. Conceptually, it works in three steps:
-
-1. List every possible pair, one row from `order_items` and one from `products`. With 16 products, that is 52,592
-   pairs: exactly what a `CROSS JOIN` returns (every row with every row, no `ON`).
-2. Keep the pairs where `ON` is true: here, only the pairs whose product ids match.
-3. Each kept pair becomes one row with the columns of both tables, and `WHERE`, `GROUP BY` and the rest of the query
-   work on that wider table.
-
-In the picture above, each line pairs with one product row, and a product that no line points at has no pair.
-
-The rules:
-
-- Only rows that get paired are returned. A row with no partner, from either table, is missing from the result.
-- In an `=` condition, `NULL` is never equal to anything, not even another `NULL`: the comparison gives `NULL`, not
-  true. So a row whose key is `NULL` pairs with nothing.
-- The count follows the pairs. If the key is unique in the table you join to, each row has at most one partner and the
-  count cannot grow. If a key value appears *a* times on one side and *b* times on the other, it gives *a* × *b* rows:
-  order 1001 has 3 lines, so a copy of `order_items` joined to itself on `order_id` gives 3 × 3 = 9 rows for it. This
-  is why you predict the count from the keys before you run a join.
-
-**Excel.** `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) returns the first match for one key; a join returns
-every match, for every row at once, and each match is a row.
-
-**A common misconception: "a join is a Venn diagram of two sets."** The circles are right about which keys have a
-partner: an inner join keeps the overlap. They say nothing about row counts, because a join counts pairs, not keys.
-Order 1001 is one key, but its 3 lines make 3 rows.
-
-You write the join in the `FROM` clause:
+**Try it** (notebook step 6). Before you run it: there are 1,800 orders. How many rows will `orders` joined to
+`order_items` return?
 
 ```sql
-FROM order_items AS oi
-INNER JOIN products AS p ON oi.product_id = p.product_id
+SELECT COUNT(*) AS joined_rows
+FROM orders AS o
+INNER JOIN order_items AS oi ON o.order_id = oi.order_id;
 ```
 
-- `AS oi` and `AS p` are **aliases**, short names for the tables. Write `oi.product_id`, the table, a dot and the
-  column, so there is never doubt about which table a column comes from.
-- `ON` names the key on each side: the foreign key of the many side against the primary key of the other (S18).
-- `JOIN` alone means the same as `INNER JOIN`.
+Expected: 1 row, 1 column. *Why:* **3287**. The key repeats on the `oi` side: an order pairs with each of its one to three
+lines, so the grain of the result is the line, and `COUNT(*)` counts lines, not orders. The count grew from 1,800 to
+3,287 because the join went from the one side to the many side.
 
-| In Excel (E8) | In SQL |
-|---|---|
-| a `raw_products` sheet with codes in a column | the `products` table with its primary key |
-| `=XLOOKUP(C2, codes, prices)` for one column | `INNER JOIN products AS p ON oi.product_id = p.product_id`, then any columns of `p` |
-| fill down to the last line | nothing: the join covers every row |
+### 5. Check the numbers
 
-## Worked example
-
-Question: **what have we sold in dollars, and which products earn the most?** Run the notebook's setup cell, then one
-cell per step. Each step gives the shape of the result to expect.
-
-1. **Predict, then count the pairs.** Before you run it: every line has one `product_id`, and `product_id` is the
-   primary key of `products`. How many rows will the join return?
-
-   ```sql
-   SELECT COUNT(*) AS joined_rows
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id;
-   ```
-
-   Expected: 1 row, 1 column. *Excel:* an XLOOKUP column filled down, with a price on every line. *Why:* each line meets
-   exactly one product, so the answer is **3287**, the lines of `order_items` (S18). The grain is still one line. A
-   different number would mean a line was lost or doubled.
-
-2. **Look at the pairs.**
-
-   ```sql
-   SELECT oi.order_item_id, oi.order_id, p.product_name,
-          oi.quantity, p.unit_price_usd, oi.discount_usd
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   ORDER BY oi.order_item_id
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 6 columns; the first row is line 5001, a Croissant at 3.25. *Why:* the columns come from both
-   tables, named through the aliases. `ORDER BY` fixes the order, because a join promises none.
-
-3. **Compute the line amount.**
-
-   ```sql
-   SELECT oi.order_item_id,
-          p.product_name,
-          oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   ORDER BY oi.order_item_id
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 3 columns; line 5003 reads 6.00, as in E8. *Excel:* `=D2*F2-E2`. *Why:* the dataset's rule is
-   quantity times price, minus the discount on the line. The price needs the join; `oi.quantity` and `oi.discount_usd`
-   do not.
-
-4. **Add it up.**
-
-   ```sql
-   SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id;
-   ```
-
-   Expected: 1 row, 1 column: `22754.25`. *Why:* this covers all 3,287 lines of all 1,800 orders. It includes the one
-   canceled order, 1461 (a Mocha line of 5.00), and the extra-zero line of order 2075 (20 Turkey Sandwiches, 185.00,
-   where 2 was meant). It is the total E8 reached with XLOOKUP and a `SUM`, and the status-bar Sum of *Summarize with a PivotTable* (E15), so the database agrees.
-
-5. **Group by product.** Grain: one row per product sold. Before you run it: the menu has 16 products. How many rows?
-
-   ```sql
-   SELECT p.product_name,
-          SUM(oi.quantity) AS units,
-          SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   GROUP BY p.product_name
-   ORDER BY sales_usd DESC;
-   ```
-
-   Expected: 3 columns. *Why:* **15** rows. The Pumpkin Spice Latte is in `products` but on no line, so nothing pairs
-   with it and the inner join drops it: the product S18 found unsold. The Latte leads with 2,927.00, and Green Tea is
-   last with 783.75. That answers the owner's second question.
-
-6. **Join in the other direction.** Before you run it: there are 1,800 orders. How many rows will `orders` joined to
-   `order_items` return?
-
-   ```sql
-   SELECT COUNT(*) AS joined_rows
-   FROM orders AS o
-   INNER JOIN order_items AS oi ON o.order_id = oi.order_id;
-   ```
-
-   Expected: 1 row, 1 column. *Why:* **3287**. Here the key repeats on the `oi` side: an order pairs once with each of
-   its one to three lines, so it appears one to three times, and the grain of the result is the line. A
-   `COUNT(*)` on this join counts lines, not orders. The count grew from 1,800 to 3,287 because the join went from the
-   one side to the many side.
-
-7. **Verify.** Step 1's 3,287 equals the lines of `order_items` and step 6's count, so the join to `products` lost no
-   line and doubled none. Step 4's 22,754.25 equals the Excel totals of E8 (the `SUM` of the XLOOKUP amounts) and E15 (the status-bar Sum). Two more Excel totals are
-   slices of it: E7's Campus coffee in March (completed orders only) and E21's Sales of 22,749.25 (completed orders
-   only). Exercise 1 reproduces E21's.
+No new query. The 3,287 of unit 1 equals the lines of `order_items` and the count of unit 4, so the join to `products`
+lost no line and doubled none. Two more Excel totals are slices of unit 2's 22,754.25: E7's Campus coffee in March
+(completed orders only) and E21's Sales of 22,749.25 (completed orders only). Exercise 1 reproduces E21's.
 
 <details>
 <summary>Explain it in your own words: why did the join to products keep 3,287 rows while the join to order_items grew?</summary>
@@ -357,6 +401,19 @@ the count grows.
 
 </details>
 
+<Aside type="tip" title="Remember">
+
+- `INNER JOIN` makes one wider row for every pair whose `ON` is true.
+- A row with no partner, or with an empty key, is missing from the result.
+- Key unique on one side: the count cannot grow. Key repeated: *a* × *b* rows.
+- Name the key, predict the rows, run the join, compare the count.
+
+**Common trap: "a join is a Venn diagram of two sets."** The circles are right about which keys have a partner: an
+inner join keeps the overlap. They say nothing about row counts, because a join counts pairs, not keys. Order 1001 is
+one key, but its 3 lines make 3 rows.
+
+</Aside>
+
 ## Finish it
 
 <Exercise id="sql-inner-join-1">
@@ -364,7 +421,7 @@ the count grows.
 **What did completed orders sell, in dollars?** E21 reported Sales of 22,749.25. Use the Exercise 1 cell. Expected: 1
 row, 1 column, equal to E21's figure.
 
-Done for you: the grain is a line, and the first part of the query is step 4's:
+Done for you: the grain is a line, and the first part of the query is unit 2's:
 
 ```sql
 SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
@@ -378,7 +435,7 @@ The status lives in `orders`, and the result of one join can be joined again. No
 <details>
 <summary>Hint</summary>
 
-The second join goes on the line after the first. Copy the shape of step 6 for the `ON`, and use `WHERE` as in
+The second join goes on the line after the first. Copy the shape of unit 4 for the `ON`, and use `WHERE` as in
 *Filtering rows with WHERE* (S3) for the status.
 
 </details>
