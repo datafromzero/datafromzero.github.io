@@ -33,7 +33,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 Solution** (31): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/sql/aggregate-functions.mdx
+- **C1 Solution** (31): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/sql/deduplicate-latest-record.mdx
 - **C2 HANDOFF.md** (28): .claude/HANDOFF.md; src/site.ts; D30 Vietnamese paused; S8 Internationalization; S14 Content production (replaces migr…; .claude/agents/README.md
 - **C3 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
 - **C4 Tech stack** (10): S2 Tech stack; research/curriculum/07-curriculum-rationale.md; agent:spec-reviewer spec-reviewer; S1 Decision record; S4 Information architecture; research/curriculum/01-competitor-map.md
