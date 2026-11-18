@@ -204,8 +204,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — SVG row highlights drifted two rows, and an Expected line gave away the count the learner was asked to
   predict. → **Check each highlight's y against the row grid; after "Before you run it: how many…", Expected gives
   only the columns.**
-- 2026-11-18 — Results like `-nan` and `inf` depend on the DuckDB version Colab installs. → **SQL notebooks pin
-  `duckdb==2.0.0` (`scripts/pin-notebook-duckdb.py`).**
+- 2026-11-18 — Results like `-nan` and `inf` depend on how the tool prints them: DuckDB 2.0.0 and 1.4.3 give the same
+  value for 0/0, but the CLI or `.show()` may print `-nan` where the browser runner prints `nan`. → **SQL notebooks pin
+  `duckdb==2.0.0` (`scripts/pin-notebook-duckdb.py`). Text that says what a RunSQL block prints must follow the browser
+  formatter in `src/scripts/sql-runtime.ts` (`nan`, `inf`, a trailing `.0` on whole floats).**
 - 2026-11-18 — A planned objective said a SELECT alias "cannot be used in WHERE", but DuckDB 2.0.0 accepts it for plain
   expressions (its Friendly SQL page lists it). → **Run every behavior claim in a stub's objectives on the engine the
   lesson uses before teaching it; teach the running order, name what other databases do from their docs, and report the
