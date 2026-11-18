@@ -305,6 +305,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   could change between engine versions and hide the flaw. → **A spot-the-flaw bug is a deterministic wrong rule (a
   tie-breaker in the wrong direction, a wrong function), never an unspecified tie; run it on DuckDB 2.0.0 and 1.4.3 and
   expect the same rows.**
+- 2026-11-18 — In the S1 to S5 rollout, several units stated in their Idea the very fact their Predict asked for (a NULL
+  test drops the row; DOUBLE stores an approximation; NULL is not 0), and the Explain-it answers repeated the unit text.
+  → **An Idea must not state the fact its Predict asks for; that fact goes in the Why after the Result. An Explain-it asks
+  a new question or uses a new example, never the unit's own sentence.**
 
 ## Agents and reviews
 

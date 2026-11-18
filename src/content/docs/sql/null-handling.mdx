@@ -119,9 +119,8 @@ Expected: 0 rows, 6 columns, and no error.
 
 ### 2. NULL inside a WHERE
 
-A test that gives NULL drops the row just as false does (S3), so a filter on one value can lose the rows that have no
-value at all. `AND`, `OR` and `NOT` work with three answers: `NULL AND false` is false, `NULL OR true` is true, but
-`NOT NULL` is NULL (the logical operators page). To keep the unknown rows on purpose, ask for them with `IS NULL`.
+`AND`, `OR` and `NOT` work with three answers: true, false and NULL. `NULL AND false` is false, `NULL OR true` is true,
+but `NOT NULL` is NULL (the logical operators page). To keep the unknown rows on purpose, ask for them with `IS NULL`.
 
 **Try it.** Before you run the two counts: will they add up to 1,800?
 
@@ -129,8 +128,11 @@ value at all. `AND`, `OR` and `NOT` work with three answers: `NULL AND false` is
 
 <RunSQL query={`SELECT COUNT(*) AS orders FROM orders WHERE customer_id = 7;`} />
 
-Expected: 1 row, 1 column each: `1786` and `13`. They make 1,799, one short. The first picture shows the same effect on
-customers 1 to 8: neither `= 3` nor `<> 3` keeps a NULL.
+Expected: 1 row, 1 column each: `1786` and `13`.
+
+*Why:* they make 1,799, one short. A test that gives NULL drops the row just as false does (S3), so a filter on one value
+can lose the rows that have no value at all. The first picture shows the same effect on customers 1 to 8 (the figure uses
+`referred_by`): neither `= 3` nor `<> 3` keeps a NULL.
 
 <figure>
 <svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="null-title null-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -219,23 +221,26 @@ and `OR` give for every pair of the three answers.
 </figure>
 
 <details>
-<summary>Explain it in your own words: why does the filter "customer is not 7" not return the walk-in order?</summary>
+<summary>Explain it in your own words: in the first picture, `referred_by <> 3` keeps none of the eight customers. Customer 6 is dropped too, but for a different reason than customers 1 and 2. What is each reason?</summary>
 
-The walk-in's customer is missing, so "is not 7" is neither true nor false for it: SQL cannot say. The answer is NULL,
-and a `WHERE` lets through only true. `OR customer_id IS NULL` asks for that row by name.
+Customer 6 has a referrer, 3, so "different from 3" is false for that row. Customers 1 and 2 have no referrer, so the
+test has no answer and gives NULL. The reasons differ, and the outcome is the same.
 
 </details>
 
 ### 3. NULL is not zero
 
-NULL is not 0 and not empty text: both of those are values, and NULL is no value at all. Most aggregate functions skip
-NULL (DuckDB's NULL values page).
+A cell can hold a real 0 or an empty text, and a missing value is neither. Most aggregate functions skip NULL (DuckDB's
+NULL values page).
 
 **Try it.** Before you run it: which of the three answers is true?
 
 <RunSQL query={`SELECT 0 IS NULL AS zero_is_null, '' IS NULL AS empty_text_is_null, NULL IS NULL AS null_is_null;`} />
 
-Expected: 1 row, 3 columns. *Why:* only `NULL IS NULL` is true, the difference between a real 0 and an empty cell in E4.
+Expected: 1 row, 3 columns.
+
+*Why:* only `NULL IS NULL` is true. 0 is a number and `''` is a text with no characters: both are values, and NULL is no
+value at all. That is the difference between a real 0 and an empty cell in E4.
 
 **Try it.** Customers 1 to 8: only customer 6 has a referrer, customer 3.
 
@@ -250,10 +255,11 @@ ignored". A SQL aggregate skips NULL the same way, but a comparison does not ski
 ### 4. NOT IN and a NULL in the list
 
 `x NOT IN (list)` means `NOT (x IN (list))`. When the list holds a NULL, a value that is not in it gets NULL, not true
-(DuckDB's `IN` page): `5 NOT IN (1, 3)` is true, but `5 NOT IN (1, 3, NULL)` is NULL.
+(DuckDB's `IN` page).
 
 **Try it.** You paste a list of customers who already got a thank-you card from a sheet column with an
-empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it:
+empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it. Before you run the
+second query: how many rows will it return?
 
 <RunSQL query={`SELECT customer_id
 FROM customers
@@ -263,9 +269,10 @@ WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7);`} />
 FROM customers
 WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7, NULL);`} />
 
-Expected: 5 rows, 1 column, and then 0 rows, 1 column, with no error.
+Expected: 1 column each, and no error.
 
-*Why:* for customer 2, the test asks whether 2 equals 1, 3, 7 or NULL: three false answers and one NULL give NULL. Keep
+*Why:* the first list leaves 5 customers and the second leaves none. `5 NOT IN (1, 3)` is true, but `5 NOT IN (1, 3, NULL)`
+is NULL. For customer 2, the test asks whether 2 equals 1, 3, 7 or NULL: three false answers and one NULL give NULL. Keep
 NULLs out of the list; later lessons show safer ways to compare two tables.
 
 ### 5. Replace NULL with a default, and check
@@ -283,7 +290,7 @@ ORDER BY customer_id;`} />
 Expected: 8 rows, 3 columns. *Excel:* an `IF` that tests for an empty cell (E6). *Why:* a missing referrer shows as 0.
 That is safe here only because no customer has the id 0; keep the original column in the result too, so you can still
 tell *nobody* from a real referrer. The default must have the column's type: `COALESCE(referred_by, 'nobody')` fails with
-`Could not convert string 'nobody' to INT32` (a Conversion Error), and the lesson *Computed columns and data types*
+`Could not convert string 'nobody' to INT32`, and the lesson *Computed columns and data types*
 shows how to change a type.
 
 Check the walk-in against the total.
@@ -443,7 +450,7 @@ WHERE referred_by IS NULL;
 ```
 
 Expected: 1 row, 1 column: `120`. With the 30 referred customers they make the 150 in the table. Writing `referred_by = ''`
-does not help: it stops with a `Conversion Error`, because `''` is text and the column holds numbers.
+does not help: it stops with an error, because `''` is text and the column holds numbers.
 
 </Solution>
 
