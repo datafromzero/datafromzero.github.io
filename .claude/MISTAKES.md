@@ -129,6 +129,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   → **Count body words before reporting; a 20-minute lesson is at most about 2,200 words including exercises, and the
   report gives the count.**
 
+- 2026-11-18 — After the SQL stage was reordered, S18 still listed only its old prerequisites and missed the S4 and S7
+  skills it uses. → **After any reorder, re-derive each lesson's `prerequisites` from the functions it uses, not from
+  its old neighbors.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
