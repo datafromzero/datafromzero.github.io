@@ -31,13 +31,15 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own and the taskbar script (D31: one script
   under 1 KB gzipped, no GSAP, no library). One exception (D33): `/career-quiz/` adds one scoring script under 4 KB
   gzipped (vanilla, no GSAP, no storage, sends nothing). Another exception (D42): a lesson page that uses `<RunSQL>` also
-  ships one small deferred module (`src/scripts/run-sql.ts`, a few KB); the DuckDB-Wasm engine, self-hosted, loads only
-  on the first Run click, so no engine or CDN request happens before it. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
+  ships one small deferred module (`src/scripts/run-sql.ts`, under 1 KB gzipped, fetches nothing); the editor (CodeMirror)
+  and the self-hosted DuckDB-Wasm engine (about 8 MB) load in the background after the load event, at idle, once a block is
+  within one screen of the viewport (never with Data Saver or 2G: then on first focus or Run), so a reader who never nears
+  a block downloads about 3 KB. The UI says nothing technical about loading. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.
 - **No** accounts, saved progress, comments or in-browser code execution (SPEC §15), except the in-page SQL runner of D42
-  (`<RunSQL>`): DuckDB-Wasm self-hosted, loaded on click, no storage, nothing sent anywhere.
+  (`<RunSQL>`): DuckDB-Wasm self-hosted, loaded in the background near a block, no storage, nothing sent anywhere.
 - Any change to a CONTRACT section or a decision in SPEC §1 must update `SPEC.md` in the same PR
   (add or amend the decision row) and `CHANGELOG.md`.
 
@@ -69,7 +71,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    are static (build-time SVG, CSS, `<details>`), never JS; no progress tracking (D15).
 9. **Motion & speed** (SPEC D28): frame-budget pass (done, `npm run perf`), then the full GSAP plugin set on the
    homepage only, each effect loaded on demand (done; project pages and the `/start/` map are static again by owner
-   decision); budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS, apart from the click-loaded SQL runner (D42).
+   decision); budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS, apart from the background-loaded SQL runner (D42).
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and

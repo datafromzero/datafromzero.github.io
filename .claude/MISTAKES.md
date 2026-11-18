@@ -130,6 +130,22 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   **After `npm i`, `git diff package-lock.json` must show additions for the new package only; restore the old lock and
   merge in just the new entries when it does not.**
 
+- 2026-11-18 — The first runner version loaded its engine on the first Run click and said "Loading DuckDB, about 8 MB"; the
+  owner wants learners never to notice setup. → **Anything a learner must wait for loads in the background before they
+  need it (after the load event, at idle, near the block; never on Data Saver or 2G), and the interface never names the
+  engine, a size or a download. Only a Run pressed too early shows "Getting ready…".**
+- 2026-11-18 — A side-by-side layout was sized from the "50 rem" in the brief, but the lesson column is 42 rem (628 px at
+  1280 px) with the sidebars on both sides, so it never fit; a first breakout overlapped the table of contents. → **Measure
+  the real column in Playwright at 1280 and 1440 px before choosing a breakpoint; a block that breaks out of the column
+  may use only the room measured beside it.**
+- 2026-11-18 — A new Starlight page under `/sql/` (the playground) was classified as a lesson by its folder and crashed the
+  lesson footer. → **A page whose URL sits inside a stage folder is listed in `classify()` as not a lesson; load it in dev
+  before building.**
+- 2026-11-18 — An auto-run feature would have repeated every `CREATE`, `INSERT` or `DROP` on each pause in typing. → **Auto-run
+  runs only statements that read (`SELECT`, `WITH`, `VALUES`, `FROM`, `DESCRIBE`, `SHOW`, `EXPLAIN`).**
+- 2026-11-18 — Error tips were drafted before checking the engine's real wording. → **Every tip is written from a captured
+  engine message (`tests/sql-errors.test.ts`); no message, no tip.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

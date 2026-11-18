@@ -1,5 +1,5 @@
-// SPEC D42: the DuckDB-Wasm engine behind <RunSQL>. This chunk is imported on the first click of a Run button, never
-// before. Everything is self-hosted (the files in dist/_astro): no CDN, no request to a third party, no storage.
+// SPEC D42: the DuckDB-Wasm engine behind <RunSQL>. This chunk is imported in the background once a block nears the
+// viewport (or on first focus or Run with Data Saver), never earlier. Everything is self-hosted (the files in dist/_astro): no CDN, no request to a third party, no storage.
 // One database per page; every block shares it, so a table or view made in one block is seen by the next.
 import * as duckdb from '@duckdb/duckdb-wasm';
 import wasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
@@ -34,22 +34,56 @@ export interface Result {
 let csv: Promise<string[]> | undefined;
 let engine: Promise<{ db: duckdb.AsyncDuckDB; conn: duckdb.AsyncDuckDBConnection }> | undefined;
 
+/** Where loading stands, for the progress line: `fraction` is 0..1 while the engine downloads. */
+export interface Progress {
+	phase: 'idle' | 'engine' | 'data' | 'ready' | 'error';
+	fraction: number;
+}
+// The engine file is 34,242,586 bytes raw (duckdb-eh.wasm of the pinned 1.32.0); the server sends it gzipped, and the
+// download reports decoded bytes, so the bar divides by the raw size when the reported total is the smaller gzip size.
+const WASM_BYTES = 34242586;
+let progress: Progress = { phase: 'idle', fraction: 0 };
+const listeners = new Set<(p: Progress) => void>();
+const set = (p: Progress) => {
+	progress = p;
+	for (const l of listeners) l(p);
+};
+/** Calls `fn` now and on every change; returns the way to stop. */
+export function watch(fn: (p: Progress) => void) {
+	listeners.add(fn);
+	fn(progress);
+	return () => listeners.delete(fn);
+}
+
 async function boot() {
+	set({ phase: 'engine', fraction: 0 });
 	const worker = new Worker(workerUrl);
 	const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
-	await db.instantiate(wasmUrl);
-	const text = await (csv ??= Promise.all(TABLES.map(([, url]) => fetch(url).then((r) => r.text()))));
+	// The CSVs download alongside the engine (they are small) and are read once.
+	const files = (csv ??= Promise.all(TABLES.map(([, url]) => fetch(url).then((r) => r.text()))));
+	await db.instantiate(wasmUrl, null, (p) => set({ phase: 'engine', fraction: Math.min(1, p.bytesLoaded / Math.max(p.bytesTotal, WASM_BYTES)) }));
+	set({ phase: 'data', fraction: 1 });
+	const text = await files;
 	const conn = await db.connect();
 	for (const [i, [name, , types]] of TABLES.entries()) {
 		await db.registerFileText(`${name}.csv`, text[i]);
 		await conn.query(`CREATE TABLE ${name} AS FROM read_csv('${name}.csv', types=[${types}])`);
 		await db.dropFile(`${name}.csv`);
 	}
+	set({ phase: 'ready', fraction: 1 });
 	return { db, conn };
 }
 
 /** Starts the engine (once) and loads the data. */
-export const start = () => (engine ??= boot());
+export const start = () =>
+	(engine ??= boot().catch((e) => {
+		engine = undefined;
+		set({ phase: 'error', fraction: 0 });
+		throw e;
+	}));
+
+/** True once the engine and the data are loaded: auto-run uses this and never starts the download itself. */
+export const ready = () => progress.phase === 'ready';
 
 /** Reset data: drops everything the learner made and loads the five tables again. */
 export async function resetData() {

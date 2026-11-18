@@ -124,7 +124,10 @@ Hints, half-solutions and solutions stay fenced blocks. Rules:
   table or view from an earlier block says so in the sentence before it. Never use `/* as in step 1 */` fragments in a
   `RunSQL`: give the full query, or keep a plain fenced block.
 - No backtick, backslash or `${` inside the query (it is a template string); the build stops the lesson if the query is empty.
-- Keep the **Expected:** line next to it: the page shows "n rows × m columns" under the result, so the learner can check it.
+- Keep the **Expected:** line next to it: the output box shows "n rows × m columns" above the result, so the learner can check it.
+- The block is two boxes (editor, output) with a Tables button listing the five tables; in the text say "the editor" and "the output",
+  never "on the left / on the right". A blank starter (`-- Write your query here`) is fine for an open exercise.
+- The block loads itself in the background; never tell learners to wait for it or mention an engine, a download or DuckDB.
 - Results come from DuckDB 1.4.3 in the browser, and the numbers in the lesson from DuckDB 2.0.0. Where a query has no
   `ORDER BY`, row order can differ (set operations, for example); say "in any order" or add the `ORDER BY`.
 - The notebook (Colab) stays and the lesson text keeps pointing at it as the second route.

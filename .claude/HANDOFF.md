@@ -50,7 +50,10 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
    200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
    `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.
-5. **In-page SQL runner (D42, built 2026-11-18):** `<RunSQL>` is in the three pilot lessons (S8, S14, S19). Rolling it to
+5. **In-page SQL runner (D42, built and amended 2026-11-18):** `<RunSQL>` is two boxes (editor, output) with a Tables panel, friendly
+   errors, Auto-run and background loading near the block; `/sql/playground/` is the same runner full height (shared markup
+   `SqlPad.astro`, CSS `src/styles/sql-runner.css`, scripts `run-sql.ts` > `sql-block.ts` > `sql-editor.ts` and `sql-runtime.ts`). It is in
+   the three pilot lessons (S8, S14, S19). Rolling `<RunSQL>` out to all 35 lessons waits for the interleaved rewrite (owner-approved default). Rolling it to
    the other SQL lessons is mechanical (every Try it query and exercise starter; `.claude/agents/LESSON-STANDARD.md`
    "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
    learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected

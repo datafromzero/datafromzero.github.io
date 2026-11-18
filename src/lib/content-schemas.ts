@@ -128,6 +128,8 @@ export function classify(entryId: string): Classified {
 	const path = segs.join('/');
 	const none = (problem?: string): Classified => ({ kind: null, locale, path, problem });
 	const [first] = segs;
+	// The SQL playground (src/pages/sql/playground.astro, D42) is a page, not a lesson, although its URL sits in /sql/.
+	if (path === 'sql/playground') return none();
 	if ((STAGES as readonly string[]).includes(first)) {
 		if (segs.length === 1) return none(); // stage landing page
 		if (segs.length === 2) return { kind: 'lesson', locale, path, folder: first };

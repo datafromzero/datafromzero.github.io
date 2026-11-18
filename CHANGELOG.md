@@ -7,6 +7,14 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SQL runner, next step (D42 amended, owner decisions): the block is now two separate boxes, the editor and the output, side by
+  side where there is room and stacked on phones, with an empty state in the output before the first run. The editor is CodeMirror
+  with SQL colors; a Tables button lists the five cafe-sales tables with columns, types and row counts and inserts or previews a
+  table; errors show the first line of the engine's message plus a tested tip for common beginner mistakes; an optional Auto-run
+  switch re-runs read-only queries 800 ms after typing stops. Nothing is set up by the learner: the editor and engine load in the
+  background after the page has painted once a block is within a screen of the viewport (not with Data Saver or 2G), a Run pressed
+  too early shows "Getting ready…" and then runs by itself, and the interface uses no loading jargon. New page `/sql/playground/`:
+  the same runner full height, with a "Try:" list of examples. Reading a lesson without nearing a block still costs about 3 KB.
 - SPEC D42 (owner decision): learners run SQL inside the lesson page. The new `<RunSQL query={...} />` component turns a "Try it"
   query or an exercise starter into an editable box with Run, Reset query and Reset data (Ctrl or Cmd plus Enter runs it) and
   shows the result table with its row and column count. The engine is DuckDB-Wasm, self-hosted, loaded only on the first Run

@@ -45,6 +45,7 @@ export interface SiteUi {
 		home: string;
 		start: string;
 		quiz: string;
+		playground: string;
 		learn: string;
 		learnShort: string;
 		toLight: string;
@@ -91,6 +92,7 @@ const en: SiteUi = {
 		home: 'Home',
 		start: 'Start here',
 		quiz: 'Career quiz',
+		playground: 'SQL playground',
 		learn: 'Start learning',
 		learnShort: 'Learn',
 		toLight: 'Switch to light theme',
@@ -137,6 +139,7 @@ const vi: SiteUi = {
 		home: 'Trang chủ',
 		start: 'Bắt đầu',
 		quiz: 'Trắc nghiệm nghề',
+		playground: 'Sân thực hành SQL',
 		learn: 'Bắt đầu học',
 		learnShort: 'Học',
 		toLight: 'Chuyển sang giao diện sáng',
