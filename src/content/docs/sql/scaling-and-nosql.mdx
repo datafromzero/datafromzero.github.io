@@ -18,7 +18,6 @@ prerequisites:
   - sql-dates-and-time
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-scaling-and-nosql.ipynb
 reviewed: 2026-11-18
 sources:
   - title: 'DuckDB documentation: Partitioned writes'
@@ -36,37 +35,15 @@ sources:
 status: draft
 ---
 
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
 This is a **preview** of distributed databases, partitions and NoSQL, on the small cafe-sales data. The core stage, after
-Python, goes deeper. No NoSQL engine runs here; the documents are small pieces of JSON text that DuckDB can read.
+Python, goes deeper. No NoSQL engine runs here; the documents are small pieces of JSON text that DuckDB can read. Unit 3
+writes a small folder of files, kept in the page and gone when you leave it. **Reset data** starts you over.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, as in S1 (*From a spreadsheet to SQL*). Step 5 writes a
-small folder next to it.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that step 5 can create its folder and that step 6 reads the same there. Time the lesson against its 20 minutes. When you have checked it, set
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 20 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *INNER JOIN: pairing rows on a key* (S19), write the query that lists the product names on order 1001.
-
-   <details>
-   <summary>Answer</summary>
-
-   ```sql
-   SELECT p.product_name
-   FROM order_items AS oi JOIN products AS p ON p.product_id = oi.product_id
-   WHERE oi.order_id = 1001;
-   ```
-
-   Three rows: Croissant, Cold Brew and Espresso.
-
-   </details>
 
 ## The question
 
@@ -83,10 +60,48 @@ Order 1001 as the tables hold it, joined:
 | 1001 | Campus | Cold Brew | 1 |
 | 1001 | Campus | Espresso | 2 |
 
-By the end you will have seen this order as a document and a key-value pair, split the orders into partitions, and said
-when each fits.
+## Warm-up
 
-## The picture
+From memory first, then click to check.
+
+1. In *INNER JOIN: pairing rows on a key* (S19), write the query that lists the product names on order 1001.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT p.product_name
+   FROM order_items AS oi JOIN products AS p ON p.product_id = oi.product_id
+   WHERE oi.order_id = 1001
+   ORDER BY oi.order_item_id;
+   ```
+
+   Three rows: Croissant, Cold Brew and Espresso.
+
+   </details>
+
+## The big idea
+
+**Partitioning** splits a table's rows into pieces by a key, so that each piece can be stored, read and managed on its own.
+
+{/* CONCEPT: concept-shard */}
+
+## Learn by doing
+
+Four small steps. Counts cover all 1,800 orders, the canceled one included.
+
+### 1. One order, three shapes
+
+Data can outgrow a database in two ways: there can be more of it than one machine copes with, or it can have a shape other
+than tables. **NoSQL** stores (databases that relax some relational behavior) mostly answer the second, and many also
+scale out. They relax rules such as a fixed schema and the reach of a transaction, the changes that succeed or fail
+together: for a document store that is one document, for a key-value store one key.
+
+| Shape | Looks like | Good at | Gives up |
+|---|---|---|---|
+| Structured (relational) | tables, keys, joins | rules, joins, changes across many rows at once | fields that differ from row to row |
+| Document | JSON objects whose fields can differ | reading or saving one whole object | ad hoc joins across documents |
+| Key-value | a key and a value the store does not look inside | very fast lookup by key | any question that is not "the value for this key" |
 
 <figure>
 <svg viewBox="0 0 360 392" width="360" role="img" aria-labelledby="three-title three-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -157,6 +172,85 @@ when each fits.
 <text x="172" y="344" font-size="11">the whole document above</text>
 <text x="10" y="376" font-size="11" opacity="0.8">The same facts in all three; they differ in how you ask for them.</text>
 </svg>
+</figure>
+
+**Try it** (order 1001 as rows). A structured store spreads one order over tables.
+
+<RunSQL query={`SELECT o.order_id, s.store_name, p.product_name, oi.quantity
+FROM orders AS o
+JOIN stores AS s ON s.store_id = o.store_id
+JOIN order_items AS oi ON oi.order_id = o.order_id
+JOIN products AS p ON p.product_id = oi.product_id
+WHERE o.order_id = 1001
+ORDER BY oi.order_item_id;`} />
+
+Expected: 3 rows, 4 columns, the table of the question. It took joins across four tables (S19). A document keeps the lines
+inside the order, so reading one order needs no join. Microsoft Learn calls document and key-value stores denormalized
+(related facts kept together) and relational stores normalized (each fact kept once, in its own table).
+
+**Try it** (the same orders as documents under a key). A key and a value, here JSON text in DuckDB's `JSON` type. Order 1335
+is the walk-in with no customer.
+
+<RunSQL query={`CREATE OR REPLACE TABLE order_docs (doc_key VARCHAR PRIMARY KEY, doc JSON);
+INSERT INTO order_docs VALUES
+('order:1001', '{"order_id": 1001, "store": "Campus", "customer": 15, "items": [{"product": "Croissant", "qty": 1}, {"product": "Cold Brew", "qty": 1}, {"product": "Espresso", "qty": 2}]}'),
+('order:1002', '{"order_id": 1002, "store": "Old Town", "customer": 46, "items": [{"product": "Croissant", "qty": 1}, {"product": "Turkey Sandwich", "qty": 1}]}'),
+('order:1335', '{"order_id": 1335, "store": "Old Town", "items": [{"product": "Americano", "qty": 2}]}');
+SELECT COUNT(*) AS documents FROM order_docs;`} />
+
+Expected: 1 row, 1 column: 3 documents. (`CREATE OR REPLACE` lets you run it again.)
+
+### 2. Read inside a document, or look it up by key
+
+`->>` reads a field of a document as text, and `[0]` is the first item: JSON counts from 0, says the DuckDB documentation. A
+field the document lacks gives `NULL`.
+
+**Try it** (read fields, and a missing one).
+
+<RunSQL query={`SELECT doc_key, doc->>'$.store' AS store, doc->>'$.customer' AS customer, doc->>'$.items[0].product' AS first_item
+FROM order_docs
+ORDER BY doc_key;`} />
+
+Expected: 3 rows, 4 columns. *Why:* order 1335's document has no `customer` field, so its result is `NULL`.
+
+**Try it** (a lookup by key). The key is all a key-value store needs.
+
+<RunSQL query={`SELECT doc FROM order_docs WHERE doc_key = 'order:1001';`} />
+
+Expected: 1 row, 1 column.
+
+### 3. Split the orders by a key
+
+A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it. A
+**distributed** database spreads data over several machines, because one system made bigger eventually hits a hardware
+limit. Partitioning splits the rows by a **partition key**: each row goes to the piece for its key value, and pieces on
+separate servers are called **shards**. DuckDB's `PARTITION_BY` writes one folder per value, named like
+`store_id=3`, with the rows inside. A query that filters on the key opens only the folders with that value.
+
+**Try it** (partition the orders by store). The files stay in the page's memory.
+
+<RunSQL query={`COPY (SELECT order_id, customer_id, store_id, ordered_at, status, payment_method FROM orders)
+TO 'orders_by_store' (FORMAT parquet, PARTITION_BY (store_id));`} />
+
+Expected: 1 row, 1 column: the 1,800 rows written. A folder `orders_by_store` now has a subfolder per store: `store_id=1`,
+`store_id=2`, `store_id=3`, with Parquet files inside.
+
+**Try it** (read the partitions). Before you run it: how many rows? Then, for a filter on store 3, how many of the three
+folders will the engine open?
+
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
+FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+<RunSQL query={`EXPLAIN SELECT COUNT(*)
+FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
+WHERE store_id = 3;`} />
+
+Expected: the first returns 3 rows, 2 columns. The plan has a read-Parquet step with `File Filters` on `store_id = 3` and a
+`Scanning Files` line whose first number is smaller than its second. *Why:* the other folders are never opened.
+
+<figure>
 <svg viewBox="0 0 360 206" width="360" role="img" aria-labelledby="parts-title parts-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="parts-title">The 1,800 orders split into one folder per store</title>
 <desc id="parts-desc">Three folders, one per store, from partitioning orders by store_id: store_id=1 holds 729 orders, store_id=2 holds 716 and store_id=3 holds 355. The bars are drawn to the same scale. A query that filters on store_id = 3 reads only the third folder. Harbor, store 3, opened in April, so its folder is about half the size of the others.</desc>
@@ -181,152 +275,60 @@ when each fits.
 </svg>
 </figure>
 
-## How it works
+### 4. What spreading costs, and when SQL still wins
 
-Data can outgrow a database in two ways: there can be more of it than one machine copes with, or it can have a shape other
-than tables. **Partitioning** answers the first. **NoSQL** stores (databases that relax some
-relational behavior) mostly answer the second, and many also scale out.
+The key decides which piece holds a row, so it decides how the work spreads. A piece that gets far more work than the rest
+is a **hot partition**. A **replica** is a copy of a piece kept on another server. Copies take time to synchronize, so for
+a while two of them can differ: this is **eventual consistency**.
 
-A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it. A
-**distributed** database spreads data over several machines, because a single system that you make bigger eventually hits
-a hardware limit. **Partitioning** splits a table's rows by a **partition key** into pieces with the same columns, each
-stored, read and managed on its own. Pieces on separate servers are called **shards**. In the picture above, the orders
-are split by `store_id`:
+**Try it** (check the sizes). The 729, 716 and 355 of unit 3 must add up to the whole.
 
-1. Pick the key: a column such as `store_id`.
-2. Each row goes to the piece for its key value. DuckDB's `PARTITION_BY` writes one folder per value, named like
-   `store_id=3`, with the rows inside.
-3. A query that filters on the key opens only the folders with that value and never reads the rest.
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders;`} />
 
-The rules:
-
-- The key decides which piece holds a row, so it decides how the work spreads. A piece that gets far more work than the
-  rest is a **hot partition**.
-- A **replica** is a copy of a piece kept on another server. Copies take time to synchronize, so for a while two of them
-  can differ: this is **eventual consistency**.
-- NoSQL stores relax rules such as a fixed schema and the reach of a transaction, the group of changes that succeed or
-  fail together. For a document store that is one document, for a key-value store one key.
-
-| Shape | Looks like | Good at | Gives up |
-|---|---|---|---|
-| Structured (relational) | tables, keys, joins | rules, joins, changes across many rows at once | fields that differ from row to row |
-| Document | JSON objects whose fields can differ | reading or saving one whole object | ad hoc joins across documents |
-| Key-value | a key and a value the store does not look inside | very fast lookup by key | any question that is not "the value for this key" |
-
-**Earlier lesson.** Reading order 1001 as rows took joins across four tables (*INNER JOIN: pairing rows on a key*, S19). A
-document keeps the lines inside the order, so reading one order needs no join. Microsoft Learn calls document and key-value
-stores denormalized (related facts kept together) and relational stores normalized (each fact kept once, in its own table).
-
-**A common misconception: "NoSQL means a database with no SQL."** NoSQL names stores that relax relational rules, not
-stores that cannot be queried: Azure Cosmos DB for NoSQL supports SQL-like querying. Microsoft's guide adds that
-most production systems use several storage models.
-
-## Worked example
-
-Question: **what would a document store, a key-value store and partitions look like for the cafes?** Run the setup cell,
-then one cell per step. Each step gives the shape of the result to expect.
-
-1. **Order 1001 as rows.**
-
-   ```sql
-   SELECT o.order_id, s.store_name, p.product_name, oi.quantity
-   FROM orders AS o
-   JOIN stores AS s ON s.store_id = o.store_id
-   JOIN order_items AS oi ON oi.order_id = o.order_id
-   JOIN products AS p ON p.product_id = oi.product_id
-   WHERE o.order_id = 1001;
-   ```
-
-   Expected: 3 rows, 4 columns, the table of the question. *Why:* a structured store spreads one order over tables.
-
-2. **The same order as a document under a key.**
-
-   ```sql
-   CREATE TABLE order_docs (doc_key VARCHAR PRIMARY KEY, doc JSON);
-   INSERT INTO order_docs VALUES ('order:1001',
-     '{"order_id": 1001, "store": "Campus", "customer": 15, "items": [{"product": "Croissant", "qty": 1}, {"product": "Cold Brew", "qty": 1}, {"product": "Espresso", "qty": 2}]}');
-   ```
-
-   Expected: no error. The notebook also adds orders 1002 and 1335. *Why:* a key and a value, here JSON text in DuckDB's
-   `JSON` type. Order 1335 is the walk-in with no customer.
-
-3. **Read fields, and a missing one.**
-
-   ```sql
-   SELECT doc_key, doc->>'$.store' AS store, doc->>'$.customer' AS customer, doc->>'$.items[0].product' AS first_item
-   FROM order_docs ORDER BY doc_key;
-   ```
-
-   Expected: 3 rows, 4 columns. *Why:* `->>` reads a field as text, and `[0]` is the first item (JSON counts from 0, says the
-   DuckDB documentation). Order 1335's document has no `customer` field, so the result is `NULL`.
-
-4. **A lookup by key.**
-
-   ```sql
-   SELECT doc FROM order_docs WHERE doc_key = 'order:1001';
-   ```
-
-   Expected: 1 row, 1 column. *Why:* the key is all a key-value store needs.
-
-5. **Partition the orders by store.**
-
-   ```sql
-   COPY (SELECT order_id, customer_id, store_id, ordered_at, status, payment_method FROM orders)
-   TO 'orders_by_store' (FORMAT parquet, PARTITION_BY (store_id));
-   ```
-
-   Expected: a `Count` table, 1 row. A folder `orders_by_store` appears with a subfolder per store: `store_id=1`, `store_id=2`,
-   `store_id=3`. *Why:* `PARTITION_BY` writes a folder per value of the key, with Parquet files inside.
-
-6. **Read the partitions.**
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
-   GROUP BY store_id ORDER BY store_id;
-
-   EXPLAIN SELECT COUNT(*)
-   FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
-   WHERE store_id = 3;
-   ```
-
-   Expected: the first returns 3 rows, 2 columns. The plan (printed with `print(...)`) has a `Read Parquet` box with
-   `File Filters: store_id = 3` and a `Scanning Files` line whose first number is smaller than its second. *Why:* step 3 of
-   How it works: the folders with other store values are never opened.
-
-7. **Verify.**
-
-   ```sql
-   SELECT COUNT(*) AS orders FROM orders;
-   ```
-
-   Expected: 1 row, 1 column. The 729, 716 and 355 of step 6 add to the same 1,800. Harbor opened on April 1, so its folder
-   is about half the size of the others.
+Expected: 1 row, 1 column. *Why:* **1800**, the sum of the three folders. Harbor opened on April 1, so its folder is half the
+size of the others.
 
 <details>
 <summary>Explain it in your own words: why can SQL still answer questions across the documents?</summary>
 
-A SQL engine is built to look inside many rows at once, so a total by store is one query. A store that serves whole objects
-by key leaves that work to the application.
+A SQL engine looks inside many rows at once, so a total by store is one query. A store that serves whole objects by key
+leaves that work to the application.
 
 </details>
 
 **When SQL is still the answer:** for questions across many rows (totals, comparisons, joins), when rules and multi-row
 changes must hold, and when the data fits one machine, as the 1,800 orders of cafe-sales do.
 
+<Aside type="tip" title="Remember">
+
+- Partition by a key; a query that filters on the key opens only the pieces it needs.
+- Document: one whole object at a time. Key-value: a lookup by key. Tables: rules and joins.
+- Copies (replicas) can differ for a while: eventual consistency.
+
+**Common trap: "NoSQL means a database with no SQL."** NoSQL names stores that relax relational rules, not stores that cannot
+be queried: Azure Cosmos DB for NoSQL supports SQL-like querying. Microsoft's guide adds that most production systems use
+several storage models.
+
+</Aside>
+
 ## Finish it
 
 <Exercise id="sql-scaling-and-nosql-1">
 
-**Read two fields from each document.** Use the Exercise 1 cells on `order_docs` from step 2. Expected: 3 rows, 3 columns.
+**Read two fields from each document.** Use `order_docs` from unit 1. Expected: 3 rows, 3 columns.
 
-Done for you: `SELECT doc_key, doc->>'$.store' AS store FROM order_docs ...`. Now finish it: add the product of each order's second
-item (`$.items[1].product`) and an `ORDER BY`.
+Done for you: the first field.
+
+<RunSQL query={`SELECT doc_key, doc->>'$.store' AS store
+FROM order_docs
+ORDER BY doc_key;`} />
+
+Now finish it: add the product of each order's second item (`$.items[1].product`).
 
 <details>
 <summary>Hint</summary>
 
-Copy `first_item` from step 3 and change the 0.
+Copy `first_item` from unit 2 and change the 0.
 
 </details>
 
@@ -354,12 +356,13 @@ Order 1001 gives Cold Brew, order 1002 Turkey Sandwich, and order 1335 `NULL`: i
 
 <Exercise id="sql-scaling-and-nosql-2">
 
-**Which key spreads the orders most evenly: store, month or payment method?** Use the Exercise 2 cells.
+**Which key spreads the orders most evenly: store, month or payment method?** Use the Exercise 2 block.
 
-Before you run anything, write one sentence: which key do you expect to be the most even, and why? Then count orders per store,
-per month (`strftime(ordered_at, '%Y-%m')`) and per `payment_method`, and compare the biggest group with the total.
+Before you run anything, write one sentence: which key do you expect to be the most even, and why? Then count orders per
+store, per month (`strftime(ordered_at, '%Y-%m')`) and per `payment_method`, and compare the biggest group with the total.
+Expected shape: three queries, one row per group, 2 columns.
 
-Expected shape: three queries, one row per group, 2 columns. Counts cover all 1,800 orders, the canceled one included.
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -407,16 +410,14 @@ table's rows by a key into pieces that can be stored, read and managed on their 
 **Spot the flaw.** A colleague says: "Orders is our biggest table. Let's shard it by store across three servers, so queries stay
 fast." Check the size first:
 
-```sql
-SELECT COUNT(*) AS orders FROM orders;
-```
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders;`} />
 
 Expected: 1 row, 1 column. What is wrong with the proposal?
 
 <details>
 <summary>Hint</summary>
 
-Compare the count with what one laptop holds, and recall the folders of steps 5-6.
+Compare the count with what one laptop holds, and recall the folders of unit 3.
 
 </details>
 
@@ -429,17 +430,17 @@ Start from: "1,800 orders are tiny, so ... The three shards would also be uneven
 
 <Solution>
 
-There are 1,800 orders (and 3,287 lines): one machine holds that easily, and Microsoft's guidance says partitioning is not important when
-one server can handle the data. Sharding also adds work: the shards would be uneven (Harbor about half the size of the others), a total
-across stores must ask all three, and a change touching two servers is no longer one simple transaction.
+There are 1,800 orders (and 3,287 lines): one machine holds that easily, and Microsoft's guidance says partitioning is not
+important when one server can handle the data. Sharding also adds work: the shards would be uneven (Harbor about half the
+size of the others), a total across stores must ask all three, and a change touching two servers is no longer one simple
+transaction.
 
 </Solution>
 
 </Exercise>
 
-**Can you do it?** *I can tell a single-machine database from a distributed one, say what partitioning is in one sentence, and say when a
+**Can you do it?** *I can tell a single-machine database from a distributed one, say what partitioning is, and say when a
 document or key-value store fits and when SQL is still the answer.*
-Test: Exercise sql-scaling-and-nosql-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-scaling-and-nosql-2, done from an empty editor without opening the hints.
 
-The pattern to remember: **one database until the size or the access pattern forces a change.** The core stage, after Python, goes deeper
-into storage, partitions and the stores you met here.
+The pattern to remember: **one database until the size or the access pattern forces a change.** The core stage goes deeper.

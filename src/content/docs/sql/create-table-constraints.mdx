@@ -19,7 +19,6 @@ prerequisites:
   - sql-aggregate-functions
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-create-table-constraints.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: CREATE TABLE statement'
@@ -33,55 +32,15 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). So far you read tables that someone else built. Here you build two of your own, and you teach the database to
-refuse bad rows.
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**. You never change those: every table you create
-here is new and lives in the notebook's memory, so running the setup cell again gives you a clean start. The notebook
-cells wrap each query as in S1 and leave out the closing `;`.
+So far you read tables that someone else built. Here you build two of your own and teach the database to refuse bad rows.
+The tables you create stay until you leave the page, so run the blocks in order. Run a block that makes a table twice and
+DuckDB says the table already exists: press **Reset data**, then run the blocks again from the top.
 
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error messages that step 5 and exercise 2 print with Colab's version. Time the lesson against its 30 minutes. The `UNIQUE` rule in How it works (several rows may hold `NULL`) rests on the DuckDB Constraints page saying that primary key and unique constraints are identical except for two points, one being that a primary key also enforces not `NULL`; DuckDB 2.0.0 stored two `NULL`s in a `UNIQUE` column in a test run. That a `CHECK` whose expression comes out `NULL` passes is a run result, not a docs sentence, and is not taught here. When you have checked it, set
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 30 minutes. The `UNIQUE` rule in unit 1 (several rows may hold `NULL`) rests on the DuckDB Constraints page saying that primary key and unique constraints are identical except for two points, one being that a primary key also enforces not `NULL`; DuckDB 2.0.0 stored two `NULL`s in a `UNIQUE` column in a test run. That a `CHECK` whose expression comes out `NULL` passes is a run result, not a docs sentence, and is not taught here. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *Tables, keys and grain* (S18), write one query that shows `product_id` can be the primary key of `products`.
-
-   <details>
-   <summary>Answer</summary>
-
-   ```sql
-   SELECT COUNT(*) AS row_count, COUNT(DISTINCT product_id) AS distinct_ids FROM products;
-   ```
-
-   Two equal numbers (`16 | 16`) prove the values are never repeated and never empty.
-
-   </details>
-
-2. In *NULL: unknown is not zero* (S4), order 1335 has no customer. What does its `customer_id` hold, and what does `COUNT(customer_id)` do with it?
-
-   <details>
-   <summary>Answer</summary>
-
-   It holds `NULL`, an unknown value, and `COUNT(customer_id)` skips it. A column that may be empty is exactly what a rule can forbid.
-
-   </details>
-
-3. In *Computed columns and data types* (S5), which type does `unit_price_usd` have? Which statement shows it?
-
-   <details>
-   <summary>Answer</summary>
-
-   `DECIMAL(6,2)`, up to six digits with two after the point. `DESCRIBE products;` shows it.
-
-   </details>
 
 ## The question
 
@@ -105,10 +64,107 @@ rows, and the first rows of the stock sheet we want (store, product, units):
 | 1 | 10 | 25 |
 | 1 | 6 | 12 |
 
-By the end you will have a `menu` and a `stock` table that refuse five kinds of bad row, and you will say which rule
-refused which.
+## Warm-up
 
-## The picture
+From memory first, then click to check.
+
+1. In *Tables, keys and grain* (S18), write one query that shows `product_id` can be the primary key of `products`.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS row_count, COUNT(DISTINCT product_id) AS distinct_ids FROM products;
+   ```
+
+   Two equal numbers (`16 | 16`) prove the values are never repeated and never empty.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), order 1335 has no customer. What does its `customer_id` hold, and what does
+   `COUNT(customer_id)` do with it?
+
+   <details>
+   <summary>Answer</summary>
+
+   It holds `NULL`, an unknown value, and `COUNT(customer_id)` skips it. A column that may be empty is exactly what a rule
+   can forbid.
+
+   </details>
+
+## The big idea
+
+A **constraint** is a rule you write into a table's definition: the database tests every new row against it and refuses
+the row that breaks it.
+
+{/* CONCEPT: concept-constraints */}
+
+## Learn by doing
+
+Five small steps.
+
+### 1. Write the rules into the table
+
+A table is written `CREATE TABLE name (column type rules, ...)`: each column gets a type and, beside it, its rules.
+Four rules sit beside a column:
+
+- `PRIMARY KEY` refuses a repeated or empty value. A table has at most one, and it may span several columns.
+- `UNIQUE` refuses a repeated value. A table may have several, and several rows may hold `NULL`.
+- `NOT NULL` refuses an empty value. Without it, a column accepts `NULL`.
+- `CHECK` refuses a row that makes your true-or-false expression false.
+
+*Excel:* data validation (E18, *Highlight and validate with rules*) limits what a user may type into a cell, for example
+to a dropdown list. A `CHECK ... IN (...)` is the same idea written into the table.
+
+**Try it.** `DECIMAL(6, 2)` is money: up to six digits, two after the point (S5). `is_active` is new: a
+row that does not mention it counts as active.
+
+<RunSQL query={`CREATE TABLE menu (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL UNIQUE,
+  category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
+  unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
+  is_active BOOLEAN DEFAULT true
+);`} />
+
+Expected: no result rows, just a note that the statement ran. *Why:* the four categories are the ones `products` uses.
+
+**Try it.** Fill it from `products`.
+
+<RunSQL query={`INSERT INTO menu (product_id, product_name, category, unit_price_usd)
+SELECT * FROM products;`} />
+
+Expected: 1 row, 1 column: the 16 rows stored. *Why:* naming four columns leaves `is_active` to its default. If one row of
+`products` broke a rule, the whole statement would fail. Run it again to see: the rows are already there, so the primary
+key refuses them.
+
+**Try it.** Read the rules back.
+
+<RunSQL query={`DESCRIBE menu;`} />
+
+Expected: 5 rows, 6 columns: `key` shows `PRI` for `product_id` and `UNI` for `product_name`, and `null` shows `NO` on
+four of the five columns.
+
+### 2. Point one table at another
+
+A **foreign key** refuses a value that has no match in another table's key. That key must be a primary key or a `UNIQUE`
+column. The cafe-sales tables declare neither, so `stock` points at `menu`, the copy you just built with its rules.
+
+`stock` also has a key of two columns: one row is one product at one store, so the pair is the key.
+
+**Try it.**
+
+<RunSQL query={`CREATE TABLE stock (
+  store_id INTEGER NOT NULL CHECK (store_id IN (1, 2, 3)),
+  product_id INTEGER NOT NULL REFERENCES menu (product_id),
+  units_on_hand INTEGER NOT NULL DEFAULT 0 CHECK (units_on_hand >= 0),
+  PRIMARY KEY (store_id, product_id)
+);`} />
+
+Expected: no result rows. *Why:* `store_id` has no foreign key because `stores` has no primary key to point at, so a `CHECK`
+on the three store ids stands in.
+
+Here is `stock` as a form: each column with its type and its rules.
 
 <figure>
 <svg viewBox="0 0 360 236" width="360" role="img" aria-labelledby="form-title form-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -148,6 +204,50 @@ refused which.
 <text x="10" y="208" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">PRIMARY KEY (store_id, product_id)</text>
 <text x="10" y="224" font-size="11" opacity="0.8">The pair is the key: one row per store and product.</text>
 </svg>
+</figure>
+
+### 3. Rows that obey the rules
+
+A column an `INSERT` leaves out is filled with its `DEFAULT`, or with `NULL` if it has none. `DEFAULT` refuses nothing: it
+only fills in a value.
+
+**Try it.** Before you run it: the second insert names only two columns. What will the Green Tea row
+show for `units_on_hand`?
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 1, 40), (1, 10, 25), (1, 6, 12);
+INSERT INTO stock (store_id, product_id) VALUES (1, 7);
+SELECT * FROM stock ORDER BY product_id;`} />
+
+Expected: 4 rows, 3 columns (the page shows the last result). *Why:* the Green Tea row shows **0**, its `DEFAULT`. A
+second run of the block meets the primary key: the first row is already there.
+
+### 4. Rows that break the rules
+
+Each new row is tested against the rules of the table, and a row that breaks one is refused with a `Constraint Error` and
+not stored. A row that breaks several is refused once, and DuckDB names one of them.
+
+**Try it.** Before you run them: which rule do you expect to refuse each of these four
+rows? Run them one at a time.
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 99, 10);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (2, 1, -5);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 1, 20);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (NULL, 2, 20);`} />
+
+Expected: every block shows an error instead of a table, and its message names the rule (the page shows the message without
+DuckDB's `Constraint Error:` label):
+
+| Insert | Message | Rule |
+|---|---|---|
+| `(1, 99, 10)` | `Violates foreign key constraint because key "product_id: 99" does not exist in the referenced table` | `FOREIGN KEY` |
+| `(2, 1, -5)` | `CHECK constraint failed on table ... with expression CHECK((units_on_hand >= 0))` | `CHECK` |
+| `(1, 1, 20)` | `Duplicate key "store_id: 1, product_id: 1" violates primary key constraint.` | `PRIMARY KEY` |
+| `(NULL, 2, 20)` | `NOT NULL constraint failed: stock.store_id` | `NOT NULL` |
+
+<figure>
 <svg viewBox="0 0 360 284" width="360" role="img" aria-labelledby="gates-title gates-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="gates-title">Four rows that stock refuses, and the rule that refuses each</title>
 <desc id="gates-desc">The table already holds four rows: store 1 with products 1, 10, 6 and 7, with 40, 25, 12 and 0 units. Four candidate rows are tried. Store 1, product 99, 10 units is refused by the foreign key, because there is no product 99 on the menu. Store 2, product 1, minus 5 units is refused by the CHECK on units_on_hand. Store 1, product 1, 20 units is refused by the primary key, because the pair 1 and 1 is already stored. An empty store with product 2 and 20 units is refused by NOT NULL on store_id.</desc>
@@ -177,159 +277,69 @@ refused which.
 </svg>
 </figure>
 
-## How it works
+*Why:* each row breaks exactly one rule. `(1, 1, -5)` would break two, and name the key, not the `CHECK`.
 
-A **constraint** is a rule written into a table's definition, next to a column, in
-`CREATE TABLE name (column type rules, ...)`. DuckDB applies the rules to rows as they go in, and a row that breaks one
-is refused with a `Constraint Error` and not stored. The first picture above writes a table as a form; the second shows
-candidate rows meeting its rules. Conceptually, each new row goes through three steps:
+### 5. Check that nothing slipped in
 
-1. A column the `INSERT` leaves out is filled with its `DEFAULT`, or with `NULL` if it has none.
-2. The row is tested against the rules of the table. A row that breaks several is refused once, and DuckDB names one of
-   them.
-3. A row that meets every rule is stored.
+A refused row leaves nothing behind. Count to see.
 
-The rules, and what each refuses:
+**Try it.**
 
-- `PRIMARY KEY`: a repeated value, or an empty one. A table has at most one primary key, and it may span several
-  columns, as in `PRIMARY KEY (store_id, product_id)`.
-- `UNIQUE`: a repeated value. A table may have several, and several rows may hold `NULL`.
-- `NOT NULL`: an empty value. Without it, a column accepts `NULL`.
-- `CHECK`: a row that makes your Boolean expression false, as in `CHECK (units_on_hand >= 0)`.
-- `FOREIGN KEY`: a value with no match in another table's key. That key must be a primary key or a `UNIQUE` column. The
-  cafe-sales tables declare neither, so `stock` points at `menu`, a copy of `products` that you build with its rules.
-- `DEFAULT` refuses nothing: it fills in a value when you give none.
+<RunSQL query={`SELECT 'menu' AS table_name, COUNT(*) AS row_count, SUM(unit_price_usd) AS total FROM menu
+UNION ALL
+SELECT 'products', COUNT(*), SUM(unit_price_usd) FROM products
+UNION ALL
+SELECT 'stock', COUNT(*), NULL FROM stock
+ORDER BY table_name;`} />
 
-**Excel.** Data validation (E18, *Highlight and validate with rules*) restricts the values a user may enter into a cell,
-for example to a dropdown list. A `CHECK ... IN (...)` is the same idea written into the table.
-
-**A common misconception: "a constraint guarantees the data is right."** It guarantees only the rule you wrote:
-`CHECK (unit_price_usd > 0)` accepts 450.00 for a Latte that costs 4.50, because the expression is true for it.
-
-## Worked example
-
-Question: **can we build a menu and a stock sheet that refuse bad rows?** Run the notebook's setup cell, then one cell
-per step. Each step gives the shape of the result to expect.
-
-1. **Create `menu` with its rules.**
-
-   ```sql
-   CREATE TABLE menu (
-     product_id INTEGER PRIMARY KEY,
-     product_name VARCHAR NOT NULL UNIQUE,
-     category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
-     unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
-     is_active BOOLEAN DEFAULT true
-   );
-   ```
-
-   Expected: no error, and an empty `Count` table. *Why:* each column has a type and its rules beside it. The four
-   categories are the ones `products` uses. `is_active` is new: a row that does not mention it counts as active.
-
-2. **Fill it from `products`, then read the rules back.** Two notebook cells.
-
-   ```sql
-   INSERT INTO menu (product_id, product_name, category, unit_price_usd)
-   SELECT * FROM products;
-
-   DESCRIBE menu;
-   ```
-
-   Expected: the first returns 1 row, 1 column (`Count`, the rows stored). The second returns 5 rows, 6 columns:
-   `key` shows `PRI` for `product_id` and `UNI` for `product_name`, and `null` shows `NO` on four of the five columns.
-   *Why:* naming four columns leaves `is_active` to its default. If one row of `products` broke a rule, the whole
-   statement would fail.
-
-3. **Create `stock`, with a two-column key and a foreign key.**
-
-   ```sql
-   CREATE TABLE stock (
-     store_id INTEGER NOT NULL CHECK (store_id IN (1, 2, 3)),
-     product_id INTEGER NOT NULL REFERENCES menu (product_id),
-     units_on_hand INTEGER NOT NULL DEFAULT 0 CHECK (units_on_hand >= 0),
-     PRIMARY KEY (store_id, product_id)
-   );
-   ```
-
-   Expected: no error, an empty `Count` table. *Why:* one row is one product at one store, so the pair is the key.
-   `store_id` has no foreign key because `stores` has no primary key to point at; a `CHECK` on the three store ids
-   stands in. A real design would constrain a copy of `stores` as step 1 does for `menu`.
-
-4. **Add rows that obey the rules.**
-
-   ```sql
-   INSERT INTO stock VALUES (1, 1, 40), (1, 10, 25), (1, 6, 12);
-   INSERT INTO stock (store_id, product_id) VALUES (1, 7);
-   SELECT * FROM stock ORDER BY product_id;
-   ```
-
-   Expected: one notebook cell, showing the last result: 4 rows, 3 columns. *Why:* the second insert names only two
-   columns, so `units_on_hand` takes its `DEFAULT`, and the Green Tea row shows 0.
-
-5. **Try four rows that break the rules.** Four notebook cells, one statement each.
-
-   ```sql
-   INSERT INTO stock VALUES (1, 99, 10);
-   INSERT INTO stock VALUES (2, 1, -5);
-   INSERT INTO stock VALUES (1, 1, 20);
-   INSERT INTO stock VALUES (NULL, 2, 20);
-   ```
-
-   Expected: every cell prints an error instead of a table (the notebook catches it, so Run all keeps going), and the message starts `Constraint Error:`. The rest names the rule:
-
-   | Insert | Message continues | Gate |
-   |---|---|---|
-   | `(1, 99, 10)` | `Violates foreign key constraint because key "product_id: 99" does not exist in the referenced table` | `FOREIGN KEY` |
-   | `(2, 1, -5)` | `CHECK constraint failed on table "stock" with expression CHECK((units_on_hand >= 0))` | `CHECK` |
-   | `(1, 1, 20)` | `Duplicate key "store_id: 1, product_id: 1" violates primary key constraint.` | `PRIMARY KEY` |
-   | `(NULL, 2, 20)` | `NOT NULL constraint failed: stock.store_id` | `NOT NULL` |
-
-   *Why:* each row breaks exactly one rule. A row that breaks two is refused once, with one of the messages, so
-   `(1, 1, -5)` would name the key, not the `CHECK`.
-
-6. **Verify.** Three notebook cells.
-
-   ```sql
-   SELECT COUNT(*) AS stock_rows FROM stock;
-   SELECT COUNT(*) AS items, SUM(unit_price_usd) AS total FROM menu;
-   SELECT COUNT(*) AS items, SUM(unit_price_usd) AS total FROM products;
-   ```
-
-   Expected: each returns 1 row; the last two have 2 columns. `stock` still has the 4 rows of step 4, so the four
-   refused inserts left nothing behind. `menu` matches `products`: 16 items and a price total of 75.00 in both.
+Expected: 3 rows, 3 columns. *Why:* `stock` still has the 4 rows of unit 3, so the four refused inserts left nothing behind.
+`menu` matches `products`: 16 items and a price total of 75.00 in both.
 
 <details>
-<summary>Explain it in your own words: why must you create <code>menu</code> before <code>stock</code>?</summary>
+<summary>Explain it in your own words: to refuse product 99, what must DuckDB look in, and what does that say about the order you create the tables?</summary>
 
-The foreign key in `stock` points at `menu.product_id`, and DuckDB needs that column to be a primary key or
-`UNIQUE`. It also has to exist, so the check on product 99 has something to look in.
+It must look in `menu` for a `product_id` of 99 and find none. So `menu` has to exist, and be filled, before `stock` can refer
+to it.
 
 </details>
+
+<Aside type="tip" title="Remember">
+
+- A constraint is a rule in the table's definition. A row that breaks one is refused and not stored.
+- `PRIMARY KEY` and `UNIQUE` refuse repeats, `NOT NULL` refuses empties, `CHECK` refuses a false expression, `FOREIGN KEY`
+  refuses a value with no match in another table.
+- `DEFAULT` refuses nothing: it fills in a missing value.
+
+**Common trap: "a constraint guarantees the data is right."** It guarantees only the rule you wrote: `CHECK (unit_price_usd
+> 0)` accepts 450.00 for a Latte that costs 4.50, because the expression is true for it.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-create-table-constraints-1">
 
-**Make a table of loyalty perks that accepts only the three real tiers.** Use the Exercise 1 cells. Expected: the
-`CREATE TABLE` shows an empty `Count` table; the final `SELECT` returns 1 row, 3 columns.
+**Make a table of loyalty perks that accepts only the three real tiers.** . Expected: 1 row, 3 columns.
 
-Done for you: the `customers` table uses three tiers, `bronze`, `silver` and `gold`, and the table starts like this:
+Done for you: `customers` uses three tiers, `bronze`, `silver` and `gold`. This block makes a table with no rules yet,
+inserts `'bronze'` with the perk `'free refill'` and no discount, and selects the table. (`CREATE OR REPLACE` lets you run
+it again.) Run it and look at `discount_pct`.
 
-```sql
-CREATE TABLE tier_perk (
-  loyalty_tier VARCHAR ...,
+<RunSQL query={`CREATE OR REPLACE TABLE tier_perk (
+  loyalty_tier VARCHAR,
   perk VARCHAR NOT NULL,
-  discount_pct INTEGER ...
+  discount_pct INTEGER
 );
-```
+INSERT INTO tier_perk (loyalty_tier, perk) VALUES ('bronze', 'free refill');
+SELECT * FROM tier_perk;`} />
 
-Now finish it: make `loyalty_tier` the primary key and accept only the three tiers; let `discount_pct` default to 0
-and accept only 0 to 50. Then insert `'bronze'` with the perk `'free refill'` and no discount, and select the table.
+Now finish it: make `loyalty_tier` the primary key and accept only the three tiers; let `discount_pct` default to 0 and
+accept only 0 to 50.
 
 <details>
 <summary>Hint</summary>
 
-Copy the `CHECK ... IN (...)` of `category` in step 1. For a range, `BETWEEN 0 AND 50` works inside a `CHECK`.
+Copy the `CHECK ... IN (...)` of `category` in unit 1. For a range, `BETWEEN 0 AND 50` works inside a `CHECK`.
 
 </details>
 
@@ -337,7 +347,7 @@ Copy the `CHECK ... IN (...)` of `category` in step 1. For a range, `BETWEEN 0 A
 <summary>Half-solution</summary>
 
 ```sql
-CREATE TABLE tier_perk (
+CREATE OR REPLACE TABLE tier_perk (
   loyalty_tier VARCHAR PRIMARY KEY CHECK (loyalty_tier IN (...)),
   perk VARCHAR NOT NULL,
   discount_pct INTEGER DEFAULT ... CHECK (discount_pct BETWEEN ... AND ...)
@@ -349,7 +359,7 @@ CREATE TABLE tier_perk (
 <Solution>
 
 ```sql
-CREATE TABLE tier_perk (
+CREATE OR REPLACE TABLE tier_perk (
   loyalty_tier VARCHAR PRIMARY KEY CHECK (loyalty_tier IN ('bronze', 'silver', 'gold')),
   perk VARCHAR NOT NULL,
   discount_pct INTEGER DEFAULT 0 CHECK (discount_pct BETWEEN 0 AND 50)
@@ -358,9 +368,8 @@ INSERT INTO tier_perk (loyalty_tier, perk) VALUES ('bronze', 'free refill');
 SELECT * FROM tier_perk;
 ```
 
-The result is `bronze | free refill | 0`: the insert named no discount, so `DEFAULT 0` filled it in. The table now
-refuses `('platinum', 'lounge', 10)`, because the tier is not in the list, and `('gold', 'free pastry', 60)`, because
-60 is outside 0 to 50.
+The result is `bronze | free refill | 0`: `DEFAULT 0` filled in the missing discount. The table now refuses
+`('platinum', 'lounge', 10)`, a tier not in the list, and `('gold', 'free pastry', 60)`, outside 0 to 50.
 
 </Solution>
 
@@ -381,16 +390,36 @@ refuses `('platinum', 'lounge', 10)`, because the tier is not in the list, and `
 | 1 | Cortado | coffee | 4.00 |
 | 21 | (empty) | tea | 3.00 |
 
-Done for you in the Exercise 2 cells: `menu_ex2` has the same rules as `menu` and holds the 16 items of `products`, and
-`new_items` holds these six rows.
+Run this first. It builds `menu_ex2` (the rules of `menu`, the 16 items of `products`) and `new_items` (these six rows).
+Run it again for a fresh `menu_ex2`.
 
-Before you run anything, write one line per candidate in the first cell: accepted or refused, and by which rule. Then
-insert them one at a time, each in its own cell, with
-`INSERT INTO menu_ex2 (product_id, product_name, category, unit_price_usd) SELECT * FROM new_items WHERE product_id = 17;`
-and change the number for the other rows (the empty name is product 21).
+<RunSQL query={`CREATE OR REPLACE TABLE menu_ex2 (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL UNIQUE,
+  category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
+  unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
+  is_active BOOLEAN DEFAULT true
+);
+INSERT INTO menu_ex2 (product_id, product_name, category, unit_price_usd)
+SELECT * FROM products;
+CREATE OR REPLACE TABLE new_items AS
+SELECT * FROM (VALUES
+  (17, 'Oat Latte', 'coffee', 5.25),
+  (18, 'Espresso', 'coffee', 3.00),
+  (19, 'Brownie', 'dessert', 3.50),
+  (20, 'Free Water', 'food', 0.00),
+  (1, 'Cortado', 'coffee', 4.00),
+  (21, NULL, 'tea', 3.00)
+) AS t (product_id, product_name, category, unit_price_usd);`} />
 
-Expected shape, to check your lines against: each insert returns a 1-row `Count` table or prints an error that
-starts `Constraint Error:`. Each candidate breaks at most one rule.
+Before you run any insert, write one line per candidate: accepted or refused, and by which rule. Then insert them one at a
+time with the block below, changing the number for the other rows (the empty name is product 21).
+
+<RunSQL query={`INSERT INTO menu_ex2 (product_id, product_name, category, unit_price_usd)
+SELECT * FROM new_items WHERE product_id = 17;`} />
+
+Expected shape, to check your lines against: each insert shows a 1-row result or an error. Each candidate breaks at most one
+rule.
 
 <details>
 <summary>Hint</summary>
@@ -419,7 +448,7 @@ Only product 17 is accepted. The others fail like this:
 | 1 Cortado | `PRIMARY KEY` | `product_id` 1 is Espresso's |
 | 21 (empty) | `NOT NULL` on `product_name` | the name is empty |
 
-Every refusal reads `Constraint Error:` first. A product 17 row is stored with `is_active` set to its default, `true`.
+Row 17 is stored with `is_active` set to its default, `true`; inserted twice, it is refused the second time.
 
 </Solution>
 
@@ -440,52 +469,49 @@ missing value. The foreign key needs a primary key (or `UNIQUE` column) in the o
 
 <Exercise id="sql-create-table-constraints-3">
 
-**Spot the flaw.** A colleague wants a protected copy of the menu for a trial, writes
-`CREATE TABLE menu_copy AS SELECT * FROM menu_ex3;`, and says "it keeps the primary key, so nothing can be entered
-twice". To prove it, the colleague runs the insert below. It works, with no error, and puzzles them. (`menu_ex3`
-is `menu` again, with its rules, done for you.)
+**Spot the flaw.** A colleague copies the menu for a trial with the first statement below and says "it keeps the primary
+key, so nothing can be entered twice". To prove it, they run the insert. It works, with no error, and puzzles them. (It
+copies `menu` from units 1 and 2.)
 
-```sql
-INSERT INTO menu_copy VALUES (1, 'Espresso', 'coffee', 3.00, true);
-```
+<RunSQL query={`CREATE OR REPLACE TABLE menu_copy AS SELECT * FROM menu;
+INSERT INTO menu_copy VALUES (1, 'Espresso', 'coffee', 3.00, true);`} />
 
-Expected from the insert: 1 row, 1 column (`Count`). What went wrong, what does `DESCRIBE menu_copy;` show, and what
-is the fix?
+Expected: 1 row, 1 column (the one row stored). What went wrong, what does `DESCRIBE menu_copy;` show, and what is the fix?
 
 <details>
 <summary>Hint</summary>
 
-Run `DESCRIBE menu_copy;` and compare its `key` and `null` columns with `DESCRIBE menu_ex3;`.
+Run `DESCRIBE menu_copy;` and compare its `key` and `null` columns with `DESCRIBE menu;`.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Start from: "`menu_copy` has none of the rules of `menu_ex3`, because ... The fix is to create the table with its rules first and then fill it with ..."
+Start from: "`menu_copy` has none of the rules of `menu`, because ... The fix is to create the table with its rules first and then fill it with ..."
 
 </details>
 
 <Solution>
 
 A table made with `CREATE TABLE ... AS SELECT` copies the columns and the rows but not the rules, as the DuckDB
-documentation says. `DESCRIBE menu_copy;` shows `YES` in the `null` column everywhere and nothing in `key`. So the
-second Espresso went in, and `SELECT COUNT(*) FROM menu_copy WHERE product_name = 'Espresso';` returns 2.
+documentation says. `DESCRIBE menu_copy;` shows `YES` in the `null` column everywhere and nothing in `key`, so the second
+Espresso went in: `SELECT COUNT(*) FROM menu_copy WHERE product_name = 'Espresso';` returns 2.
 
 Write the table with its rules, then fill it:
 
 ```sql
-CREATE TABLE menu_copy2 (
+CREATE OR REPLACE TABLE menu_copy2 (
   product_id INTEGER PRIMARY KEY,
   product_name VARCHAR NOT NULL UNIQUE,
   category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
   unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
   is_active BOOLEAN DEFAULT true
 );
-INSERT INTO menu_copy2 SELECT * FROM menu_ex3;
+INSERT INTO menu_copy2 SELECT * FROM menu;
 ```
 
-Now the same Espresso insert ends in `Constraint Error: Duplicate key "product_id: 1" violates primary key constraint.`
+Now the same Espresso insert, into `menu_copy2`, is refused: `Duplicate key "product_id: 1" violates primary key constraint.`
 
 </Solution>
 
@@ -493,7 +519,7 @@ Now the same Espresso insert ends in `Constraint Error: Duplicate key "product_i
 
 **Can you do it?** *I can write a `CREATE TABLE` with types, a key, `NOT NULL`, `UNIQUE`, `CHECK`, a foreign key and a
 `DEFAULT`, and say which rule will refuse a given row.*
-Test: Exercise sql-create-table-constraints-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-create-table-constraints-2, done from an empty editor without opening the hints.
 
 The pattern to remember: **write the rules into the table, then try to break them.** The next lesson, *Inserting,
 updating and deleting safely*, changes the rows you stored.

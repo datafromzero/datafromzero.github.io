@@ -20,7 +20,6 @@ prerequisites:
   - sql-subqueries
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-indexes-and-explain.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Indexes'
@@ -42,26 +41,34 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). It is honest about one thing first. DuckDB is built for analytics: its documentation says it processes batches
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
+This lesson is honest about one thing first. DuckDB is built for analytics: its documentation says it processes batches
 of values at a time, to answer questions over large parts of a table. Indexes matter differently there than in the
-transactional databases that many courses teach on. You learn the idea, then see how much DuckDB uses it.
+transactional databases that many courses teach on. You learn the idea, then see how much DuckDB uses it. You work on
+copies, so the cafe-sales tables never get an index. A block that makes a table or an index says so if it already exists:
+press **Reset data** and start again. Timings say nothing on 1,800 rows, so this lesson never compares them.
 
-**Your practice notebook** loads the five tables of **cafe-sales** and works on copies, so the cafe-sales tables never
-get an index. The `EXPLAIN` cells print the plan with `print(...)`, because `.show()` squeezes a plan onto one line;
-the other cells wrap each query as in S1 and leave out the closing `;`. This lesson never compares timings: on 1,800
-rows they say nothing.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that the plans of steps 2 to 6 read the same in Colab, in particular that plain `EXPLAIN` still prints `Sequential Scan` after the index exists (step 4) while `EXPLAIN ANALYZE` prints `Index Scan`; a newer DuckDB may differ. Time the lesson against its 25 minutes. When you have checked it, set
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 25 minutes. The plans on the page come from DuckDB 1.4.3 in the browser and the figure and numbers from 2.0.0. The lesson relies only on the `Type:` and `Filters:` lines and the row counts, which read the same in both; the boxes are drawn differently, 1.4.3 has no `Row Groups Scanned` line, and in both a plain `EXPLAIN` prints `Sequential Scan` after the index exists while `EXPLAIN ANALYZE` prints `Index Scan`. A newer DuckDB may differ. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> The till screen looks up one order by its number all day: "order 1001". A friend says "add an index". What is an
+> index, and will it help here?
+
+The lookup returns one row of `orders`, which has 1,800:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02 | completed | mobile |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In *Filtering rows with WHERE* (S3), write the query that returns order 1001 from `orders`.
 
@@ -85,32 +92,52 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In *Tables, keys and grain* (S18), what is one row of `orders`?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+An **index** is a sorted shortcut to rows: instead of reading every row to find one, the database looks the value up and
+goes straight to the rows.
 
-   One order, one visit to the till.
+{/* CONCEPT: concept-index */}
 
-   </details>
+## Learn by doing
 
-## The question
+Four small steps. Ignore the times in a plan.
 
-The owner of the cafes asks:
+### 1. Read a plan
 
-> The till screen looks up one order by its number all day: "order 1001". A friend says "add an index". What is an
-> index, and will it help here?
+Before it runs a query, the database writes a **query plan**: the steps it will take, in order. `EXPLAIN` prints the plan
+without running the query. `EXPLAIN ANALYZE` runs it and prints the plan with measured numbers. For a table with a filter,
+the plan shows a **scan**; the simplest is the **full scan**, which the plan calls `Sequential Scan`: read the rows one
+after another and test the filter on each.
 
-The lookup returns one row of `orders`, which has 1,800:
+**Try it** (copy the table). You add indexes to a copy, and a table made this way starts with no rules and no indexes (S31).
 
-| order_id | customer_id | store_id | ordered_at | status | payment_method |
-|---:|---:|---:|---|---|---|
-| 1001 | 15 | 2 | 2026-01-01 08:02 | completed | mobile |
+<RunSQL query={`CREATE TABLE orders_ix AS SELECT * FROM orders;`} />
 
-By the end you will have read the plan of that lookup before and after an index, found a filter that ignores the
-index, and proved the answer never changed.
+Expected: 1 row, 1 column: the 1,800 rows copied.
 
-## The picture
+**Try it** (a plan, not run). The plan arrives as text in one cell of the output. Find the `Type:` line in it.
+
+<RunSQL query={`EXPLAIN SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: a plan with one scan: `Type: Sequential Scan`, the columns it outputs, the `Filters:` test on `order_id` and `~1 row`.
+*Why:* the `~` marks an estimate, because the query was not run. A scan with a filter is the plan of every `WHERE` on a table
+with no index.
+
+**Try it** (a plan, run). Before you run it: which `Type:` will it show, and will the row count still be a guess?
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: a time, then a scan with `Type: Sequential Scan`, the filter and `1 row`. *Why:* now the row count is real: the
+engine read every row of the table and kept 1.
+
+### 2. Make an index
+
+An index is a sorted structure that holds one column's values and, beside each, the position of its rows, like the
+alphabetic index at the back of a book. The picture is a model: DuckDB's real structure is an ART, an adaptive radix tree.
+`CREATE INDEX` builds one, and DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE` column. DuckDB has a second kind
+for free: **min-max indexes** (zonemaps), created for you on columns of the general-purpose types, which let it skip any
+**row group** (a horizontal slice of a table's rows) whose min-max range does not contain the filter value.
 
 <figure>
 <svg viewBox="0 0 360 252" width="360" role="img" aria-labelledby="index-title index-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -197,6 +224,21 @@ index, and proved the answer never changed.
 <text x="10" y="222" font-size="11" font-weight="600">Customer 15: read the short sorted list, then go to rows 1 and 6.</text>
 <text x="10" y="238" font-size="11" opacity="0.8">With no index, every row has to be read to be sure.</text>
 </svg>
+</figure>
+
+**Try it** (create the index).
+
+<RunSQL query={`CREATE INDEX idx_orders_order_id ON orders_ix (order_id);`} />
+
+**Try it** (run the lookup again). Same query as before.
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: the same plan, now with `Type: Index Scan` and `1 row`. *Why:* the engine went to the row through the index. The
+answer to the owner: yes, for a lookup of one row by key. Your plan may be drawn a little differently from the figure, and
+a newer version prints more lines; the `Type:` line is the one to compare.
+
+<figure>
 <svg viewBox="0 0 360 326" width="360" role="img" aria-labelledby="plans-title plans-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="plans-title">EXPLAIN ANALYZE before and after CREATE INDEX</title>
 <desc id="plans-desc">Two plan boxes from EXPLAIN ANALYZE on the table orders_ix, which has 1,800 rows, for the filter order_id = 1001. Before the index: Table Scan, Type Sequential Scan, Row Groups Scanned 1 of 1, 1 row. After the index: Table Scan, Type Index Scan, Row Groups Scanned 0 of 1, 1 row.</desc>
@@ -223,125 +265,54 @@ index, and proved the answer never changed.
 </svg>
 </figure>
 
-## How it works
+ART indexes exist mainly to enforce keys and to speed up point lookups and very highly selective queries, under 0.1% of the
+rows. That is guidance: the engine's rule for an index scan is 2,048 rows or 0.1% of the table, whichever is larger.
 
-An **index** is a shortcut to rows: a sorted structure that holds one column's values and, beside each, the position of
-its rows. In the picture above, the list on the right is an index on `customer_id`, like the
-alphabetic index at the back of a book. The picture is a model: DuckDB's real structure is an ART, an adaptive radix tree.
+### 3. The filter has to fit the index
 
-Before it runs a query, the engine writes a **query plan**: the steps it will take, in order. `EXPLAIN` prints the plan
-without running the query; `EXPLAIN ANALYZE` runs it and prints the plan with measured numbers. For a table with a filter,
-the engine chooses between two scans:
+DuckDB tries an index scan for equality (`=`) and `IN` conditions, and only for an index defined on one plain column, not on
+an expression.
 
-1. **Full scan** (`Sequential Scan`): read the rows one after another and test the filter on each. DuckDB stores a table
-   in **row groups**, horizontal slices of its rows; each cafe table fits in one, so a full scan reports `1 / 1`. In the
-   picture above, customer 15 needs all six rows read.
-2. **Index scan**: look the value up in the sorted structure, take the row positions beside it, and read only those rows.
-   In the picture above: one entry, then rows 1 and 6.
+**Try it** (a function of the column). Before you run it: the index on `order_id` exists. Will this filter use it?
 
-The rules:
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE CAST(order_id AS VARCHAR) = '1001';`} />
 
-- DuckDB has two kinds of index. **Min-max indexes** (zonemaps) are created for you on columns of the general-purpose
-  types: DuckDB can skip any row group whose min-max range does not contain the filter value. **ART indexes** come from `CREATE INDEX`, and DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE` column.
-- ART indexes exist mainly to enforce keys and to speed up point lookups and very highly selective queries, under 0.1%
-  of the rows. That is guidance: the engine's rule for an index scan is 2,048 rows or 0.1% of the table, whichever is
-  larger.
-- DuckDB tries an index scan for equality (`=`) and `IN` conditions, and only for an index defined on one plain column,
-  not on an expression.
-- An ART index does not change how fast joins, aggregations or sorts run.
-- An index has a price: it slows down loading and updates, so changes on an indexed table perform worse, and it can take
-  a significant share of DuckDB's memory.
+Expected: `Type: Sequential Scan` and `1 row`, although the index exists. *Why:* the index holds `order_id` values, not their
+text. A filter on a function of the column must compute the function for every row, so it scans them all. Write the plain
+filter, as in unit 2, to keep the index useful.
 
-**Excel.** `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) has a binary-search mode that relies on the lookup list
-being sorted, and returns invalid results if it is not. By analogy, sorted order saves reading, and keeping the order is the upkeep:
-the bargain an index makes.
+**Try it** (a composite index). An index can span two columns, written `ON table (a, b)`.
 
-**A common misconception: "an index makes every query faster, so index every column."** An ART index mainly
-serves highly selective lookups, and it costs upkeep and memory all the time.
+<RunSQL query={`CREATE INDEX idx_orders_store_payment ON orders_ix (store_id, payment_method);`} />
 
-## Worked example
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE store_id = 3 AND payment_method = 'card';`} />
 
-Question: **will an index help the till's lookup of one order?** Run the notebook's setup cell, then one cell per
-step. Each step gives the shape of the result to expect. Ignore the times in a plan.
+Expected: a scan, and above it a projection step. *Why:* the plan scans every row (`Type: Sequential Scan`) and returns 180
+rows, so DuckDB did not use the composite index: it spans two columns, not one plain column. An index on `store_id` alone is used for `store_id = 3`. The composite
+index was built and kept up to date for nothing.
 
-1. **Copy `orders` so you can add indexes.**
+### 4. An index has a price, and never changes the answer
 
-   ```sql
-   CREATE TABLE orders_ix AS SELECT * FROM orders;
-   ```
+An index slows down loading and updates, so changes on an indexed table perform worse, and it can take a significant share
+of DuckDB's memory. An ART index does not change how fast joins, aggregations or sorts run. *Excel:* `XLOOKUP` (E8, *Bring
+in a value by key with XLOOKUP*) has a binary-search mode that relies on the lookup list being sorted, and returns invalid
+results if it is not. By analogy, sorted order saves reading, and keeping the order is the upkeep: the bargain an index
+makes.
 
-   Expected: a `Count` table, 1 row, 1 column. *Why:* indexes go on the copy, and a table made this way starts with no
-   rules and no indexes (S31).
+**Try it** (same answer, with and without the index). Before you run it: how many rows should differ?
 
-2. **Read a plan without running it.**
+<RunSQL query={`SELECT COUNT(*) AS differing_rows FROM (
+  (SELECT * FROM orders WHERE order_id = 1001 EXCEPT SELECT * FROM orders_ix WHERE order_id = 1001)
+  UNION ALL
+  (SELECT * FROM orders_ix WHERE order_id = 1001 EXCEPT SELECT * FROM orders WHERE order_id = 1001)
+);`} />
 
-   ```sql
-   EXPLAIN SELECT * FROM orders_ix WHERE order_id = 1001;
-   ```
-
-   Expected: a box drawing with one `Seq Scan` box: `Table: memory.main.orders_ix`, `Type: Sequential Scan`, the
-   columns it outputs, `Filters: order_id = 1001` and `~1 row`. *Why:* the `~` marks an estimate, because the query
-   was not run. A scan with a filter is the plan of every `WHERE` on a table with no index.
-
-3. **Run it and read what happened.**
-
-   ```sql
-   EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;
-   ```
-
-   Expected: a `Summary` box with a time, then a `Table Scan` box with `Type: Sequential Scan`, `Row Groups Scanned:
-   1 / 1` and `1 row`. *Why:* now the row count is real: the engine read one row group, all of the table, and
-   kept 1 row.
-
-4. **Create the index and run it again.**
-
-   ```sql
-   CREATE INDEX idx_orders_order_id ON orders_ix (order_id);
-   EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;
-   ```
-
-   Expected: the same boxes, now with `Type: Index Scan`, `Row Groups Scanned: 0 / 1` and `1 row`. *Why:* the engine
-   went to the row through the index, so no group was scanned in the ordinary way. In DuckDB 2.0.0 the plain `EXPLAIN`
-   of this query still prints `Sequential Scan`: only `EXPLAIN ANALYZE` shows what was used. The answer to the owner:
-   yes, for a lookup of one row by key.
-
-5. **A filter that cannot use the index.**
-
-   ```sql
-   EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE CAST(order_id AS VARCHAR) = '1001';
-   ```
-
-   Expected: `Type: Sequential Scan`, `Row Groups Scanned: 1 / 1` and `1 row`, although the index exists. *Why:* the
-   index holds `order_id` values, not their text. A filter on a function of the column must compute the function for
-   every row, so it scans them all. Write the plain filter, as in step 4, to keep the index useful.
-
-6. **A composite index.** An index can span two columns, written `ON table (a, b)`.
-
-   ```sql
-   CREATE INDEX idx_orders_store_payment ON orders_ix (store_id, payment_method);
-   EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE store_id = 3 AND payment_method = 'card';
-   ```
-
-   Expected: a `Table Scan` box, and above it a `Projection` box. *Why:* the plan scans every row and returns 180
-   rows, so DuckDB did not use the composite index: as the rules in How it works say.
-   An index on `store_id` alone is used for `store_id = 3`. The composite index was built and kept up to date for nothing.
-
-7. **Verify: the same answer with and without the index.**
-
-   ```sql
-   SELECT COUNT(*) AS differing_rows FROM (
-     (SELECT * FROM orders WHERE order_id = 1001 EXCEPT SELECT * FROM orders_ix WHERE order_id = 1001)
-     UNION ALL
-     (SELECT * FROM orders_ix WHERE order_id = 1001 EXCEPT SELECT * FROM orders WHERE order_id = 1001)
-   );
-   ```
-
-   Expected: 1 row, 1 column. *Why:* each `EXCEPT` lists rows that one side has and the other lacks, and `UNION ALL` joins the
-   two lists. The count is 0: the indexed copy returns exactly the original row. An index changes how a row is found,
-   never which rows qualify.
+Expected: 1 row, 1 column. *Why:* each `EXCEPT` lists rows that one side has and the other lacks, and `UNION ALL` joins the two
+lists. The count is **0**: the indexed copy returns exactly the original row. An index changes how a row is found, never
+which rows qualify.
 
 <details>
-<summary>Explain it in your own words: why does step 7 run EXCEPT in both directions?</summary>
+<summary>Explain it in your own words: why does this check run EXCEPT in both directions?</summary>
 
 One `EXCEPT` lists only the rows its first query has and its second lacks. If the indexed copy returned an extra row,
 that direction would still count 0 differences. Running it both ways and adding the lists catches a missing row and an
@@ -349,26 +320,39 @@ extra one.
 
 </details>
 
+<Aside type="tip" title="Remember">
+
+- `EXPLAIN` shows the plan; `EXPLAIN ANALYZE` runs the query and shows what happened. Read the `Type:` line.
+- An ART index serves a plain `=` or `IN` filter on its one column, mostly for a few rows.
+- An index costs upkeep and memory, and never changes which rows come back.
+
+**Common trap: "an index makes every query faster, so index every column."** An ART index mainly serves highly selective
+lookups, and it costs upkeep and memory all the time.
+
+</Aside>
+
 ## Finish it
 
 <Exercise id="sql-indexes-and-explain-1">
 
-**Index the lookup of an order's lines.** Use the Exercise 1 cells on `items_ex1`, a copy of `order_items` (3,287 rows,
-many lines per order). Expected: `EXPLAIN ANALYZE` prints a `Summary` box and a `Table Scan` box each time.
+**Index the lookup of an order's lines.** Use `items_ex1`, a copy of `order_items` (3,287 rows, many lines per order).
+Expected: a plan with a `Type:` line each time.
 
-Done for you, the plan before the index:
+Done for you: the copy, and the plan before the index. (`CREATE OR REPLACE` lets you run it again for a fresh copy.)
 
-```sql
-EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;
-```
+<RunSQL query={`CREATE OR REPLACE TABLE items_ex1 AS SELECT * FROM order_items;
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;`} />
 
-Now finish it: create a single-column index on `order_id`, run the same `EXPLAIN ANALYZE` again, and say what changed in
-the `Type` and the `Row Groups Scanned` lines.
+Now finish it: create a single-column index on `order_id`, run the same `EXPLAIN ANALYZE` again, and say what changed in the
+`Type:` line.
+
+<RunSQL query={`-- Add the CREATE INDEX line here, then press Run once.
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;`} />
 
 <details>
 <summary>Hint</summary>
 
-Copy step 4: `CREATE INDEX name ON table (column);`, then the same `EXPLAIN ANALYZE` line.
+Copy unit 2: `CREATE INDEX name ON table (column);`, then the same `EXPLAIN ANALYZE` line.
 
 </details>
 
@@ -389,9 +373,8 @@ CREATE INDEX idx_items_order ON items_ex1 (order_id);
 EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;
 ```
 
-Before: `Type: Sequential Scan`, `Row Groups Scanned: 1 / 1`, 3 rows. After: `Type: Index Scan`, `Row Groups Scanned: 0 / 1`,
-still 3 rows. The same 3 lines come back; only the way they are found changed. A lookup of a few rows by an indexed column is the
-kind of filter an ART index is for.
+Before: `Type: Sequential Scan` and 3 rows. After: `Type: Index Scan`, still 3 rows. The same 3 lines come back; only the
+way they are found changed.
 
 </Solution>
 
@@ -401,18 +384,24 @@ kind of filter an ART index is for.
 
 <Exercise id="sql-indexes-and-explain-2">
 
-**Which filters will use the index on `customer_id`?** `orders_ex2` is a copy of `orders` with an index on `customer_id`
-(done for you in the Exercise 2 cells). Here are three filters:
+**Which filters will use the index on `customer_id`?** Run this first. It makes `orders_ex2`, a copy of `orders`, with an
+index on `customer_id`. (Run it again for a fresh copy.)
+
+<RunSQL query={`CREATE OR REPLACE TABLE orders_ex2 AS SELECT * FROM orders;
+CREATE INDEX idx_orders_ex2_customer ON orders_ex2 (customer_id);`} />
+
+Here are three filters:
 
 - (a) `WHERE customer_id = 15`
 - (b) `WHERE CAST(customer_id AS VARCHAR) = '15'`
 - (c) `WHERE status = 'canceled'`
 
-Before you run anything, write one line per filter in the first cell: `Index Scan` or `Sequential Scan`, and why. Then run
+Before you run anything else, write one line per filter: `Index Scan` or `Sequential Scan`, and why. Then run
 `EXPLAIN ANALYZE SELECT * FROM orders_ex2 ...` for each. Finally, check with `EXCEPT` that (a) and (b) return the same rows.
 
-Expected shape, to check your lines against: three plans, each with one `Table Scan` box, a `Type` line, a `Filters` line and
-a row count. Counts cover orders of any status, and count orders, not units or dollars.
+Expected shape: three plans, each with a `Type:` line, a `Filters:` line and a row count. Counts cover orders of any status.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -439,7 +428,7 @@ EXPLAIN ANALYZE SELECT * FROM orders_ex2 WHERE status = 'canceled';
 
 (a) is an `Index Scan` with 16 rows: the filter is the indexed column. (b) is a `Sequential Scan` with 16 rows: the function wraps
 the column. (c) is a `Sequential Scan` with 1 row: nothing is indexed on `status`, and the one canceled order is found by
-reading all of them. Check (a) against (b) with the symmetric `EXCEPT` of step 7; it returns 0: the rewrite changes the way
+reading all of them. Check (a) against (b) with the symmetric `EXCEPT` of unit 4; it returns 0: the rewrite changes the way
 the rows are found, not which rows.
 
 </Solution>
@@ -462,18 +451,18 @@ min-max (zonemap) indexes on its own, and an ART index for each primary key and 
 <Exercise id="sql-indexes-and-explain-3">
 
 **Spot the flaw.** A colleague creates an index on `orders_ex3 (order_id)`, runs the plain `EXPLAIN` below, and sees
-`Type: Sequential Scan`. "The index is not used, so it is useless," says the colleague, and drops it.
+`Type: Sequential Scan`. "The index is not used, so it is useless," says the colleague, and drops it. Run it yourself:
 
-```sql
-EXPLAIN SELECT * FROM orders_ex3 WHERE order_id = 1001;
-```
+<RunSQL query={`CREATE OR REPLACE TABLE orders_ex3 AS SELECT * FROM orders;
+CREATE INDEX idx_orders_ex3 ON orders_ex3 (order_id);
+EXPLAIN SELECT * FROM orders_ex3 WHERE order_id = 1001;`} />
 
-Expected: a box drawing with a `Seq Scan` box. What went wrong, and what should the colleague have run?
+Expected: a plan whose `Type:` line reads `Sequential Scan`. What went wrong, and what should the colleague have run?
 
 <details>
 <summary>Hint</summary>
 
-Does plain `EXPLAIN` run the query? Run both versions of the line on `orders_ex3` and compare the `Type` lines.
+Does plain `EXPLAIN` run the query? Run both versions of the last line and compare the `Type:` lines.
 
 </details>
 
@@ -486,10 +475,10 @@ Start from: "Plain EXPLAIN only ... the query, so it cannot show what the engine
 
 <Solution>
 
-Plain `EXPLAIN` prints the plan without running the query. In DuckDB 2.0.0 it prints `Sequential Scan` for this query
-whether or not the index exists, so the line proves nothing about the index. `EXPLAIN ANALYZE` runs the query and prints
-`Type: Index Scan`, with `Row Groups Scanned: 0 / 1`. The colleague should have run `EXPLAIN ANALYZE`. Whether to keep an
-index is a separate decision, weighed against its price in How it works.
+Plain `EXPLAIN` prints the plan without running the query. It prints `Sequential Scan` for this query whether or not the
+index exists, so the line proves nothing about the index. `EXPLAIN ANALYZE` runs the query and prints `Type: Index Scan`. The
+colleague should have run `EXPLAIN ANALYZE`. Whether to keep an index is a separate decision, weighed against its price in
+unit 4.
 
 </Solution>
 
@@ -497,7 +486,7 @@ index is a separate decision, weighed against its price in How it works.
 
 **Can you do it?** *I can explain an index with the book picture, create a single-column index, read `EXPLAIN ANALYZE` for a
 full scan and an index scan, name a filter that ignores the index, and prove a rewrite returns the same rows.*
-Test: Exercise sql-indexes-and-explain-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-indexes-and-explain-2, done from an empty editor without opening the hints.
 
 The pattern to remember: **read the plan that ran, not the one that was drawn, and prove the answer did not move.** The
 next lesson, *Beyond one database: scale and NoSQL*, asks what changes when the data outgrows one machine.

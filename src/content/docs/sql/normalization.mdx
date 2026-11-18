@@ -22,7 +22,6 @@ prerequisites:
   - sql-subqueries
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-normalization.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'Microsoft Learn: Description of the database normalization basics'
@@ -34,51 +33,16 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). You have joined five tables many times. Here you ask why the data lives in five tables: you glue them into one
-wide table, watch it go wrong, and take it apart again.
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales** and builds the wide table as a copy. The cafe-sales
-tables are never changed, and every trial change to the copy runs inside a transaction that you roll back, as in
-*Inserting, updating and deleting safely* (S32). The notebook cells wrap each query as in S1 and leave out the closing `;`.
+You have joined five tables many times. Here you ask why the data lives in five tables: you glue them into one wide
+table, watch it go wrong, and take it apart again. The cafe-sales tables are never changed. The tables you make stay
+until you leave the page, so run the blocks in order. A block that makes a table says it already exists if you run it
+twice: press **Reset data** and start again from the top.
 
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 30 minutes. Read the wording of the three normal forms against a course text you trust; the Microsoft Learn page is an archived support article. How it works words the second and third forms in the textbook way (part of the key; another non-key column); the Microsoft page words them more loosely, so check those two rules against your course text. When you have checked it, set
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 30 minutes. Read the wording of the three normal forms against a course text you trust; the Microsoft Learn page is an archived support article. Unit 3 words the second and third forms in the textbook way (part of the key; another non-key column); the Microsoft page words them more loosely, so check those two rules against your course text. When you have checked it, set
 `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In *Tables, keys and grain* (S18), what does the grain of `order_items` say?
-
-   <details>
-   <summary>Answer</summary>
-
-   One row is one product line inside one order.
-
-   </details>
-
-2. In *LEFT JOIN and finding rows with no match* (S20), order 1335 has no customer. Which join keeps its line when you attach customers, and why?
-
-   <details>
-   <summary>Answer</summary>
-
-   `LEFT JOIN`. It keeps every row of the left table and fills the right side with `NULL` when nothing matches. An `INNER JOIN` would drop the line.
-
-   </details>
-
-3. In S32, which four statements let you try a change and then take it back?
-
-   <details>
-   <summary>Answer</summary>
-
-   `BEGIN;`, the change, a `SELECT` to look at it, then `ROLLBACK;`.
-
-   </details>
 
 ## The question
 
@@ -96,10 +60,73 @@ In the big table, each store's name and city are written on every one of its lin
 | Campus | Berkeley | 1,305 |
 | Harbor | Alameda | 645 |
 
-By the end you will have split the big table into five, shown what the big one gets wrong, and proved with queries that
-the known answers stay the same.
+## Warm-up
 
-## The picture
+From memory first, then click to check.
+
+1. In *LEFT JOIN and finding rows with no match* (S20), order 1335 has no customer. Which join keeps its line when you
+   attach customers, and why?
+
+   <details>
+   <summary>Answer</summary>
+
+   `LEFT JOIN`. It keeps every row of the left table and fills the right side with `NULL` when nothing matches. An
+   `INNER JOIN` would drop the line.
+
+   </details>
+
+2. In *Inserting, updating and deleting safely* (S32), which four statements let you try a change and then take it back?
+
+   <details>
+   <summary>Answer</summary>
+
+   `BEGIN;`, the change, a `SELECT` to look at it, then `ROLLBACK;`.
+
+   </details>
+
+## The big idea
+
+**Normalization** stores each fact once, in a table whose key identifies it, and lets other tables point to it by key.
+
+{/* CONCEPT: concept-normalize */}
+
+## Learn by doing
+
+Four small steps. Revenue counts completed orders only, all lines, including the extra-zero line of order 2075.
+
+### 1. One wide table repeats its facts
+
+A **normal form** is a rule about where a fact may live; there are three, and you meet them in order. The first (1NF)
+asks for one row per thing and no repeating columns such as `product_1` and `product_2`: a fourth product would need a
+new column. The wide table obeys it: one row per order line, whose key is the pair (`order_id`, `product_id`), 3,287 rows
+and 3,287 different pairs.
+
+**Try it** (build the wide table). It glues the five tables into one, one row per line, with the store, customer and
+product facts attached. The `LEFT JOIN` keeps order 1335, which has no customer.
+
+<RunSQL query={`CREATE OR REPLACE TABLE orders_wide AS
+SELECT oi.order_item_id, oi.order_id, oi.product_id, oi.quantity, oi.discount_usd,
+       o.ordered_at, o.status, o.payment_method,
+       o.store_id, s.store_name, s.city AS store_city,
+       o.customer_id, c.city AS customer_city, c.loyalty_tier,
+       p.product_name, p.category, p.unit_price_usd
+FROM order_items AS oi
+JOIN orders AS o ON o.order_id = oi.order_id
+JOIN stores AS s ON s.store_id = o.store_id
+LEFT JOIN customers AS c ON c.customer_id = o.customer_id
+JOIN products AS p ON p.product_id = oi.product_id;`} />
+
+Expected: 1 row, 1 column: the 3,287 rows stored, in a table of 17 columns. Run it again to get a fresh copy.
+
+**Try it** (spot the repeated facts). Count the lines of each store.
+
+<RunSQL query={`SELECT store_id, store_name, store_city, COUNT(*) AS lines
+FROM orders_wide
+GROUP BY store_id, store_name, store_city
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 4 columns, as in the table of the question. *Why:* the three counts add up to the whole table: every line
+repeats its store's name and city.
 
 <figure>
 <svg viewBox="0 0 360 292" width="360" role="img" aria-labelledby="wide-title wide-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -186,6 +213,117 @@ the known answers stay the same.
 <text x="10" y="266" font-size="11" font-weight="600">Oakland, silver is written on all 33 lines of customer 15.</text>
 <text x="10" y="284" font-size="11" opacity="0.8">Shaded: facts about the store and the customer, repeated.</text>
 </svg>
+</figure>
+
+### 2. Three ways a wide table fails
+
+A badly shaped table fails in three ways, the **anomalies**. *Update:* a fact stored on many rows can be changed on some
+and not others, leaving two versions. *Insert:* a fact cannot be recorded until a row for something else exists. *Delete:*
+removing a row also removes a fact.
+
+**Try it** (the update anomaly). The `UPDATE` below reaches only Harbor's lines before May 1. Before you run it: what will a
+report of Harbor's lines grouped by name show? The block leaves the transaction open, so run the second block next.
+
+<RunSQL query={`BEGIN;
+UPDATE orders_wide SET store_name = 'Harbor Point' WHERE store_id = 3 AND ordered_at < '2026-05-01';
+SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP BY store_name ORDER BY store_name;`} />
+
+<RunSQL query={`ROLLBACK;
+SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP BY store_name ORDER BY store_name;`} />
+
+Expected: 2 columns each time. *Why:* the `WHERE` reached 223 of Harbor's 645 lines, so Harbor has two names, 422 lines as
+`Harbor` and 223 as `Harbor Point`, and a report grouped by name splits in two. After `ROLLBACK`, one name is left, on all
+645 lines.
+
+**Try it** (the insert and delete anomalies). Before you run it: the menu has 16 products and `customers` has 150 rows.
+How many of each does the wide table know?
+
+<RunSQL query={`SELECT COUNT(DISTINCT product_id) AS sold_products, COUNT(DISTINCT customer_id) AS ordering_customers FROM orders_wide;`} />
+
+<RunSQL query={`SELECT COUNT(*) AS lines FROM orders_wide WHERE customer_id = 42;`} />
+
+Expected: the first returns 1 row, 2 columns; the second 1 row, 1 column. *Why:* the wide table knows only products and
+customers with a sale: the Pumpkin Spice Latte and five members who never ordered cannot be in it (insert anomaly).
+Customer 42 has one line in the whole table, on the canceled order, so deleting that line would erase everything the table
+knows about customer 42 (delete anomaly).
+
+### 3. Split each fact out by its key
+
+Move each group of facts into a table of its own, keyed by the column they depend on, and leave that column behind as a
+foreign key. The second form (2NF) says no non-key column depends on only part of the key. Product facts depend on
+`product_id` alone and order facts on `order_id` alone, so both leave the lines. A one-column key cannot break this rule.
+
+**Try it** (the product facts). `DISTINCT` keeps each product once, and the primary key (S31) would refuse a product with two
+different names.
+
+<RunSQL query={`CREATE TABLE n_product (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL,
+  category VARCHAR NOT NULL,
+  unit_price_usd DECIMAL(6, 2) NOT NULL
+);
+INSERT INTO n_product
+SELECT DISTINCT product_id, product_name, category, unit_price_usd FROM orders_wide;`} />
+
+Expected: 1 row, 1 column: the 15 products stored, not 16, for the reason of unit 2.
+
+<details>
+<summary>Explain it in your own words: why does <code>n_product</code> have 15 rows when the menu has 16?</summary>
+
+The wide table has one row per line sold, so a product nobody bought has no row, and the split can only keep what
+the wide table held. This is the insert anomaly: the five tables could record the Pumpkin Spice Latte, the wide one
+could not.
+
+</details>
+
+The third form (3NF) says no non-key column depends on another non-key column. Store name and city depend on `store_id`,
+not on the order, so they leave the orders, as do customer city and tier.
+
+**Try it** (the store facts).
+
+<RunSQL query={`CREATE TABLE n_store (store_id INTEGER PRIMARY KEY, store_name VARCHAR NOT NULL, store_city VARCHAR NOT NULL);
+INSERT INTO n_store SELECT DISTINCT store_id, store_name, store_city FROM orders_wide;`} />
+
+Expected: 1 row, 1 column. Now the same recipe for the customer, order and line tables, each with its primary key, and
+`n_order` and `n_line` with foreign keys. `n_line` keeps `order_item_id` as its key. Run it, and read the counts. `n_customer`
+needs `WHERE customer_id IS NOT NULL`: without it, the walk-in's empty row hits the `NOT NULL` rule and the insert fails.
+
+<RunSQL query={`CREATE TABLE n_customer (
+  customer_id INTEGER PRIMARY KEY,
+  customer_city VARCHAR NOT NULL,
+  loyalty_tier VARCHAR NOT NULL
+);
+INSERT INTO n_customer
+SELECT DISTINCT customer_id, customer_city, loyalty_tier FROM orders_wide WHERE customer_id IS NOT NULL;
+CREATE TABLE n_order (
+  order_id INTEGER PRIMARY KEY,
+  ordered_at TIMESTAMP NOT NULL,
+  status VARCHAR NOT NULL,
+  payment_method VARCHAR NOT NULL,
+  store_id INTEGER NOT NULL REFERENCES n_store (store_id),
+  customer_id INTEGER REFERENCES n_customer (customer_id)
+);
+INSERT INTO n_order
+SELECT DISTINCT order_id, ordered_at, status, payment_method, store_id, customer_id FROM orders_wide;
+CREATE TABLE n_line (
+  order_item_id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES n_order (order_id),
+  product_id INTEGER NOT NULL REFERENCES n_product (product_id),
+  quantity INTEGER NOT NULL,
+  discount_usd DECIMAL(6, 2) NOT NULL
+);
+INSERT INTO n_line
+SELECT order_item_id, order_id, product_id, quantity, discount_usd FROM orders_wide;
+SELECT (SELECT COUNT(*) FROM n_store) AS stores, (SELECT COUNT(*) FROM n_customer) AS customers,
+       (SELECT COUNT(*) FROM n_order) AS orders, (SELECT COUNT(*) FROM n_line) AS lines,
+       (SELECT COUNT(*) FROM n_product) AS products;`} />
+
+Expected: 1 row, 5 columns: 3 stores, 145 customers, 1,800 orders, 3,287 lines and 15 products.
+
+*Excel:* in E8 (*Bring in a value by key with XLOOKUP*) a price sits on one sheet and each line holds only the code.
+Normalizing does that for every repeated fact.
+
+<figure>
 <svg viewBox="0 0 360 488" width="360" role="img" aria-labelledby="split-title split-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="split-title">The wide table split into five tables, with the row count of each</title>
 <desc id="split-desc">Five boxes. n_store, 3 rows, and n_customer, 145 rows, sit at the top. n_order, 1,800 rows, sits in the middle with foreign keys store_id and customer_id. n_line, 3,287 rows, and n_product, 15 rows, sit at the bottom. n_line holds foreign keys order_id and product_id. Lines join n_order to n_store and to n_customer, n_line to n_order, and n_line to n_product, each with many at the foreign key end and 1 at the key end. The product and order facts leave the lines in the second normal form step. The store and customer facts leave the orders in the third normal form step.</desc>
@@ -238,188 +376,79 @@ the known answers stay the same.
 </svg>
 </figure>
 
-## How it works
+### 4. Prove the answers did not change
 
-**Normalization** is organizing data into tables so that each fact is stored once, in a table whose key identifies it.
-Other tables point to it by key. Its rules are the usual three **normal forms**. In the first picture, one row of the
-wide table is one order line, and its key is the pair (`order_id`, `product_id`): 3,287 rows, 3,287 different pairs. To
-normalize it:
+Read the five tables together again with a join on the keys, and compare with the wide table.
 
-1. Find the facts repeated from row to row: the shaded cells of the first picture.
-2. Move each group of facts into a table of its own, keyed by the column they depend on, and leave that column behind as
-   a foreign key.
-3. Read them together again with a join on the keys.
+**Try it.** `EXCEPT` lists rows in one query and not the other. Before you run the checks: what should each return?
 
-The rules:
+<RunSQL query={`CREATE OR REPLACE VIEW orders_rebuilt AS
+SELECT l.order_item_id, l.order_id, l.product_id, l.quantity, l.discount_usd,
+       o.ordered_at, o.status, o.payment_method,
+       o.store_id, s.store_name, s.store_city,
+       o.customer_id, c.customer_city, c.loyalty_tier,
+       p.product_name, p.category, p.unit_price_usd
+FROM n_line AS l
+JOIN n_order AS o ON o.order_id = l.order_id
+JOIN n_store AS s ON s.store_id = o.store_id
+LEFT JOIN n_customer AS c ON c.customer_id = o.customer_id
+JOIN n_product AS p ON p.product_id = l.product_id;`} />
 
-- **First (1NF):** one row per thing, no repeating columns such as `product_1` and `product_2`: a fourth product
-  would need a new column.
-- **Second (2NF):** no non-key column depends on only part of the key. Product facts depend on `product_id` alone and
-  order facts on `order_id` alone, so both leave the lines. A one-column key cannot break this rule.
-- **Third (3NF):** no non-key column depends on another non-key column. Store name and city depend on `store_id`, not
-  on the order, so they leave the orders, as do customer city and tier.
-- A badly shaped table fails in three ways, the **anomalies**. *Update:* a fact stored on many rows can be changed on
-  some and not others, leaving two versions. *Insert:* a fact cannot be recorded until a row for something else exists,
-  as a fourth cafe cannot until it has an order. *Delete:* removing a row also removes a fact, as removing the only line
-  that mentions a product erases the product.
-- **Denormalizing** stores a fact many times on purpose. Microsoft Learn says normalization adds tables that some find
-  cumbersome, and the Azure Architecture Center notes the join cost for read-heavy views. Analysts build a wide view or star
-  schema (S29) over normalized tables.
+<RunSQL query={`SELECT COUNT(*) AS only_in_rebuilt FROM (SELECT * FROM orders_rebuilt EXCEPT SELECT * FROM orders_wide);`} />
 
-**Excel.** In E8 (*Bring in a value by key with XLOOKUP*) a price sits on one sheet and each line holds only the code.
-Normalizing does that for every repeated fact.
+<RunSQL query={`SELECT COUNT(*) AS only_in_wide FROM (SELECT * FROM orders_wide EXCEPT SELECT * FROM orders_rebuilt);`} />
 
-**A common misconception: "normalized means no value repeats."** Keys repeat: Old Town's `store_id` of 1 sits on all
-729 of its orders in `n_order`. What is stored once is each fact about the store, its name and city.
+Then the revenue, from the wide table and from the rebuilt one.
 
-## Worked example
+<RunSQL query={`SELECT store_name, SUM(quantity * unit_price_usd - discount_usd) AS revenue
+FROM orders_wide WHERE status = 'completed' GROUP BY store_name ORDER BY store_name;`} />
 
-Question: **what goes wrong in one wide table, and does splitting it change any answer?** Run the notebook's setup
-cell, then one cell per step. Each step gives the shape of the result to expect. Revenue counts completed orders only,
-all lines, including the extra-zero line of order 2075.
+<RunSQL query={`SELECT store_name, SUM(quantity * unit_price_usd - discount_usd) AS revenue
+FROM orders_rebuilt WHERE status = 'completed' GROUP BY store_name ORDER BY store_name;`} />
 
-1. **Build the wide table.**
+Expected: the view shows no rows; each `EXCEPT` check returns 1 row, 1 column; each revenue query 3 rows, 2 columns. *Why:*
+two 0s mean the same 3,287 rows both ways. Both revenue tables read Campus \$8,998.75, Harbor \$4,606.25 and Old Town
+\$9,144.25: \$22,749.25 for completed orders, the same total as from the five original tables. Splitting lost nothing.
 
-   ```sql
-   CREATE TABLE orders_wide AS
-   SELECT oi.order_item_id, oi.order_id, oi.product_id, oi.quantity, oi.discount_usd,
-          o.ordered_at, o.status, o.payment_method,
-          o.store_id, s.store_name, s.city AS store_city,
-          o.customer_id, c.city AS customer_city, c.loyalty_tier,
-          p.product_name, p.category, p.unit_price_usd
-   FROM order_items AS oi
-   JOIN orders AS o ON o.order_id = oi.order_id
-   JOIN stores AS s ON s.store_id = o.store_id
-   LEFT JOIN customers AS c ON c.customer_id = o.customer_id
-   JOIN products AS p ON p.product_id = oi.product_id;
-   ```
+The rebuilt view is a wide table again, on purpose. **Denormalizing** stores a fact many times deliberately. Microsoft Learn
+says normalization adds tables that some find cumbersome, and the Azure Architecture Center notes the join cost for
+read-heavy views. Analysts build a wide view or star schema (S29) over normalized tables.
 
-   Expected: a `Count` table, 1 row, 1 column. The new table has 17 columns. *Why:* one row per line, with the store,
-   customer and product facts glued on. The `LEFT JOIN` keeps order 1335, which has no customer.
+<Aside type="tip" title="Remember">
 
-2. **Spot the repeated facts.**
+- A normal form says where a fact may live: 1NF one row per thing; 2NF no column depends on part of the key; 3NF no column
+  depends on another non-key column.
+- A wide table breeds update, insert and delete anomalies.
+- Split by key, read back with a join, and prove the answers did not move.
 
-   ```sql
-   SELECT store_id, store_name, store_city, COUNT(*) AS lines
-   FROM orders_wide
-   GROUP BY store_id, store_name, store_city
-   ORDER BY store_id;
-   ```
+**Common trap: "normalized means no value repeats."** Keys repeat: Old Town's `store_id` of 1 sits on all 729 of its orders
+in `n_order`. What is stored once is each fact about the store, its name and city.
 
-   Expected: 3 rows, 4 columns, as in the table of the question. *Why:* the three lines counts add up to the whole
-   table: every line repeats its store's name and city.
-
-3. **Update anomaly, then undo it.** Four cells: `BEGIN`, the `UPDATE`, the `SELECT`, `ROLLBACK`.
-
-   ```sql
-   UPDATE orders_wide SET store_name = 'Harbor Point' WHERE store_id = 3 AND ordered_at < '2026-05-01';
-   SELECT store_name, COUNT(*) AS lines FROM orders_wide WHERE store_id = 3 GROUP BY store_name ORDER BY store_name;
-   ```
-
-   Expected: the `UPDATE` reports a `Count`; the `SELECT` returns 2 rows, 2 columns. *Why:* the `WHERE` reached 223 of
-   Harbor's 645 lines, so Harbor now has two names, 422 lines as `Harbor` and 223 as `Harbor Point`. A report grouped
-   by name splits in two. After `ROLLBACK`, the name is `Harbor` everywhere again.
-
-4. **Insert and delete anomalies.** Two cells.
-
-   ```sql
-   SELECT COUNT(DISTINCT product_id) AS sold_products, COUNT(DISTINCT customer_id) AS ordering_customers FROM orders_wide;
-   SELECT COUNT(*) AS lines FROM orders_wide WHERE customer_id = 42;
-   ```
-
-   Expected: the first returns 1 row, 2 columns; the second 1 row, 1 column. *Why:* the menu has 16 products and
-   `customers` has 150 rows, but the wide table knows only products and customers with a sale: the Pumpkin Spice Latte
-   and five members who never ordered cannot be in it (insert anomaly). Customer 42 has one line in the whole table, on
-   the canceled order, so deleting that line would erase everything the table knows about customer 42 (delete anomaly).
-
-5. **Split out the product facts (2NF).**
-
-   ```sql
-   CREATE TABLE n_product (
-     product_id INTEGER PRIMARY KEY,
-     product_name VARCHAR NOT NULL,
-     category VARCHAR NOT NULL,
-     unit_price_usd DECIMAL(6, 2) NOT NULL
-   );
-   INSERT INTO n_product
-   SELECT DISTINCT product_id, product_name, category, unit_price_usd FROM orders_wide;
-   ```
-
-   Expected: a `Count` table with 1 row. *Why:* `DISTINCT` keeps each product once, and the primary key
-   (from S31) would refuse a product with two different names. The new table has 15 rows, not 16, for the reason of step 4.
-
-6. **Split out the store facts (3NF), then the rest.**
-
-   ```sql
-   CREATE TABLE n_store (store_id INTEGER PRIMARY KEY, store_name VARCHAR NOT NULL, store_city VARCHAR NOT NULL);
-   INSERT INTO n_store SELECT DISTINCT store_id, store_name, store_city FROM orders_wide;
-   ```
-
-   Expected: a `Count` table, 1 row. The next notebook cell, done for you, builds `n_customer`, `n_order` and `n_line`
-   with the same recipe, each with its primary key, and `n_order` and `n_line` with foreign keys as in the picture; `n_line`
-   keeps `order_item_id` as its key. *Why:* `n_customer` needs `WHERE customer_id IS NOT NULL`: without it, the walk-in's empty row hits the `NOT NULL`
-   rule and the insert fails.
-
-7. **Prove the answers did not change.** Rebuild the wide table as a view over the five new tables, then compare.
-
-   ```sql
-   CREATE VIEW orders_rebuilt AS
-   SELECT l.order_item_id, l.order_id, l.product_id, l.quantity, l.discount_usd,
-          o.ordered_at, o.status, o.payment_method,
-          o.store_id, s.store_name, s.store_city,
-          o.customer_id, c.customer_city, c.loyalty_tier,
-          p.product_name, p.category, p.unit_price_usd
-   FROM n_line AS l
-   JOIN n_order AS o ON o.order_id = l.order_id
-   JOIN n_store AS s ON s.store_id = o.store_id
-   LEFT JOIN n_customer AS c ON c.customer_id = o.customer_id
-   JOIN n_product AS p ON p.product_id = l.product_id;
-
-   SELECT COUNT(*) AS only_in_rebuilt FROM (SELECT * FROM orders_rebuilt EXCEPT SELECT * FROM orders_wide);
-   SELECT COUNT(*) AS only_in_wide FROM (SELECT * FROM orders_wide EXCEPT SELECT * FROM orders_rebuilt);
-   SELECT store_name, SUM(quantity * unit_price_usd - discount_usd) AS revenue
-   FROM orders_wide WHERE status = 'completed' GROUP BY store_name ORDER BY store_name;
-   ```
-
-   Expected: the view returns a `Count` table; each `EXCEPT` check returns 1 row, 1 column; the revenue query returns
-   3 rows, 2 columns. Run the revenue query again with `orders_rebuilt` in place of `orders_wide`. *Why:* `EXCEPT`
-   lists rows in one table and not in the other, so two 0s mean the same 3,287 rows both ways. Both revenue tables read
-   Campus \$8,998.75, Harbor \$4,606.25 and Old Town \$9,144.25: \$22,749.25 for completed orders, the same total as from
-   the five original tables. Splitting lost nothing.
-
-<details>
-<summary>Explain it in your own words: why does <code>n_product</code> have 15 rows when the menu has 16?</summary>
-
-The wide table has one row per line sold, so a product nobody bought has no row, and the split can only keep what
-the wide table held. This is the insert anomaly: the five tables could record the Pumpkin Spice Latte, the wide one
-could not.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-normalization-1">
 
-**Split out the customer facts.** Use the Exercise 1 cells. Expected: the `INSERT` returns a `Count` table with 1 row; the
-check returns 1 row, 2 columns.
+**Split out the customer facts.** Use `orders_wide` from unit 1. Expected: the check returns 1 row, 2 columns.
 
-Done for you, the empty table:
+Done for you, the empty table, and the check that counts it. Run it: it shows `0 | 0`. (`CREATE OR REPLACE` lets you run it
+again for a fresh table.)
 
-```sql
-CREATE TABLE n_customer_ex1 (
+<RunSQL query={`CREATE OR REPLACE TABLE n_customer_ex1 (
   customer_id INTEGER PRIMARY KEY,
   customer_city VARCHAR NOT NULL,
   loyalty_tier VARCHAR NOT NULL
 );
-```
+-- Write the INSERT ... SELECT DISTINCT from orders_wide here.
+SELECT COUNT(*) AS row_count, COUNT(DISTINCT customer_id) AS distinct_ids FROM n_customer_ex1;`} />
 
-Now finish it: write the `INSERT ... SELECT DISTINCT` from `orders_wide`, then check with `COUNT(*)` and
-`COUNT(DISTINCT customer_id)` that the new table has one row per customer.
+Now finish it: add the `INSERT ... SELECT DISTINCT` from `orders_wide`, so that the check shows one row per customer.
 
 <details>
 <summary>Hint</summary>
 
-Copy step 5. Order 1335 has no customer: leave its row out with `WHERE customer_id IS NOT NULL`.
+Copy unit 3. Order 1335 has no customer: leave its row out with `WHERE customer_id IS NOT NULL`.
 
 </details>
 
@@ -447,8 +476,8 @@ SELECT COUNT(*) AS row_count, COUNT(DISTINCT customer_id) AS distinct_ids FROM n
 ```
 
 The result is `145 | 145`: one row per customer who ordered, so `customer_id` can be the key. Without the `WHERE`, the
-insert ends in `Constraint Error: NOT NULL constraint failed: n_customer_ex1.customer_city`, because the walk-in's row is
-empty. The five members who never ordered are not here: the wide table never held them.
+insert ends in `NOT NULL constraint failed: n_customer_ex1.customer_city`, because the walk-in's row is empty. The five
+members who never ordered are not here: the wide table never held them.
 
 </Solution>
 
@@ -458,16 +487,17 @@ empty. The five members who never ordered are not here: the wide table never hel
 
 <Exercise id="sql-normalization-2">
 
-**Did splitting change the units sold per category?** Use the Exercise 2 cells, after steps 5 to 7. The known answer comes
+**Did splitting change the units sold per category?** Use the Exercise 2 block, after units 1 to 4. The known answer comes
 from `orders_wide`; the view `orders_rebuilt` is the rebuilt table.
 
-Before you run anything, write one sentence in the first cell: how will the two result tables compare? Then write the
-units sold per category (the sum of `quantity`) from `orders_wide`, the same from `orders_rebuilt`, and a query that compares
-them with `EXCEPT`.
+Before you run anything, write one sentence: how will the two result tables compare? Then write the units sold per category
+(the sum of `quantity`) from `orders_wide`, the same from `orders_rebuilt`, and a query that compares them with `EXCEPT`.
 
 Expected shape, to check your sentence against: each units query returns one row per category and 2 columns; the comparison
 has the same 2 columns. Units count all 3,287 lines, the canceled one included, and the quantity-20 line of order 2075 (a Turkey Sandwich)
 is in the food total, because this question counts units, not dollars.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -518,11 +548,25 @@ facts into tables with keys fixes all three.
 
 **Spot the flaw.** A colleague rebuilds the wide table, but joins the customers table with `JOIN` instead of `LEFT JOIN`
 and calls the result `orders_rebuilt_bad`. The check below does not return 0, so the colleague says the split lost a line
-and the five tables must be wrong:
+and the five tables must be wrong. Run both statements; they need the tables of unit 3.
 
-```sql
-SELECT COUNT(*) AS only_in_wide FROM (SELECT * FROM orders_wide EXCEPT SELECT * FROM orders_rebuilt_bad);
-```
+<RunSQL query={`CREATE OR REPLACE VIEW orders_rebuilt_bad AS
+SELECT l.order_item_id, l.order_id, l.product_id, l.quantity, l.discount_usd,
+       o.ordered_at, o.status, o.payment_method,
+       o.store_id, s.store_name, s.store_city,
+       o.customer_id, c.customer_city, c.loyalty_tier,
+       p.product_name, p.category, p.unit_price_usd
+FROM n_line AS l
+JOIN n_order AS o ON o.order_id = l.order_id
+JOIN n_store AS s ON s.store_id = o.store_id
+JOIN n_customer AS c ON c.customer_id = o.customer_id
+JOIN n_product AS p ON p.product_id = l.product_id;
+
+SELECT COUNT(*) AS only_in_wide FROM (
+  SELECT order_item_id FROM orders_wide
+  EXCEPT
+  SELECT order_item_id FROM orders_rebuilt_bad
+);`} />
 
 Expected: 1 row, 1 column. What went wrong, and what is the right join?
 
@@ -542,9 +586,9 @@ Start from: "The tables are fine. The line of order ... has an empty customer, s
 
 <Solution>
 
-The check returns 1: the line of order 1335, the walk-in, which has no customer. An `INNER JOIN` keeps only rows that
+The check, which compares line ids, returns 1: the line of order 1335, the walk-in, which has no customer. An `INNER JOIN` keeps only rows that
 match on both sides, so it dropped that line. The five tables are fine: `n_order.customer_id` is empty for order
-1335, and a foreign key may be empty. The rebuilt view needs `LEFT JOIN n_customer`, as in step 7. The bug would also
+1335, and a foreign key may be empty. The rebuilt view needs `LEFT JOIN n_customer`, as in unit 4. The bug would also
 change a known answer: completed revenue would read \$22,742.25 instead of \$22,749.25, a \$7.00 difference, which is
 the two Americanos at \$3.50 on order 1335.
 
@@ -554,7 +598,7 @@ the two Americanos at \$3.50 on order 1335.
 
 **Can you do it?** *I can spot a repeated fact in a wide table, split it into tables with keys, show the update, insert and delete
 anomalies, and prove with queries that the split kept the answers.*
-Test: Exercise sql-normalization-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-normalization-2, done from an empty editor without opening the hints.
 
 The pattern to remember: **one fact in one place, then prove the answers did not move.** The next lesson, *Indexes and
 reading a query plan*, asks how the database finds rows fast.
