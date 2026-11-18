@@ -137,6 +137,25 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   skills it uses. → **After any reorder, re-derive each lesson's `prerequisites` from the functions it uses, not from
   its old neighbors.**
 
+- 2026-11-18 — SQL drafts cited SQLite's documentation for how DuckDB ranks `AND` over `OR` and `*` over `+`, and for
+  integer division. → **Cite only the engine the lesson runs (DuckDB). A standard-SQL rule is shown by the results in the
+  steps and called "standard SQL"; the missing DuckDB page goes in `TODO(owner)`.**
+
+- 2026-11-18 — A Check yourself answer was cut off and followed by a line `XX`; every check passed because tests only ran
+  the SQL. → Automated in `check:lessons` (placeholder lines and bare TODO).
+- 2026-11-18 — SVG row highlights drifted two rows, and an Expected line gave away the count the learner was asked to
+  predict. → **Check each highlight's y against the row grid; after "Before you run it: how many…", Expected gives
+  only the columns.**
+- 2026-11-18 — Results like `-nan` and `inf` depend on the DuckDB version Colab installs. → **SQL notebooks pin
+  `duckdb==2.0.0` (`scripts/pin-notebook-duckdb.py`).**
+- 2026-11-18 — A planned objective said a SELECT alias "cannot be used in WHERE", but DuckDB 2.0.0 accepts it for plain
+  expressions (its Friendly SQL page lists it). → **Run every behavior claim in a stub's objectives on the engine the
+  lesson uses before teaching it; teach the running order, name what other databases do from their docs, and report the
+  objective wording.**
+
+- 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
+  convention per quantity across lessons, or name both.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget

@@ -1,0 +1,557 @@
+---
+id: sql-query-execution-order
+title: 'How a query runs: the order of the clauses'
+description: Learn the order the engine works through a query, from FROM to ORDER BY, and use it to explain the most common SELECT errors.
+stage: sql
+order: 120
+level: intermediate
+duration: 20
+objectives:
+  - List the clauses of a query in the order they run
+  - Use the running order to say where a SELECT alias works and why standard SQL refuses it in WHERE, though DuckDB accepts it for plain expressions
+  - Picture filtering as choosing rows and SELECT as choosing columns
+prerequisites:
+  - sql-group-by-having
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-query-execution-order.ipynb
+reviewed: 2026-11-18
+sources:
+  - title: 'DuckDB documentation: SELECT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/select
+  - title: 'DuckDB documentation: SELECT clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/select
+  - title: 'DuckDB documentation: WHERE clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/where
+  - title: 'DuckDB documentation: HAVING clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/having
+  - title: 'DuckDB documentation: Friendly SQL'
+    url: https://duckdb.org/docs/stable/sql/dialect/friendly_sql
+  - title: 'DuckDB documentation: Python API overview'
+    url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'PostgreSQL documentation: SELECT'
+    url: https://www.postgresql.org/docs/current/sql-select.html
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
+(S1). It teaches no new function. You write a query with `SELECT` first, but the engine reads it in a different order,
+and that order explains most of the errors you meet.
+
+**Your practice notebook** loads the five tables of **cafe-sales**. Each query sits between `con.sql("""` and
+`""").show()`: only the text inside the triple quotes is SQL. The notebook cells leave out the closing `;` that this
+page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text of step 5 with Colab's version, and check that a column alias is accepted in `WHERE` there (step 7) and that exercise 3 returns 0 rows there. Time the lesson against its 20 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *GROUP BY and HAVING* (S8), what is the difference between `WHERE` and `HAVING`?
+
+   <details>
+   <summary>Answer</summary>
+
+   `WHERE` keeps or drops rows, before the grouping. `HAVING` keeps or drops groups, after it.
+
+   </details>
+
+2. In *SELECT, ORDER BY and LIMIT* (S2), write a query that returns the three dearest products, with their name and
+   price. Break price ties by name.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT product_name, unit_price_usd
+   FROM products
+   ORDER BY unit_price_usd DESC, product_name
+   LIMIT 3;
+   ```
+
+   It returns Turkey Sandwich, Avocado Toast and Pumpkin Spice Latte.
+
+   </details>
+
+3. In S2, what does `AS` do in `COUNT(*) AS items`?
+
+   <details>
+   <summary>Answer</summary>
+
+   It gives the result column a name, an alias. The table is not changed.
+
+   </details>
+
+## The question
+
+The owner is writing a menu board for the cafes:
+
+> Among the items under \$5, which two categories have the most items, counting only categories with at least three?
+
+The top of the `products` table, which has 16 rows:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+| 4 | Cappuccino | coffee | 4.50 |
+
+One query answers it, but only if each clause does its own job. By the end you will know the order the clauses run in,
+and you will have read the answer: **coffee with 5 items and bakery with 3**.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 348" width="360" role="img" aria-labelledby="clause-order-title clause-order-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="clause-order-title">The order a query runs in, with the rows left after each clause</title>
+<desc id="clause-order-desc">Seven stages from top to bottom, each with a bar that gets shorter as rows are dropped. 1 FROM products: 16 rows and 4 columns. 2 WHERE unit_price_usd below 5: 12 rows. 3 GROUP BY category: 4 groups, coffee 5, tea 3, bakery 3 and food 1. 4 HAVING COUNT of rows at least 3: 3 groups, because food has only 1. 5 SELECT category and the count as items: 3 rows and 2 columns. 6 ORDER BY items descending then category: coffee 5, bakery 3, tea 3. 7 LIMIT 2: coffee 5 and bakery 3.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">The clauses in running order</text>
+<text x="10" y="46" font-size="11" font-weight="600">1</text>
+<text x="24" y="46" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">FROM products</text>
+<rect x="24" y="52" width="128" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="160" y="60" font-size="10">16 rows, 4 columns</text>
+<text x="10" y="90" font-size="11" font-weight="600">2</text>
+<text x="24" y="90" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE unit_price_usd &lt; 5</text>
+<rect x="24" y="96" width="96" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="128" y="104" font-size="10">12 rows, 4 columns</text>
+<text x="10" y="134" font-size="11" font-weight="600">3</text>
+<text x="24" y="134" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">GROUP BY category</text>
+<rect x="24" y="140" width="32" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="64" y="148" font-size="10">4 groups: coffee 5, tea 3, bakery 3, food 1</text>
+<text x="10" y="178" font-size="11" font-weight="600">4</text>
+<text x="24" y="178" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">HAVING COUNT(&#42;) &gt;= 3</text>
+<rect x="24" y="184" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="192" font-size="10">3 groups: food (1) drops out</text>
+<text x="10" y="222" font-size="11" font-weight="600">5</text>
+<text x="24" y="222" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT category, COUNT(&#42;) AS items</text>
+<rect x="24" y="228" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="236" font-size="10">3 rows, 2 columns</text>
+<text x="10" y="266" font-size="11" font-weight="600">6</text>
+<text x="24" y="266" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">ORDER BY items DESC, category</text>
+<rect x="24" y="272" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="280" font-size="10">coffee 5, bakery 3, tea 3</text>
+<text x="10" y="310" font-size="11" font-weight="600">7</text>
+<text x="24" y="310" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">LIMIT 2</text>
+<rect x="24" y="316" width="16" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="48" y="324" font-size="10">coffee 5, bakery 3</text>
+</svg>
+<svg viewBox="0 0 360 334" width="360" role="img" aria-labelledby="rows-columns-title rows-columns-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="rows-columns-title">WHERE chooses rows, SELECT chooses columns</title>
+<desc id="rows-columns-desc">The 16 rows of the products table in four columns: product_id, product_name, category and unit_price_usd. The three tea rows, Green Tea 3.25, Chai Latte 4.75 and Iced Lemon Tea 3.75, are shaded: WHERE category equals tea keeps those rows. The product_name and unit_price_usd columns have a heavy outline: SELECT product_name, unit_price_usd keeps those columns. The result is where the two meet: 3 rows and 2 columns.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Rows are chosen by WHERE, columns by SELECT</text>
+<text x="10" y="40" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE category = 'tea'</text>
+<text x="10" y="54" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT product_name, unit_price_usd</text>
+<rect x="10" y="60" width="52" height="14" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="13" y="70" font-size="9" font-weight="600">product_id</text>
+<rect x="62" y="60" width="118" height="14" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="65" y="70" font-size="9" font-weight="600">product_name</text>
+<rect x="180" y="60" width="50" height="14" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="183" y="70" font-size="9" font-weight="600">category</text>
+<rect x="230" y="60" width="80" height="14" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="233" y="70" font-size="9" font-weight="600">unit_price_usd</text>
+<rect x="10" y="74" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="84" font-size="9">1</text>
+<rect x="62" y="74" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="84" font-size="9">Espresso</text>
+<rect x="180" y="74" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="84" font-size="9">coffee</text>
+<rect x="230" y="74" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="84" font-size="9" text-anchor="end">3.00</text>
+<rect x="10" y="87" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="97" font-size="9">2</text>
+<rect x="62" y="87" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="97" font-size="9">Americano</text>
+<rect x="180" y="87" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="97" font-size="9">coffee</text>
+<rect x="230" y="87" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="97" font-size="9" text-anchor="end">3.50</text>
+<rect x="10" y="100" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="110" font-size="9">3</text>
+<rect x="62" y="100" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="110" font-size="9">Latte</text>
+<rect x="180" y="100" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="110" font-size="9">coffee</text>
+<rect x="230" y="100" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="110" font-size="9" text-anchor="end">4.50</text>
+<rect x="10" y="113" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="123" font-size="9">4</text>
+<rect x="62" y="113" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="123" font-size="9">Cappuccino</text>
+<rect x="180" y="113" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="123" font-size="9">coffee</text>
+<rect x="230" y="113" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="123" font-size="9" text-anchor="end">4.50</text>
+<rect x="10" y="126" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="136" font-size="9">5</text>
+<rect x="62" y="126" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="136" font-size="9">Mocha</text>
+<rect x="180" y="126" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="136" font-size="9">coffee</text>
+<rect x="230" y="126" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="136" font-size="9" text-anchor="end">5.00</text>
+<rect x="10" y="139" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="149" font-size="9">6</text>
+<rect x="62" y="139" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="149" font-size="9">Cold Brew</text>
+<rect x="180" y="139" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="149" font-size="9">coffee</text>
+<rect x="230" y="139" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="149" font-size="9" text-anchor="end">4.75</text>
+<rect x="10" y="152" width="52" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="162" font-size="9">7</text>
+<rect x="62" y="152" width="118" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="162" font-size="9">Green Tea</text>
+<rect x="180" y="152" width="50" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="162" font-size="9">tea</text>
+<rect x="230" y="152" width="80" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="162" font-size="9" text-anchor="end">3.25</text>
+<rect x="10" y="165" width="52" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="175" font-size="9">8</text>
+<rect x="62" y="165" width="118" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="175" font-size="9">Chai Latte</text>
+<rect x="180" y="165" width="50" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="175" font-size="9">tea</text>
+<rect x="230" y="165" width="80" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="175" font-size="9" text-anchor="end">4.75</text>
+<rect x="10" y="178" width="52" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="188" font-size="9">9</text>
+<rect x="62" y="178" width="118" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="188" font-size="9">Iced Lemon Tea</text>
+<rect x="180" y="178" width="50" height="13" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="188" font-size="9">tea</text>
+<rect x="230" y="178" width="80" height="13" fill="currentColor" fill-opacity="0.32" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="188" font-size="9" text-anchor="end">3.75</text>
+<rect x="10" y="191" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="201" font-size="9">10</text>
+<rect x="62" y="191" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="201" font-size="9">Croissant</text>
+<rect x="180" y="191" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="201" font-size="9">bakery</text>
+<rect x="230" y="191" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="201" font-size="9" text-anchor="end">3.25</text>
+<rect x="10" y="204" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="214" font-size="9">11</text>
+<rect x="62" y="204" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="214" font-size="9">Blueberry Muffin</text>
+<rect x="180" y="204" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="214" font-size="9">bakery</text>
+<rect x="230" y="204" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="214" font-size="9" text-anchor="end">3.50</text>
+<rect x="10" y="217" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="227" font-size="9">12</text>
+<rect x="62" y="217" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="227" font-size="9">Banana Bread</text>
+<rect x="180" y="217" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="227" font-size="9">bakery</text>
+<rect x="230" y="217" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="227" font-size="9" text-anchor="end">3.75</text>
+<rect x="10" y="230" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="240" font-size="9">13</text>
+<rect x="62" y="230" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="240" font-size="9">Bagel with Cream Cheese</text>
+<rect x="180" y="230" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="240" font-size="9">food</text>
+<rect x="230" y="230" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="240" font-size="9" text-anchor="end">4.25</text>
+<rect x="10" y="243" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="253" font-size="9">14</text>
+<rect x="62" y="243" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="253" font-size="9">Avocado Toast</text>
+<rect x="180" y="243" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="253" font-size="9">food</text>
+<rect x="230" y="243" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="253" font-size="9" text-anchor="end">8.50</text>
+<rect x="10" y="256" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="266" font-size="9">15</text>
+<rect x="62" y="256" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="266" font-size="9">Turkey Sandwich</text>
+<rect x="180" y="256" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="266" font-size="9">food</text>
+<rect x="230" y="256" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="266" font-size="9" text-anchor="end">9.25</text>
+<rect x="10" y="269" width="52" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="13" y="279" font-size="9">16</text>
+<rect x="62" y="269" width="118" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="65" y="279" font-size="9">Pumpkin Spice Latte</text>
+<rect x="180" y="269" width="50" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="183" y="279" font-size="9">coffee</text>
+<rect x="230" y="269" width="80" height="13" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+<text x="307" y="279" font-size="9" text-anchor="end">5.50</text>
+<rect x="62" y="60" width="118" height="222" fill="none" stroke="currentColor" stroke-opacity="1" stroke-width="2" />
+<rect x="230" y="60" width="80" height="222" fill="none" stroke="currentColor" stroke-opacity="1" stroke-width="2" />
+<text x="10" y="302" font-size="11">Shaded rows: kept by WHERE. Outlined columns: kept by SELECT.</text>
+<text x="10" y="320" font-size="11" font-weight="600">Result: 3 rows, 2 columns, where the two meet.</text>
+</svg>
+</figure>
+
+You write `SELECT` first. The engine runs it near the end. The DuckDB documentation says so in its own words: "Logically,
+the FROM clause is where the query starts execution." and "Logically the WHERE clause is applied immediately after the
+FROM clause." For the SELECT clause: "While it appears first in the clause, logically the expressions here are executed
+only at the end." And for the last two: "ORDER BY, LIMIT, and OFFSET are output modifiers. Logically they are applied at
+the very end of the query." Between them, "the WHERE clause occurs before the grouping, the HAVING clause occurs after
+the grouping."
+
+| You write | The engine runs |
+|---|---|
+| 1. `SELECT` | 1. `FROM`: take the table |
+| 2. `FROM` | 2. `WHERE`: keep rows |
+| 3. `WHERE` | 3. `GROUP BY`: make groups |
+| 4. `GROUP BY` | 4. `HAVING`: keep groups |
+| 5. `HAVING` | 5. `SELECT`: choose columns, name them |
+| 6. `ORDER BY` | 6. `ORDER BY`: sort |
+| 7. `LIMIT` | 7. `LIMIT`: cut |
+
+Picture the table as a grid. `WHERE` chooses **rows** (and `HAVING` chooses groups). `SELECT` chooses **columns**. They
+never swap jobs, and `WHERE` runs first, on the whole table.
+
+## Worked example
+
+Question: **among the items under \$5, which two categories have the most items, counting only those with at least
+three?** Run the notebook's setup cell, then one cell per step. We build the query in running order.
+
+1. **FROM: start with the whole table.**
+
+   ```sql
+   SELECT * FROM products;
+   ```
+
+   Expected: 16 rows, 4 columns. *Why:* every query starts with the rows of its table.
+
+2. **WHERE chooses rows.**
+
+   ```sql
+   SELECT * FROM products WHERE unit_price_usd < 5;
+   ```
+
+   Expected: 12 rows, 4 columns. *Why:* rows are dropped, columns are untouched.
+
+3. **SELECT chooses columns.**
+
+   ```sql
+   SELECT category FROM products WHERE unit_price_usd < 5;
+   ```
+
+   Expected: 12 rows, 1 column. *Why:* the same 12 rows, one column. `WHERE` used `unit_price_usd`, which the output does
+   not show: `WHERE` works on the table, before `SELECT` picks columns.
+
+4. **GROUP BY turns rows into groups.**
+
+   ```sql
+   SELECT category, COUNT(*) AS items
+   FROM products
+   WHERE unit_price_usd < 5
+   GROUP BY category;
+   ```
+
+   Expected: 4 rows, 2 columns. *Why:* `food` counts 1 item, not 3, because `WHERE` ran first and dropped the dear ones.
+
+5. **An aggregate cannot go in WHERE.** The natural first try is to filter the count in `WHERE`:
+
+   ```sql
+   SELECT category, COUNT(*) AS items
+   FROM products
+   WHERE unit_price_usd < 5 AND COUNT(*) >= 3
+   GROUP BY category;
+   ```
+
+   Expected: an error that starts `Binder Error: WHERE clause cannot contain aggregates!`. *Why:* when `WHERE` runs there are no
+   groups yet, so there is no count to test. `HAVING` runs after the grouping:
+
+   ```sql
+   SELECT category, COUNT(*) AS items
+   FROM products
+   WHERE unit_price_usd < 5
+   GROUP BY category
+   HAVING COUNT(*) >= 3;
+   ```
+
+   Expected: 3 rows, 2 columns; `food` drops out.
+
+6. **ORDER BY and LIMIT run last.**
+
+   ```sql
+   SELECT category, COUNT(*) AS items
+   FROM products
+   WHERE unit_price_usd < 5
+   GROUP BY category
+   HAVING COUNT(*) >= 3
+   ORDER BY items DESC, category
+   LIMIT 2;
+   ```
+
+   Expected: 2 rows, 2 columns: coffee 5, bakery 3. *Why:* `ORDER BY items` can use the alias because `SELECT` has already
+   run. `category` breaks the tie between bakery and tea (S2).
+
+7. **What about an alias in WHERE?**
+
+   ```sql
+   SELECT product_name, unit_price_usd * 100 AS cents
+   FROM products
+   WHERE cents < 400;
+   ```
+
+   Expected: 7 rows, 2 columns. DuckDB accepts this: its documentation lists "Column aliases in WHERE, GROUP BY, and
+   HAVING" among its friendly features. PostgreSQL does not accept it. Its documentation says:
+   "An output column's name can be used to refer to the column's value in ORDER BY and GROUP BY clauses, but not in the
+   WHERE or HAVING clauses; there you must write out the expression instead." The portable habit is to write it out:
+   `WHERE unit_price_usd * 100 < 400` returns the same 7 rows. Even DuckDB stops for an alias of an aggregate:
+   `WHERE items >= 3` gives the error of step 5.
+
+8. **Verify.** Follow the counts in the picture: 16 rows, 12 rows, 4 groups, 3 groups, then 2 rows; each notebook step gave
+   them. A second method: coffee has 7 products, and 2 of them (Mocha at \$5.00 and Pumpkin Spice Latte at \$5.50) cost
+   \$5 or more, which leaves the 5 in the result. Answer: **coffee 5 and bakery 3**.
+
+<details>
+<summary>Explain it in your own words: why can `WHERE unit_price_usd < 5` use a column that the output does not show?</summary>
+
+`WHERE` runs on the full table, before `SELECT` chooses the output columns. Every column of the table is still there.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-query-execution-order-1">
+
+**Which categories have at least three items costing \$4.00 or less?** Use the Exercise 1 cell. Expected: 1 row,
+2 columns (the category and its count).
+
+The first steps are done for you:
+
+```sql
+SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd <= 4
+```
+
+Now finish it: add the line that makes the groups and the line that keeps only the groups of three or more.
+
+<details>
+<summary>Hint</summary>
+
+Row filter first, then groups, then a filter on the groups. Which clause filters on `COUNT(*)`?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+GROUP BY ...
+HAVING COUNT(*) ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd <= 4
+GROUP BY category
+HAVING COUNT(*) >= 3;
+```
+
+The result is bakery with 3 items. Coffee and tea have only two items each at \$4.00 or less.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-query-execution-order-2">
+
+**Which stores took more than 400 completed orders?** Show `store_id` and the count, biggest first. Work in the Exercise 2
+cells.
+
+Before you run anything, write one sentence in the first cell: which clause does each job (completed orders only, a count
+per store, stores over 400, the sort). Then write the query.
+
+Expected shape, to check your sentence against: 2 rows, 2 columns.
+
+<details>
+<summary>Hint</summary>
+
+Think in running order: rows first (`WHERE`), groups next, then a filter on the groups, then the sort.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Two rows with two columns: a store and its count of completed orders, the biggest count first; the third store is left out because it has fewer than 400."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY store_id
+HAVING COUNT(*) > 400
+ORDER BY orders DESC;
+```
+
+Store 1 has 729 completed orders and store 2 has 715. Store 2 has 716 orders in all: the one canceled order of the data, on
+March 1, is store 2's, so the `WHERE` matters. Harbor, store 3, has 355 and is dropped by `HAVING`.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: list the clauses of a query in the order they run.
+
+   <details>
+   <summary>Answer</summary>
+
+   `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`, `LIMIT`. Rows are chosen before columns.
+
+   </details>
+
+<Exercise id="sql-query-execution-order-3">
+
+**Spot the flaw.** A colleague wants the products over \$4 shown in cents. The query runs without an error but returns no
+rows:
+
+```sql
+SELECT product_name, unit_price_usd * 100 AS unit_price_usd
+FROM products
+WHERE unit_price_usd > 400;
+```
+
+Expected: 0 rows, 2 columns. Nine products cost more than \$4. Find the flaw and fix the query.
+
+<Solution>
+
+The alias has the same name as a table column, and DuckDB uses the column. `WHERE` runs before `SELECT`, so it reads the
+table's column, in dollars (4.50), not the alias in cents (450.00), and `> 400` matches nothing. Give the alias another name, or write the
+expression out:
+
+```sql
+SELECT product_name, unit_price_usd * 100 AS cents
+FROM products
+WHERE unit_price_usd * 100 > 400;
+```
+
+Expected: 9 rows, 2 columns.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can list the clauses in running order and use it to say why a query fails or returns nothing.*
+Test: Exercise sql-query-execution-order-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT: rows are chosen before columns.** The
+next lesson, *Readable queries with CTEs* (S13), splits a long query into named steps.

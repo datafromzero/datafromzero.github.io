@@ -1,0 +1,507 @@
+---
+id: sql-window-functions
+title: 'Window functions: keep the rows, add the context'
+description: Add a running total or a share of the group without collapsing rows, using OVER with PARTITION BY and ORDER BY.
+stage: sql
+order: 140
+level: intermediate
+duration: 30
+objectives:
+  - Explain how a window function differs from GROUP BY
+  - Write an aggregate with OVER and PARTITION BY
+  - Compute a running total with ORDER BY in the window
+  - Compute a share of the partition total
+  - Predict the default frame
+prerequisites:
+  - sql-ctes
+  - sql-group-by-having
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-window-functions.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Window functions'
+    url: https://duckdb.org/docs/stable/sql/functions/window_functions
+  - title: 'Microsoft Support: SUM function'
+    url: https://support.microsoft.com/en-us/office/sum-function-043e1c7d-7726-4e80-8f32-07b23e057f89
+  - title: 'Microsoft Support: SUMIF function'
+    url: https://support.microsoft.com/en-us/office/sumif-function-169b8c99-c05c-4483-a712-1697a653039b
+  - title: 'Microsoft Support: COUNTIF function'
+    url: https://support.microsoft.com/en-us/office/countif-function-e0de10c6-f885-4e71-abb4-1f464816df34
+  - title: 'Microsoft Support: Switch between relative, absolute, and mixed references'
+    url: https://support.microsoft.com/en-us/excel/switch-between-relative-absolute-and-mixed-references
+  - title: 'Google Docs Editors Help: SUM'
+    url: https://support.google.com/docs/answer/3093669
+  - title: 'Google Docs Editors Help: SUMIF'
+    url: https://support.google.com/docs/answer/3093583
+status: draft
+---
+
+This lesson runs on **DuckDB**, a free database engine, inside a Google Colab notebook, so there is nothing to
+install. It works on one table, `orders`, and on one week of it, so you can see every row.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. In the notebook, each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
+quotes is SQL, and `.show()` prints the result as a table. The notebook cells leave out the closing `;` that this
+page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Compare the outputs of steps 5 and 6 with Colab's version (the sums print as plain integers). Time the lesson against its 30 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. Write a query that counts the orders of each store (*GROUP BY and HAVING*, S8). Expected: 3 rows, 2 columns.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   GROUP BY store_id
+   ORDER BY store_id;
+   ```
+
+   The result is 729, 716 and 355 orders for stores 1, 2 and 3. Together they are the 1,800 orders of the dataset.
+
+   </details>
+
+2. In *Readable queries with CTEs* (S13), why do you give a step a name with `WITH`, and what do you check at each step?
+
+   <details>
+   <summary>Answer</summary>
+
+   The name says what the step returns, so the query reads top to bottom. At each step you check the grain (what one
+   row is) and the row count, by running that stage alone.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> In the first week of January, how many orders did each cafe take each day, how many so far, and what share of the
+> day's orders did each cafe take?
+
+Only the two older cafes are open in January: store 1 is Old Town and store 2 is Campus (Harbor, store 3, opens on
+April 1). Grouping by day and store gives one row per day and cafe. The top of that table:
+
+| day | store_id | orders |
+|---|---:|---:|
+| 2026-01-01 | 1 | 2 |
+| 2026-01-01 | 2 | 2 |
+| 2026-01-02 | 1 | 3 |
+| 2026-01-02 | 2 | 4 |
+
+There are 14 rows: 7 days times 2 cafes. In Excel you would add a running-total column and a share column beside
+these rows, and no row would go away. A **window function** does the same in SQL. By the end you will have both
+columns, and you will know why a running total can show the same number on two rows.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 330" width="360" role="img" aria-labelledby="collapse-title collapse-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="collapse-title">GROUP BY collapses the rows, a window function keeps them</title>
+<desc id="collapse-desc">Seven daily rows for store 1, January 1 to 7, with orders 2, 3, 3, 4, 4, 5 and 5. GROUP BY store_id turns them into one row: store 1, 26 orders. SUM(orders) OVER (PARTITION BY store_id) keeps all seven rows and adds the same total, 26, beside each one.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Store 1, January 1 to 7: seven rows in</text>
+<text x="10" y="44" font-weight="600" font-size="11">GROUP BY store_id: 1 row out</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="52" width="100" height="22" /><rect x="110" y="52" width="100" height="22" />
+<rect x="10" y="74" width="100" height="22" /><rect x="110" y="74" width="100" height="22" />
+</g>
+<g font-size="11" font-weight="600"><text x="15" y="67">store_id</text><text x="115" y="67">orders</text></g>
+<text x="15" y="89">1</text><text x="205" y="89" text-anchor="end">26</text>
+<text x="10" y="126" font-weight="600" font-size="11">SUM(orders) OVER (PARTITION BY store_id): 7 rows out</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="134" width="100" height="22" /><rect x="110" y="134" width="60" height="22" /><rect x="170" y="134" width="130" height="22" />
+<rect x="10" y="156" width="100" height="22" /><rect x="110" y="156" width="60" height="22" /><rect x="170" y="156" width="130" height="22" />
+<rect x="10" y="178" width="100" height="22" /><rect x="110" y="178" width="60" height="22" /><rect x="170" y="178" width="130" height="22" />
+<rect x="10" y="200" width="100" height="22" /><rect x="110" y="200" width="60" height="22" /><rect x="170" y="200" width="130" height="22" />
+<rect x="10" y="222" width="100" height="22" /><rect x="110" y="222" width="60" height="22" /><rect x="170" y="222" width="130" height="22" />
+<rect x="10" y="244" width="100" height="22" /><rect x="110" y="244" width="60" height="22" /><rect x="170" y="244" width="130" height="22" />
+<rect x="10" y="266" width="100" height="22" /><rect x="110" y="266" width="60" height="22" /><rect x="170" y="266" width="130" height="22" />
+<rect x="10" y="288" width="100" height="22" /><rect x="110" y="288" width="60" height="22" /><rect x="170" y="288" width="130" height="22" />
+</g>
+<g font-size="11" font-weight="600"><text x="15" y="149">day</text><text x="115" y="149">orders</text><text x="175" y="149">SUM(orders) OVER (…)</text></g>
+<text x="15" y="171">2026-01-01</text><text x="165" y="171" text-anchor="end">2</text><text x="295" y="171" text-anchor="end">26</text>
+<text x="15" y="193">2026-01-02</text><text x="165" y="193" text-anchor="end">3</text><text x="295" y="193" text-anchor="end">26</text>
+<text x="15" y="215">2026-01-03</text><text x="165" y="215" text-anchor="end">3</text><text x="295" y="215" text-anchor="end">26</text>
+<text x="15" y="237">2026-01-04</text><text x="165" y="237" text-anchor="end">4</text><text x="295" y="237" text-anchor="end">26</text>
+<text x="15" y="259">2026-01-05</text><text x="165" y="259" text-anchor="end">4</text><text x="295" y="259" text-anchor="end">26</text>
+<text x="15" y="281">2026-01-06</text><text x="165" y="281" text-anchor="end">5</text><text x="295" y="281" text-anchor="end">26</text>
+<text x="15" y="303">2026-01-07</text><text x="165" y="303" text-anchor="end">5</text><text x="295" y="303" text-anchor="end">26</text>
+</svg>
+<svg viewBox="0 0 360 268" width="360" role="img" aria-labelledby="frame-title frame-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="frame-title">A running total adds the rows from the start up to the current row</title>
+<desc id="frame-desc">Store 1, January 1 to 7. Orders are 2, 3, 3, 4, 4, 5, 5 and the running totals are 2, 5, 8, 12, 16, 21, 26. The rows January 1 to January 4 are shaded: that is the frame for January 4, and 2 + 3 + 3 + 4 = 12.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">The frame for January 4</text>
+<rect x="10" y="54" width="300" height="88" fill="currentColor" fill-opacity="0.12" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="32" width="100" height="22" /><rect x="110" y="32" width="60" height="22" /><rect x="170" y="32" width="140" height="22" />
+<rect x="10" y="54" width="100" height="22" /><rect x="110" y="54" width="60" height="22" /><rect x="170" y="54" width="140" height="22" />
+<rect x="10" y="76" width="100" height="22" /><rect x="110" y="76" width="60" height="22" /><rect x="170" y="76" width="140" height="22" />
+<rect x="10" y="98" width="100" height="22" /><rect x="110" y="98" width="60" height="22" /><rect x="170" y="98" width="140" height="22" />
+<rect x="10" y="120" width="100" height="22" /><rect x="110" y="120" width="60" height="22" /><rect x="170" y="120" width="140" height="22" />
+<rect x="10" y="142" width="100" height="22" /><rect x="110" y="142" width="60" height="22" /><rect x="170" y="142" width="140" height="22" />
+<rect x="10" y="164" width="100" height="22" /><rect x="110" y="164" width="60" height="22" /><rect x="170" y="164" width="140" height="22" />
+<rect x="10" y="186" width="100" height="22" /><rect x="110" y="186" width="60" height="22" /><rect x="170" y="186" width="140" height="22" />
+</g>
+<g font-size="11" font-weight="600"><text x="15" y="47">day</text><text x="115" y="47">orders</text><text x="175" y="47">running_total</text></g>
+<g><text x="15" y="69">2026-01-01</text><text x="165" y="69" text-anchor="end">2</text><text x="305" y="69" text-anchor="end">2</text></g>
+<g><text x="15" y="91">2026-01-02</text><text x="165" y="91" text-anchor="end">3</text><text x="305" y="91" text-anchor="end">5</text></g>
+<g><text x="15" y="113">2026-01-03</text><text x="165" y="113" text-anchor="end">3</text><text x="305" y="113" text-anchor="end">8</text></g>
+<g font-weight="600"><text x="15" y="135">2026-01-04</text><text x="165" y="135" text-anchor="end">4</text><text x="305" y="135" text-anchor="end">12</text></g>
+<g><text x="15" y="157">2026-01-05</text><text x="165" y="157" text-anchor="end">4</text><text x="305" y="157" text-anchor="end">16</text></g>
+<g><text x="15" y="179">2026-01-06</text><text x="165" y="179" text-anchor="end">5</text><text x="305" y="179" text-anchor="end">21</text></g>
+<g><text x="15" y="201">2026-01-07</text><text x="165" y="201" text-anchor="end">5</text><text x="305" y="201" text-anchor="end">26</text></g>
+<text x="10" y="228" font-size="11">Shaded: the rows Jan 1 to Jan 4 are the frame of Jan 4.</text>
+<text x="10" y="246" font-size="11">2 + 3 + 3 + 4 = 12. The frame grows by one row each day.</text>
+</svg>
+</figure>
+
+`GROUP BY` collapses: seven rows go in, one comes out. A window function keeps all seven and adds a value computed
+from related rows. The part after `OVER` describes which rows are related:
+
+- `PARTITION BY store_id` splits the rows into groups, one block per cafe. The function works inside each block.
+  Leave it out and the whole result is one block; `OVER ()` with nothing inside means exactly that.
+- `ORDER BY day` inside `OVER` puts each block in order and makes the function work from the first row up to the
+  current row. That is a running total.
+- The **frame** is the set of rows the function uses for the current row. With an `ORDER BY` and nothing else
+  written, DuckDB's default frame runs from the first row of the block to the current row, including every row that
+  ties with the current row on the `ORDER BY` value (its peers). Step 6 shows what that means.
+
+Window functions run after `WHERE` and `GROUP BY` (*How a query runs: the order of the clauses*, S12), so they add
+columns and never remove rows. The same ideas exist in the spreadsheet; this table assumes the columns day, store_id
+and orders in A, B and C, with data in rows 2 to 15:
+
+| SQL | Reads as | In Excel or Google Sheets |
+|---|---|---|
+| `SUM(orders) OVER (PARTITION BY store_id)` | the cafe's total beside every row | `=SUMIF($B$2:$B$15,B2,$C$2:$C$15)` |
+| `SUM(orders) OVER (PARTITION BY store_id ORDER BY day)` | a running total inside each cafe | `=SUM(C$2:C2)`, copied down and restarted at each cafe's first row |
+| `orders * 100.0 / SUM(orders) OVER (PARTITION BY day)` | the row's share of its day | `=C2/SUMIF($A$2:$A$15,A2,$C$2:$C$15)` |
+
+The `$` locks part of a reference when you copy a formula: in `C$2` the row stays 2, so the range `C$2:C2` grows by
+one row as you copy it down. `SUM` and `SUMIF` exist in both Excel and Google Sheets.
+
+## Worked example
+
+Question: **for the first week of January, what share of each day did each cafe take, and how many orders had each
+cafe taken by the end of each day?** Run the notebook's setup cell, then one cell per step. Each step names the Excel
+action it replaces and the shape of the result to expect.
+
+1. **Collapse with `GROUP BY`.**
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+   GROUP BY store_id
+   ORDER BY store_id;
+   ```
+
+   Read it: *count the week's orders for each store*. Expected: 2 rows, 2 columns: store 1 with 26 orders and store 2
+   with 24. *Excel:* a COUNTIF for each store. *Why:* this is the collapsed view, 50 orders in 2 rows. Keep both
+   numbers for step 7.
+
+2. **Keep the rows with a window function.**
+
+   ```sql
+   SELECT order_id, store_id,
+          COUNT(*) OVER (PARTITION BY store_id) AS store_orders
+   FROM orders
+   WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+   ORDER BY order_id
+   LIMIT 5;
+   ```
+
+   Read it: *beside each order, put the number of orders of its store this week*. Expected: 5 rows, 3 columns; order 1001
+   was taken at store 2, so `store_orders` shows 24 beside it. *Excel:* the SUMIF column from the table above.
+   *Why:* `OVER (PARTITION BY store_id)` leaves every row in place and adds the group's count. `WHERE` runs first, so
+   only the week's orders are counted; `LIMIT` runs last, so it only trims the display.
+
+3. **Build the daily table.**
+
+   ```sql
+   WITH daily AS (
+     SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+     FROM orders
+     WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+     GROUP BY day, store_id
+   )
+   SELECT day, store_id, orders
+   FROM daily
+   ORDER BY day, store_id;
+   ```
+
+   Expected: 14 rows, 3 columns, the table from the question. *Why:* the grain is one row per day and cafe (*Readable
+   queries with CTEs*, S13). `CAST(ordered_at AS DATE)` drops the time of day and keeps the date (*Working with dates
+   and time*, S11). Steps 4 to 6 start with this same `daily` stage, and the notebook repeats it in each cell.
+
+4. **Add each cafe's share of the day.**
+
+   ```sql
+   WITH daily AS (
+     SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+     FROM orders
+     WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+     GROUP BY day, store_id
+   )
+   SELECT day, store_id, orders,
+          SUM(orders) OVER (PARTITION BY day) AS day_total,
+          ROUND(orders * 100.0 / SUM(orders) OVER (PARTITION BY day), 1) AS share_pct
+   FROM daily
+   ORDER BY day, store_id;
+   ```
+
+   Read it: *beside each row, put the day's total orders, and this row's percent of it*. Expected: 14 rows, 5 columns. On
+   January 1 each cafe has 50.0 percent; on January 6 Old Town has 71.4 percent (5 of 7 orders). *Excel:* the
+   SUMIF share column. *Why:* `PARTITION BY day` makes the two rows of one day a block, so the denominator is the
+   day's total. `100.0` and `ROUND(..., 1)` give a percent with one decimal.
+
+5. **Add a running total for each cafe.**
+
+   ```sql
+   WITH daily AS (
+     SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+     FROM orders
+     WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+     GROUP BY day, store_id
+   )
+   SELECT store_id, day, orders,
+          SUM(orders) OVER (PARTITION BY store_id ORDER BY day) AS running_total
+   FROM daily
+   ORDER BY store_id, day;
+   ```
+
+   Expected: 14 rows, 4 columns; store 1 ends at 26 and store 2 at 24. *Excel:* `=SUM(C$2:C2)` copied down, restarted at
+   each cafe. *Why:* `PARTITION BY store_id` restarts the total for each cafe, and `ORDER BY day` makes each row's
+   total the sum of the rows up to its own day.
+
+6. **Predict the default frame, then run it.** On January 1 both cafes have 2 orders. Before you run the query,
+   predict what `default_frame` will show on each of those two rows.
+
+   <details>
+   <summary>Prediction</summary>
+
+   Both rows show 4. `ORDER BY day` cannot tell the two January 1 rows apart: they are peers, and the default frame
+   includes all peers of the current row, so each row's frame holds both rows (2 + 2). `row_by_row` breaks the tie
+   with `store_id` and counts rows, so it shows 2 and then 4.
+
+   </details>
+
+   ```sql
+   WITH daily AS (
+     SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+     FROM orders
+     WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+     GROUP BY day, store_id
+   )
+   SELECT day, store_id, orders,
+          SUM(orders) OVER (ORDER BY day) AS default_frame,
+          SUM(orders) OVER (ORDER BY day, store_id
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS row_by_row
+   FROM daily
+   ORDER BY day, store_id;
+   ```
+
+   Expected: 14 rows, 5 columns. *Why:* the two columns differ on the first row of each day, because there are two cafes
+   and so two peers a day. `default_frame` answers "how many orders by the end of this day", the same on both rows. `row_by_row`
+   answers "how many orders by this row", which depends on the tie-breaker you chose. Pick the one your question
+   needs.
+
+7. **Verify.** Four checks, no new query. Steps 3 to 6 all return 14 rows, as the daily table has: a window function
+   never changes the row count. In step 5 the last running totals, 26 and 24, equal the counts of step 1. In step 4 the two
+   shares of each day add to 100 (January 2: 42.9 and 57.1). And the last row of step 6 shows 50 in both columns: 26 + 24, every order
+   of the week.
+
+<details>
+<summary>Explain it in your own words: why does step 2 return 5 rows when step 1 returned 2?</summary>
+
+`GROUP BY` replaces the rows of a group by one summary row. `OVER (PARTITION BY ...)` computes the same summary but
+copies it beside each original row, so no row disappears. `LIMIT 5` then keeps five of them.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-window-functions-1">
+
+**Each day's share of the cafe's week.** Use the Exercise 1 cell. Expected: 14 rows, 4 columns.
+
+The first steps are done for you: the `daily` stage and a query that lists its rows, sorted by cafe and day:
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+  FROM orders
+  WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+  GROUP BY day, store_id
+)
+SELECT day, store_id, orders
+FROM daily
+ORDER BY store_id, day;
+```
+
+Now finish it: add a fourth column, `share_of_week_pct`, that shows each day's orders as a percent of that cafe's
+orders for the whole week, rounded to one decimal.
+
+<details>
+<summary>Hint</summary>
+
+Copy the share column of step 4. This time the block is the cafe, not the day, so change what `PARTITION BY` names.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+ROUND(orders * 100.0 / SUM(orders) OVER (PARTITION BY ...), 1) AS share_of_week_pct
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+  FROM orders
+  WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+  GROUP BY day, store_id
+)
+SELECT day, store_id, orders,
+       ROUND(orders * 100.0 / SUM(orders) OVER (PARTITION BY store_id), 1) AS share_of_week_pct
+FROM daily
+ORDER BY store_id, day;
+```
+
+Old Town's seven shares start 7.7, 11.5, 11.5 and Campus starts 8.3, 16.7, 12.5. Each cafe's seven shares add to 99.9,
+not 100, because every share is rounded to one decimal; the unrounded shares add to 100.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-window-functions-2">
+
+**A running total for each payment method.** Work in the Exercise 2 cells, over the same week and both cafes.
+
+Before you run anything, write one sentence in the first cell: how many rows do you expect, and why might it be fewer
+than 21 (7 days times 3 payment methods)? Then build a `daily` stage with one row per day and payment method, and add
+a running total of orders for each method.
+
+Expected: 4 columns. The count covers orders of any status; none of them
+is the canceled order, which falls on March 1.
+
+<details>
+<summary>Hint</summary>
+
+Start from the `daily` stage of step 3, but group by `payment_method` instead of `store_id`. Then copy the window of
+step 5 and change the block.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three payment methods, each with one row for every day it has orders, and a running total that
+starts at the method's first day. Fewer than 21 rows, because `GROUP BY` makes no row for a day with no orders."*
+
+</details>
+
+<Solution>
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, payment_method, COUNT(*) AS orders
+  FROM orders
+  WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+  GROUP BY day, payment_method
+)
+SELECT payment_method, day, orders,
+       SUM(orders) OVER (PARTITION BY payment_method ORDER BY day) AS running_total
+FROM daily
+ORDER BY payment_method, day;
+```
+
+The result has 17 rows: card has 6 (no card order on January 1), cash has 4 (its first order is on January 4) and
+mobile has 7. The last running totals are 24, 7 and 19, which add to 50, the orders of the week. A running total over
+these rows skips days that have no row. To show those days with a zero you would first build a complete list of days;
+*Complete time series and recursive CTEs* (S27) does that.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: how does a window function differ from `GROUP BY`, and what do `PARTITION BY` and `ORDER BY`
+   inside `OVER` do?
+
+   <details>
+   <summary>Answer</summary>
+
+   `GROUP BY` returns one row per group; a window function keeps every row and adds a value computed over its group.
+   `PARTITION BY` picks the group, and `ORDER BY` orders the rows inside it, so the function can work from the first
+   row to the current one.
+
+   </details>
+
+2. `SUM(orders) OVER (ORDER BY day)` runs over rows where two rows share a day. What do those two rows show?
+
+   <details>
+   <summary>Answer</summary>
+
+   The same number: the total through the end of that day. The two rows are peers, and the default frame includes
+   every peer of the current row.
+
+   </details>
+
+<Exercise id="sql-window-functions-3">
+
+**Spot the flaw.** A colleague wants each cafe's share of each day's orders. The query runs and the numbers look
+reasonable:
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, store_id, COUNT(*) AS orders
+  FROM orders
+  WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-01-08'
+  GROUP BY day, store_id
+)
+SELECT day, store_id, orders,
+       ROUND(orders * 100.0 / SUM(orders) OVER (), 1) AS share_pct
+FROM daily
+ORDER BY day, store_id;
+```
+
+Expected: 14 rows, 4 columns. Add the two shares of January 1, then find the flaw and fix it.
+
+<Solution>
+
+On January 1 the two shares are 4.0 and 4.0, which add to 8.0, not 100. `OVER ()` has no `PARTITION BY`, so the
+denominator is the total of all 14 rows, 50 orders, for every row. The 14 shares add to 100 across the week, not
+within each day. A check of one block would have caught it: the shares of one day must add to 100. The fix is the
+block of step 4: `PARTITION BY day`. Expected after the fix: 14 rows, 5 columns with the share column as in step 4.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can add a running total or a share of the group to a table without losing a row, and say which
+rows each value used.*
+Test: Exercise sql-window-functions-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **a window function keeps every row and adds a value computed over its group: `PARTITION BY`
+picks the group, `ORDER BY` sets the order, and the frame says which rows count.** The next lesson, *Ranking and
+top-N per group*, uses the same `OVER` to number rows inside each group.

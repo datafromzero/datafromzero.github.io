@@ -1,0 +1,619 @@
+---
+id: sql-deduplicate-latest-record
+title: Deduplication and the latest record per entity
+description: Collapse repeated records to one trustworthy row with a stated survivor rule, and find the latest row per entity.
+stage: sql
+order: 170
+level: intermediate
+duration: 25
+objectives:
+  - Find duplicate keys with GROUP BY and HAVING
+  - Keep one row per entity with ROW_NUMBER and a stated survivor rule
+  - Return the latest record per entity
+  - Explain why DISTINCT is not a fix for duplicates
+prerequisites:
+  - sql-rank-top-n
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-deduplicate-latest-record.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Window functions'
+    url: https://duckdb.org/docs/stable/sql/functions/window_functions
+  - title: 'DuckDB documentation: QUALIFY clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/qualify
+  - title: 'DuckDB documentation: SELECT clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/select
+  - title: 'DuckDB documentation: VALUES clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/values
+  - title: 'DuckDB documentation: CREATE TABLE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_table
+  - title: 'Microsoft Support: COUNTIF function'
+    url: https://support.microsoft.com/en-us/office/countif-function-e0de10c6-f885-4e71-abb4-1f464816df34
+  - title: 'Microsoft Support: Filter for unique values or remove duplicate values'
+    url: https://support.microsoft.com/en-us/office/filter-for-unique-values-or-remove-duplicate-values-ccf664b0-81d6-449b-bbe1-8daaec1e83c2
+  - title: 'Google Docs Editors Help: Split text, remove duplicates, or trim whitespace'
+    url: https://support.google.com/docs/answer/6325535
+status: draft
+---
+
+This lesson runs on **DuckDB**, a free database engine, inside a Google Colab notebook, so there is nothing to
+install. It works on a small practice table, then on `orders`.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. In the notebook, each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
+quotes is SQL, and `.show()` prints the result as a table. The notebook cells leave out the closing `;` that this
+page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Check the practice-table cell and that step 4 prints 8 rows. Decide whether this hand-typed, temporary table fits the dataset rule. In Google Sheets, check which row Remove duplicates keeps (its help page does not say). Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. Write a query that lists the stores with more than 500 orders (*GROUP BY and HAVING*, S8). Expected:
+   2 rows, 2 columns.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT store_id, COUNT(*) AS orders
+   FROM orders
+   GROUP BY store_id
+   HAVING COUNT(*) > 500
+   ORDER BY store_id;
+   ```
+
+   Stores 1 and 2 have 729 and 716 orders. `HAVING` filters groups after they are counted.
+
+   </details>
+
+2. In *Ranking and top-N per group* (S15), which ranking function gives every row a different number, and why does
+   that matter when you want exactly one row per group?
+
+   <details>
+   <summary>Answer</summary>
+
+   `ROW_NUMBER`: tied rows still get different numbers, so number 1 is exactly one row per group. `RANK` can give
+   several rows rank 1.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Our loyalty app writes a row every time a customer's record is saved, and sometimes it writes the same save twice.
+> I want one current row for each customer.
+
+The cafe-sales tables hold no repeated ids, so this lesson uses a small practice table, `customer_updates`: 10 invented
+rows for 5 customers, built by one notebook cell (step 2).
+
+| update_id | customer_id | loyalty_tier | city | updated_at |
+|---:|---:|---|---|---|
+| 1 | 301 | bronze | Oakland | 2026-03-02 09:15:00 |
+| 2 | 301 | silver | Oakland | 2026-05-10 14:02:00 |
+| 3 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
+| 4 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
+| 5 | 303 | silver | Alameda | 2026-04-01 08:00:00 |
+| 6 | 303 | gold | Alameda | 2026-04-01 08:00:00 |
+| 7 | 304 | bronze | Oakland | 2026-04-20 16:45:00 |
+| 8 | 305 | bronze | Berkeley | 2026-02-11 11:11:00 |
+| 9 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
+| 10 | 305 | silver | Berkeley | 2026-06-01 09:30:00 |
+
+Some rows are history (customer 301 moved up a tier), some are copies (customer 302, and the last two of customer 305)
+and one is a conflict (customer 303 has two tiers at the same minute). By the end you will have five rows, one for
+each customer, and a written rule for why each survived.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 298" width="360" role="img" aria-labelledby="rows-title rows-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="rows-title">Ten rows numbered by customer, newest first, five kept</title>
+<desc id="rows-desc">The ten rows of customer_updates, grouped by customer and numbered by ROW_NUMBER, newest first, ties broken by update_id. The shaded rows have number 1 and are kept: update 2 for customer 301, update 4 for customer 302, update 6 for customer 303, update 7 for customer 304, update 10 for customer 305. Customer 303 has two rows at the same time, 04-01 08:00; update 6 (gold) wins because its update_id is higher.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Number the rows, keep number 1</text>
+<rect x="10" y="54" width="330" height="22" fill="currentColor" fill-opacity="0.12" />
+<rect x="10" y="98" width="330" height="22" fill="currentColor" fill-opacity="0.12" />
+<rect x="10" y="142" width="330" height="22" fill="currentColor" fill-opacity="0.12" />
+<rect x="10" y="186" width="330" height="22" fill="currentColor" fill-opacity="0.12" />
+<rect x="10" y="208" width="330" height="22" fill="currentColor" fill-opacity="0.12" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="32" width="60" height="22" />
+<rect x="70" y="32" width="66" height="22" />
+<rect x="136" y="32" width="50" height="22" />
+<rect x="186" y="32" width="88" height="22" />
+<rect x="274" y="32" width="28" height="22" />
+<rect x="302" y="32" width="38" height="22" />
+<rect x="10" y="54" width="60" height="22" />
+<rect x="70" y="54" width="66" height="22" />
+<rect x="136" y="54" width="50" height="22" />
+<rect x="186" y="54" width="88" height="22" />
+<rect x="274" y="54" width="28" height="22" />
+<rect x="302" y="54" width="38" height="22" />
+<rect x="10" y="76" width="60" height="22" />
+<rect x="70" y="76" width="66" height="22" />
+<rect x="136" y="76" width="50" height="22" />
+<rect x="186" y="76" width="88" height="22" />
+<rect x="274" y="76" width="28" height="22" />
+<rect x="302" y="76" width="38" height="22" />
+<rect x="10" y="98" width="60" height="22" />
+<rect x="70" y="98" width="66" height="22" />
+<rect x="136" y="98" width="50" height="22" />
+<rect x="186" y="98" width="88" height="22" />
+<rect x="274" y="98" width="28" height="22" />
+<rect x="302" y="98" width="38" height="22" />
+<rect x="10" y="120" width="60" height="22" />
+<rect x="70" y="120" width="66" height="22" />
+<rect x="136" y="120" width="50" height="22" />
+<rect x="186" y="120" width="88" height="22" />
+<rect x="274" y="120" width="28" height="22" />
+<rect x="302" y="120" width="38" height="22" />
+<rect x="10" y="142" width="60" height="22" />
+<rect x="70" y="142" width="66" height="22" />
+<rect x="136" y="142" width="50" height="22" />
+<rect x="186" y="142" width="88" height="22" />
+<rect x="274" y="142" width="28" height="22" />
+<rect x="302" y="142" width="38" height="22" />
+<rect x="10" y="164" width="60" height="22" />
+<rect x="70" y="164" width="66" height="22" />
+<rect x="136" y="164" width="50" height="22" />
+<rect x="186" y="164" width="88" height="22" />
+<rect x="274" y="164" width="28" height="22" />
+<rect x="302" y="164" width="38" height="22" />
+<rect x="10" y="186" width="60" height="22" />
+<rect x="70" y="186" width="66" height="22" />
+<rect x="136" y="186" width="50" height="22" />
+<rect x="186" y="186" width="88" height="22" />
+<rect x="274" y="186" width="28" height="22" />
+<rect x="302" y="186" width="38" height="22" />
+<rect x="10" y="208" width="60" height="22" />
+<rect x="70" y="208" width="66" height="22" />
+<rect x="136" y="208" width="50" height="22" />
+<rect x="186" y="208" width="88" height="22" />
+<rect x="274" y="208" width="28" height="22" />
+<rect x="302" y="208" width="38" height="22" />
+<rect x="10" y="230" width="60" height="22" />
+<rect x="70" y="230" width="66" height="22" />
+<rect x="136" y="230" width="50" height="22" />
+<rect x="186" y="230" width="88" height="22" />
+<rect x="274" y="230" width="28" height="22" />
+<rect x="302" y="230" width="38" height="22" />
+<rect x="10" y="252" width="60" height="22" />
+<rect x="70" y="252" width="66" height="22" />
+<rect x="136" y="252" width="50" height="22" />
+<rect x="186" y="252" width="88" height="22" />
+<rect x="274" y="252" width="28" height="22" />
+<rect x="302" y="252" width="38" height="22" />
+</g>
+<g font-size="9" font-weight="600">
+<text x="15" y="47">update_id</text>
+<text x="75" y="47">customer_id</text>
+<text x="141" y="47">tier</text>
+<text x="191" y="47">updated_at</text>
+<text x="279" y="47">rn</text>
+<text x="307" y="47"></text>
+</g>
+<text x="64" y="69" text-anchor="end">2</text>
+<text x="130" y="69" text-anchor="end">301</text>
+<text x="180" y="69" text-anchor="end">silver</text>
+<text x="268" y="69" text-anchor="end">05-10 14:02</text>
+<text x="296" y="69" text-anchor="end">1</text>
+<text x="334" y="69" text-anchor="end">keep</text>
+<text x="64" y="91" text-anchor="end">1</text>
+<text x="130" y="91" text-anchor="end">301</text>
+<text x="180" y="91" text-anchor="end">bronze</text>
+<text x="268" y="91" text-anchor="end">03-02 09:15</text>
+<text x="296" y="91" text-anchor="end">2</text>
+<text x="334" y="91" text-anchor="end"></text>
+<text x="64" y="113" text-anchor="end">4</text>
+<text x="130" y="113" text-anchor="end">302</text>
+<text x="180" y="113" text-anchor="end">bronze</text>
+<text x="268" y="113" text-anchor="end">03-05 10:30</text>
+<text x="296" y="113" text-anchor="end">1</text>
+<text x="334" y="113" text-anchor="end">keep</text>
+<text x="64" y="135" text-anchor="end">3</text>
+<text x="130" y="135" text-anchor="end">302</text>
+<text x="180" y="135" text-anchor="end">bronze</text>
+<text x="268" y="135" text-anchor="end">03-05 10:30</text>
+<text x="296" y="135" text-anchor="end">2</text>
+<text x="334" y="135" text-anchor="end"></text>
+<text x="64" y="157" text-anchor="end">6</text>
+<text x="130" y="157" text-anchor="end">303</text>
+<text x="180" y="157" text-anchor="end">gold</text>
+<text x="268" y="157" text-anchor="end">04-01 08:00</text>
+<text x="296" y="157" text-anchor="end">1</text>
+<text x="334" y="157" text-anchor="end">keep</text>
+<text x="64" y="179" text-anchor="end">5</text>
+<text x="130" y="179" text-anchor="end">303</text>
+<text x="180" y="179" text-anchor="end">silver</text>
+<text x="268" y="179" text-anchor="end">04-01 08:00</text>
+<text x="296" y="179" text-anchor="end">2</text>
+<text x="334" y="179" text-anchor="end"></text>
+<text x="64" y="201" text-anchor="end">7</text>
+<text x="130" y="201" text-anchor="end">304</text>
+<text x="180" y="201" text-anchor="end">bronze</text>
+<text x="268" y="201" text-anchor="end">04-20 16:45</text>
+<text x="296" y="201" text-anchor="end">1</text>
+<text x="334" y="201" text-anchor="end">keep</text>
+<text x="64" y="223" text-anchor="end">10</text>
+<text x="130" y="223" text-anchor="end">305</text>
+<text x="180" y="223" text-anchor="end">silver</text>
+<text x="268" y="223" text-anchor="end">06-01 09:30</text>
+<text x="296" y="223" text-anchor="end">1</text>
+<text x="334" y="223" text-anchor="end">keep</text>
+<text x="64" y="245" text-anchor="end">9</text>
+<text x="130" y="245" text-anchor="end">305</text>
+<text x="180" y="245" text-anchor="end">silver</text>
+<text x="268" y="245" text-anchor="end">06-01 09:30</text>
+<text x="296" y="245" text-anchor="end">2</text>
+<text x="334" y="245" text-anchor="end"></text>
+<text x="64" y="267" text-anchor="end">8</text>
+<text x="130" y="267" text-anchor="end">305</text>
+<text x="180" y="267" text-anchor="end">bronze</text>
+<text x="268" y="267" text-anchor="end">02-11 11:11</text>
+<text x="296" y="267" text-anchor="end">3</text>
+<text x="334" y="267" text-anchor="end"></text>
+<text x="10" y="292" font-size="11">Customer 303 ties at 04-01 08:00: higher update_id wins.</text>
+</svg>
+<svg viewBox="0 0 360 140" width="360" role="img" aria-labelledby="counts-title counts-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="counts-title">How many rows are left after each approach</title>
+<desc id="counts-desc">The table has 10 rows for 5 customers. SELECT DISTINCT without update_id leaves 8 rows, so some customers still have two. ROW_NUMBER with a survivor rule leaves 5, one for each customer.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Rows left for 5 customers</text>
+<text x="10" y="53" font-size="11">all rows</text>
+<rect x="130" y="41" width="200" height="16" fill="currentColor" fill-opacity="0.35" />
+<text x="336" y="53" font-size="11" font-weight="600">10</text>
+<text x="10" y="83" font-size="11">SELECT DISTINCT</text>
+<rect x="130" y="71" width="160" height="16" fill="currentColor" fill-opacity="0.35" />
+<text x="296" y="83" font-size="11" font-weight="600">8</text>
+<text x="10" y="113" font-size="11">ROW_NUMBER = 1</text>
+<rect x="130" y="101" width="100" height="16" fill="currentColor" fill-opacity="0.35" />
+<text x="236" y="113" font-size="11" font-weight="600">5</text>
+<text x="10" y="132" font-size="11">Only the last bar has one row for each customer.</text>
+</svg>
+</figure>
+
+A **duplicate** is an entity that appears more than once in a table where it should appear once. Removing duplicates
+means choosing which row survives, and that is a rule about the business, not a trick of SQL:
+
+1. Find the repeats: `GROUP BY` the id, `HAVING COUNT(*) > 1`.
+2. State the **survivor rule** in words: which column orders the rows, in which direction, and what breaks a tie.
+3. Number each entity's rows with `ROW_NUMBER()` in that order and keep number 1 (S15).
+4. Verify: one row for each entity.
+
+The same steps return the **latest record per entity**, such as each customer's most recent order: the rule is "newest
+first".
+
+**Excel and Google Sheets.** Excel's Remove Duplicates (Data, Data Tools) keeps the first occurrence in the list, so
+the order of your rows is the survivor rule: sort newest first to keep the latest. Google Sheets has a similar command
+(Data, Data cleanup, Remove duplicates); SQL writes the rule down and leaves the source table as it was.
+
+## Worked example
+
+Question: **what is the current row for each customer in `customer_updates`?** Run the setup cell and the
+practice-table cell, then one cell per step.
+
+1. **Check a table that has no repeats.**
+
+   ```sql
+   SELECT order_id, COUNT(*) AS copies
+   FROM orders
+   GROUP BY order_id
+   HAVING COUNT(*) > 1;
+   ```
+
+   Read it: *show the order ids that appear more than once*. Expected: 0 rows, 2 columns: no rows. *Excel:* a COUNTIF
+   column for the ids, filtered above 1. *Why:* a clean table returns nothing, and you can run this check on any id
+   column.
+
+2. **Look at the practice table.**
+
+   ```sql
+   SELECT * FROM customer_updates ORDER BY update_id;
+   ```
+
+   Expected: 10 rows, 5 columns, the table from the question. *Why:* one row is one save, so a customer can have several
+   rows by design. The practice-table cell:
+
+   <details>
+   <summary>The practice-table cell</summary>
+
+   ```sql
+   CREATE OR REPLACE TEMP TABLE customer_updates AS
+   SELECT * FROM (VALUES
+     (1,  301, 'bronze', 'Oakland',  TIMESTAMP '2026-03-02 09:15:00'),
+     (2,  301, 'silver', 'Oakland',  TIMESTAMP '2026-05-10 14:02:00'),
+     (3,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
+     (4,  302, 'bronze', 'Berkeley', TIMESTAMP '2026-03-05 10:30:00'),
+     (5,  303, 'silver', 'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
+     (6,  303, 'gold',   'Alameda',  TIMESTAMP '2026-04-01 08:00:00'),
+     (7,  304, 'bronze', 'Oakland',  TIMESTAMP '2026-04-20 16:45:00'),
+     (8,  305, 'bronze', 'Berkeley', TIMESTAMP '2026-02-11 11:11:00'),
+     (9,  305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00'),
+     (10, 305, 'silver', 'Berkeley', TIMESTAMP '2026-06-01 09:30:00')
+   ) AS t(update_id, customer_id, loyalty_tier, city, updated_at);
+   ```
+
+   `VALUES` lists the rows, `TIMESTAMP '...'` types a timestamp, and `t(update_id, ...)` names the columns. `TEMP`
+   means the table lives only in this session. *Creating tables and constraints* (S31) explains `CREATE TABLE`.
+
+   </details>
+
+3. **Find the repeated customer ids.**
+
+   ```sql
+   SELECT customer_id, COUNT(*) AS records
+   FROM customer_updates
+   GROUP BY customer_id
+   HAVING COUNT(*) > 1
+   ORDER BY customer_id;
+   ```
+
+   Expected: 4 rows, 2 columns: customers 301, 302 and 303 with 2 rows each, and customer 305 with 3. *Excel:* a COUNTIF column
+   for the ids, filtered above 1. *Why:* a repeated id is a question, not yet an error: customer 301's rows are
+   history, 302's are an exact copy, and 303's conflict.
+
+4. **See why `SELECT DISTINCT` is not the fix.**
+
+   ```sql
+   SELECT DISTINCT customer_id, loyalty_tier, city, updated_at
+   FROM customer_updates
+   ORDER BY customer_id, updated_at;
+   ```
+
+   Expected: 8 rows, 4 columns, with `update_id` left out. *Why:* `DISTINCT` keeps only the unique rows of the result, rows
+   identical in every selected column. It merged the copies of customers 302 and 305, but
+   customers 301 and 303 still have two rows, and it chose no survivor.
+
+5. **State the rule, then number the rows.** The rule, in words: *the survivor is the record with the latest
+   `updated_at`; if two share the same time, the one that arrived later, the higher `update_id`.*
+
+   ```sql
+   SELECT *,
+          ROW_NUMBER() OVER (PARTITION BY customer_id
+                             ORDER BY updated_at DESC, update_id DESC) AS rn
+   FROM customer_updates
+   ORDER BY customer_id, rn;
+   ```
+
+   Read it: *for each customer, number the records newest first, and break a tie by the higher update_id*. Expected:
+   10 rows, 6 columns, as in the first picture. *Why:* `PARTITION BY customer_id` makes each customer a group, and the
+   `ORDER BY` is the rule. Customer 303's rows share an `updated_at`, so `update_id` decides: update 6 (gold) gets 1.
+
+6. **Keep number 1.**
+
+   ```sql
+   WITH numbered AS (
+     SELECT *,
+            ROW_NUMBER() OVER (PARTITION BY customer_id
+                               ORDER BY updated_at DESC, update_id DESC) AS rn
+     FROM customer_updates
+   )
+   SELECT update_id, customer_id, loyalty_tier, city, updated_at
+   FROM numbered
+   WHERE rn = 1
+   ORDER BY customer_id;
+   ```
+
+   Expected: 5 rows, 5 columns: updates 2, 4, 6, 7 and 10. *Why:* the numbering sits in its own stage so the final `WHERE`
+   can use it. DuckDB's shortcut `QUALIFY` filters on a window function the way
+   `HAVING` filters on an aggregate, without the extra stage:
+
+   ```sql
+   SELECT update_id, customer_id, loyalty_tier, city, updated_at
+   FROM customer_updates
+   QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id
+                              ORDER BY updated_at DESC, update_id DESC) = 1
+   ORDER BY customer_id;
+   ```
+
+   Expected: 5 rows, 5 columns, the same five rows. Learn the two-stage form first.
+
+7. **Verify.**
+
+   ```sql
+   WITH numbered AS (
+     SELECT *,
+            ROW_NUMBER() OVER (PARTITION BY customer_id
+                               ORDER BY updated_at DESC, update_id DESC) AS rn
+     FROM customer_updates
+   ),
+   latest AS (
+     SELECT * FROM numbered WHERE rn = 1
+   )
+   SELECT COUNT(*) AS rows_kept, COUNT(DISTINCT customer_id) AS customers
+   FROM latest;
+   ```
+
+   Expected: 1 row, 2 columns: `5` and `5`. *Why:* rows kept equal customers, so each customer has exactly one row. The
+   count alone is not enough, as Exercise 3 shows: also read the rows where the rule had to decide, here customer 303.
+
+<details>
+<summary>Explain it in your own words: why did step 3 not just tell us which rows to delete?</summary>
+
+A repeated id says a customer has several rows, not why. Only a rule about the business, here "latest wins", says
+which row is current.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-deduplicate-latest-record-1">
+
+**Each customer's first record.** Use the Exercise 1 cell. Expected: 5 rows, 5 columns. Keep the first record of each
+customer instead of the latest: the earliest `updated_at`, and the lower `update_id` on a tie.
+
+The first steps are done for you: the `numbered` stage is started, and the final query lists its columns:
+
+```sql
+WITH numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY ...) AS rn
+  FROM customer_updates
+)
+SELECT update_id, customer_id, loyalty_tier, city, updated_at
+FROM numbered;
+```
+
+Now finish it: replace `...` with the survivor rule, add the line that keeps one row per customer, and sort by
+customer.
+
+<details>
+<summary>Hint</summary>
+
+Copy the `ORDER BY` of step 5 and take out the two `DESC`. Which number do you keep?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY updated_at, update_id) AS rn
+...
+WHERE ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY updated_at, update_id) AS rn
+  FROM customer_updates
+)
+SELECT update_id, customer_id, loyalty_tier, city, updated_at
+FROM numbered
+WHERE rn = 1
+ORDER BY customer_id;
+```
+
+| update_id | customer_id | loyalty_tier | city | updated_at |
+|---:|---:|---|---|---|
+| 1 | 301 | bronze | Oakland | 2026-03-02 09:15:00 |
+| 3 | 302 | bronze | Berkeley | 2026-03-05 10:30:00 |
+| 5 | 303 | silver | Alameda | 2026-04-01 08:00:00 |
+| 7 | 304 | bronze | Oakland | 2026-04-20 16:45:00 |
+| 8 | 305 | bronze | Berkeley | 2026-02-11 11:11:00 |
+
+The survivors are updates 1, 3, 5, 7 and 8. Customer 303 shows silver (update 5), the lower `update_id` of the two
+rows at the same minute.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-deduplicate-latest-record-2">
+
+**Each customer's latest completed order.** Work in the Exercise 2 cells, on `orders`. Return the columns
+`customer_id`, `order_id` and `ordered_at`.
+
+Before you run anything, write one sentence in the first cell: how many rows do you expect? There are 150 customers in
+`customers`, but think about who has no completed order in `orders`.
+
+Expected: 3 columns. Only completed orders count, so the canceled order is
+out, and so is the walk-in order, which has no customer.
+
+<details>
+<summary>Hint</summary>
+
+Copy steps 5 and 6 and change the table and the columns. Put the two conditions in a `WHERE` inside the numbering
+stage; the filter on `rn` stays outside it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One row for each customer with a completed order: fewer than 150, because some customers never
+ordered and one has only the canceled order."*
+
+</details>
+
+<Solution>
+
+```sql
+WITH numbered AS (
+  SELECT customer_id, order_id, ordered_at,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY ordered_at DESC, order_id DESC) AS rn
+  FROM orders
+  WHERE customer_id IS NOT NULL AND status = 'completed'
+)
+SELECT customer_id, order_id, ordered_at
+FROM numbered
+WHERE rn = 1
+ORDER BY customer_id;
+```
+
+The result has 144 rows. Of the 150 customers, 145 placed an order (customers 140, 147, 148, 149 and 150 never did),
+and customer 42 has only the canceled order, so 144 have a completed one. No customer has two orders in the same minute, but `order_id` stays in the `ORDER BY` as a
+tie-breaker, so the rule never depends on luck. Showing the five customers who never ordered takes a join: *LEFT JOIN
+and finding rows with no match* (S20).
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what three things must a survivor rule say, and why is `SELECT DISTINCT` not a fix when two
+   rows of one customer differ in tier?
+
+   <details>
+   <summary>Answer</summary>
+
+   It says which column orders the rows, in which direction, and what breaks a tie. `DISTINCT` only merges rows that
+   are identical in every selected column, so two rows with different tiers both stay.
+
+   </details>
+
+<Exercise id="sql-deduplicate-latest-record-3">
+
+**Spot the flaw.** A colleague keeps the latest record of each customer. The query returns 5 rows, one for each customer,
+so the count looks right:
+
+```sql
+WITH numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY customer_id
+                            ORDER BY updated_at DESC) AS rn
+  FROM customer_updates
+)
+SELECT update_id, customer_id, loyalty_tier, updated_at
+FROM numbered
+WHERE rn = 1
+ORDER BY customer_id;
+```
+
+Expected: 5 rows, 4 columns. Look at customer 303, find the flaw and fix it.
+
+<Solution>
+
+Customer 303 shows silver (update 5), but gold (update 6) was the later save. The two rows share an `updated_at`, and
+the `ORDER BY` does not say which wins: DuckDB 2.0.0 returned update 5, but nothing in the query promises that. The
+row count cannot catch this; reading the rows where the rule had to decide can. The fix is the tie-breaker of step 5:
+`ORDER BY updated_at DESC, update_id DESC`. Then customer 303 shows gold.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can find repeated ids, write the survivor rule in words, keep one row for each entity or the
+latest one, and say why `DISTINCT` is not enough.*
+Test: Exercise sql-deduplicate-latest-record-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **find the repeats, state the survivor rule, number the rows by that rule and keep number 1,
+then check one row for each entity.** The next lesson, *Tables, keys and grain*, asks what makes a row unique.
