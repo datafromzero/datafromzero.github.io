@@ -92,6 +92,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   and design tokens with our generator; look at other sites' visuals for the concept at most, never copy, trace or recreate
   one (layout, colors, characters, captions, sample tables).**
 
+- 2026-11-18 — A step animation slid rows through each other, and their text piled up mid-run; the pair counts of a
+  join sat in the gap beside the wrong table. → **Check text overlap at every 0.2 s of a run, fade rows in at their slot
+  instead of crossing other rows, and put a value in a column of the table it describes.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

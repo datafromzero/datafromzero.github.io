@@ -119,10 +119,12 @@ export function anim({ id, w = 360, h, title, desc, steps }) {
 			const svg =
 				`<svg class="sa-svg" viewBox="0 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
 				`<title id="${id}-t">${esc(title)}</title>\n<desc id="${id}-d">${esc(desc)}</desc>\n${body}\n</svg>`;
+			// not-content keeps Starlight's own details/list styling off the figure; the labels swap by CSS (play or stop,
+			// or show or hide the steps for readers who asked for less motion).
 			const out =
-				`<figure class="sa">\n${svg}\n` +
-				`<details class="sa-play">\n<summary>Play step by step</summary>\n<ol class="sa-steps">\n${lis}\n</ol>\n` +
-				`<p class="sa-hint">Close this panel and open it again to replay.</p>\n</details>\n</figure>`;
+				`<figure class="sa not-content">\n${svg}\n` +
+				`<details class="sa-play">\n<summary><span class="l1">Play step by step</span><span class="l2">Close to replay</span>` +
+				`<span class="l3">Show the steps</span><span class="l4">Hide the steps</span></summary>\n<ol class="sa-steps">\n${lis}\n</ol>\n</details>\n</figure>`;
 			return { markup: out, seconds: maxEnd };
 		},
 	};

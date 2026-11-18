@@ -68,6 +68,11 @@ and never copy its layout, colors, characters, captions or sample tables.
   you ran. A miniature (a few real rows) may stand in for the full table; say so on the figure.
 - **Captions rule:** 3 to 5 steps, one plain sentence each, in the order they play, so they double as the text
   description of the motion; the first step needs no animation. The `<title>` and `<desc>` describe the final frame.
+- **No overlap:** text never overlaps other text at any moment of the run. Rows that must change places fade in at
+  their new slot rather than slide through other rows (a slide is fine only along an empty lane). Check every 0.2 s:
+  pause `document.getAnimations()` at each time and compare the text boxes.
+- **Color (optional):** gray shades are the default. `sa-hue` on the figure (or on `<html>`) switches the shades `k1` to
+  `k3` to three color-blind-safe hues, with the shades and labels kept; the owner has not chosen it yet.
 - **Limits:** viewBox width 360 at most; about 15 KB of markup; the run ends within 10 s, once, no loops; shades are
   the site's grays (opacity steps `k1` to `k3`), never new colors; no `style` attribute, no script, no CSS variable in
   the markup. Check the lesson at 390 px and 1280 px, light and dark, closed, mid-run and with reduced motion.
