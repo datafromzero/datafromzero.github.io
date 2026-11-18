@@ -156,6 +156,13 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
   convention per quantity across lessons, or name both.**
 
+- 2026-11-18 — Notebook cells that error on purpose (fix-the-query exercises, error demos) would stop Colab's Run all.
+  → **Run `scripts/wrap-notebook-error-cells.py`; it wraps every erroring cell in try/except.**
+- 2026-11-18 — Parallel writers used the same file names in the shared scratchpad and overwrote each other's test
+  scripts. → **Each agent works only in its own scratchpad subfolder (`scratchpad/batchX/`, `scratchpad/revX/`).**
+- 2026-11-18 — A predict-first exercise named the surprise in its own question ("why is January so large?"). → **The
+  title and lead sentence of a predict-first task never name the result; every bound in a definition is in the SQL.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
