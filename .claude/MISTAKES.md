@@ -153,6 +153,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   lesson uses before teaching it; teach the running order, name what other databases do from their docs, and report the
   objective wording.**
 
+- 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
+  convention per quantity across lessons, or name both.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
