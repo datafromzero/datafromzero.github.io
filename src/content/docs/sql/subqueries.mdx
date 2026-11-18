@@ -1,0 +1,576 @@
+---
+id: sql-subqueries
+title: Subqueries and EXISTS
+description: 'Put a query inside a query: scalar subqueries, IN, EXISTS and derived tables, and when each fits.'
+stage: sql
+order: 230
+level: intermediate
+duration: 25
+objectives:
+  - Write a scalar subquery and a subquery with IN
+  - Use EXISTS for a semi-join and NOT EXISTS for an anti-join
+  - Use a derived table in FROM
+  - Read a correlated subquery
+prerequisites:
+  - sql-left-join-anti-join
+  - sql-group-by-having
+  - sql-ctes
+  - sql-null-handling
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-subqueries.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Subqueries'
+    url: https://duckdb.org/docs/stable/sql/expressions/subqueries
+  - title: 'DuckDB documentation: FROM and JOIN clauses'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
+Until now each query read tables. Here a query reads the result of another query: a **subquery**, a `SELECT` in
+parentheses. *Readable queries with CTEs* (S13) showed one nested query as read-only; now you write them.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
+Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
+notebook cells leave out the closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Check that the `NOT IN` query in exercise 3 returns no rows there too. The DuckDB subqueries page does not cover `NOT IN`; the lesson relies on the result and on the FROM page's note about anti joins. Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *LEFT JOIN and finding rows with no match* (S20), write the query that lists the customers who never ordered.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT c.customer_id
+   FROM customers c
+   LEFT JOIN orders o ON o.customer_id = c.customer_id
+   WHERE o.order_id IS NULL
+   ORDER BY c.customer_id;
+   ```
+
+   It returns 5 rows: customers 140, 147, 148, 149 and 150.
+
+   </details>
+
+2. In *GROUP BY and HAVING* (S8), write the query that lists the customers with more than 20 orders and their order counts.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT customer_id, COUNT(*) AS orders
+   FROM orders
+   GROUP BY customer_id
+   HAVING COUNT(*) > 20;
+   ```
+
+   `HAVING` filters the groups after they are counted. It returns 25 rows.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Harbor opened in April. How many of our 150 loyalty customers have ordered there? How many have never ordered
+> anywhere? And how many order more often than the average customer?
+
+The first rows of `customers`:
+
+| customer_id | signup_date | loyalty_tier |
+|---:|---|---|
+| 1 | 2025-06-04 | bronze |
+| 2 | 2025-06-04 | silver |
+| 3 | 2025-06-06 | gold |
+
+Each answer needs facts from `orders`, so each needs a second query inside the first. By the end you will have the
+three numbers and know which of four kinds of subquery fits which question.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 338" width="360" role="img" aria-labelledby="sq-in-title sq-in-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-in-title">The inner query returns a list that the outer query checks ids against</title>
+<desc id="sq-in-desc">Step 1: the inner query, SELECT customer_id FROM orders WHERE store_id = 3, returns a list of 355 values with 90 different ids; the first eight are 2, 3, 5, 5, 5, 5, 5, 6. An arrow labeled customer_id IN this list leads to step 2: the outer query reads customers 1 to 6. Customers 2, 3, 5 and 6 appear in the list and are kept; customers 1 and 4 do not and are dropped. The id 5 appears five times in the list, which does not change the result.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A query inside a query: IN</text>
+<text x="10" y="40" font-size="11" font-weight="600">1. The inner query runs first and returns a list</text>
+<text x="10" y="55" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT customer_id FROM orders WHERE store_id = 3</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="63" width="30" height="22" />
+<rect x="40" y="63" width="30" height="22" />
+<rect x="70" y="63" width="30" height="22" />
+<rect x="100" y="63" width="30" height="22" />
+<rect x="130" y="63" width="30" height="22" />
+<rect x="160" y="63" width="30" height="22" />
+<rect x="190" y="63" width="30" height="22" />
+<rect x="220" y="63" width="30" height="22" />
+</g>
+<text x="25" y="78" text-anchor="middle">2</text>
+<text x="55" y="78" text-anchor="middle">3</text>
+<text x="85" y="78" text-anchor="middle">5</text>
+<text x="115" y="78" text-anchor="middle">5</text>
+<text x="145" y="78" text-anchor="middle">5</text>
+<text x="175" y="78" text-anchor="middle">5</text>
+<text x="205" y="78" text-anchor="middle">5</text>
+<text x="235" y="78" text-anchor="middle">6</text>
+<text x="256" y="78">...</text>
+<text x="10" y="100" font-size="10" opacity="0.8">First 8 of 355 values; 90 different ids.</text>
+<path d="M30 106 V130 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="42" y="123" font-size="11" font-weight="600">customer_id IN (this list)</text>
+<text x="10" y="150" font-size="11" font-weight="600">2. The outer query keeps a customer whose id is in the list</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="10" y="198" width="340" height="20" />
+<rect x="10" y="218" width="340" height="20" />
+<rect x="10" y="258" width="340" height="20" />
+<rect x="10" y="278" width="340" height="20" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="158" width="80" height="20" />
+<rect x="10" y="178" width="80" height="20" />
+<rect x="10" y="198" width="80" height="20" />
+<rect x="10" y="218" width="80" height="20" />
+<rect x="10" y="238" width="80" height="20" />
+<rect x="10" y="258" width="80" height="20" />
+<rect x="10" y="278" width="80" height="20" />
+<rect x="90" y="158" width="90" height="20" />
+<rect x="90" y="178" width="90" height="20" />
+<rect x="90" y="198" width="90" height="20" />
+<rect x="90" y="218" width="90" height="20" />
+<rect x="90" y="238" width="90" height="20" />
+<rect x="90" y="258" width="90" height="20" />
+<rect x="90" y="278" width="90" height="20" />
+<rect x="180" y="158" width="90" height="20" />
+<rect x="180" y="178" width="90" height="20" />
+<rect x="180" y="198" width="90" height="20" />
+<rect x="180" y="218" width="90" height="20" />
+<rect x="180" y="238" width="90" height="20" />
+<rect x="180" y="258" width="90" height="20" />
+<rect x="180" y="278" width="90" height="20" />
+<rect x="270" y="158" width="80" height="20" />
+<rect x="270" y="178" width="80" height="20" />
+<rect x="270" y="198" width="80" height="20" />
+<rect x="270" y="218" width="80" height="20" />
+<rect x="270" y="238" width="80" height="20" />
+<rect x="270" y="258" width="80" height="20" />
+<rect x="270" y="278" width="80" height="20" />
+</g>
+<text x="15" y="172.0" font-size="10" font-weight="600">customer_id</text>
+<text x="95" y="172.0" font-size="10" font-weight="600">signup_date</text>
+<text x="185" y="172.0" font-size="10" font-weight="600">loyalty_tier</text>
+<text x="275" y="172.0" font-size="10" font-weight="600">outer row</text>
+<text x="15" y="192.0" font-size="11">1</text>
+<text x="95" y="192.0" font-size="11">2025-06-04</text>
+<text x="185" y="192.0" font-size="11">bronze</text>
+<text x="275" y="192.0" font-size="11">dropped</text>
+<text x="15" y="212.0" font-size="11">2</text>
+<text x="95" y="212.0" font-size="11">2025-06-04</text>
+<text x="185" y="212.0" font-size="11">silver</text>
+<text x="275" y="212.0" font-size="11">kept</text>
+<text x="15" y="232.0" font-size="11">3</text>
+<text x="95" y="232.0" font-size="11">2025-06-06</text>
+<text x="185" y="232.0" font-size="11">gold</text>
+<text x="275" y="232.0" font-size="11">kept</text>
+<text x="15" y="252.0" font-size="11">4</text>
+<text x="95" y="252.0" font-size="11">2025-06-08</text>
+<text x="185" y="252.0" font-size="11">silver</text>
+<text x="275" y="252.0" font-size="11">dropped</text>
+<text x="15" y="272.0" font-size="11">5</text>
+<text x="95" y="272.0" font-size="11">2025-06-09</text>
+<text x="185" y="272.0" font-size="11">silver</text>
+<text x="275" y="272.0" font-size="11">kept</text>
+<text x="15" y="292.0" font-size="11">6</text>
+<text x="95" y="292.0" font-size="11">2025-06-12</text>
+<text x="185" y="292.0" font-size="11">bronze</text>
+<text x="275" y="292.0" font-size="11">kept</text>
+<text x="10" y="316" font-size="10" opacity="0.8">Customer 5 is in the list five times; it is still one customer in the result.</text>
+<text x="10" y="330" font-size="10" opacity="0.8">The first 6 of the 150 customers are drawn.</text>
+</svg>
+<svg viewBox="0 0 360 246" width="360" role="img" aria-labelledby="sq-corr-title sq-corr-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-corr-title">A correlated NOT EXISTS runs its inner query once per customer</title>
+<desc id="sq-corr-desc">The inner query of NOT EXISTS, SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id, runs once for each customer row. customer 138 finds 1 order; customer 139 finds 1 order; customer 140 finds 0 orders; customer 141 finds 2 orders; customer 142 finds 3 orders. EXISTS is true when at least one order is found, NOT EXISTS when none is. Only customer 140 has none, so only that row is kept.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">NOT EXISTS: one inner run per row</text>
+<text x="10" y="40" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE NOT EXISTS (</text>
+<text x="22" y="52" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT 1 FROM orders o</text>
+<text x="22" y="64" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE o.customer_id = c.customer_id)</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="10" y="146" width="340" height="20" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="76" width="80" height="30" />
+<rect x="10" y="106" width="80" height="20" />
+<rect x="10" y="126" width="80" height="20" />
+<rect x="10" y="146" width="80" height="20" />
+<rect x="10" y="166" width="80" height="20" />
+<rect x="10" y="186" width="80" height="20" />
+<rect x="90" y="76" width="110" height="30" />
+<rect x="90" y="106" width="110" height="20" />
+<rect x="90" y="126" width="110" height="20" />
+<rect x="90" y="146" width="110" height="20" />
+<rect x="90" y="166" width="110" height="20" />
+<rect x="90" y="186" width="110" height="20" />
+<rect x="200" y="76" width="70" height="30" />
+<rect x="200" y="106" width="70" height="20" />
+<rect x="200" y="126" width="70" height="20" />
+<rect x="200" y="146" width="70" height="20" />
+<rect x="200" y="166" width="70" height="20" />
+<rect x="200" y="186" width="70" height="20" />
+<rect x="270" y="76" width="80" height="30" />
+<rect x="270" y="106" width="80" height="20" />
+<rect x="270" y="126" width="80" height="20" />
+<rect x="270" y="146" width="80" height="20" />
+<rect x="270" y="166" width="80" height="20" />
+<rect x="270" y="186" width="80" height="20" />
+</g>
+<text x="15" y="89.0" font-size="10" font-weight="600">customer_id</text>
+<text x="15" y="101.0" font-size="10" font-weight="600">(outer row)</text>
+<text x="195" y="89.0" font-size="10" font-weight="600" text-anchor="end">orders found</text>
+<text x="195" y="101.0" font-size="10" font-weight="600" text-anchor="end">by the inner query</text>
+<text x="235.0" y="95.0" font-size="10" font-weight="600" text-anchor="middle">EXISTS</text>
+<text x="310.0" y="95.0" font-size="10" font-weight="600" text-anchor="middle">NOT EXISTS</text>
+<text x="15" y="120.0" font-size="11">138</text>
+<text x="195" y="120.0" font-size="11" text-anchor="end">1</text>
+<text x="235.0" y="120.0" font-size="11" text-anchor="middle">true</text>
+<text x="310.0" y="120.0" font-size="11" text-anchor="middle">false</text>
+<text x="15" y="140.0" font-size="11">139</text>
+<text x="195" y="140.0" font-size="11" text-anchor="end">1</text>
+<text x="235.0" y="140.0" font-size="11" text-anchor="middle">true</text>
+<text x="310.0" y="140.0" font-size="11" text-anchor="middle">false</text>
+<text x="15" y="160.0" font-size="11">140</text>
+<text x="195" y="160.0" font-size="11" text-anchor="end">0</text>
+<text x="235.0" y="160.0" font-size="11" text-anchor="middle">false</text>
+<text x="310.0" y="160.0" font-size="11" text-anchor="middle">true</text>
+<text x="15" y="180.0" font-size="11">141</text>
+<text x="195" y="180.0" font-size="11" text-anchor="end">2</text>
+<text x="235.0" y="180.0" font-size="11" text-anchor="middle">true</text>
+<text x="310.0" y="180.0" font-size="11" text-anchor="middle">false</text>
+<text x="15" y="200.0" font-size="11">142</text>
+<text x="195" y="200.0" font-size="11" text-anchor="end">3</text>
+<text x="235.0" y="200.0" font-size="11" text-anchor="middle">true</text>
+<text x="310.0" y="200.0" font-size="11" text-anchor="middle">false</text>
+<text x="10" y="224" font-size="10" opacity="0.8">c.customer_id is the id of the outer row being tested.</text>
+<text x="10" y="238" font-size="10" opacity="0.8">Only the shaded row survives. Customers 138 to 142 are drawn.</text>
+</svg>
+</figure>
+
+A subquery is a `SELECT` in parentheses. Where it sits decides what it must return:
+
+| Kind | Where it sits | The inner query returns |
+|---|---|---|
+| Scalar | anywhere one value fits: `WHERE`, `HAVING`, the `SELECT` list | one row and one column |
+| `IN` | after `x IN` | one column, any number of rows: a list |
+| `EXISTS` | after `EXISTS` or `NOT EXISTS` | any rows: only "is there at least one?" matters |
+| Derived table | in `FROM`, with a name | a whole table |
+
+- A scalar subquery is like a cell such as `=AVERAGE(...)` that other formulas point to. If it returns more than one value,
+  DuckDB raises an error.
+- `IN` keeps an outer row at most once, however often its id repeats in the list. A join to `orders` would repeat a
+  customer once per order (*INNER JOIN*, S19).
+- A subquery that uses a column of the outer query is **correlated**. The DuckDB documentation says it is, conceptually,
+  run once for every row of the outer query. The second picture shows that: `c.customer_id` changes with each row. DuckDB
+  recognizes a `NOT EXISTS` that is an anti join, so it need not run the inner query row by row.
+
+## Worked example
+
+Question: **how many customers ordered at Harbor, how many never ordered, and how many order more than average?** Run
+the notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect. Counts cover all
+1,800 orders, the canceled one included; the walk-in order 1335 has no customer, so it belongs to none.
+
+1. **IN: write the inner query alone first.**
+
+   ```sql
+   SELECT customer_id
+   FROM orders
+   WHERE store_id = 3
+   ORDER BY customer_id
+   LIMIT 8;
+   ```
+
+   Expected: 8 rows, 1 column. *Why:* the inner query must make sense on its own. Customer 5 repeats because each row
+   is an order, not a customer.
+
+   Now put it in parentheses after `IN`:
+
+   ```sql
+   SELECT customer_id, signup_date, loyalty_tier
+   FROM customers
+   WHERE customer_id IN (
+     SELECT customer_id
+     FROM orders
+     WHERE store_id = 3
+   )
+   ORDER BY customer_id
+   LIMIT 6;
+   ```
+
+   Expected: 6 rows, 3 columns; the first is customer 2. *Why:* the outer query asks one thing of each customer: is
+   your id in the list? The grain stays one row per customer.
+
+2. **NOT EXISTS: customers with no order.**
+
+   ```sql
+   SELECT customer_id, signup_date, loyalty_tier
+   FROM customers c
+   WHERE NOT EXISTS (
+     SELECT 1
+     FROM orders o
+     WHERE o.customer_id = c.customer_id
+   )
+   ORDER BY customer_id;
+   ```
+
+   Expected: 5 rows, 3 columns. *Why:* `c` and `o` are aliases, and `o.customer_id = c.customer_id`
+   is what makes it correlated. The `1` in `SELECT 1` is a placeholder: `EXISTS` ignores what the inner query selects.
+   The same five customers as in the warm-up.
+
+3. **Read a correlated subquery in the `SELECT` list.** Do not write this yet; run it and read it.
+
+   ```sql
+   SELECT c.customer_id,
+          (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.customer_id) AS orders
+   FROM customers c
+   WHERE c.customer_id BETWEEN 138 AND 142
+   ORDER BY c.customer_id;
+   ```
+
+   Expected: 5 rows, 2 columns. *Why:* for each customer, the inner query counts that customer's orders, so customer 140
+   shows 0. This is the second picture as a number.
+
+4. **A derived table: the average of a count.** `AVG(COUNT(*))` is not allowed, so make the counts a table first.
+
+   ```sql
+   SELECT ROUND(AVG(orders), 2) AS avg_orders, MAX(orders) AS max_orders
+   FROM (
+     SELECT customer_id, COUNT(*) AS orders
+     FROM orders
+     WHERE customer_id IS NOT NULL
+     GROUP BY customer_id
+   ) AS per_customer;
+   ```
+
+   Expected: 1 row, 2 columns: `12.41` and `29`. *Why:* the inner query has grain one row per customer; the outer
+   query summarizes it. It is the same idea as a CTE (S13) written inside `FROM`. The filter drops the walk-in order.
+
+5. **Scalar: customers above the average.** The average from step 4, in one value:
+
+   ```sql
+   SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2) AS avg_orders
+   FROM orders;
+   ```
+
+   Expected: 1 row, 1 column: `12.41`. *Why:* 1,799 orders that name a customer, over 145 different customers. Both counts
+   skip the empty `customer_id` (S7). Now use it in `HAVING`:
+
+   ```sql
+   SELECT customer_id, COUNT(*) AS orders
+   FROM orders
+   WHERE customer_id IS NOT NULL
+   GROUP BY customer_id
+   HAVING COUNT(*) > (
+     SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2)
+     FROM orders
+   )
+   ORDER BY orders DESC, customer_id
+   LIMIT 5;
+   ```
+
+   Expected: 5 rows, 2 columns; the first three have 29 orders. Without `LIMIT 5` the query has 68 rows. *Why:* the inner
+   query runs once and gives a single number that each group is compared with.
+
+6. **Verify.** One row of four scalar subqueries:
+
+   ```sql
+   SELECT
+     (SELECT COUNT(*) FROM customers
+      WHERE customer_id IN (SELECT customer_id FROM orders WHERE store_id = 3)) AS at_harbor,
+     (SELECT COUNT(*) FROM customers c
+      JOIN orders o ON o.customer_id = c.customer_id
+      WHERE o.store_id = 3) AS join_rows,
+     (SELECT COUNT(*) FROM customers c
+      WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS ordered,
+     (SELECT COUNT(*) FROM customers c
+      WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS never;
+   ```
+
+   Expected: 1 row, 4 columns: `90 | 355 | 145 | 5`. Answer: **90 customers ordered at Harbor, 5 never ordered, and 68
+   order more than the average customer's 12.41.** Checks: 145 + 5 = 150 customers; the join gives 355 rows, one per
+   Harbor order, while `IN` gives 90, one per customer; and the 5 are the same customers as the anti join of S20.
+
+<details>
+<summary>Explain it in your own words: why does the join give 355 rows and IN only 90?</summary>
+
+The join pairs a customer with every order, so a customer with five Harbor orders appears five times. `IN` only asks
+whether the id is in the list, so a customer appears at most once, however long the list repeats it.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-subqueries-1">
+
+**What is the average number of lines on an order, and the most lines on one order?** Use the Exercise 1 cell.
+Expected: 1 row, 2 columns.
+
+Done for you: the outer query. Finish the derived table: one row per order, with its number of lines in a column named
+`lines`.
+
+```sql
+SELECT ROUND(AVG(lines), 2) AS avg_lines, MAX(lines) AS max_lines
+FROM (
+  ...
+) AS per_order;
+```
+
+<details>
+<summary>Hint</summary>
+
+The grain of the inner query is one row per order, so it groups `order_items` by `order_id`, as in step 4.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT order_id, COUNT(*) AS lines
+FROM order_items
+GROUP BY ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT ROUND(AVG(lines), 2) AS avg_lines, MAX(lines) AS max_lines
+FROM (
+  SELECT order_id, COUNT(*) AS lines
+  FROM order_items
+  GROUP BY order_id
+) AS per_order;
+```
+
+`1.83 | 3`. Check: 3,287 lines over 1,800 orders is 1.83, from the numbers of *Tables, keys and grain* (S18).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-subqueries-2">
+
+**Which customers placed an order but never a completed one?** Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: which customers you expect, and how they differ from the
+five who never ordered. Then write the query with `EXISTS` and `NOT EXISTS`. Try the `NOT EXISTS` half alone as well and
+compare.
+
+Expected shape, to check your sentence against: a list of customer ids, 1 column. The status of an order is `completed`
+or `canceled`.
+
+<details>
+<summary>Hint</summary>
+
+Two conditions on the same customer: an order exists, and no completed order exists. Each is a correlated subquery
+like step 2; the second adds `AND o.status = 'completed'`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One id column. The customers who have at least one order, none of them completed."*
+
+```sql
+SELECT customer_id
+FROM customers c
+WHERE EXISTS (...)
+  AND NOT EXISTS (...);
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id
+FROM customers c
+WHERE EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
+)
+AND NOT EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status = 'completed'
+);
+```
+
+One customer: **42**, whose only order is the canceled order 1461. With the `NOT EXISTS` half alone you get 6 rows: 42
+and the five who never ordered. The `EXISTS` half separates "never ordered" from "never completed".
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the four kinds of subquery and say what the inner query returns in each.
+
+<details>
+<summary>Answer</summary>
+
+Scalar: one value. `IN`: one column, a list. `EXISTS`: any rows, only whether there are some. Derived table: a whole
+table in `FROM`, with a name.
+
+</details>
+
+<Exercise id="sql-subqueries-3">
+
+**Spot the flaw.** A colleague wants the customers who never ordered, and writes:
+
+```sql
+SELECT customer_id
+FROM customers
+WHERE customer_id NOT IN (SELECT customer_id FROM orders);
+```
+
+Expected from that query: 0 rows, 1 column. The warm-up showed there are 5 such customers. What went wrong, and how do
+you fix it?
+
+<Solution>
+
+The inner list contains an empty value: order 1335 has no `customer_id`. For a customer that is not in the list, `IN`
+gives `NULL` (unknown) instead of `false` when the list holds a `NULL`, as the DuckDB documentation notes, so `NOT IN`
+never becomes true and no row survives. DuckDB's FROM page adds that an anti join matches `NOT IN` except that
+it ignores `NULL` values from the right table.
+
+Two fixes:
+
+```sql
+SELECT customer_id
+FROM customers
+WHERE customer_id NOT IN (SELECT customer_id FROM orders WHERE customer_id IS NOT NULL);
+```
+
+or `NOT EXISTS`, which has no such trap. Both give 5 rows, 1 column: 140, 147, 148, 149 and 150.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a scalar subquery, an `IN`, an `EXISTS` and a derived table, say what each inner query
+returns, and read a correlated one.*
+Test: Exercise sql-subqueries-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **write the inner query alone and check it, then put it in parentheses where the outer query
+needs a value, a list, a yes or no, or a table.** The next lesson, *Comparing sets: UNION, INTERSECT, EXCEPT* (S24),
+puts whole result sets side by side.

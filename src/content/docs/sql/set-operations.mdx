@@ -1,0 +1,807 @@
+---
+id: sql-set-operations
+title: 'Comparing sets: UNION, INTERSECT, EXCEPT'
+description: Stack and compare result sets with UNION, INTERSECT and EXCEPT, and answer coverage questions with grouped counts.
+stage: sql
+order: 240
+level: intermediate
+duration: 25
+objectives:
+  - Combine two queries with UNION and UNION ALL
+  - Find shared and missing rows with INTERSECT and EXCEPT
+  - Match column count, order and type across the queries
+  - Answer "bought from every category" with GROUP BY and HAVING COUNT(DISTINCT)
+prerequisites:
+  - sql-ctes
+  - sql-left-join-anti-join
+  - sql-subqueries
+  - sql-self-and-multi-table-joins
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-set-operations.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Set operations'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/setops
+  - title: 'DuckDB documentation: Subqueries'
+    url: https://duckdb.org/docs/stable/sql/expressions/subqueries
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
+A join pairs rows; a **set operation** stacks or compares whole results: customers in one list, in the other, in both,
+or in only one. It works on customers because a customer is the same row of the same table in every list.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
+Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
+notebook cells leave out the closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text of the column-count mismatch with Colab's version. The DuckDB set operations page does not say how `NULL` values are compared; the lesson shows the effect of the walk-in order's empty `customer_id` and filters it out, so check that step in Colab. The stub also named the DataLemur patterns page as a source: it does not mention set operations, so it is not listed. The map notes about the cost of `UNION` against `UNION ALL` and about `MINUS` in Oracle are not in the lesson; they need a source first. Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Subqueries and EXISTS* (S23), write the query that counts the customers who have at least one order.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS ordered
+   FROM customers c
+   WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id);
+   ```
+
+   It returns `145`; the other 5 customers never ordered.
+
+   </details>
+
+2. In S23, why did `customer_id NOT IN (SELECT customer_id FROM orders)` return no rows?
+
+   <details>
+   <summary>Answer</summary>
+
+   The list holds an empty `customer_id` (the walk-in order 1335). With a `NULL` in the list, `NOT IN` never becomes
+   true. Keep that in mind: an empty value can also slip into a set.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> Harbor opened on April 1. Of the customers who ordered there, how many had already ordered at the other two cafes, and
+> how many are new to us? And which customers have tried every kind of product?
+
+For three customers, were they seen before April, and at Harbor?
+
+| customer_id | ordered before April | ordered at Harbor |
+|---:|---|---|
+| 1 | yes | no |
+| 2 | yes | yes |
+| 13 | no | yes |
+
+By the end you will have both counts, the customers who tried everything, and the rule for lining up the columns of two
+queries.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 322" width="360" role="img" aria-labelledby="sq-sets-title sq-sets-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-sets-title">The same two sets, run through each set operator</title>
+<desc id="sq-sets-desc">A table of customers 1 to 13. Column A marks the customers who ordered before April: 1 to 12, not 13. Column B marks the customers who ordered at Harbor: 2, 3, 5, 6, 7, 10, 11, 12, 13. The next four columns mark the customers each operator returns. UNION: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13. INTERSECT: 2, 3, 5, 6, 7, 10, 11, 12. A EXCEPT B: 1, 4, 8, 9. B EXCEPT A: 13.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One pair of sets, four operators</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="126" y="74" width="52" height="16" />
+<rect x="126" y="90" width="52" height="16" />
+<rect x="126" y="106" width="52" height="16" />
+<rect x="126" y="122" width="52" height="16" />
+<rect x="126" y="138" width="52" height="16" />
+<rect x="126" y="154" width="52" height="16" />
+<rect x="126" y="170" width="52" height="16" />
+<rect x="126" y="186" width="52" height="16" />
+<rect x="126" y="202" width="52" height="16" />
+<rect x="126" y="218" width="52" height="16" />
+<rect x="126" y="234" width="52" height="16" />
+<rect x="126" y="250" width="52" height="16" />
+<rect x="126" y="266" width="52" height="16" />
+<rect x="178" y="90" width="64" height="16" />
+<rect x="178" y="106" width="64" height="16" />
+<rect x="178" y="138" width="64" height="16" />
+<rect x="178" y="154" width="64" height="16" />
+<rect x="178" y="170" width="64" height="16" />
+<rect x="178" y="218" width="64" height="16" />
+<rect x="178" y="234" width="64" height="16" />
+<rect x="178" y="250" width="64" height="16" />
+<rect x="242" y="74" width="54" height="16" />
+<rect x="242" y="122" width="54" height="16" />
+<rect x="242" y="186" width="54" height="16" />
+<rect x="242" y="202" width="54" height="16" />
+<rect x="296" y="266" width="54" height="16" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="34" width="28" height="40" />
+<rect x="10" y="74" width="28" height="16" />
+<rect x="10" y="90" width="28" height="16" />
+<rect x="10" y="106" width="28" height="16" />
+<rect x="10" y="122" width="28" height="16" />
+<rect x="10" y="138" width="28" height="16" />
+<rect x="10" y="154" width="28" height="16" />
+<rect x="10" y="170" width="28" height="16" />
+<rect x="10" y="186" width="28" height="16" />
+<rect x="10" y="202" width="28" height="16" />
+<rect x="10" y="218" width="28" height="16" />
+<rect x="10" y="234" width="28" height="16" />
+<rect x="10" y="250" width="28" height="16" />
+<rect x="10" y="266" width="28" height="16" />
+<rect x="38" y="34" width="44" height="40" />
+<rect x="38" y="74" width="44" height="16" />
+<rect x="38" y="90" width="44" height="16" />
+<rect x="38" y="106" width="44" height="16" />
+<rect x="38" y="122" width="44" height="16" />
+<rect x="38" y="138" width="44" height="16" />
+<rect x="38" y="154" width="44" height="16" />
+<rect x="38" y="170" width="44" height="16" />
+<rect x="38" y="186" width="44" height="16" />
+<rect x="38" y="202" width="44" height="16" />
+<rect x="38" y="218" width="44" height="16" />
+<rect x="38" y="234" width="44" height="16" />
+<rect x="38" y="250" width="44" height="16" />
+<rect x="38" y="266" width="44" height="16" />
+<rect x="82" y="34" width="44" height="40" />
+<rect x="82" y="74" width="44" height="16" />
+<rect x="82" y="90" width="44" height="16" />
+<rect x="82" y="106" width="44" height="16" />
+<rect x="82" y="122" width="44" height="16" />
+<rect x="82" y="138" width="44" height="16" />
+<rect x="82" y="154" width="44" height="16" />
+<rect x="82" y="170" width="44" height="16" />
+<rect x="82" y="186" width="44" height="16" />
+<rect x="82" y="202" width="44" height="16" />
+<rect x="82" y="218" width="44" height="16" />
+<rect x="82" y="234" width="44" height="16" />
+<rect x="82" y="250" width="44" height="16" />
+<rect x="82" y="266" width="44" height="16" />
+<rect x="126" y="34" width="52" height="40" />
+<rect x="126" y="74" width="52" height="16" />
+<rect x="126" y="90" width="52" height="16" />
+<rect x="126" y="106" width="52" height="16" />
+<rect x="126" y="122" width="52" height="16" />
+<rect x="126" y="138" width="52" height="16" />
+<rect x="126" y="154" width="52" height="16" />
+<rect x="126" y="170" width="52" height="16" />
+<rect x="126" y="186" width="52" height="16" />
+<rect x="126" y="202" width="52" height="16" />
+<rect x="126" y="218" width="52" height="16" />
+<rect x="126" y="234" width="52" height="16" />
+<rect x="126" y="250" width="52" height="16" />
+<rect x="126" y="266" width="52" height="16" />
+<rect x="178" y="34" width="64" height="40" />
+<rect x="178" y="74" width="64" height="16" />
+<rect x="178" y="90" width="64" height="16" />
+<rect x="178" y="106" width="64" height="16" />
+<rect x="178" y="122" width="64" height="16" />
+<rect x="178" y="138" width="64" height="16" />
+<rect x="178" y="154" width="64" height="16" />
+<rect x="178" y="170" width="64" height="16" />
+<rect x="178" y="186" width="64" height="16" />
+<rect x="178" y="202" width="64" height="16" />
+<rect x="178" y="218" width="64" height="16" />
+<rect x="178" y="234" width="64" height="16" />
+<rect x="178" y="250" width="64" height="16" />
+<rect x="178" y="266" width="64" height="16" />
+<rect x="242" y="34" width="54" height="40" />
+<rect x="242" y="74" width="54" height="16" />
+<rect x="242" y="90" width="54" height="16" />
+<rect x="242" y="106" width="54" height="16" />
+<rect x="242" y="122" width="54" height="16" />
+<rect x="242" y="138" width="54" height="16" />
+<rect x="242" y="154" width="54" height="16" />
+<rect x="242" y="170" width="54" height="16" />
+<rect x="242" y="186" width="54" height="16" />
+<rect x="242" y="202" width="54" height="16" />
+<rect x="242" y="218" width="54" height="16" />
+<rect x="242" y="234" width="54" height="16" />
+<rect x="242" y="250" width="54" height="16" />
+<rect x="242" y="266" width="54" height="16" />
+<rect x="296" y="34" width="54" height="40" />
+<rect x="296" y="74" width="54" height="16" />
+<rect x="296" y="90" width="54" height="16" />
+<rect x="296" y="106" width="54" height="16" />
+<rect x="296" y="122" width="54" height="16" />
+<rect x="296" y="138" width="54" height="16" />
+<rect x="296" y="154" width="54" height="16" />
+<rect x="296" y="170" width="54" height="16" />
+<rect x="296" y="186" width="54" height="16" />
+<rect x="296" y="202" width="54" height="16" />
+<rect x="296" y="218" width="54" height="16" />
+<rect x="296" y="234" width="54" height="16" />
+<rect x="296" y="250" width="54" height="16" />
+<rect x="296" y="266" width="54" height="16" />
+</g>
+<text x="15" y="57.5" font-size="9" font-weight="600">id</text>
+<text x="43" y="46.5" font-size="9" font-weight="600">A</text>
+<text x="43" y="57.5" font-size="9" font-weight="600">before</text>
+<text x="43" y="68.5" font-size="9" font-weight="600">April</text>
+<text x="87" y="46.5" font-size="9" font-weight="600">B</text>
+<text x="87" y="57.5" font-size="9" font-weight="600">at</text>
+<text x="87" y="68.5" font-size="9" font-weight="600">Harbor</text>
+<text x="131" y="57.5" font-size="9" font-weight="600">UNION</text>
+<text x="183" y="57.5" font-size="9" font-weight="600">INTERSECT</text>
+<text x="247" y="52.0" font-size="9" font-weight="600">A EXCEPT</text>
+<text x="247" y="63.0" font-size="9" font-weight="600">B</text>
+<text x="301" y="52.0" font-size="9" font-weight="600">B EXCEPT</text>
+<text x="301" y="63.0" font-size="9" font-weight="600">A</text>
+<text x="15" y="86.0" font-size="11">1</text>
+<text x="43" y="86.0" font-size="11"></text>
+<text x="87" y="86.0" font-size="11"></text>
+<text x="131" y="86.0" font-size="11"></text>
+<text x="183" y="86.0" font-size="11"></text>
+<text x="247" y="86.0" font-size="11"></text>
+<text x="301" y="86.0" font-size="11"></text>
+<text x="15" y="102.0" font-size="11">2</text>
+<text x="43" y="102.0" font-size="11"></text>
+<text x="87" y="102.0" font-size="11"></text>
+<text x="131" y="102.0" font-size="11"></text>
+<text x="183" y="102.0" font-size="11"></text>
+<text x="247" y="102.0" font-size="11"></text>
+<text x="301" y="102.0" font-size="11"></text>
+<text x="15" y="118.0" font-size="11">3</text>
+<text x="43" y="118.0" font-size="11"></text>
+<text x="87" y="118.0" font-size="11"></text>
+<text x="131" y="118.0" font-size="11"></text>
+<text x="183" y="118.0" font-size="11"></text>
+<text x="247" y="118.0" font-size="11"></text>
+<text x="301" y="118.0" font-size="11"></text>
+<text x="15" y="134.0" font-size="11">4</text>
+<text x="43" y="134.0" font-size="11"></text>
+<text x="87" y="134.0" font-size="11"></text>
+<text x="131" y="134.0" font-size="11"></text>
+<text x="183" y="134.0" font-size="11"></text>
+<text x="247" y="134.0" font-size="11"></text>
+<text x="301" y="134.0" font-size="11"></text>
+<text x="15" y="150.0" font-size="11">5</text>
+<text x="43" y="150.0" font-size="11"></text>
+<text x="87" y="150.0" font-size="11"></text>
+<text x="131" y="150.0" font-size="11"></text>
+<text x="183" y="150.0" font-size="11"></text>
+<text x="247" y="150.0" font-size="11"></text>
+<text x="301" y="150.0" font-size="11"></text>
+<text x="15" y="166.0" font-size="11">6</text>
+<text x="43" y="166.0" font-size="11"></text>
+<text x="87" y="166.0" font-size="11"></text>
+<text x="131" y="166.0" font-size="11"></text>
+<text x="183" y="166.0" font-size="11"></text>
+<text x="247" y="166.0" font-size="11"></text>
+<text x="301" y="166.0" font-size="11"></text>
+<text x="15" y="182.0" font-size="11">7</text>
+<text x="43" y="182.0" font-size="11"></text>
+<text x="87" y="182.0" font-size="11"></text>
+<text x="131" y="182.0" font-size="11"></text>
+<text x="183" y="182.0" font-size="11"></text>
+<text x="247" y="182.0" font-size="11"></text>
+<text x="301" y="182.0" font-size="11"></text>
+<text x="15" y="198.0" font-size="11">8</text>
+<text x="43" y="198.0" font-size="11"></text>
+<text x="87" y="198.0" font-size="11"></text>
+<text x="131" y="198.0" font-size="11"></text>
+<text x="183" y="198.0" font-size="11"></text>
+<text x="247" y="198.0" font-size="11"></text>
+<text x="301" y="198.0" font-size="11"></text>
+<text x="15" y="214.0" font-size="11">9</text>
+<text x="43" y="214.0" font-size="11"></text>
+<text x="87" y="214.0" font-size="11"></text>
+<text x="131" y="214.0" font-size="11"></text>
+<text x="183" y="214.0" font-size="11"></text>
+<text x="247" y="214.0" font-size="11"></text>
+<text x="301" y="214.0" font-size="11"></text>
+<text x="15" y="230.0" font-size="11">10</text>
+<text x="43" y="230.0" font-size="11"></text>
+<text x="87" y="230.0" font-size="11"></text>
+<text x="131" y="230.0" font-size="11"></text>
+<text x="183" y="230.0" font-size="11"></text>
+<text x="247" y="230.0" font-size="11"></text>
+<text x="301" y="230.0" font-size="11"></text>
+<text x="15" y="246.0" font-size="11">11</text>
+<text x="43" y="246.0" font-size="11"></text>
+<text x="87" y="246.0" font-size="11"></text>
+<text x="131" y="246.0" font-size="11"></text>
+<text x="183" y="246.0" font-size="11"></text>
+<text x="247" y="246.0" font-size="11"></text>
+<text x="301" y="246.0" font-size="11"></text>
+<text x="15" y="262.0" font-size="11">12</text>
+<text x="43" y="262.0" font-size="11"></text>
+<text x="87" y="262.0" font-size="11"></text>
+<text x="131" y="262.0" font-size="11"></text>
+<text x="183" y="262.0" font-size="11"></text>
+<text x="247" y="262.0" font-size="11"></text>
+<text x="301" y="262.0" font-size="11"></text>
+<text x="15" y="278.0" font-size="11">13</text>
+<text x="43" y="278.0" font-size="11"></text>
+<text x="87" y="278.0" font-size="11"></text>
+<text x="131" y="278.0" font-size="11"></text>
+<text x="183" y="278.0" font-size="11"></text>
+<text x="247" y="278.0" font-size="11"></text>
+<text x="301" y="278.0" font-size="11"></text>
+<circle cx="60.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="323.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<text x="10" y="300" font-size="10" opacity="0.8">A: ordered before April 1. B: ordered at Harbor. Customers 1 to 13 of 150.</text>
+<text x="10" y="314" font-size="10" opacity="0.8">A dot means the customer is in that set, or in that result.</text>
+</svg>
+<svg viewBox="0 0 360 210" width="360" role="img" aria-labelledby="sq-cover-title sq-cover-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-cover-title">Which customers bought from every category</title>
+<desc id="sq-cover-desc">Five customers against the four categories bakery, coffee, food and tea, with a dot where the customer has a completed order in that category. customer 1: bakery, coffee, food, tea (4); customer 13: bakery, coffee, food, tea (4); customer 29: bakery, coffee, food (3); customer 36: coffee, food (2); customer 43: bakery, coffee, tea (3). Customers 1 and 13 reach all four categories, the number of categories on the menu, so HAVING keeps them.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Bought from every category?</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="10" y="70" width="340" height="20" />
+<rect x="10" y="90" width="340" height="20" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="40" width="66" height="30" />
+<rect x="10" y="70" width="66" height="20" />
+<rect x="10" y="90" width="66" height="20" />
+<rect x="10" y="110" width="66" height="20" />
+<rect x="10" y="130" width="66" height="20" />
+<rect x="10" y="150" width="66" height="20" />
+<rect x="76" y="40" width="46" height="30" />
+<rect x="76" y="70" width="46" height="20" />
+<rect x="76" y="90" width="46" height="20" />
+<rect x="76" y="110" width="46" height="20" />
+<rect x="76" y="130" width="46" height="20" />
+<rect x="76" y="150" width="46" height="20" />
+<rect x="122" y="40" width="46" height="30" />
+<rect x="122" y="70" width="46" height="20" />
+<rect x="122" y="90" width="46" height="20" />
+<rect x="122" y="110" width="46" height="20" />
+<rect x="122" y="130" width="46" height="20" />
+<rect x="122" y="150" width="46" height="20" />
+<rect x="168" y="40" width="46" height="30" />
+<rect x="168" y="70" width="46" height="20" />
+<rect x="168" y="90" width="46" height="20" />
+<rect x="168" y="110" width="46" height="20" />
+<rect x="168" y="130" width="46" height="20" />
+<rect x="168" y="150" width="46" height="20" />
+<rect x="214" y="40" width="46" height="30" />
+<rect x="214" y="70" width="46" height="20" />
+<rect x="214" y="90" width="46" height="20" />
+<rect x="214" y="110" width="46" height="20" />
+<rect x="214" y="130" width="46" height="20" />
+<rect x="214" y="150" width="46" height="20" />
+<rect x="260" y="40" width="90" height="30" />
+<rect x="260" y="70" width="90" height="20" />
+<rect x="260" y="90" width="90" height="20" />
+<rect x="260" y="110" width="90" height="20" />
+<rect x="260" y="130" width="90" height="20" />
+<rect x="260" y="150" width="90" height="20" />
+</g>
+<text x="15" y="58.5" font-size="9" font-weight="600">customer_id</text>
+<text x="99.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">bakery</text>
+<text x="145.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">coffee</text>
+<text x="191.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">food</text>
+<text x="237.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">tea</text>
+<text x="305.0" y="53.0" font-size="9" font-weight="600" text-anchor="middle">COUNT(DISTINCT</text>
+<text x="305.0" y="64.0" font-size="9" font-weight="600" text-anchor="middle">category)</text>
+<text x="15" y="84.0" font-size="11">1</text>
+<text x="99.0" y="84.0" font-size="11" text-anchor="middle"></text>
+<text x="145.0" y="84.0" font-size="11" text-anchor="middle"></text>
+<text x="191.0" y="84.0" font-size="11" text-anchor="middle"></text>
+<text x="237.0" y="84.0" font-size="11" text-anchor="middle"></text>
+<text x="305.0" y="84.0" font-size="11" text-anchor="middle">4</text>
+<text x="15" y="104.0" font-size="11">13</text>
+<text x="99.0" y="104.0" font-size="11" text-anchor="middle"></text>
+<text x="145.0" y="104.0" font-size="11" text-anchor="middle"></text>
+<text x="191.0" y="104.0" font-size="11" text-anchor="middle"></text>
+<text x="237.0" y="104.0" font-size="11" text-anchor="middle"></text>
+<text x="305.0" y="104.0" font-size="11" text-anchor="middle">4</text>
+<text x="15" y="124.0" font-size="11">29</text>
+<text x="99.0" y="124.0" font-size="11" text-anchor="middle"></text>
+<text x="145.0" y="124.0" font-size="11" text-anchor="middle"></text>
+<text x="191.0" y="124.0" font-size="11" text-anchor="middle"></text>
+<text x="237.0" y="124.0" font-size="11" text-anchor="middle"></text>
+<text x="305.0" y="124.0" font-size="11" text-anchor="middle">3</text>
+<text x="15" y="144.0" font-size="11">36</text>
+<text x="99.0" y="144.0" font-size="11" text-anchor="middle"></text>
+<text x="145.0" y="144.0" font-size="11" text-anchor="middle"></text>
+<text x="191.0" y="144.0" font-size="11" text-anchor="middle"></text>
+<text x="237.0" y="144.0" font-size="11" text-anchor="middle"></text>
+<text x="305.0" y="144.0" font-size="11" text-anchor="middle">2</text>
+<text x="15" y="164.0" font-size="11">43</text>
+<text x="99.0" y="164.0" font-size="11" text-anchor="middle"></text>
+<text x="145.0" y="164.0" font-size="11" text-anchor="middle"></text>
+<text x="191.0" y="164.0" font-size="11" text-anchor="middle"></text>
+<text x="237.0" y="164.0" font-size="11" text-anchor="middle"></text>
+<text x="305.0" y="164.0" font-size="11" text-anchor="middle">3</text>
+<circle cx="99.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="140.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="140.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<text x="10" y="188" font-size="10" opacity="0.8">Completed orders only. The menu has 4 categories.</text>
+<text x="10" y="202" font-size="10" opacity="0.8">HAVING keeps the shaded rows: the count equals the number of categories.</text>
+</svg>
+</figure>
+
+Call the customers who ordered before April **A**, and those who ordered at Harbor **B**.
+
+| Operator | Returns | Duplicates |
+|---|---|---|
+| `A UNION B` | rows in A, in B or in both | removed |
+| `A UNION ALL B` | every row of A, then every row of B | kept |
+| `A INTERSECT B` | rows in both | removed |
+| `A EXCEPT B` | rows of A that are not in B | removed |
+
+- **Columns match by position.** The DuckDB documentation says the queries need the same number of columns, matches them by
+  position and takes the result's names from the first query. Types are cast when that is possible, and the operation
+  fails when it is not. The names of the second query play no part. (`UNION BY NAME` matches by name; it is not used here.)
+- **Order matters for `EXCEPT`**: `A EXCEPT B` is not `B EXCEPT A`. It is the anti join of S20 and S23, written as sets.
+- **Coverage** ("every category") is a different pattern: count the different categories each customer bought, and keep
+  those whose count equals the number of categories. The second picture shows it.
+
+## Worked example
+
+Question: **how many Harbor customers had ordered before April, how many had not, and who bought from every category?**
+Run the notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect. "Ordered"
+means any order, the canceled one included, and the sets hold customers: the walk-in order 1335 (February 14) has no
+customer, so set A filters it out.
+
+1. **Write the two sets as two queries.** A:
+
+   ```sql
+   SELECT DISTINCT customer_id
+   FROM orders
+   WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+   ORDER BY customer_id;
+   ```
+
+   Expected: 97 rows, 1 column. B:
+
+   ```sql
+   SELECT DISTINCT customer_id
+   FROM orders
+   WHERE store_id = 3
+   ORDER BY customer_id;
+   ```
+
+   Expected: 90 rows, 1 column. *Why:* a set has no repeats, so each query gives one row per customer. Without the
+   `IS NOT NULL`, set A would hold one empty row.
+
+2. **INTERSECT: in both.**
+
+   ```sql
+   SELECT customer_id FROM orders
+   WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+   INTERSECT
+   SELECT customer_id FROM orders
+   WHERE store_id = 3
+   ORDER BY customer_id;
+   ```
+
+   Expected: 60 rows, 1 column; the first is customer 2. *Why:* `INTERSECT` removes duplicates itself, so no `DISTINCT`
+   is needed. The `ORDER BY` goes last and sorts the whole result.
+
+3. **EXCEPT, in both directions.** The first returns A without B:
+
+   ```sql
+   SELECT customer_id FROM orders
+   WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+   EXCEPT
+   SELECT customer_id FROM orders
+   WHERE store_id = 3
+   ORDER BY customer_id;
+   ```
+
+   Expected: 37 rows, 1 column; the first is customer 1. Swap the two queries for B without A: 30 rows, 1 column; the
+   first is customer 13. *Why:* the 30 are Harbor customers not seen before April: new to us. The 37 never came to Harbor.
+
+4. **UNION and UNION ALL.** Count the stacked rows of the two de-duplicated sets, once with each operator:
+
+   ```sql
+   SELECT COUNT(*) AS union_rows
+   FROM (
+     SELECT DISTINCT customer_id FROM orders
+     WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+     UNION
+     SELECT DISTINCT customer_id FROM orders WHERE store_id = 3
+   );
+   ```
+
+   Replace `UNION` with `UNION ALL` and run it again. Expected: 1 row, 1 column each time. *Why:* `UNION` gives each
+   customer once: 127. `UNION ALL` stacks the lists as they are, so a customer in both appears twice: 187, which is
+   97 + 90. It does not look for duplicates, so use it when you want every row, or when the parts cannot overlap.
+
+5. **Line up the columns: a total row.**
+
+   ```sql
+   SELECT s.store_name, COUNT(*) AS orders
+   FROM orders o
+   JOIN stores s ON s.store_id = o.store_id
+   GROUP BY s.store_name
+   UNION ALL
+   SELECT 'All stores', COUNT(*)
+   FROM orders
+   ORDER BY orders;
+   ```
+
+   Expected: 4 rows, 2 columns; the last is `All stores`, 1800. *Why:* both queries give text, then a number; the
+   names come from the first. A different number of columns stops with `Binder Error: Set operations can only apply to
+   expressions with the same number of result columns`. The same count in a different order does not stop: Exercise 3.
+
+6. **Coverage: bought from every category.** Completed orders only.
+
+   ```sql
+   SELECT o.customer_id, COUNT(DISTINCT p.category) AS categories
+   FROM orders o
+   JOIN order_items oi ON oi.order_id = o.order_id
+   JOIN products p ON p.product_id = oi.product_id
+   WHERE o.status = 'completed' AND o.customer_id IS NOT NULL
+   GROUP BY o.customer_id
+   HAVING COUNT(DISTINCT p.category) = (SELECT COUNT(DISTINCT category) FROM products)
+   ORDER BY o.customer_id;
+   ```
+
+   Expected: 111 rows, 2 columns. *Why:* the joins repeat a category once per line, so `DISTINCT` counts each once (S21).
+   The number to reach comes from a scalar subquery (S23), so a fifth category would not break the query.
+
+7. **Verify.** The four sizes of steps 1 to 4 in one row:
+
+   ```sql
+   WITH before_april AS (
+     SELECT DISTINCT customer_id FROM orders
+     WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+   ),
+   at_harbor AS (
+     SELECT DISTINCT customer_id FROM orders WHERE store_id = 3
+   )
+   SELECT (SELECT COUNT(*) FROM before_april) AS a,
+          (SELECT COUNT(*) FROM at_harbor) AS b,
+          (SELECT COUNT(*) FROM (SELECT * FROM before_april INTERSECT SELECT * FROM at_harbor)) AS in_both,
+          (SELECT COUNT(*) FROM (SELECT * FROM before_april UNION SELECT * FROM at_harbor)) AS in_either;
+   ```
+
+   Expected: 1 row, 4 columns: `97 | 90 | 60 | 127`. Answer: **of the 90 Harbor customers, 60 had ordered before April and
+   30 had not.** Checks: 97 + 90 − 60 = 127; 60 + 37 = 97 and 60 + 30 = 90.
+
+   For coverage, count the customers by how many categories they bought:
+
+   ```sql
+   SELECT categories, COUNT(*) AS customers
+   FROM (
+     SELECT o.customer_id, COUNT(DISTINCT p.category) AS categories
+     FROM orders o
+     JOIN order_items oi ON oi.order_id = o.order_id
+     JOIN products p ON p.product_id = oi.product_id
+     WHERE o.status = 'completed' AND o.customer_id IS NOT NULL
+     GROUP BY o.customer_id
+   ) AS per_customer
+   GROUP BY categories
+   ORDER BY categories;
+   ```
+
+   Expected: 4 rows, 2 columns: 1 category 4 customers, 2 categories 9, 3 categories 20, 4 categories 111. They add up to
+   144, the 145 customers who ordered minus customer 42, whose only order was canceled.
+
+<details>
+<summary>Explain it in your own words: why is 187 more than 127?</summary>
+
+`UNION ALL` keeps a customer once for each list that holds them. The 60 customers in both lists are counted twice;
+`UNION` counts them once, and 187 − 60 = 127.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-set-operations-1">
+
+**Which customers ordered at both Old Town (store 1) and Campus (store 2)?** Use the Exercise 1 cell. Expected: 1
+column, the customer ids.
+
+Done for you: the first query and the operator's place.
+
+```sql
+SELECT customer_id FROM orders WHERE store_id = 1
+...
+```
+
+Now finish it: add the operator and the second query, sorted by `customer_id`.
+
+<details>
+<summary>Hint</summary>
+
+"In both" is step 2. The second query is the same, with the other store.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT customer_id FROM orders WHERE store_id = 1
+INTERSECT
+SELECT customer_id FROM orders WHERE store_id = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id FROM orders WHERE store_id = 1
+INTERSECT
+SELECT customer_id FROM orders WHERE store_id = 2
+ORDER BY customer_id;
+```
+
+81 rows. Check: 108 different customers ordered at Old Town and 108 at Campus, so 81 in both is plausible.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-set-operations-2">
+
+**Which customers ordered at all three cafes?** Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: what one row of the result is, and which customers must
+not appear. Then answer it with the coverage pattern of step 6, not with `INTERSECT`.
+
+Expected shape, to check your sentence against: 1 column, `customer_id`. Count any order, canceled included, and keep
+the walk-in order out.
+
+<details>
+<summary>Hint</summary>
+
+Count the different `store_id` values for each customer and compare with the number of rows of `stores`, as step 6
+compares with the number of categories. No join is needed.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One id column: customers whose orders touch every store."*
+
+```sql
+SELECT customer_id
+FROM orders
+WHERE customer_id IS NOT NULL
+GROUP BY customer_id
+HAVING COUNT(DISTINCT store_id) = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id
+FROM orders
+WHERE customer_id IS NOT NULL
+GROUP BY customer_id
+HAVING COUNT(DISTINCT store_id) = (SELECT COUNT(*) FROM stores)
+ORDER BY customer_id;
+```
+
+44 customers. Grouping them by how many cafes they used gives 28 with one, 73 with two and 44 with three: 145
+customers. `COUNT(*)` instead of `COUNT(DISTINCT store_id)` would count orders, not cafes.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what do `UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` return, and how does DuckDB line up the
+columns?
+
+<details>
+<summary>Answer</summary>
+
+`UNION`: rows in either, once each. `UNION ALL`: every row of both, duplicates kept. `INTERSECT`: rows in both.
+`EXCEPT`: rows of the first that are not in the second. The queries need the same number of columns, matched by position,
+with the names of the first.
+
+</details>
+
+<Exercise id="sql-set-operations-3">
+
+**Spot the flaw.** A colleague wants the customer and store pairs that appear both before and after April, and writes:
+
+```sql
+SELECT customer_id, store_id FROM orders WHERE ordered_at < DATE '2026-04-01'
+INTERSECT
+SELECT store_id, customer_id FROM orders WHERE ordered_at >= DATE '2026-04-01';
+```
+
+Expected from that query: 2 rows, 2 columns, with no error. What went wrong, and what is the right result?
+
+<Solution>
+
+Columns match by position, not by name. Both columns are integers, so DuckDB compares the first query's `customer_id`
+with the second query's `store_id`, and `store_id` with `customer_id`. The question it answers, "is there a row after
+April where the store number is this customer and the customer number is this store?", is nonsense that two rows happen
+to satisfy. Put the columns in the same order:
+
+```sql
+SELECT customer_id, store_id FROM orders WHERE ordered_at < DATE '2026-04-01'
+INTERSECT
+SELECT customer_id, store_id FROM orders WHERE ordered_at >= DATE '2026-04-01';
+```
+
+Expected: 92 rows, 2 columns. A mismatch of counts raises an error; a swap of same-typed columns gives a plausible wrong
+answer, so read the column lists side by side.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say which rows I want in terms of two sets, line up the columns, and choose between `UNION`,
+`UNION ALL`, `INTERSECT` and `EXCEPT`; and I can answer "every" with `HAVING COUNT(DISTINCT …)`.*
+Test: Exercise sql-set-operations-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **name the two sets, line the columns up by position, then pick the operator; for "every", compare
+`COUNT(DISTINCT …)` with the total.** The next lesson, *Funnels: where do people drop off?* (S25), counts customers step by
+step.
