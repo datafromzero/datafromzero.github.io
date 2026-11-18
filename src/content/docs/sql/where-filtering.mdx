@@ -1,0 +1,488 @@
+---
+id: sql-where-filtering
+title: Filtering rows with WHERE
+description: Keep only the rows you need with comparisons, AND, OR and NOT with parentheses, IN, BETWEEN and LIKE.
+stage: sql
+order: 30
+level: beginner
+duration: 25
+objectives:
+  - Filter with comparison operators
+  - Combine conditions with AND, OR and NOT using parentheses
+  - Match lists and ranges with IN and BETWEEN
+  - Match text patterns with LIKE and % and _
+  - Write a date range that includes the first day and excludes the next
+prerequisites:
+  - sql-select-sort-limit
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-where-filtering.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: WHERE clause'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/where
+  - title: 'DuckDB documentation: Comparison operators'
+    url: https://duckdb.org/docs/stable/sql/expressions/comparison_operators
+  - title: 'DuckDB documentation: Logical operators'
+    url: https://duckdb.org/docs/stable/sql/expressions/logical_operators
+  - title: 'DuckDB documentation: Boolean type'
+    url: https://duckdb.org/docs/stable/sql/data_types/boolean
+  - title: 'DuckDB documentation: IN operator'
+    url: https://duckdb.org/docs/stable/sql/expressions/in
+  - title: 'DuckDB documentation: Pattern matching'
+    url: https://duckdb.org/docs/stable/sql/functions/pattern_matching
+  - title: 'DuckDB documentation: Date types'
+    url: https://duckdb.org/docs/stable/sql/data_types/date
+  - title: 'SQLite documentation: Expressions (operator precedence)'
+    url: https://www.sqlite.org/lang_expr.html
+status: draft
+---
+
+This lesson builds on *SELECT, ORDER BY and LIMIT* (S2) and runs in the same Google Colab notebook setup. In S1 you used
+`WHERE` with one `=` test. Here you learn to say exactly which rows you want: other comparisons, several conditions at
+once, lists, ranges, text patterns and date ranges.
+
+**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
+`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
+table. The notebook cells leave out the closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has (if it is not installed, add `%pip install duckdb`), and that `.show()` prints the tables with the shapes this page gives. The rule "AND is applied before OR" is shown here by
+counts that DuckDB gave and by SQLite's operator-precedence table; check whether you want a DuckDB page cited for it. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to
+that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *SELECT, ORDER BY and LIMIT* (S2) you cut a sorted list. Write a query that shows `order_id` and `ordered_at` of
+   the three newest orders, newest first, with `order_id` as the tie-breaker.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT order_id, ordered_at
+   FROM orders
+   ORDER BY ordered_at DESC, order_id DESC
+   LIMIT 3;
+   ```
+
+   </details>
+
+2. In Excel or Google Sheets (*Decisions with IF, AND and OR*, E6), when is `AND(test1, test2)` true, and when is
+   `OR(test1, test2)` true?
+
+   <details>
+   <summary>Answer</summary>
+
+   `AND` is true only when every test is true. `OR` is true when at least one test is true. SQL uses the same two words
+   in `WHERE`.
+
+   </details>
+
+3. In S1, which clause keeps only some rows, and how do you write a text value in it?
+
+   <details>
+   <summary>Answer</summary>
+
+   `WHERE` keeps the rows that match. A text value goes in single quotes, as in `WHERE category = 'tea'`.
+
+   </details>
+
+## The question
+
+The owner of the Old Town cafe asks:
+
+> How many orders did we take in March 2026 that were paid by mobile or cash? And for the poster: which lattes cost
+> between \$4.00 and \$5.00?
+
+In E5 you filtered a sheet with the filter arrow, one column at a time. In SQL you write all the conditions in one
+`WHERE`. Old Town is `store_id` 1. Four rows of the `orders` table, from the last day of March:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1711 | 101 | 2 | 2026-03-31 10:01:00 | completed | mobile |
+| 1712 | 40 | 1 | 2026-03-31 10:10:00 | completed | card |
+| 1713 | 16 | 1 | 2026-03-31 11:04:00 | completed | mobile |
+| 1714 | 116 | 2 | 2026-03-31 11:12:00 | completed | mobile |
+
+By the end you will have answered both questions, and you will know the two traps that make a count quietly wrong: a
+missing pair of parentheses and a date range that ends one day early.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="gate-title gate-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="gate-title">Six orders through two filters that differ by one pair of parentheses</title>
+<desc id="gate-desc">Six real orders: 1002 at store 1 paid mobile, 1034 store 1 cash, 1006 store 1 card, 1001 store 2 mobile, 1023 store 2 cash, 1008 store 2 card. Filter A, store 1 AND mobile OR cash, keeps orders 1002, 1034 and 1023. Filter B, store 1 AND (mobile OR cash), keeps 1002 and 1034 only. Order 1023 is the difference: a cash order at store 2 that A wrongly keeps. Over the whole table A keeps 470 orders and B keeps 308.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One pair of parentheses</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="160" y="54" width="95" height="44" /><rect x="160" y="142" width="95" height="22" /><rect x="255" y="54" width="95" height="44" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="32" width="50" height="22" /><rect x="60" y="32" width="40" height="22" /><rect x="100" y="32" width="60" height="22" /><rect x="160" y="32" width="95" height="22" /><rect x="255" y="32" width="95" height="22" />
+<rect x="10" y="54" width="50" height="22" /><rect x="60" y="54" width="40" height="22" /><rect x="100" y="54" width="60" height="22" /><rect x="160" y="54" width="95" height="22" /><rect x="255" y="54" width="95" height="22" />
+<rect x="10" y="76" width="50" height="22" /><rect x="60" y="76" width="40" height="22" /><rect x="100" y="76" width="60" height="22" /><rect x="160" y="76" width="95" height="22" /><rect x="255" y="76" width="95" height="22" />
+<rect x="10" y="98" width="50" height="22" /><rect x="60" y="98" width="40" height="22" /><rect x="100" y="98" width="60" height="22" /><rect x="160" y="98" width="95" height="22" /><rect x="255" y="98" width="95" height="22" />
+<rect x="10" y="120" width="50" height="22" /><rect x="60" y="120" width="40" height="22" /><rect x="100" y="120" width="60" height="22" /><rect x="160" y="120" width="95" height="22" /><rect x="255" y="120" width="95" height="22" />
+<rect x="10" y="142" width="50" height="22" /><rect x="60" y="142" width="40" height="22" /><rect x="100" y="142" width="60" height="22" /><rect x="160" y="142" width="95" height="22" /><rect x="255" y="142" width="95" height="22" />
+<rect x="10" y="164" width="50" height="22" /><rect x="60" y="164" width="40" height="22" /><rect x="100" y="164" width="60" height="22" /><rect x="160" y="164" width="95" height="22" /><rect x="255" y="164" width="95" height="22" />
+</g>
+<g font-size="10" font-weight="600">
+<text x="14" y="47">order</text><text x="64" y="47">store</text><text x="104" y="47">payment</text><text x="164" y="47">A: no parens</text><text x="259" y="47">B: parens</text>
+</g>
+<g>
+<text x="14" y="69">1002</text><text x="64" y="69">1</text><text x="104" y="69">mobile</text><text x="164" y="69">kept</text><text x="259" y="69">kept</text>
+<text x="14" y="91">1034</text><text x="64" y="91">1</text><text x="104" y="91">cash</text><text x="164" y="91">kept</text><text x="259" y="91">kept</text>
+<text x="14" y="113">1006</text><text x="64" y="113">1</text><text x="104" y="113">card</text><text x="164" y="113" fill-opacity="0.6">dropped</text><text x="259" y="113" fill-opacity="0.6">dropped</text>
+<text x="14" y="135">1001</text><text x="64" y="135">2</text><text x="104" y="135">mobile</text><text x="164" y="135" fill-opacity="0.6">dropped</text><text x="259" y="135" fill-opacity="0.6">dropped</text>
+<text x="14" y="157" font-weight="600">1023</text><text x="64" y="157" font-weight="600">2</text><text x="104" y="157" font-weight="600">cash</text><text x="164" y="157" font-weight="600">kept (wrong)</text><text x="259" y="157" fill-opacity="0.6">dropped</text>
+<text x="14" y="179">1008</text><text x="64" y="179">2</text><text x="104" y="179">card</text><text x="164" y="179" fill-opacity="0.6">dropped</text><text x="259" y="179" fill-opacity="0.6">dropped</text>
+</g>
+<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">
+<text x="10" y="206">A: store 1 AND mobile OR cash</text>
+<text x="10" y="222">B: store 1 AND (mobile OR cash)</text>
+</g>
+<text x="10" y="244" font-size="11">Whole table: A keeps 470 orders, B keeps 308.</text>
+<text x="10" y="260" font-size="11">SQL reads AND before OR, so A keeps every cash order.</text>
+</svg>
+<svg viewBox="0 0 360 176" width="360" role="img" aria-labelledby="day-title day-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="day-title">The eight orders of March 31 on a line from midnight to midnight</title>
+<desc id="day-desc">A time line for March 31, 2026, from 00:00 to 24:00. Eight orders sit between 10:01 and 16:04, at 10:01, 10:10, 11:04, 11:12, 12:55, 13:23, 15:38 and 16:04. BETWEEN with an end of 2026-03-31 stops at 00:00 on March 31, before all eight. A test that says earlier than 2026-04-01 stops at 24:00, after all eight.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">March 31, midnight to midnight</text>
+<g font-size="11">
+<text x="14" y="42">BETWEEN ... AND '2026-03-31'</text>
+<text x="14" y="56">stops here, at 00:00</text>
+<text x="346" y="42" text-anchor="end">&lt; '2026-04-01'</text>
+<text x="346" y="56" text-anchor="end">stops here, at 24:00</text>
+</g>
+<g stroke="currentColor" stroke-width="1.5">
+<line x1="20" y1="62" x2="20" y2="112" /><line x1="340" y1="62" x2="340" y2="112" />
+</g>
+<line x1="20" y1="100" x2="340" y2="100" stroke="currentColor" stroke-opacity="0.45" />
+<g stroke="currentColor" stroke-opacity="0.45">
+<line x1="100" y1="96" x2="100" y2="104" /><line x1="180" y1="96" x2="180" y2="104" /><line x1="260" y1="96" x2="260" y2="104" />
+</g>
+<g fill="currentColor">
+<circle cx="153.6" cy="100" r="3.5" /><circle cx="155.6" cy="100" r="3.5" /><circle cx="167.6" cy="100" r="3.5" /><circle cx="169.3" cy="100" r="3.5" /><circle cx="192.2" cy="100" r="3.5" /><circle cx="198.4" cy="100" r="3.5" /><circle cx="228.4" cy="100" r="3.5" /><circle cx="234.2" cy="100" r="3.5" />
+</g>
+<text x="194" y="88" font-size="11" text-anchor="middle" font-weight="600">8 orders</text>
+<g font-size="10" fill-opacity="0.7" text-anchor="middle">
+<text x="20" y="124">00:00</text><text x="100" y="124">06:00</text><text x="180" y="124">12:00</text><text x="260" y="124">18:00</text><text x="340" y="124">24:00</text>
+</g>
+<text x="10" y="150" font-size="11">All eight orders fall after the BETWEEN stop, so a count with</text>
+<text x="10" y="166" font-size="11">BETWEEN loses them. The second test keeps all eight.</text>
+</svg>
+</figure>
+
+In the first picture, filters A and B differ by one pair of parentheses, and order 1023 is the row where they disagree;
+steps 3 and 4 explain why. The second picture belongs to step 7. A `WHERE` keeps a row only when its condition is true.
+The comparison operators, and the words that join them:
+
+| SQL | Reads as | In Excel |
+|---|---|---|
+| `=` and `<>` | equal, not equal | tick or clear a value in the filter list (E5) |
+| `<`, `<=`, `>`, `>=` | less, at most, greater, at least | the tests inside `IF` (E6) |
+| `a AND b` | both must hold | `AND(a, b)` (E6) |
+| `a OR b` | at least one holds | `OR(a, b)` (E6) |
+| `NOT (a)` | flips a condition | none in E5 or E6 |
+| `x IN (1, 2)` | equal to one of the values | tick several values in the filter list (E5) |
+| `x BETWEEN a AND b` | from `a` to `b`, both included | **Date Filters > Between** (E5) |
+| `text LIKE 'a%'` | matches a text pattern | none in E5 |
+
+## Worked example
+
+Question: **how many March 2026 orders at Old Town were paid by mobile or cash, and which lattes cost between \$4.00 and
+\$5.00?** Run the notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect.
+
+1. **Compare a number.**
+
+   ```sql
+   SELECT product_name, unit_price_usd
+   FROM products
+   WHERE unit_price_usd >= 4.50;
+   ```
+
+   Read it: *keep the products whose price is at least 4.50*. Expected: 8 rows, 2 columns. *Excel:* a filter on the
+   price column (E5). *Why:* a number has no quotes, and `>=` keeps 4.50 itself. `<>` means not equal.
+
+2. **Combine two conditions with AND.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1 AND payment_method = 'mobile';
+   ```
+
+   Expected: 1 row, 1 column: `217`. *Excel:* two filters on two columns. *Why:* `AND` keeps a row only when both
+   conditions are true. `COUNT(*)` is the row count from S1.
+
+3. **Add OR, the wrong way.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1 AND payment_method = 'mobile' OR payment_method = 'cash';
+   ```
+
+   Expected: 1 row, 1 column: `470`. That is too many. *Why:* SQL applies `AND` before `OR` (SQLite's documentation ranks `AND` higher than `OR` in its precedence table, and DuckDB
+   gave the result here), so the query reads *(Old Town and mobile) or (cash, in any store)*. It counts the cash orders of all three stores.
+
+4. **Put parentheses around the OR.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1 AND (payment_method = 'mobile' OR payment_method = 'cash');
+   ```
+
+   Expected: 1 row, 1 column: `308`. *Excel:* an `AND(...)` that contains an `OR(...)` (E6). *Why:* the parentheses make the `OR`
+   a single condition, and `AND` then needs it and the store. Whenever one `WHERE` has both `AND` and `OR`, write the
+   parentheses, even where they change nothing.
+
+5. **Shorten it with IN.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1 AND payment_method IN ('mobile', 'cash');
+   ```
+
+   Expected: 1 row, 1 column: `308`, the same as step 4. *Why:* `IN` tests one column against a list, as a chain of
+   `OR`s on that column would, and it needs no extra parentheses.
+
+6. **Add the date range.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1
+     AND payment_method IN ('mobile', 'cash')
+     AND ordered_at >= '2026-03-01'
+     AND ordered_at < '2026-04-01';
+   ```
+
+   Expected: 1 row, 1 column: `52`. That answers the first question: **52 orders**, of any status (the one canceled
+   order of the data is a Campus order, not Old Town's). *Why:* the range starts at the first day and stops before the next
+   month: `>=` includes midnight of March 1, `<` leaves out midnight of April 1. Dates are written year-month-day, as in
+   DuckDB's date documentation, and a bare date means midnight at its start.
+
+7. **See why not BETWEEN for dates.** First the half-open range for all stores, then the same month with `BETWEEN`:
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01';
+   ```
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE ordered_at BETWEEN '2026-03-01' AND '2026-03-31';
+   ```
+
+   Expected: 1 row, 1 column each: `258` and `250`. *Why:* `BETWEEN a AND b` means `a <=` the value `<= b`, and the end
+   `'2026-03-31'` means midnight at the start of March 31, so every order later that day is lost. The 8 missing orders are
+   the eight on March 31 in the second picture. The half-open range cannot lose a day.
+
+8. **Match text and a range.**
+
+   ```sql
+   SELECT product_name, unit_price_usd
+   FROM products
+   WHERE product_name LIKE '%Latte%' AND unit_price_usd BETWEEN 4.00 AND 5.00;
+   ```
+
+   Expected: 2 rows, 2 columns. *Excel:* two filters on two columns (E5). *Why:* in a `LIKE`
+   pattern `%` stands for any run of characters, including none, and `_` for exactly one character. `LIKE` has to match the
+   whole text, so `'%Latte%'` means *Latte anywhere*. `BETWEEN` includes both ends, so 4.00 and 5.00 count. Pumpkin Spice Latte has the word but not the
+   price (5.50). Matching is case-sensitive: `'%latte%'` finds nothing, and `ILIKE` ignores case. That answers the second question: **Latte and Chai Latte**.
+
+9. **Verify.** Split Old Town's March orders into the two groups. `NOT` flips the condition, and the parentheses make it flip the whole test:
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1
+     AND NOT (payment_method IN ('mobile', 'cash'))
+     AND ordered_at >= '2026-03-01'
+     AND ordered_at < '2026-04-01';
+   ```
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 1
+     AND ordered_at >= '2026-03-01'
+     AND ordered_at < '2026-04-01';
+   ```
+
+   Expected: 1 row, 1 column each: `81` and `133`. The 52 of step 6 and the 81 card orders make 133, all of Old Town's March
+   orders. A second method, and the groups reconcile.
+
+<details>
+<summary>Explain it in your own words: why do steps 3 and 4 return different counts when they use the same words?</summary>
+
+Without parentheses, `AND` is applied first, so step 3 means *(Old Town and mobile) or cash anywhere*. The parentheses in
+step 4 make the `OR` one condition that `AND` combines with the store, so only Old Town's mobile and cash orders count.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-where-filtering-1">
+
+**How many Campus orders in April 2026 were paid by card?** Campus is `store_id` 2. Use the Exercise 1 cell. Expected: 1
+row, 1 column.
+
+The first steps are done for you: the count, the table, and the first two conditions are
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 2 AND payment_method = 'card'
+```
+
+Now finish it: add the two lines that keep April, from its first day up to, but not including, May 1.
+
+<details>
+<summary>Hint</summary>
+
+Copy the two date lines of step 6 and change the months. Each line starts with `AND`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 2 AND payment_method = 'card'
+  AND ordered_at >= '...'
+  AND ordered_at < '...';
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 2 AND payment_method = 'card'
+  AND ordered_at >= '2026-04-01'
+  AND ordered_at < '2026-05-01';
+```
+
+The result is `64`. **Campus took 64 card orders in April 2026**, of any status; the one canceled order is from March.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-where-filtering-2">
+
+**List the coffee and tea items that cost less than \$4.00.** Work in the Exercise 2 cells. Show the name, the category
+and the price, cheapest first, with equal prices in alphabetical order (S2).
+
+Before you run anything, write one sentence in the first cell: what will the query return? Then write the query.
+
+Expected shape, to check your sentence against: 4 rows, 3 columns. If you get more rows, look at where your
+parentheses are.
+
+<details>
+<summary>Hint</summary>
+
+Two facts must both hold: the category is coffee or tea, and the price is under 4.00. Use `IN` for the first, or
+parentheses around the `OR`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Four rows with three columns each: coffee and tea items under \$4.00, the cheapest first."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT product_name, category, unit_price_usd
+FROM products
+WHERE category IN ('coffee', 'tea') AND unit_price_usd < 4.00
+ORDER BY unit_price_usd, product_name;
+```
+
+The result is Espresso 3.00, Green Tea 3.25, Americano 3.50 and Iced Lemon Tea 3.75. Without the parentheses (or `IN`),
+`category = 'coffee' OR category = 'tea' AND unit_price_usd < 4.00` returns 9 rows, because it keeps every coffee
+whatever its price, the same trap as step 3.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which words make a `WHERE` stricter and which make it wider, what must you add when you mix
+   them, and how do you write "all of March"?
+
+   <details>
+   <summary>Answer</summary>
+
+   `AND` makes it stricter, `OR` makes it wider. Put parentheses around every `OR` that appears with an `AND`. All of
+   March: `ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01'`, from the first day up to, but not including, the
+   next month.
+
+   </details>
+
+2. Read this query as a plain sentence and say its result shape: `SELECT COUNT(*) FROM orders WHERE payment_method IN ('card', 'cash') AND store_id <> 3;`
+
+   <details>
+   <summary>Answer</summary>
+
+   *Count the orders paid by card or cash in every store except Harbor.* One row, one column: `1019`, orders of any status.
+
+   </details>
+
+<Exercise id="sql-where-filtering-3">
+
+**Spot the flaw.** A colleague counts the orders of June 2026 and gets `344`. The query runs without an error:
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';
+```
+
+Expected: 1 row, 1 column. The data holds more June orders than that. Find the flaw and fix the query.
+
+<Solution>
+
+The end `'2026-06-30'` means midnight at the start of June 30, so every order placed during June 30 is missed. The fix is the
+half-open range, which stops before the next month starts:
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE ordered_at >= '2026-06-01' AND ordered_at < '2026-07-01';
+```
+
+Expected: 1 row, 1 column: `353`. The 9 orders that `BETWEEN` lost are the orders of June 30.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can filter with comparisons, combine conditions with `AND`, `OR` and `NOT` using parentheses, match
+lists, ranges and patterns, and write a date range that includes the first day and stops before the next.*
+Test: Exercise sql-where-filtering-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **parentheses around every OR, and a date range that starts on the first day and stops before
+the next.** The next lesson, *NULL: unknown is not zero*, shows what `WHERE` does with rows whose value is missing.

@@ -1,0 +1,442 @@
+---
+id: sql-null-handling
+title: 'NULL: unknown is not zero'
+description: 'Treat NULL as unknown: test with IS NULL, see why comparisons with NULL fail, and avoid the NOT IN trap.'
+stage: sql
+order: 40
+level: beginner
+duration: 20
+objectives:
+  - Test for missing values with IS NULL and IS NOT NULL
+  - Predict the result of a comparison that involves NULL
+  - Explain why NULL is neither zero nor an empty string
+  - Avoid the NOT IN trap with NULL in the list
+  - Replace NULL with a default using COALESCE
+prerequisites:
+  - sql-where-filtering
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-null-handling.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: NULL values'
+    url: https://duckdb.org/docs/stable/sql/data_types/nulls
+  - title: 'DuckDB documentation: Comparison operators'
+    url: https://duckdb.org/docs/stable/sql/expressions/comparison_operators
+  - title: 'DuckDB documentation: Logical operators'
+    url: https://duckdb.org/docs/stable/sql/expressions/logical_operators
+  - title: 'DuckDB documentation: Boolean type'
+    url: https://duckdb.org/docs/stable/sql/data_types/boolean
+  - title: 'DuckDB documentation: IN operator'
+    url: https://duckdb.org/docs/stable/sql/expressions/in
+  - title: 'DuckDB documentation: Utility functions (coalesce)'
+    url: https://duckdb.org/docs/stable/sql/functions/utility
+status: draft
+---
+
+This lesson builds on *Filtering rows with WHERE* (S3) and runs in the same Google Colab notebook setup. Some cells in a
+table are empty: a walk-in customer has no loyalty card, and most customers were not referred by anyone. SQL has a
+special value for that, **NULL**, and it breaks the filters you just learned in a way that gives no error. This lesson
+shows where, and how to ask for NULL on purpose.
+
+**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
+`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
+table. The notebook cells leave out the closing `;` that this page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has (if it is not installed, add `%pip install duckdb`), and that `.show()` prints the tables with the shapes this page gives. Compare the `Conversion Error` text in step 7 with Colab's version. DuckDB's IN page says `IN` with a list in square brackets ignores NULLs, unlike `IN` with parentheses; this lesson uses parentheses only, so decide whether the difference deserves a line. Time the lesson against its 20 minutes. When you have checked it, set `reviewed` to that day and
+`status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Filtering rows with WHERE* (S3) you combined conditions. Write a query that counts the orders of Campus (`store_id`
+   2) that were paid by card or cash.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE store_id = 2 AND payment_method IN ('card', 'cash');
+   ```
+
+   </details>
+
+2. In Excel or Google Sheets (*Numbers are not numbers until you check*, E4), the cell C7 inside `=AVERAGE(C2:C20)` is
+   empty. Does `AVERAGE` treat it as a 0?
+
+   <details>
+   <summary>Answer</summary>
+
+   No. An empty cell inside the range is skipped, so the average is taken over the cells that hold numbers. A real 0 is
+   counted; an empty cell is not.
+
+   </details>
+
+## The question
+
+The loyalty manager asks:
+
+> Which order came from a customer with no loyalty card? And how many orders did customers other than customer 7 place?
+
+An empty `customer_id` cell in a sheet would mean a walk-in. Three rows of the `orders` table:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1334 | 9 | 1 | 2026-02-13 16:33:00 | completed | cash |
+| 1335 | NULL | 1 | 2026-02-14 08:59:00 | completed | mobile |
+| 1336 | 70 | 2 | 2026-02-14 09:21:00 | completed | mobile |
+
+By the end you will have answered both questions, and the second one has a trap: the obvious query leaves out the walk-in.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="null-title null-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="null-title">Two filters on customers 1 to 8, where seven referred_by cells are NULL</title>
+<desc id="null-desc">Customers 1 to 8 with their referred_by value: customers 1, 2, 3, 4, 5, 7 and 8 have NULL, customer 6 has 3. The test referred_by = 3 is true for customer 6 and NULL for the other seven, so only customer 6 is kept. The test referred_by &lt;&gt; 3 is false for customer 6 and NULL for the other seven, so none of the eight is kept. Over all 150 customers, = 3 keeps 1, &lt;&gt; 3 keeps 29, and 120 customers with a NULL are in neither.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">NULL is in neither answer</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="80" y="54" width="90" height="110" /><rect x="80" y="186" width="90" height="44" />
+<rect x="170" y="164" width="90" height="22" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="32" width="70" height="22" /><rect x="80" y="32" width="90" height="22" /><rect x="170" y="32" width="90" height="22" /><rect x="260" y="32" width="90" height="22" />
+<rect x="10" y="54" width="70" height="22" /><rect x="80" y="54" width="90" height="22" /><rect x="170" y="54" width="90" height="22" /><rect x="260" y="54" width="90" height="22" />
+<rect x="10" y="76" width="70" height="22" /><rect x="80" y="76" width="90" height="22" /><rect x="170" y="76" width="90" height="22" /><rect x="260" y="76" width="90" height="22" />
+<rect x="10" y="98" width="70" height="22" /><rect x="80" y="98" width="90" height="22" /><rect x="170" y="98" width="90" height="22" /><rect x="260" y="98" width="90" height="22" />
+<rect x="10" y="120" width="70" height="22" /><rect x="80" y="120" width="90" height="22" /><rect x="170" y="120" width="90" height="22" /><rect x="260" y="120" width="90" height="22" />
+<rect x="10" y="142" width="70" height="22" /><rect x="80" y="142" width="90" height="22" /><rect x="170" y="142" width="90" height="22" /><rect x="260" y="142" width="90" height="22" />
+<rect x="10" y="164" width="70" height="22" /><rect x="80" y="164" width="90" height="22" /><rect x="170" y="164" width="90" height="22" /><rect x="260" y="164" width="90" height="22" />
+<rect x="10" y="186" width="70" height="22" /><rect x="80" y="186" width="90" height="22" /><rect x="170" y="186" width="90" height="22" /><rect x="260" y="186" width="90" height="22" />
+<rect x="10" y="208" width="70" height="22" /><rect x="80" y="208" width="90" height="22" /><rect x="170" y="208" width="90" height="22" /><rect x="260" y="208" width="90" height="22" />
+</g>
+<g font-size="10" font-weight="600">
+<text x="14" y="47">customer</text><text x="84" y="47">referred_by</text><text x="174" y="47">= 3</text><text x="264" y="47">&lt;&gt; 3</text>
+</g>
+<g>
+<text x="14" y="69">1</text><text x="84" y="69">NULL</text><text x="174" y="69" fill-opacity="0.7">NULL: dropped</text><text x="264" y="69" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="91">2</text><text x="84" y="91">NULL</text><text x="174" y="91" fill-opacity="0.7">NULL: dropped</text><text x="264" y="91" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="113">3</text><text x="84" y="113">NULL</text><text x="174" y="113" fill-opacity="0.7">NULL: dropped</text><text x="264" y="113" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="135">4</text><text x="84" y="135">NULL</text><text x="174" y="135" fill-opacity="0.7">NULL: dropped</text><text x="264" y="135" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="157">5</text><text x="84" y="157">NULL</text><text x="174" y="157" fill-opacity="0.7">NULL: dropped</text><text x="264" y="157" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="179" font-weight="600">6</text><text x="84" y="179" font-weight="600">3</text><text x="174" y="179" font-weight="600">true: kept</text><text x="264" y="179" fill-opacity="0.7">false: dropped</text>
+<text x="14" y="201">7</text><text x="84" y="201">NULL</text><text x="174" y="201" fill-opacity="0.7">NULL: dropped</text><text x="264" y="201" fill-opacity="0.7">NULL: dropped</text>
+<text x="14" y="223">8</text><text x="84" y="223">NULL</text><text x="174" y="223" fill-opacity="0.7">NULL: dropped</text><text x="264" y="223" fill-opacity="0.7">NULL: dropped</text>
+</g>
+<text x="10" y="248" font-size="11">All 150 customers: = 3 keeps 1, &lt;&gt; 3 keeps 29,</text>
+<text x="10" y="264" font-size="11">and 120 NULL customers are in neither.</text>
+</svg>
+<svg viewBox="0 0 360 296" width="360" role="img" aria-labelledby="tt-title tt-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="tt-title">AND and OR with three values: true, false and NULL</title>
+<desc id="tt-desc">Two three-by-three grids with a as the row and b as the column, each taking true, false or NULL. a AND b: true with true is true, true with false is false, true with NULL is NULL; false with anything is false; NULL with true is NULL, NULL with false is false, NULL with NULL is NULL. a OR b: true with anything is true; false with true is true, false with false is false, false with NULL is NULL; NULL with true is true, NULL with false is NULL, NULL with NULL is NULL. Only the results that are true, shaded, pass a WHERE.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Three values, one that passes</text>
+<g font-size="11" font-weight="600">
+<text x="10" y="44">a AND b</text><text x="10" y="164">a OR b</text>
+</g>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="130" y="72" width="60" height="22" />
+<rect x="130" y="192" width="60" height="22" /><rect x="190" y="192" width="60" height="22" /><rect x="250" y="192" width="60" height="22" /><rect x="130" y="214" width="60" height="22" /><rect x="130" y="236" width="60" height="22" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="70" y="50" width="60" height="22" /><rect x="130" y="50" width="60" height="22" /><rect x="190" y="50" width="60" height="22" /><rect x="250" y="50" width="60" height="22" />
+<rect x="70" y="72" width="60" height="22" /><rect x="130" y="72" width="60" height="22" /><rect x="190" y="72" width="60" height="22" /><rect x="250" y="72" width="60" height="22" />
+<rect x="70" y="94" width="60" height="22" /><rect x="130" y="94" width="60" height="22" /><rect x="190" y="94" width="60" height="22" /><rect x="250" y="94" width="60" height="22" />
+<rect x="70" y="116" width="60" height="22" /><rect x="130" y="116" width="60" height="22" /><rect x="190" y="116" width="60" height="22" /><rect x="250" y="116" width="60" height="22" />
+<rect x="70" y="170" width="60" height="22" /><rect x="130" y="170" width="60" height="22" /><rect x="190" y="170" width="60" height="22" /><rect x="250" y="170" width="60" height="22" />
+<rect x="70" y="192" width="60" height="22" /><rect x="130" y="192" width="60" height="22" /><rect x="190" y="192" width="60" height="22" /><rect x="250" y="192" width="60" height="22" />
+<rect x="70" y="214" width="60" height="22" /><rect x="130" y="214" width="60" height="22" /><rect x="190" y="214" width="60" height="22" /><rect x="250" y="214" width="60" height="22" />
+<rect x="70" y="236" width="60" height="22" /><rect x="130" y="236" width="60" height="22" /><rect x="190" y="236" width="60" height="22" /><rect x="250" y="236" width="60" height="22" />
+</g>
+<g font-size="10" font-weight="600" text-anchor="middle">
+<text x="100" y="65">a \ b</text><text x="160" y="65">true</text><text x="220" y="65">false</text><text x="280" y="65">NULL</text>
+<text x="100" y="185">a \ b</text><text x="160" y="185">true</text><text x="220" y="185">false</text><text x="280" y="185">NULL</text>
+</g>
+<g font-size="11" text-anchor="middle">
+<text x="100" y="87" font-weight="600">true</text><text x="160" y="87">true</text><text x="220" y="87">false</text><text x="280" y="87">NULL</text>
+<text x="100" y="109" font-weight="600">false</text><text x="160" y="109">false</text><text x="220" y="109">false</text><text x="280" y="109">false</text>
+<text x="100" y="131" font-weight="600">NULL</text><text x="160" y="131">NULL</text><text x="220" y="131">false</text><text x="280" y="131">NULL</text>
+<text x="100" y="207" font-weight="600">true</text><text x="160" y="207">true</text><text x="220" y="207">true</text><text x="280" y="207">true</text>
+<text x="100" y="229" font-weight="600">false</text><text x="160" y="229">true</text><text x="220" y="229">false</text><text x="280" y="229">NULL</text>
+<text x="100" y="251" font-weight="600">NULL</text><text x="160" y="251">true</text><text x="220" y="251">NULL</text><text x="280" y="251">NULL</text>
+</g>
+<text x="10" y="278" font-size="11">Shaded: the only result that passes a WHERE.</text>
+</svg>
+</figure>
+
+**NULL** means *unknown*: the value is missing, not zero and not an empty text. It is not a number you can compare.
+Any comparison with NULL, including `NULL = NULL`, gives NULL, and a `WHERE` keeps a row only when its condition is
+true, so a NULL result drops the row (first picture). `AND` and `OR` can sometimes still give an answer, as in the second
+picture: `NULL AND false` is false, and `NULL OR true` is true. The tools:
+
+| SQL | Reads as | In Excel |
+|---|---|---|
+| `x IS NULL` | the value is missing | an empty cell |
+| `x IS NOT NULL` | the value is there | a cell that holds something |
+| `COALESCE(x, d)` | `x`, or `d` when `x` is missing | an `IF` that tests for an empty cell (E6) |
+
+## Worked example
+
+Question: **which order has no customer, and how many orders did customers other than customer 7 place?** Run the
+notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect.
+
+1. **Find the missing value.**
+
+   ```sql
+   SELECT * FROM orders WHERE customer_id IS NULL;
+   ```
+
+   Read it: *show the orders whose customer is missing*. Expected: 1 row, 6 columns: order 1335, the walk-in. *Excel:*
+   look for the empty cell in the customer column. *Why:* `IS NULL` is the test for a missing value. That answers the
+   first question.
+
+2. **Try `= NULL`.**
+
+   ```sql
+   SELECT * FROM orders WHERE customer_id = NULL;
+   ```
+
+   Expected: 0 rows, 6 columns, and no error. *Why:* `customer_id = NULL` is NULL for every row, so `WHERE` drops them all.
+   DuckDB's documentation says any comparison with NULL returns NULL, including `NULL = NULL`.
+
+3. **Meet the first trap.**
+
+   ```sql
+   SELECT COUNT(*) AS orders FROM orders WHERE customer_id <> 7;
+   ```
+
+   ```sql
+   SELECT COUNT(*) AS orders FROM orders WHERE customer_id = 7;
+   ```
+
+   Expected: 1 row, 1 column each: `1786` and `13`. *Why:* 1786 + 13 is 1,799, not 1,800. The walk-in order has no
+   customer, so `customer_id <> 7` is NULL for it, not true, and the row is dropped.
+
+4. **Ask for the unknown on purpose.**
+
+   ```sql
+   SELECT COUNT(*) AS orders
+   FROM orders
+   WHERE customer_id <> 7 OR customer_id IS NULL;
+   ```
+
+   Expected: 1 row, 1 column: `1787`. *Why:* the walk-in is a customer other than customer 7, so say so: `OR ... IS NULL`
+   brings its row back. That answers the second question: **1,787 orders**, counting the walk-in and the one canceled order.
+
+5. **See that NULL is not 0 and not empty text.**
+
+   ```sql
+   SELECT 0 IS NULL AS zero_is_null, '' IS NULL AS empty_text_is_null, NULL IS NULL AS null_is_null;
+   ```
+
+   Expected: 1 row, 3 columns: false, false, true. *Why:* 0 is a number and `''` is a text with no characters; both are
+   values. NULL is no value at all. This is the E4 difference between a real 0 and an empty cell. DuckDB's documentation says most aggregate functions ignore NULL, which
+   the lesson *Counting and summing: aggregate functions* shows.
+
+6. **Meet the second trap: NOT IN.** You paste a list of customers who already got a thank-you card from a sheet column with an
+   empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it:
+
+   ```sql
+   SELECT customer_id
+   FROM customers
+   WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7);
+   ```
+
+   ```sql
+   SELECT customer_id
+   FROM customers
+   WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7, NULL);
+   ```
+
+   Expected: 5 rows, 1 column, and then 0 rows, 1 column, with no error. *Why:* for customer 2, the test asks whether 2 equals 1, 3, 7 or
+   NULL. The first three answers are false, the last is NULL, so the answer is NULL, and `NOT` of NULL is NULL. DuckDB's `IN` page says
+   a value that is not in the list gives NULL when the list holds a NULL. So `NOT IN` never keeps a row once a NULL sits in the list.
+   Keep NULLs out of the list; later lessons show safer ways to compare two tables.
+
+7. **Replace NULL with a default.**
+
+   ```sql
+   SELECT customer_id, referred_by, COALESCE(referred_by, 0) AS referrer_id
+   FROM customers
+   WHERE customer_id <= 8
+   ORDER BY customer_id;
+   ```
+
+   Expected: 8 rows, 3 columns. *Why:* `COALESCE` returns the first value that is not NULL, so a missing referrer shows as 0.
+   That is safe here only because no customer has the id 0; keep the original column in the result too, so you can still tell *nobody* from a
+   real referrer. The default must have the column's type: `COALESCE(referred_by, 'nobody')` fails with
+   `Conversion Error: Could not convert string 'nobody' to INT32`, and the lesson *Computed columns and data types* shows how to change a type.
+
+8. **Verify.**
+
+   ```sql
+   SELECT COUNT(*) AS orders FROM orders WHERE customer_id IS NOT NULL;
+   ```
+
+   Expected: 1 row, 1 column: `1799`. The one walk-in of step 1 and these 1,799 make the 1,800 orders you counted in S1.
+   The groups reconcile.
+
+<details>
+<summary>Explain it in your own words: why does the filter "customer is not 7" not return the walk-in order?</summary>
+
+The walk-in has no customer, so asking whether it is different from 7 has no answer: the result is NULL, and `WHERE` keeps
+only rows whose condition is true. To keep the row, ask for it with `OR customer_id IS NULL`.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-null-handling-1">
+
+**How many of Old Town's orders came from customers with a loyalty card?** Old Town is `store_id` 1. Use the Exercise 1
+cell. Expected: 1 row, 1 column.
+
+The first steps are done for you: the count, the table and the store are
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1
+```
+
+Now finish it: add the line that keeps only the orders whose customer is not missing.
+
+<details>
+<summary>Hint</summary>
+
+Look at step 8: which test keeps the rows that have a value? Join it to the store test with `AND`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND customer_id IS NOT NULL;
+```
+
+The result is `728`. Old Town took 729 orders, and one of them is the walk-in, so **728 orders came from loyalty customers**.
+Check: 728 plus 1 is the 729 you get with `WHERE store_id = 1` alone.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-null-handling-2">
+
+**How many customers were referred by someone other than customer 24?** Count the customers nobody referred too: they
+were not referred by customer 24 either. Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: what will the query return, and which customers do you
+expect it to include? Then write the query.
+
+Expected shape, to check your sentence against: 1 row, 1 column. The `customers` table has 150 rows, and about one customer in five was referred by another
+customer; the rest have a NULL in `referred_by`.
+
+<details>
+<summary>Hint</summary>
+
+Customers with no referrer have a NULL, so `<>` alone drops them, as in step 3. Add what step 4 added.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One number: the customers whose `referred_by` is not 24, plus the customers whose `referred_by` is missing."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS customers
+FROM customers
+WHERE referred_by <> 24 OR referred_by IS NULL;
+```
+
+The result is `148`. Customer 24 referred 2 customers, so 150 minus 2 is 148. With only `referred_by <> 24` you would get `28`: the 120 customers nobody referred
+disappear, because their `referred_by` is NULL.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `NULL = NULL` return, how do you test for a missing value, and which rows does a
+   `WHERE` keep?
+
+   <details>
+   <summary>Answer</summary>
+
+   `NULL = NULL` returns NULL, not true. Test with `IS NULL` or `IS NOT NULL`. A `WHERE` keeps only the rows whose
+   condition is true, so rows where it is false or NULL are dropped.
+
+   </details>
+
+2. Read this query as a plain sentence and say its result shape: `SELECT COUNT(*) FROM customers WHERE referred_by IS NOT NULL;`
+
+   <details>
+   <summary>Answer</summary>
+
+   *Count the customers whose referrer is known.* One row, one column: `30`.
+
+   </details>
+
+<Exercise id="sql-null-handling-3">
+
+**Spot the flaw.** A colleague wants to know how many customers were not referred by anyone, and thinks of a missing
+referrer as a 0. The query runs without an error:
+
+```sql
+SELECT COUNT(*) AS not_referred
+FROM customers
+WHERE referred_by = 0;
+```
+
+Expected: 1 row, 1 column. The result suggests that every customer was referred. Find the flaw and fix the query.
+
+<Solution>
+
+No customer has `referred_by` equal to 0, because a missing referrer is NULL, not 0, so the query returns `0`. Test for the missing value instead:
+
+```sql
+SELECT COUNT(*) AS not_referred
+FROM customers
+WHERE referred_by IS NULL;
+```
+
+Expected: 1 row, 1 column: `120`. With the 30 referred customers they make the 150 in the table. Writing `referred_by = ''`
+does not help: it stops with a `Conversion Error`, because `''` is text and the column holds numbers.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can test for a missing value with `IS NULL`, predict that a comparison with NULL drops the row, keep a
+NULL out of a `NOT IN` list, and replace a NULL with a default using `COALESCE`.*
+Test: Exercise sql-null-handling-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **NULL means unknown: test it with `IS NULL`, never with `=` or `<>`, and keep it out of a
+`NOT IN` list.** The next lesson, *Computed columns and data types*, calculates new columns and shows why a number must have the
+right type.
