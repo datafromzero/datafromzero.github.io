@@ -123,6 +123,10 @@ All notable changes to datafromzero are recorded here. The format follows
   - Skipped: ScrollSmoother (it moves scrolling from the compositor to the main thread and breaks the CSS sticky stages)
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
+### Fixed
+- Lesson tables on phones: a long formula in a cell now wraps, so the other columns no longer shrink to one letter
+  per line (Excel E4, E5, E7, E13, E21).
+
 ### Changed
 - About page (owner request): the story no longer names a course platform ("a few SQL and Python courses on bootcamp
   sites").

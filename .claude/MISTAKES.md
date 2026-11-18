@@ -84,6 +84,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — The consent banner sits inside Starlight's `<main>`, so search indexed its text on every page. → **Anything placed in Starlight's `<main>` (Banner, PageTitle, Footer overrides) that is site chrome
   carries `data-pagefind-ignore`; after the build, read one file in `dist/pagefind/fragment/`.**
 
+- 2026-11-18 — Long formulas in a table cell did not wrap, so on phones the other columns shrank to one letter per line
+  (E4, E5, E7, E13, E21; reported by the owner). Fixed in `tokens.css`. → **Load every page with a table at 390 px
+  before publishing; nothing in a cell may be narrower than a word.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
