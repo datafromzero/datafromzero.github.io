@@ -37,8 +37,10 @@ sources:
     url: https://duckdb.org/why_duckdb
   - title: 'PostgreSQL documentation: Introduction to indexes'
     url: https://www.postgresql.org/docs/current/indexes-intro.html
-  - title: 'PostgreSQL documentation: Index types'
-    url: https://www.postgresql.org/docs/current/indexes-types.html
+  - title: 'DuckDB documentation: Storage format'
+    url: https://duckdb.org/docs/stable/internals/storage
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
 status: draft
 ---
 
@@ -56,7 +58,7 @@ rows they say nothing.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that the plans of steps 2 to 6 read the same in Colab, in particular that plain `EXPLAIN` still prints `Sequential Scan` after the index exists (step 4) while `EXPLAIN ANALYZE` prints `Index Scan`; a newer DuckDB may differ. Time the lesson against its 25 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that the plans of steps 2 to 6 read the same in Colab, in particular that plain `EXPLAIN` still prints `Sequential Scan` after the index exists (step 4) while `EXPLAIN ANALYZE` prints `Index Scan`; a newer DuckDB may differ. Time the lesson against its 25 minutes. How it works: none of the DuckDB pages opened states that a min-max index lets the engine skip a row group, so the text only says that DuckDB creates min-max indexes; add the page if you want that claim back. The PostgreSQL B-tree comparison was cut for length. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -223,29 +225,39 @@ index, and proved the answer never changed.
 </svg>
 </figure>
 
-An **index** works like the index at the back of a book: a short, alphabetical list of terms, each with page numbers,
-so that you do not read the whole book to find one (the PostgreSQL documentation uses the same comparison). A database
-index is a sorted copy of one column's values, each with the position of its rows. That picture is a mental model:
-DuckDB's index is an ART (an adaptive radix tree), and the PostgreSQL documentation says its default is a B-tree. The price is upkeep: after an index
-exists, the database must keep it in step with the table, which adds work to every insert and update.
+## How it works
 
-A **query plan** is the list of steps the engine will take. `EXPLAIN` in front of a query prints the plan without
-running it. `EXPLAIN ANALYZE` runs the query and prints what happened, with the real row counts. A **full scan**
-(`Sequential Scan`) reads every row and tests the filter on each one.
+An **index** is a shortcut to rows: a sorted structure, kept apart from the table, that holds one column's values and,
+beside each, the position of its rows. In the picture above, the list on the right is an index on `customer_id`, like the
+alphabetic index at the back of a book. The picture is a model: DuckDB's real structure is an ART, an adaptive radix tree.
 
-DuckDB has two kinds of index, according to its documentation:
+Before it runs a query, the engine writes a **query plan**: the steps it will take, in order. `EXPLAIN` prints the plan
+without running the query; `EXPLAIN ANALYZE` runs it and prints the plan with measured numbers. For a table with a filter,
+the engine chooses between two scans:
 
-- **Min-max indexes** (zonemaps) are created for you on columns of the general-purpose types. DuckDB stores a table in row groups
-  and can skip a group whose smallest and largest value cannot match the filter. You never write them. The cafe tables
-  are small enough to be one row group, so a scan shows `1 / 1`.
-- **ART indexes** are the kind `CREATE INDEX` builds. DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE`
-  constraint. The documentation says they are mainly for enforcing keys and for speeding up point lookups and very highly
-  selective queries, under 0.1% of the rows. That figure is guidance: the engine's settings also allow an index scan of up
-  to 2,048 rows, which covers small tables. Its performance guide adds that an ART index does not affect joins,
-  aggregations or sorting, that index scans serve equality and `IN` filters, and that only single-column indexes without
-  expressions qualify.
+1. **Full scan** (`Sequential Scan`): read the rows one after another and test the filter on each. DuckDB stores a table
+   in **row groups**, horizontal slices of its rows; each cafe table fits in one, so a full scan reports `1 / 1`. In the
+   picture above, customer 15 needs all six rows read.
+2. **Index scan**: look the value up in the sorted structure, take the row positions beside it, and read only those rows.
+   In the picture above: one entry, then rows 1 and 6.
 
-So in DuckDB the index is a niche tool. Reading plans is not: you will meet plans in every database.
+The engine, not you, makes the choice. The rules:
+
+- DuckDB has two kinds of index. **Min-max indexes** (zonemaps) are created for you on columns of the general-purpose
+  types. **ART indexes** come from `CREATE INDEX`, and DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE` column.
+- ART indexes exist mainly to enforce keys and to speed up point lookups and very highly selective queries, under 0.1%
+  of the rows.
+- DuckDB tries an index scan for equality (`=`) and `IN` conditions, and only for an index on one column with no
+  expression inside it.
+- An ART index does not change how fast joins, aggregations or sorts run.
+- An index has a price: every insert, update and delete must change it too, and it can take a significant share of memory.
+
+**Excel.** `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) has a binary-search mode that relies on the lookup list
+being sorted, and returns invalid results if it is not. Sorted order saves reading, and keeping the order is the upkeep:
+the bargain an index makes.
+
+**A common misconception: "an index makes every query faster, so index every column."** An ART index serves highly
+selective lookups, leaves joins, aggregations and sorts as they were, and costs upkeep and memory all the time.
 
 ## Worked example
 
@@ -311,7 +323,7 @@ step. Each step gives the shape of the result to expect. Ignore the times in a p
    ```
 
    Expected: a `Table Scan` box, and above it a `Projection` box. *Why:* the plan scans every row and returns 180
-   rows, so DuckDB did not use the composite index: its documentation says index scans use single-column indexes only.
+   rows, so DuckDB did not use the composite index: only an index on one column qualifies (How it works).
    An index on `store_id` alone is used for `store_id = 3`. The composite index was built and kept up to date for nothing.
 
 7. **Verify: the same answer with and without the index.**
@@ -332,7 +344,7 @@ step. Each step gives the shape of the result to expect. Ignore the times in a p
 <summary>Explain it in your own words: what is the price of an index?</summary>
 
 The database keeps the sorted list in step with the table, so inserts and updates do more work, and the index takes
-memory. The DuckDB documentation says indexes slow down loading and updates in return for speeding up certain queries.
+memory.
 
 </details>
 
@@ -476,8 +488,7 @@ Start from: "Plain EXPLAIN only ... the query, so it cannot show what the engine
 Plain `EXPLAIN` prints the plan without running the query. In DuckDB 2.0.0 it prints `Sequential Scan` for this query
 whether or not the index exists, so the line proves nothing about the index. `EXPLAIN ANALYZE` runs the query and prints
 `Type: Index Scan`, with `Row Groups Scanned: 0 / 1`. The colleague should have run `EXPLAIN ANALYZE`. Whether to keep an
-index is a separate decision: the DuckDB performance guide advises explicit indexes only for highly selective queries, and
-only when there is memory to spare.
+index is a separate decision, weighed against its price in How it works.
 
 </Solution>
 

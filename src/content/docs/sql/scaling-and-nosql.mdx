@@ -5,7 +5,7 @@ description: 'What changes when data outgrows one machine, and when teams pick a
 stage: sql
 order: 350
 level: intermediate
-duration: 15
+duration: 20
 objectives:
   - Tell a single-machine database from a distributed one
   - Explain partitioning in one sentence
@@ -46,7 +46,7 @@ small folder next to it.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that step 5 can create its folder and that step 6 reads the same there. Time the lesson against its 15 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that step 5 can create its folder and that step 6 reads the same there. Time the lesson against its 20 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -181,21 +181,46 @@ when each fits.
 </svg>
 </figure>
 
-A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it
-(its documentation says so). A **distributed** database spreads data over several machines, because a single system that
-you make bigger hits a hardware limit (Microsoft's partitioning guidance). Copies of the data, called replicas, keep it
-available, but they take time to synchronize, so for a while two copies can differ: that is eventual consistency.
+## How it works
 
-**Partitioning** splits a table's rows by a key, such as the store, into pieces that can be stored, read and managed on
-their own. Pieces on separate servers are called shards, and a bad key makes a hot partition with far more work than the rest.
+Data can outgrow a database in two ways: there can be more of it than one machine copes with, or it can have a shape other
+than tables. **Partitioning** answers the first. **NoSQL** stores, an umbrella name for databases that relax some
+relational behavior, answer the second.
 
-**NoSQL** stores relax some relational rules for flexibility or scale, say the Microsoft Learn data-model pages:
+A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it. A
+**distributed** database spreads data over several machines, because a single system that you make bigger eventually hits
+a hardware limit. **Partitioning** splits a table's rows by a **partition key** into pieces with the same columns, each
+stored, read and managed on its own. Pieces on separate servers are called **shards**. In the picture above, the orders
+are split by `store_id`:
+
+1. Pick the key: a column such as `store_id`.
+2. Each row goes to the piece for its key value. DuckDB's `PARTITION_BY` writes one folder per value, named like
+   `store_id=3`, with the rows inside.
+3. A query that filters on the key opens only the folders with that value and never reads the rest. A query with no
+   filter on the key has no folder to skip.
+
+The rules:
+
+- The key decides which piece holds a row, so it decides how the work spreads. A piece that gets far more work than the
+  rest is a **hot partition**.
+- A **replica** is a copy of a piece kept on another server. Copies take time to synchronize, so for a while two of them
+  can differ: this is **eventual consistency**.
+- NoSQL stores relax rules such as a fixed schema and the reach of a transaction (a group of changes that succeed or
+  fail together). Their usual atomic unit is one document or one key.
 
 | Shape | Looks like | Good at | Gives up |
 |---|---|---|---|
 | Structured (relational) | tables, keys, joins | rules, joins, changes across many rows at once | scaling out needs sharding |
-| Document | JSON objects whose fields can differ | reading or saving one whole object | joins; a change usually covers one document |
-| Key-value | a key and an opaque value | very fast lookup by key | any question that is not "the value for this key" |
+| Document | JSON objects whose fields can differ | reading or saving one whole object | easy joins between documents |
+| Key-value | a key and a value the store does not look inside | very fast lookup by key | any question that is not "the value for this key" |
+
+**Earlier lesson.** Reading order 1001 as rows took joins across four tables (*INNER JOIN: pairing rows on a key*, S19). A
+document keeps the lines inside the order, so reading one order needs no join: the Microsoft Learn data-model page calls document and key-value
+stores denormalized, where relational stores use normalized tables.
+
+**A common misconception: "NoSQL means a database with no SQL."** NoSQL names stores that relax relational rules, not
+stores that cannot be queried: Azure Cosmos DB for NoSQL, for one, supports SQL-like querying. Microsoft's guide adds that
+most production systems use several storage models, not one replacing the other.
 
 ## Worked example
 
@@ -242,8 +267,7 @@ then one cell per step. Each step gives the shape of the result to expect.
    SELECT doc FROM order_docs WHERE doc_key = 'order:1001';
    ```
 
-   Expected: 1 row, 1 column. *Why:* the key is all a key-value store needs. A question about the contents, such as every
-   Old Town order, means looking inside every document: DuckDB can as a SQL engine, a store that works only by key could not.
+   Expected: 1 row, 1 column. *Why:* the key is all a key-value store needs.
 
 5. **Partition the orders by store.**
 
@@ -268,8 +292,8 @@ then one cell per step. Each step gives the shape of the result to expect.
    ```
 
    Expected: the first returns 3 rows, 2 columns. The plan (printed with `print(...)`) has a `Read Parquet` box with
-   `File Filters: store_id = 3` and a `Scanning Files` line whose first number is smaller than its second. *Why:* a filter on
-   the partition key lets DuckDB skip the folders that cannot match.
+   `File Filters: store_id = 3` and a `Scanning Files` line whose first number is smaller than its second. *Why:* step 3 of
+   How it works: the folders with other store values are never opened.
 
 7. **Verify.**
 
