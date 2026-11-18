@@ -122,6 +122,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — "greyed" in a lesson. → **American English; grep for -our, -ise, grey, cancelled.**
 - 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.**
 
+- 2026-11-18 — The SQL model lesson draft had 3,372 body words for a 20-minute lesson (about twice the Excel model).
+  → **Count body words before reporting; a 20-minute lesson is at most about 2,200 words including exercises, and the
+  report gives the count.**
+
 ## Agents and reviews
 
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
