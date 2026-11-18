@@ -16,7 +16,6 @@ prerequisites:
   - sql-where-filtering
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-null-handling.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: NULL values'
@@ -36,26 +35,33 @@ sources:
 status: draft
 ---
 
-This lesson builds on *Filtering rows with WHERE* (S3) and runs in the same Google Colab notebook setup. Some cells in a
-table are empty: a walk-in customer has no loyalty card, and most customers were not referred by anyone. SQL has a
-special value for that, **NULL**, and it breaks the filters you just learned in a way that gives no error. This lesson
-shows where, and how to ask for NULL on purpose.
+This lesson builds on *Filtering rows with WHERE* (S3). Some cells in a table are empty: a walk-in customer has no loyalty
+card, and most customers were not referred by anyone. Press **Run** under any query on this page.
 
-**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
-`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
-table. The notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. Compare the `Conversion Error` text in step 7 with Colab's version. DuckDB's IN page says `IN` with a list in square brackets ignores NULLs, unlike `IN` with parentheses; this lesson uses parentheses only, so decide whether the difference deserves a line. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to that day and
+TODO(owner): run every block on this page and compare each result with its Expected line. DuckDB's IN page says `IN` with a list in square brackets ignores NULLs, unlike `IN` with parentheses; this lesson uses parentheses only, so decide whether the difference deserves a line. In unit 5, check the error text of `COALESCE(referred_by, 'nobody')`; on this page the line has no `Conversion Error` label. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to that day and
 `status: published`.
+
+## The question
+
+The loyalty manager asks:
+
+> Which order came from a customer with no loyalty card? And how many orders did customers other than customer 7 place?
+
+An empty `customer_id` cell in a sheet would mean a walk-in. Three rows of the `orders` table:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1334 | 9 | 1 | 2026-02-13 16:33:00 | completed | cash |
+| 1335 | NULL | 1 | 2026-02-14 08:59:00 | completed | mobile |
+| 1336 | 70 | 2 | 2026-02-14 09:21:00 | completed | mobile |
+
+The second question has a trap.
 
 ## Warm-up
 
 Answer from memory before you open anything. Then click to check.
 
-1. In *Filtering rows with WHERE* (S3) you combined conditions. Write a query that counts the orders of Campus (`store_id`
+1. In *Filtering rows with WHERE* (S3) you combined tests. Write a query that counts the orders of Campus (`store_id`
    2) that were paid by card or cash.
 
    <details>
@@ -80,23 +86,51 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The loyalty manager asks:
+A cell with no value is stored as **NULL**, SQL's mark for "unknown", and any test that touches an unknown value comes
+out unknown too.
 
-> Which order came from a customer with no loyalty card? And how many orders did customers other than customer 7 place?
+{/* CONCEPT: concept-null */}
 
-An empty `customer_id` cell in a sheet would mean a walk-in. Three rows of the `orders` table:
+## Learn by doing
 
-| order_id | customer_id | store_id | ordered_at | status | payment_method |
-|---:|---:|---:|---|---|---|
-| 1334 | 9 | 1 | 2026-02-13 16:33:00 | completed | cash |
-| 1335 | NULL | 1 | 2026-02-14 08:59:00 | completed | mobile |
-| 1336 | 70 | 2 | 2026-02-14 09:21:00 | completed | mobile |
+Five small steps. Press Run under each query. Each one works on its own, so you can come back to any step.
 
-By the end you will have answered both questions, and the second one has a trap: the obvious query leaves out the walk-in.
+### 1. Find the missing value
 
-## The picture
+`IS NULL` is the test for a missing value, and `IS NOT NULL` is its opposite. Both answer true or false, never NULL (the
+comparison operators page). Any other comparison with NULL returns NULL, even `NULL = NULL` (DuckDB's NULL values page).
+
+**Try it**:
+
+<RunSQL query={`SELECT * FROM orders WHERE customer_id IS NULL;`} />
+
+Read it: *show the orders whose customer is missing*. Expected: 1 row, 6 columns: order 1335, the walk-in. *Excel:* look
+for the empty cell in the customer column. That answers the first question.
+
+**Try it.** Now the test a spreadsheet habit suggests:
+
+<RunSQL query={`SELECT * FROM orders WHERE customer_id = NULL;`} />
+
+Expected: 0 rows, 6 columns, and no error.
+
+*Why:* `customer_id = NULL` is NULL for every row, so `WHERE` drops them all (S3).
+
+### 2. NULL inside a WHERE
+
+A test that gives NULL drops the row just as false does (S3), so a filter on one value can lose the rows that have no
+value at all. `AND`, `OR` and `NOT` work with three answers: `NULL AND false` is false, `NULL OR true` is true, but
+`NOT NULL` is NULL (the logical operators page). To keep the unknown rows on purpose, ask for them with `IS NULL`.
+
+**Try it.** Before you run the two counts: will they add up to 1,800?
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders WHERE customer_id <> 7;`} />
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders WHERE customer_id = 7;`} />
+
+Expected: 1 row, 1 column each: `1786` and `13`. They make 1,799, one short. The first picture shows the same effect on
+customers 1 to 8: neither `= 3` nor `<> 3` keeps a NULL.
 
 <figure>
 <svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="null-title null-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -134,6 +168,19 @@ By the end you will have answered both questions, and the second one has a trap:
 <text x="10" y="248" font-size="11">All 150 customers: = 3 keeps 1, &lt;&gt; 3 keeps 29,</text>
 <text x="10" y="264" font-size="11">and 120 NULL customers are in neither.</text>
 </svg>
+</figure>
+
+**Try it.** Ask for the unknown on purpose:
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE customer_id <> 7 OR customer_id IS NULL;`} />
+
+Expected: 1 row, 1 column: `1787`. *Why:* the walk-in is a customer other than customer 7, so say so. That answers the
+second question: **1,787 orders**, counting the walk-in and the one canceled order. The second picture lists what `AND`
+and `OR` give for every pair of the three answers.
+
+<figure>
 <svg viewBox="0 0 360 296" width="360" role="img" aria-labelledby="tt-title tt-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="tt-title">AND and OR with three values: true, false and NULL</title>
 <desc id="tt-desc">Two three-by-three grids with a as the row and b as the column, each taking true, false or NULL. a AND b: true with true is true, true with false is false, true with NULL is NULL; false with anything is false; NULL with true is NULL, NULL with false is false, NULL with NULL is NULL. a OR b: true with anything is true; false with true is true, false with false is false, false with NULL is NULL; NULL with true is true, NULL with false is NULL, NULL with NULL is NULL. Only the results that are true, shaded, pass a WHERE.</desc>
@@ -171,175 +218,115 @@ By the end you will have answered both questions, and the second one has a trap:
 </svg>
 </figure>
 
-## How it works
-
-**NULL** is SQL's marker for a value that is unknown or missing. SQL cannot say whether a test on an unknown value is
-true or false, so it gives a third answer, NULL, and a `WHERE` keeps only one of the three. For each row, the engine
-does this:
-
-1. It reads the row's values. A missing one is NULL.
-2. It works out each comparison. If either side is NULL, the answer is NULL.
-3. It combines the answers with `AND`, `OR` and `NOT`, which work with all three values. The second picture above lists
-   what every pair gives.
-4. `WHERE` keeps the row only if the final answer is true. False and NULL both drop it, and there is no error.
-
-In the first picture above, seven of the eight customers have a NULL, so both tests give NULL for them and drop them.
-The rules:
-
-- Any comparison with NULL returns NULL, including `NULL = NULL` (DuckDB's NULL values page).
-- `AND` and `OR` do not always return NULL: `NULL AND false` is false and `NULL OR true` is true, but `NOT NULL` is NULL
-  (the logical operators page).
-- `IS NULL` and `IS NOT NULL` are the tests for a missing value, and they answer true or false, never NULL (the
-  comparison operators page).
-- `COALESCE(x, d)` returns the first of its arguments that is not NULL, so it gives `d` when `x` is missing (the utility
-  functions page).
-- `x NOT IN (list)` means `NOT (x IN (list))`. When the list holds a NULL, a value that is not in it gets NULL, not true
-  (DuckDB's `IN` page): `5 NOT IN (1, 3)` is true, but `5 NOT IN (1, 3, NULL)` is NULL.
-
-**Excel.** In *Numbers are not numbers until you check* (E4), the nearest thing to NULL is an empty cell. `AVERAGE` skips
-empty cells: Microsoft Support says "those values are ignored". A SQL aggregate skips NULL the same way, but a comparison
-does not skip it: it answers NULL.
-
-**A common misconception: "a missing value counts as 0 in a total or an average."** Most SQL aggregate functions
-ignore NULL (DuckDB's NULL values page). Over customers 1 to 8 of
-the first picture, `AVG(referred_by)` is 3.0: the one value that exists. If NULL counted as 0, the average would be
-3 / 8 = 0.375.
-
-The tools:
-
-| SQL | Reads as | In Excel |
-|---|---|---|
-| `x IS NULL` | the value is missing | an empty cell |
-| `x IS NOT NULL` | the value is there | a cell that holds something |
-| `COALESCE(x, d)` | `x`, or `d` when `x` is missing | an `IF` that tests for an empty cell (E6) |
-
-## Worked example
-
-Question: **which order has no customer, and how many orders did customers other than customer 7 place?** Run the
-notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect.
-
-1. **Find the missing value.**
-
-   ```sql
-   SELECT * FROM orders WHERE customer_id IS NULL;
-   ```
-
-   Read it: *show the orders whose customer is missing*. Expected: 1 row, 6 columns: order 1335, the walk-in. *Excel:*
-   look for the empty cell in the customer column. *Why:* `IS NULL` is the test for a missing value. That answers the
-   first question.
-
-2. **Try `= NULL`.**
-
-   ```sql
-   SELECT * FROM orders WHERE customer_id = NULL;
-   ```
-
-   Expected: 0 rows, 6 columns, and no error. *Why:* `customer_id = NULL` is NULL for every row, so `WHERE` drops them all.
-
-3. **Meet the first trap.**
-
-   ```sql
-   SELECT COUNT(*) AS orders FROM orders WHERE customer_id <> 7;
-   ```
-
-   ```sql
-   SELECT COUNT(*) AS orders FROM orders WHERE customer_id = 7;
-   ```
-
-   Expected: 1 row, 1 column each: `1786` and `13`. *Why:* 1786 + 13 is 1,799, not 1,800. The walk-in order has no
-   customer, so `customer_id <> 7` is NULL for it, not true, and the row is dropped.
-
-4. **Ask for the unknown on purpose.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE customer_id <> 7 OR customer_id IS NULL;
-   ```
-
-   Expected: 1 row, 1 column: `1787`. *Why:* the walk-in is a customer other than customer 7, so say so: `OR ... IS NULL`
-   brings its row back. That answers the second question: **1,787 orders**, counting the walk-in and the one canceled order.
-
-5. **See that NULL is not 0 and not empty text.**
-
-   ```sql
-   SELECT 0 IS NULL AS zero_is_null, '' IS NULL AS empty_text_is_null, NULL IS NULL AS null_is_null;
-   ```
-
-   Expected: 1 row, 3 columns: false, false, true. *Why:* 0 is a number and `''` is a text with no characters; both are
-   values. NULL is no value at all. This is the E4 difference between a real 0 and an empty cell.
-
-6. **Meet the second trap: NOT IN.** You paste a list of customers who already got a thank-you card from a sheet column with an
-   empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it:
-
-   ```sql
-   SELECT customer_id
-   FROM customers
-   WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7);
-   ```
-
-   ```sql
-   SELECT customer_id
-   FROM customers
-   WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7, NULL);
-   ```
-
-   Expected: 5 rows, 1 column, and then 0 rows, 1 column, with no error. *Why:* for customer 2, the test asks whether 2 equals 1, 3, 7 or
-   NULL. The first three answers are false, the last is NULL, so the answer is NULL, and `NOT` of NULL is NULL.
-   Keep NULLs out of the list; later lessons show safer ways to compare two tables.
-
-7. **Replace NULL with a default.**
-
-   ```sql
-   SELECT customer_id, referred_by, COALESCE(referred_by, 0) AS referrer_id
-   FROM customers
-   WHERE customer_id <= 8
-   ORDER BY customer_id;
-   ```
-
-   Expected: 8 rows, 3 columns. *Why:* a missing referrer shows as 0.
-   That is safe here only because no customer has the id 0; keep the original column in the result too, so you can still tell *nobody* from a
-   real referrer. The default must have the column's type: `COALESCE(referred_by, 'nobody')` fails with
-   `Conversion Error: Could not convert string 'nobody' to INT32`, and the lesson *Computed columns and data types* shows how to change a type.
-
-8. **Verify.**
-
-   ```sql
-   SELECT COUNT(*) AS orders FROM orders WHERE customer_id IS NOT NULL;
-   ```
-
-   Expected: 1 row, 1 column: `1799`. The one walk-in of step 1 and these 1,799 make the 1,800 orders you counted in S1.
-   The groups reconcile.
-
 <details>
 <summary>Explain it in your own words: why does the filter "customer is not 7" not return the walk-in order?</summary>
 
-The walk-in has no customer, so asking whether it is different from 7 has no answer: the result is NULL, and `WHERE` keeps
-only rows whose condition is true. To keep the row, ask for it with `OR customer_id IS NULL`.
+The walk-in's customer is missing, so "is not 7" is neither true nor false for it: SQL cannot say. The answer is NULL,
+and a `WHERE` lets through only true. `OR customer_id IS NULL` asks for that row by name.
 
 </details>
+
+### 3. NULL is not zero
+
+NULL is not 0 and not empty text: both of those are values, and NULL is no value at all. Most aggregate functions skip
+NULL (DuckDB's NULL values page).
+
+**Try it.** Before you run it: which of the three answers is true?
+
+<RunSQL query={`SELECT 0 IS NULL AS zero_is_null, '' IS NULL AS empty_text_is_null, NULL IS NULL AS null_is_null;`} />
+
+Expected: 1 row, 3 columns. *Why:* only `NULL IS NULL` is true, the difference between a real 0 and an empty cell in E4.
+
+**Try it.** Customers 1 to 8: only customer 6 has a referrer, customer 3.
+
+<RunSQL query={`SELECT AVG(referred_by) AS average_referrer
+FROM customers
+WHERE customer_id <= 8;`} />
+
+Expected: 1 row, 1 column: the value 3, the one value that exists. If NULL counted as 0, the average would be 3 / 8 = 0.375.
+*Excel:* the nearest thing to NULL is an empty cell, and `AVERAGE` skips it: Microsoft Support says "those values are
+ignored". A SQL aggregate skips NULL the same way, but a comparison does not skip it: it answers NULL.
+
+### 4. NOT IN and a NULL in the list
+
+`x NOT IN (list)` means `NOT (x IN (list))`. When the list holds a NULL, a value that is not in it gets NULL, not true
+(DuckDB's `IN` page): `5 NOT IN (1, 3)` is true, but `5 NOT IN (1, 3, NULL)` is NULL.
+
+**Try it.** You paste a list of customers who already got a thank-you card from a sheet column with an
+empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it:
+
+<RunSQL query={`SELECT customer_id
+FROM customers
+WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7);`} />
+
+<RunSQL query={`SELECT customer_id
+FROM customers
+WHERE customer_id <= 8 AND customer_id NOT IN (1, 3, 7, NULL);`} />
+
+Expected: 5 rows, 1 column, and then 0 rows, 1 column, with no error.
+
+*Why:* for customer 2, the test asks whether 2 equals 1, 3, 7 or NULL: three false answers and one NULL give NULL. Keep
+NULLs out of the list; later lessons show safer ways to compare two tables.
+
+### 5. Replace NULL with a default, and check
+
+`COALESCE(x, d)` returns the first of its arguments that is not NULL, so it gives `d` when `x` is missing (the utility
+functions page).
+
+**Try it**:
+
+<RunSQL query={`SELECT customer_id, referred_by, COALESCE(referred_by, 0) AS referrer_id
+FROM customers
+WHERE customer_id <= 8
+ORDER BY customer_id;`} />
+
+Expected: 8 rows, 3 columns. *Excel:* an `IF` that tests for an empty cell (E6). *Why:* a missing referrer shows as 0.
+That is safe here only because no customer has the id 0; keep the original column in the result too, so you can still
+tell *nobody* from a real referrer. The default must have the column's type: `COALESCE(referred_by, 'nobody')` fails with
+`Could not convert string 'nobody' to INT32` (a Conversion Error), and the lesson *Computed columns and data types*
+shows how to change a type.
+
+Check the walk-in against the total.
+
+**Try it**:
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders WHERE customer_id IS NOT NULL;`} />
+
+Expected: 1 row, 1 column: `1799`. The one walk-in of unit 1 and these 1,799 make the 1,800 orders you counted in S1.
+The groups reconcile.
+
+<Aside type="tip" title="Remember">
+
+- NULL means unknown: test it with `IS NULL`, never with `=` or `<>`.
+- A comparison with NULL gives NULL, and `WHERE` keeps only true.
+- NULL is not 0 or empty text, and most aggregates skip it.
+- A NULL in a `NOT IN` list leaves no rows.
+- `COALESCE(x, d)` swaps a NULL for a default of the column's type.
+
+**Common trap: "a missing value counts as 0 in a total or an average."** Most SQL aggregate functions ignore NULL (DuckDB's
+NULL values page), so the average of unit 3 is 3.0, not 0.375.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-null-handling-1">
 
-**How many of Old Town's orders came from customers with a loyalty card?** Old Town is `store_id` 1. Use the Exercise 1
-cell. Expected: 1 row, 1 column.
+**How many of Old Town's orders came from customers with a loyalty card?** Old Town is `store_id` 1. Expected: 1 row, 1
+column.
 
 The first steps are done for you: the count, the table and the store are
 
-```sql
-SELECT COUNT(*) AS orders
+<RunSQL query={`SELECT COUNT(*) AS orders
 FROM orders
-WHERE store_id = 1
-```
+WHERE store_id = 1`} />
 
 Now finish it: add the line that keeps only the orders whose customer is not missing.
 
 <details>
 <summary>Hint</summary>
 
-Look at step 8: which test keeps the rows that have a value? Join it to the store test with `AND`.
+Look at the check in unit 5: which test keeps the rows that have a value? Join it to the store test with `AND`.
 
 </details>
 
@@ -374,17 +361,19 @@ Check: 728 plus 1 is the 729 you get with `WHERE store_id = 1` alone.
 <Exercise id="sql-null-handling-2">
 
 **How many customers were referred by someone other than customer 24?** Count the customers nobody referred too: they
-were not referred by customer 24 either. Work in the Exercise 2 cells.
+were not referred by customer 24 either.
 
-Before you run anything, write one sentence in the first cell: what will the query return, and which customers do you
-expect it to include? Then write the query.
+Before you run anything, write one sentence (a line that starts with `--` works in the editor): what will the query
+return, and which customers do you expect it to include? Then write the query.
 
 Expected shape, to check your sentence against: 1 row, 1 column. The `customers` table has 150 rows, and most of them have a NULL in `referred_by`.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
 
-Customers with no referrer have a NULL, so `<>` alone drops them, as in step 3. Add what step 4 added.
+Customers with no referrer have a NULL, so `<>` alone drops them, as in unit 2. Add what unit 2 added.
 
 </details>
 
@@ -437,11 +426,9 @@ disappear, because their `referred_by` is NULL.
 **Spot the flaw.** A colleague wants to know how many customers were not referred by anyone, and thinks of a missing
 referrer as a 0. The query runs without an error:
 
-```sql
-SELECT COUNT(*) AS not_referred
+<RunSQL query={`SELECT COUNT(*) AS not_referred
 FROM customers
-WHERE referred_by = 0;
-```
+WHERE referred_by = 0;`} />
 
 Expected: 1 row, 1 column. The result suggests that every customer was referred. Find the flaw and fix the query.
 
@@ -464,7 +451,7 @@ does not help: it stops with a `Conversion Error`, because `''` is text and the 
 
 **Can you do it?** *I can test for a missing value with `IS NULL`, predict that a comparison with NULL drops the row, keep a
 NULL out of a `NOT IN` list, and replace a NULL with a default using `COALESCE`.*
-Test: Exercise sql-null-handling-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-null-handling-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **NULL means unknown: test it with `IS NULL`, never with `=` or `<>`, and keep it out of a
 `NOT IN` list.** The next lesson, *Computed columns and data types*, calculates new columns and shows why a number must have the

@@ -16,7 +16,6 @@ prerequisites:
   - sql-select-sort-limit
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-where-filtering.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: WHERE clause'
@@ -38,20 +37,30 @@ sources:
 status: draft
 ---
 
-This lesson builds on *SELECT, ORDER BY and LIMIT* (S2) and runs in the same Google Colab notebook setup. In S1 you used
-`WHERE` with one `=` test. Here you learn to say exactly which rows you want: other comparisons, several conditions at
-once, lists, ranges, text patterns and date ranges.
+This lesson builds on *SELECT, ORDER BY and LIMIT* (S2). In S1 you used `WHERE` with one `=` test. Here you learn to say
+exactly which rows you want: other comparisons, several tests at once, lists, ranges, text patterns and date ranges.
+Press **Run** under any query on this page.
 
-**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
-`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
-table. The notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. The rule "AND is applied before OR" is shown here by
-the counts in steps 3 and 4 and called standard SQL; check whether you want a DuckDB page cited for it. The pattern matching page does not state that `LIKE` is case-sensitive; that rule rests on a lowercase pattern returning no rows in a local run. The date page does not say what a date without a time means in a comparison with a timestamp; the date rule in How it works rests on a local run, where `TIMESTAMP '2026-03-31 10:00' <= '2026-03-31'` is false and `TIMESTAMP '2026-03-31 00:00' = '2026-03-31'` is true. Time the lesson against its 30 minutes. When you have checked it, set `reviewed` to
+TODO(owner): run every block on this page and compare each result with its Expected line. The rule "AND is applied before OR" is shown here by
+the counts in unit 2 and called standard SQL; check whether you want a DuckDB page cited for it. The pattern matching page does not state that `LIKE` is case-sensitive; that rule in unit 3 rests on a lowercase pattern returning no rows in a local run. The date page does not say what a date without a time means in a comparison with a timestamp; the date rule in unit 4 rests on a local run, where `TIMESTAMP '2026-03-31 10:00' <= '2026-03-31'` is false and `TIMESTAMP '2026-03-31 00:00' = '2026-03-31'` is true. Time the lesson against its 30 minutes. When you have checked it, set `reviewed` to
 that day and `status: published`.
+
+## The question
+
+The owner of the Old Town cafe asks:
+
+> How many orders did we take in March 2026 that were paid by mobile or cash? And for the poster: which lattes cost
+> between \$4.00 and \$5.00?
+
+In E5 you filtered a sheet with the filter arrow, one column at a time. In SQL you write all the tests in one `WHERE`.
+Old Town is `store_id` 1. Four rows of the `orders` table, from the last day of March:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1711 | 101 | 2 | 2026-03-31 10:01:00 | completed | mobile |
+| 1712 | 40 | 1 | 2026-03-31 10:10:00 | completed | card |
+| 1713 | 16 | 1 | 2026-03-31 11:04:00 | completed | mobile |
+| 1714 | 116 | 2 | 2026-03-31 11:12:00 | completed | mobile |
 
 ## Warm-up
 
@@ -83,36 +92,74 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In S1, which clause keeps only some rows, and how do you write a text value in it?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+`WHERE` is a test that SQL runs on every row, one at a time: the rows that pass stay, and all the others are dropped.
 
-   `WHERE` keeps the rows that match. A text value goes in single quotes, as in `WHERE category = 'tea'`.
+{/* CONCEPT: concept-where */}
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Press Run under each query. Each one works on its own, so you can come back to any step.
 
-The owner of the Old Town cafe asks:
+### 1. One test per row
 
-> How many orders did we take in March 2026 that were paid by mobile or cash? And for the poster: which lattes cost
-> between \$4.00 and \$5.00?
+`WHERE` works out its test for each row from that row's own values. The answer is true or false, and the row stays only
+if it is true: DuckDB's Boolean page says rows whose test is true "will pass the filter", and rows whose test is false
+or `NULL` are filtered out. (`NULL` is SQL's marker for a missing value; the next lesson is about it.) Later clauses see
+only the kept rows.
 
-In E5 you filtered a sheet with the filter arrow, one column at a time. In SQL you write all the conditions in one
-`WHERE`. Old Town is `store_id` 1. Four rows of the `orders` table, from the last day of March:
+The tests use `=`, `<>` (not equal), `<`, `<=`, `>` and `>=`. A number has no quotes.
 
-| order_id | customer_id | store_id | ordered_at | status | payment_method |
-|---:|---:|---:|---|---|---|
-| 1711 | 101 | 2 | 2026-03-31 10:01:00 | completed | mobile |
-| 1712 | 40 | 1 | 2026-03-31 10:10:00 | completed | card |
-| 1713 | 16 | 1 | 2026-03-31 11:04:00 | completed | mobile |
-| 1714 | 116 | 2 | 2026-03-31 11:12:00 | completed | mobile |
+**Try it**:
 
-By the end you will have answered both questions, and you will know the two traps that make a count quietly wrong: a
-missing pair of parentheses and a date range that ends one day early.
+<RunSQL query={`SELECT product_name, unit_price_usd
+FROM products
+WHERE unit_price_usd >= 4.50;`} />
 
-## The picture
+Read it: *keep the products whose price is at least 4.50*. Expected: 8 rows, 2 columns. *Excel:* a filter on the price
+column (E5); the same comparisons sit inside `IF` (E6), and `=` and `<>` are the values you tick or clear in a filter list.
+
+*Why:* `>=` keeps 4.50 itself.
+
+### 2. Combine tests: AND, OR and parentheses
+
+`AND` keeps a row only when both tests are true. `OR` keeps it when at least one is. SQL works out `AND` before `OR`, so
+`a OR b AND c` means `a OR (b AND c)`. That is standard SQL, and the counts below show it. Parentheses turn an `OR` into
+one test.
+
+**Try it.** `COUNT(*)` is the row count from S1.
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND payment_method = 'mobile';`} />
+
+Expected: 1 row, 1 column: `217`. *Excel:* two filters on two columns: Microsoft Support says "each additional filter
+is based on the current filter", which is `AND`. The same word is `AND(a, b)` in E6.
+
+Now add `OR`, written the natural way.
+
+**Try it**:
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND payment_method = 'mobile' OR payment_method = 'cash';`} />
+
+Expected: 1 row, 1 column: `470`. That is too many: the query reads *(Old Town and mobile) or (cash)*.
+
+Now put parentheses around the `OR`.
+
+**Try it**:
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND (payment_method = 'mobile' OR payment_method = 'cash');`} />
+
+Expected: 1 row, 1 column: `308`. *Excel:* an `AND(...)` that contains an `OR(...)` (E6).
+
+*Why:* the parentheses make the `OR` a single test, and `AND` then needs it and the store. Whenever one `WHERE` has both
+`AND` and `OR`, write the parentheses, even where they change nothing. The first picture shows the two versions on six
+orders.
 
 <figure>
 <svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="gate-title gate-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -149,6 +196,77 @@ missing pair of parentheses and a date range that ends one day early.
 <text x="10" y="244" font-size="11">Whole table: A keeps 470 orders, B keeps 308.</text>
 <text x="10" y="260" font-size="11">SQL reads AND before OR, so A keeps every cash order.</text>
 </svg>
+</figure>
+
+<details>
+<summary>Explain it in your own words: why do the last two queries return different counts when they use the same words?</summary>
+
+The first query accepts every cash order in the chain, because that half of the `OR` needs no store. The parentheses tie
+the store test to both payment tests, so only Old Town's mobile and cash orders count.
+
+</details>
+
+### 3. Shortcuts: IN, BETWEEN and LIKE
+
+`x IN (1, 2)` gives the same answer as `x = 1 OR x = 2`, with no parentheses to forget. `x BETWEEN a AND b` includes both
+ends. `text LIKE 'a%'` matches a pattern: `%` stands for any run of characters, including none, and `_` for exactly one.
+The pattern must cover the whole text (DuckDB's pattern matching page), and it is case-sensitive; `ILIKE` ignores case.
+
+**Try it.** The same count as unit 2, shorter:
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1 AND payment_method IN ('mobile', 'cash');`} />
+
+Expected: 1 row, 1 column: `308`, the same as before. *Excel:* tick several values in the filter list (E5).
+
+**Try it.** Text and a range in one `WHERE`:
+
+<RunSQL query={`SELECT product_name, unit_price_usd
+FROM products
+WHERE product_name LIKE '%Latte%' AND unit_price_usd BETWEEN 4.00 AND 5.00;`} />
+
+Expected: 2 rows, 2 columns. *Excel:* two filters on two columns (E5).
+
+*Why:* `'%Latte%'` means *Latte anywhere in the name*, and 4.00 and 5.00 both count. Pumpkin Spice Latte has the word but
+not the price (5.50). A lowercase `'%latte%'` finds nothing. That answers the second question: **Latte and Chai Latte**.
+
+### 4. Date ranges
+
+Dates are written year-month-day, as in DuckDB's date documentation. A date written without a time stands for 00:00 at
+the start of that day when it is compared with a timestamp. So "all of March" starts at `>= '2026-03-01'` and stops
+before `< '2026-04-01'`: the start includes midnight of March 1, and the stop leaves out midnight of April 1.
+
+**Try it**:
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1
+  AND payment_method IN ('mobile', 'cash')
+  AND ordered_at >= '2026-03-01'
+  AND ordered_at < '2026-04-01';`} />
+
+Expected: 1 row, 1 column: `52`. That answers the first question: **52 orders**, of any status (the one canceled order
+of the data is a Campus order, not Old Town's).
+
+**Try it.** The same month for all stores, first with the range, then with `BETWEEN`. Before you run
+the second: will it agree with the first?
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01';`} />
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE ordered_at BETWEEN '2026-03-01' AND '2026-03-31';`} />
+
+Expected: 1 row, 1 column each. *Excel:* **Date Filters > Between** (E5).
+
+*Why:* the counts are `258` and `250`. `BETWEEN a AND b` means `a <=` the value `<= b`, and the end `'2026-03-31'` means
+midnight at the start of March 31, so every order later that day is lost. The 8 missing orders are the eight on March 31
+in the second picture. The half-open range cannot lose a day.
+
+<figure>
 <svg viewBox="0 0 360 176" width="360" role="img" aria-labelledby="day-title day-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="day-title">The eight orders of March 31 on a line from midnight to midnight</title>
 <desc id="day-desc">A time line for March 31, 2026, from 00:00 to 24:00. Eight orders sit between 10:01 and 16:04, at 10:01, 10:10, 11:04, 11:12, 12:55, 13:23, 15:38 and 16:04. BETWEEN with an end of 2026-03-31 stops at 00:00 on March 31, before all eight. A test that says earlier than 2026-04-01 stops at 24:00, after all eight.</desc>
@@ -178,204 +296,60 @@ missing pair of parentheses and a date range that ends one day early.
 </svg>
 </figure>
 
-## How it works
+### 5. Split the group, and check
 
-A `WHERE` clause is a test that SQL applies to the rows of a table, one row at a time. It keeps the rows for which the
-test is true and drops all the others. Logically it works in four steps:
+`NOT` flips a test, and parentheses make it flip the whole test: `NOT (payment_method IN ('mobile', 'cash'))` keeps the
+orders paid some other way. *Excel:* E5 and E6 have no counterpart.
 
-1. `FROM` hands over every row of the table.
-2. For each row, every comparison in the condition is worked out from that row's own values. Each gives true or false
-   (or `NULL` when a value is missing).
-3. `AND`, `OR` and `NOT` combine those answers into one final answer for the row.
-4. `WHERE` keeps the row only if the final answer is true. Later clauses see only the kept rows.
+**Try it.** Old Town's March orders in two groups, then all of them:
 
-In the first picture above, each order goes through filter A and filter B on its own and is kept or dropped; the second picture belongs to step 7. The rules:
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1
+  AND NOT (payment_method IN ('mobile', 'cash'))
+  AND ordered_at >= '2026-03-01'
+  AND ordered_at < '2026-04-01';`} />
 
-- Only a true answer passes. DuckDB's Boolean page says rows whose test is true "will pass the filter", and rows whose
-  test is false or `NULL` (a missing value) are filtered out.
-- `AND` is worked out before `OR`, so `a OR b AND c` means `a OR (b AND c)`. This is standard SQL, and steps 3 and 4 show
-  it in counts.
-- `BETWEEN a AND b` includes both ends, and `x IN (1, 2)` gives the same answer as `x = 1 OR x = 2`.
-- A date written without a time stands for 00:00 at the start of that day when it is compared with a timestamp.
-- In `LIKE`, `%` matches any run of characters, including none, and `_` matches exactly one. The pattern must cover the
-  whole text (DuckDB's pattern matching page), and it is case-sensitive; `ILIKE` ignores case.
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE store_id = 1
+  AND ordered_at >= '2026-03-01'
+  AND ordered_at < '2026-04-01';`} />
 
-**Excel.** In *Tables, sorting and filtering* (E5), a filter on a second column narrows the first, because Microsoft
-Support says "each additional filter is based on the current filter": that is `AND`.
+Expected: 1 row, 1 column each: `81` and `133`. The 52 of unit 4 and the 81 card orders make 133, all of Old Town's March
+orders. A second method, and the groups reconcile.
 
-**A common misconception: "`OR` works like English, so `payment_method = 'card' OR 'cash'` means card or cash."** Each side
-of `AND` and `OR` is its own true-or-false test, and `'cash'` alone is only text. DuckDB cannot read it as true or false and
+<Aside type="tip" title="Remember">
+
+- A `WHERE` keeps a row only when its test is true.
+- `AND` is worked out before `OR`: put parentheses around every `OR` that sits with an `AND`.
+- `BETWEEN` includes both ends, `IN` is a list of `OR`s, and in `LIKE`, `%` is any run and `_` is one character.
+- A date alone means midnight: start with `>=` the first day and stop with `<` the next.
+
+**Common trap: "`OR` works like English, so `payment_method = 'card' OR 'cash'` means card or cash."** Each side of
+`AND` and `OR` is its own true-or-false test, and `'cash'` alone is only text. DuckDB cannot read it as true or false and
 stops with a `Conversion Error`. Write `payment_method = 'card' OR payment_method = 'cash'`, or use `IN`.
 
-The comparison operators, and the words that join them:
-
-| SQL | Reads as | In Excel |
-|---|---|---|
-| `=` and `<>` | equal, not equal | tick or clear a value in the filter list (E5) |
-| `<`, `<=`, `>`, `>=` | less, at most, greater, at least | the tests inside `IF` (E6) |
-| `a AND b` | both must hold | `AND(a, b)` (E6) |
-| `a OR b` | at least one holds | `OR(a, b)` (E6) |
-| `NOT (a)` | flips a condition | none in E5 or E6 |
-| `x IN (1, 2)` | equal to one of the values | tick several values in the filter list (E5) |
-| `x BETWEEN a AND b` | from `a` to `b`, both included | **Date Filters > Between** (E5) |
-| `text LIKE 'a%'` | matches a text pattern | none in E5 |
-
-## Worked example
-
-Question: **how many March 2026 orders at Old Town were paid by mobile or cash, and which lattes cost between \$4.00 and
-\$5.00?** Run the notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect.
-
-1. **Compare a number.**
-
-   ```sql
-   SELECT product_name, unit_price_usd
-   FROM products
-   WHERE unit_price_usd >= 4.50;
-   ```
-
-   Read it: *keep the products whose price is at least 4.50*. Expected: 8 rows, 2 columns. *Excel:* a filter on the
-   price column (E5). *Why:* a number has no quotes, and `>=` keeps 4.50 itself. `<>` means not equal.
-
-2. **Combine two conditions with AND.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1 AND payment_method = 'mobile';
-   ```
-
-   Expected: 1 row, 1 column: `217`. *Excel:* two filters on two columns. *Why:* `AND` keeps a row only when both
-   conditions are true. `COUNT(*)` is the row count from S1.
-
-3. **Add OR, the wrong way.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1 AND payment_method = 'mobile' OR payment_method = 'cash';
-   ```
-
-   Expected: 1 row, 1 column: `470`. That is too many. *Why:* `AND` is applied before `OR`, so the query reads *(Old Town and mobile) or (cash)*.
-
-4. **Put parentheses around the OR.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1 AND (payment_method = 'mobile' OR payment_method = 'cash');
-   ```
-
-   Expected: 1 row, 1 column: `308`. *Excel:* an `AND(...)` that contains an `OR(...)` (E6). *Why:* the parentheses make the `OR`
-   a single condition, and `AND` then needs it and the store. Whenever one `WHERE` has both `AND` and `OR`, write the
-   parentheses, even where they change nothing.
-
-5. **Shorten it with IN.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1 AND payment_method IN ('mobile', 'cash');
-   ```
-
-   Expected: 1 row, 1 column: `308`, the same as step 4. *Why:* `IN` needs no extra parentheses.
-
-6. **Add the date range.**
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1
-     AND payment_method IN ('mobile', 'cash')
-     AND ordered_at >= '2026-03-01'
-     AND ordered_at < '2026-04-01';
-   ```
-
-   Expected: 1 row, 1 column: `52`. That answers the first question: **52 orders**, of any status (the one canceled
-   order of the data is a Campus order, not Old Town's). *Why:* the range starts at the first day and stops before the next
-   month: `>=` includes midnight of March 1, `<` leaves out midnight of April 1. Dates are written year-month-day, as in
-   DuckDB's date documentation, and a bare date means midnight at its start.
-
-7. **See why not BETWEEN for dates.** First the half-open range for all stores, then the same month with `BETWEEN`:
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01';
-   ```
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE ordered_at BETWEEN '2026-03-01' AND '2026-03-31';
-   ```
-
-   Expected: 1 row, 1 column each: `258` and `250`. *Why:* `BETWEEN a AND b` means `a <=` the value `<= b`, and the end
-   `'2026-03-31'` means midnight at the start of March 31, so every order later that day is lost. The 8 missing orders are
-   the eight on March 31 in the second picture. The half-open range cannot lose a day.
-
-8. **Match text and a range.**
-
-   ```sql
-   SELECT product_name, unit_price_usd
-   FROM products
-   WHERE product_name LIKE '%Latte%' AND unit_price_usd BETWEEN 4.00 AND 5.00;
-   ```
-
-   Expected: 2 rows, 2 columns. *Excel:* two filters on two columns (E5). *Why:* `'%Latte%'` means *Latte
-   anywhere in the name*, and 4.00 and 5.00 both count. Pumpkin Spice Latte has the word but not the price (5.50). A
-   lowercase `'%latte%'` finds nothing. That answers the second question: **Latte and Chai Latte**.
-
-9. **Verify.** Split Old Town's March orders into the two groups. `NOT` flips the condition, and the parentheses make it flip the whole test:
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1
-     AND NOT (payment_method IN ('mobile', 'cash'))
-     AND ordered_at >= '2026-03-01'
-     AND ordered_at < '2026-04-01';
-   ```
-
-   ```sql
-   SELECT COUNT(*) AS orders
-   FROM orders
-   WHERE store_id = 1
-     AND ordered_at >= '2026-03-01'
-     AND ordered_at < '2026-04-01';
-   ```
-
-   Expected: 1 row, 1 column each: `81` and `133`. The 52 of step 6 and the 81 card orders make 133, all of Old Town's March
-   orders. A second method, and the groups reconcile.
-
-<details>
-<summary>Explain it in your own words: why do steps 3 and 4 return different counts when they use the same words?</summary>
-
-Without parentheses, `AND` is applied first, so step 3 means *(Old Town and mobile) or cash anywhere*. The parentheses in
-step 4 make the `OR` one condition that `AND` combines with the store, so only Old Town's mobile and cash orders count.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-where-filtering-1">
 
-**How many Campus orders in April 2026 were paid by card?** Campus is `store_id` 2. Use the Exercise 1 cell. Expected: 1
-row, 1 column.
+**How many Campus orders in April 2026 were paid by card?** Campus is `store_id` 2. Expected: 1 row, 1 column.
 
-The first steps are done for you: the count, the table, and the first two conditions are
+The first steps are done for you: the count, the table, and the first two tests are
 
-```sql
-SELECT COUNT(*) AS orders
+<RunSQL query={`SELECT COUNT(*) AS orders
 FROM orders
-WHERE store_id = 2 AND payment_method = 'card'
-```
+WHERE store_id = 2 AND payment_method = 'card'`} />
 
 Now finish it: add the two lines that keep April, from its first day up to, but not including, May 1.
 
 <details>
 <summary>Hint</summary>
 
-Copy the two date lines of step 6 and change the months. Each line starts with `AND`.
+Copy the two date lines of unit 4 and change the months. Each line starts with `AND`.
 
 </details>
 
@@ -412,13 +386,16 @@ The result is `64`. **Campus took 64 card orders in April 2026**, of any status;
 
 <Exercise id="sql-where-filtering-2">
 
-**List the coffee and tea items that cost less than \$4.00.** Work in the Exercise 2 cells. Show the name, the category
-and the price, cheapest first, with equal prices in alphabetical order (S2).
+**List the coffee and tea items that cost less than \$4.00.** Show the name, the category and the price, cheapest
+first, with equal prices in alphabetical order (S2).
 
-Before you run anything, write one sentence in the first cell: what will the query return? Then write the query.
+Before you run anything, write one sentence (a line that starts with `--` works in the editor): what will the query
+return? Then write the query.
 
 Expected shape, to check your sentence against: 4 rows, 3 columns. If you get more rows, look at where your
 parentheses are.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -446,7 +423,7 @@ ORDER BY unit_price_usd, product_name;
 
 The result is Espresso 3.00, Green Tea 3.25, Americano 3.50 and Iced Lemon Tea 3.75. Without the parentheses (or `IN`),
 `category = 'coffee' OR category = 'tea' AND unit_price_usd < 4.00` returns 9 rows, because it keeps every coffee
-whatever its price, the same trap as step 3.
+whatever its price, the same trap as in unit 2.
 
 </Solution>
 
@@ -479,11 +456,9 @@ whatever its price, the same trap as step 3.
 
 **Spot the flaw.** A colleague counts the orders of June 2026 and gets `344`. The query runs without an error:
 
-```sql
-SELECT COUNT(*) AS orders
+<RunSQL query={`SELECT COUNT(*) AS orders
 FROM orders
-WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';
-```
+WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';`} />
 
 Expected: 1 row, 1 column. The data holds more June orders than that. Find the flaw and fix the query.
 
@@ -504,9 +479,9 @@ Expected: 1 row, 1 column: `353`. The 9 orders that `BETWEEN` lost are the order
 
 </Exercise>
 
-**Can you do it?** *I can filter with comparisons, combine conditions with `AND`, `OR` and `NOT` using parentheses, match
+**Can you do it?** *I can filter with comparisons, combine tests with `AND`, `OR` and `NOT` using parentheses, match
 lists, ranges and patterns, and write a date range that includes the first day and stops before the next.*
-Test: Exercise sql-where-filtering-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-where-filtering-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **parentheses around every OR, and a date range that starts on the first day and stops before
 the next.** The next lesson, *NULL: unknown is not zero*, shows what `WHERE` does with rows whose value is missing.
