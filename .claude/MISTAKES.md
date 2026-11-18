@@ -107,6 +107,15 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   that drives it (zero height, reordered with flex), never absolutely positioned elsewhere; after any control change, click
   every control in Playwright and assert scrollY moves by at most 2 px.**
 
+- 2026-11-18 — Asked for "concept figures" in the stepper system, six data-driven steppers with real counts were built; the
+  owner wanted abstract, autoplay, looping schematics with no data (the data steppers stay for the exercises). → **A figure
+  that teaches an idea is abstract (labels such as Row 1, t1, Σ); real cafe-sales numbers belong to the data steppers of
+  "The picture". When a brief says "like a GIF" or "concept", ask which of the two it means before drawing.**
+- 2026-11-18 — A print of the data steppers showed every one-step frame at once, because only the screen rules knew `hide`. →
+  **Whatever a state rule hides must also be hidden in the print/no-radio rule; print a figure and look at it.**
+- 2026-11-18 — A contact sheet sampled only at whole seconds showed empty highlights: a part is invisible at the instant its
+  phase starts. → **Sample loops every 0.25 s and also inside each phase, and read the sheet before concluding a part is missing.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

@@ -11,7 +11,9 @@ All notable changes to datafromzero are recorded here. The format follows
   (a native radio group, no JavaScript) move through at most 6 steps, one change per step with a short fade; all step captions stay
   on the page as a numbered list with a clause badge and "Predict:" prompts. Each SQL clause has one fixed color inside figures.
   Print and reduced motion show the final frame with all captions. Built by `scripts/make-animation.mjs` from our own cafe-sales
-  rows; pilots in GROUP BY and HAVING, window functions and INNER JOIN.
+  rows; pilots in GROUP BY and HAVING, window functions and INNER JOIN. The same decision adds concept animations (owner request):
+  abstract, autoplay, looping CSS-only schematics with no real data (aggregate against window function, kinds of CTE, join types,
+  the logical order of a query), a 44 px Pause / Play button for WCAG 2.2.2, and a static final frame for reduced motion and print.
 - SPEC D40 (owner decisions, research issue #52): the SQL stage has 35 lessons in three parts (analysis on one table, then keys and
   joins, then the database itself), starting with an Excel-side first lesson
   ("From a spreadsheet to SQL: your first queries") and adding query execution order, views, star schema, and scale and
