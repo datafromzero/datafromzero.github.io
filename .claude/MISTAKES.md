@@ -88,6 +88,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   (E4, E5, E7, E13, E21; reported by the owner). Fixed in `tokens.css`. → **Load every page with a table at 390 px
   before publishing; nothing in a cell may be narrower than a word.**
 
+- 2026-11-18 — Owner rule for pictures and animations: they are original work. → **Draw them from our own cafe-sales rows
+  and design tokens with our generator; look at other sites' visuals for the concept at most, never copy, trace or recreate
+  one (layout, colors, characters, captions, sample tables).**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

@@ -7,6 +7,10 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D41 (owner decision): lesson figures may use CSS-only click-to-play step animations. A reader opens "Play step by step"
+  and the figure runs once (under 10 s) with numbered captions, then stays on its final frame; the default view, reduced
+  motion, print and browsers without `:has()` show that final frame. No JavaScript. Built by `scripts/make-animation.mjs`
+  from our own cafe-sales rows; pilots in GROUP BY and HAVING, window functions and INNER JOIN.
 - SPEC D40 (owner decisions, research issue #52): the SQL stage has 35 lessons in three parts (analysis on one table, then keys and
   joins, then the database itself), starting with an Excel-side first lesson
   ("From a spreadsheet to SQL: your first queries") and adding query execution order, views, star schema, and scale and

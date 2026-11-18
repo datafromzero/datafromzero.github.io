@@ -71,6 +71,7 @@ export default defineConfig({
 				'@fontsource/geist-mono/500.css',
 				'./src/styles/tokens.css',
 				'./src/styles/math.css',
+				'./src/styles/step-animation.css',
 				'./src/styles/transitions.css',
 				'./src/styles/print.css',
 			],

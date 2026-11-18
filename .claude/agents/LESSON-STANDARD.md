@@ -20,7 +20,8 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
 - **Warm-up:** 2–3 recall prompts from earlier lessons (use their frontmatter objectives), at least one asks the
   learner to produce something; answers in lowercase `<details>`.
 - **The question:** one business question with the data visible (a small table); promise the answer.
-- **The picture:** one static inline SVG (at most two stacked), labels on the grid itself.
+- **The picture:** one static inline SVG (at most two stacked), labels on the grid itself. A concept where rows move may use
+  a step animation instead of one of them (see Step animations below).
 - **Worked example:** numbered steps, each with *why*; the last step verifies (row count, reconciled total, a
   second method); then a self-explanation `<details>`.
 - **Finish it:** `<Exercise>` 1, faded: first steps given, learner finishes.
@@ -48,6 +49,28 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
   person, no "I could not find", and no process notes like "checked as SQL".
 - **Quotes are exact**, or they are paraphrases without quote marks.
 - **SVG pictures match the real data** (codes, store numbers, results).
+
+## Step animations (SPEC D41)
+
+Pictures and animations are **original work**, drawn from our own cafe-sales rows and our design tokens; external
+visuals (other sites' GIFs, posters, diagrams) may inspire the concept only. Never download, trace or recreate one,
+and never copy its layout, colors, characters, captions or sample tables.
+
+- **When:** only where the idea is rows moving or merging: aggregation and GROUP BY, joins, window functions, CTE
+  pipelines, set operations, recursion. Not for syntax, formulas or anything a still picture shows as well. At most one
+  per lesson, in "The picture", in place of one of its two SVGs; the static final frame must carry the whole meaning.
+- **How:** write a spec in `scripts/animations/<lesson-id>.mjs` (copy `sql-inner-join.mjs`): draw the FINAL frame with
+  `row`, `text`, `rect`, `path`, then give moving parts an effect: `in` (fades in), `out` (ends dimmed), `mv: [dx, dy]`
+  (starts offset by multiples of 10, slides to where it is drawn), tied to a `step` and an optional `delay`. Run
+  `node scripts/make-animation.mjs <name> --stats` and paste the `<figure class="sa">` block into the lesson (no blank
+  lines inside it; MDX ends HTML at a blank line). The generator escapes `$` and `*` for you. Rerun and re-paste when the data changes.
+- **Data:** rows come from the real tables; recompute counts with DuckDB 2.0.0 and say in the spec comment which query
+  you ran. A miniature (a few real rows) may stand in for the full table; say so on the figure.
+- **Captions rule:** 3 to 5 steps, one plain sentence each, in the order they play, so they double as the text
+  description of the motion; the first step needs no animation. The `<title>` and `<desc>` describe the final frame.
+- **Limits:** viewBox width 360 at most; about 15 KB of markup; the run ends within 10 s, once, no loops; shades are
+  the site's grays (opacity steps `k1` to `k3`), never new colors; no `style` attribute, no script, no CSS variable in
+  the markup. Check the lesson at 390 px and 1280 px, light and dark, closed, mid-run and with reduced motion.
 
 ## Markup
 

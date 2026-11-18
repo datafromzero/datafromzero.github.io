@@ -24,7 +24,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Schemas are enforced** with Zod content collections (SPEC §5). Missing required fields must fail the build.
 - **Content portability:** lessons are plain `.md`; use `.mdx` only for the components listed in SPEC §6.
   No other components or raw `<script>` in content.
-- **Motion:** GSAP on `/` only (any plugin); project pages, stories and lessons get no effects; effects load on demand after first paint
+- **Motion:** GSAP on `/` only (any plugin); project pages and stories get no effects; lessons get none except CSS-only click-to-play figure animations, no JS (D41); effects load on demand after first paint
   (deferred chunks); JS before first paint ≈ 3 KB gzipped; frame budget in SPEC §12 (`npm run perf`) (SPEC D28).
   Respect `prefers-reduced-motion`. The bottom taskbar (D31) on every other page moves with CSS transitions only.
   Every page must be readable with JavaScript disabled.
