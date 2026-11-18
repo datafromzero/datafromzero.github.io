@@ -26,6 +26,10 @@ reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Date functions'
     url: https://duckdb.org/docs/stable/sql/functions/date
+  - title: 'Microsoft Support: Group or ungroup data in a PivotTable report'
+    url: https://support.microsoft.com/en-us/office/group-or-ungroup-data-in-a-pivottable-report-c9d1ddd0-6580-47d1-82bc-c84a5a340725
+  - title: 'Microsoft Support: Show different calculations in PivotTable value fields'
+    url: https://support.microsoft.com/en-us/office/show-different-calculations-in-pivottable-value-fields-014d2777-baaf-480b-a32b-98431f48bfec
   - title: 'StrataScratch: 30 product analyst interview questions'
     url: https://www.stratascratch.com/blog/30-product-analyst-interview-questions
 status: draft
@@ -325,20 +329,38 @@ denominator, and a clear line between a month that had no activity and a month t
 </svg>
 </figure>
 
-Four decisions define the table. State them before the SQL, as in S25.
+## How it works
 
-- **Cohort:** the signup month, for the 65 customers who signed up in 2026. For them, signup is the first event we can
-  see. For the 85 who signed up earlier, the data starts on January 1, so a first order in January may not be their
-  first (Exercise 2).
-- **Months since:** the number of calendar months from the signup month to the month of the order. Month 0 is the signup
-  month itself.
-- **Active in month k:** at least one completed order in that month, at any store. A customer who skips a month and
-  returns counts in the later month only.
-- **Denominator:** the size of the cohort, every customer who signed up that month, including those who never ordered.
-  It is the same for every month of a row. That is why month 0 is below 100%: signing up is not ordering.
+A **cohort** is a group of customers who start in the same period, and **retention** is the share of a cohort that is
+active again in the periods after. Here the periods are months and the start is the signup, for the 65 customers who
+signed up in 2026. Conceptually the query builds the triangle in the picture above in five steps:
 
-How many months can each cohort be observed? The data ends on June 30. January signups have 6 months (0 to 5), February 5,
-March 4, April 3, May 2 and June 1. The cells after that do not exist yet: they are empty, not 0%.
+1. It gives each customer one cohort: the first day of their signup month.
+2. It places each completed order by its **months since**: the number of calendar months from the cohort month to the
+   order's month. Month 0 is the signup month.
+3. It marks a customer **active** in month k when at least one completed order, at any store, falls in that month.
+4. It counts, for each cell (one cohort, one month since), the customers active in it. The second picture traces one
+   cell back to its customers.
+5. It divides each count by the size of the cohort.
+
+The rules:
+
+- **Months are calendar months, not blocks of 30 days.** The DuckDB documentation says `DATE_DIFF` counts the part
+  boundaries between two dates, inclusive of the later date and exclusive of the earlier one. From the first day of the
+  cohort month, that gives whole months.
+- **The denominator is the size of the cohort**: everyone who signed up that month, whether or not they ever ordered. It
+  is the same number for every cell of a row.
+- **Each cell is judged on its own month.** A customer active in month 3 but not in month 2 counts in month 3 only.
+- **An empty cell is not 0%.** The data ends on June 30, so a later month was never observed. Leave it empty: 0% would
+  claim that nobody came.
+
+**Excel.** A PivotTable (E16, *Grouping and share of total in pivots*) can group dates into months, and with the cohort
+month in Rows and the months since in Columns it shows the counts of the triangle. Its "% of Row Total" divides by the
+row's total, the sum of the counts, not by the cohort size.
+
+**A common misconception: "retention can only go down, like a funnel."** A funnel step counts people who reached it, and
+reaching step 3 includes reaching step 2, so the counts shrink. A retention cell counts people active in one month. A
+customer who skips a month is missing from it and is counted again on return, so a row can rise.
 
 ## Worked example
 
@@ -390,9 +412,7 @@ order 1335 has no customer, so the join drops it.
    ```
 
    Expected: 6 rows, 3 columns. Customer 86 has months 0, 3, 4 and 5, with no row for February and March. *Why:*
-   `DATE_DIFF('month', a, b)` counts the month boundaries between two dates, which the DuckDB documentation describes as
-   inclusive of the later date and exclusive of the earlier one; from the first of the cohort month it gives whole
-   months. `DISTINCT` keeps one row per customer per month, however many orders. The inner join leaves out customers
+   `DATE_DIFF('month', a, b)` gives the months since (How it works). `DISTINCT` keeps one row per customer per month, however many orders. The inner join leaves out customers
    with no order: they stay in the denominator, not here.
 
 3. **Count active customers per cell and divide by the cohort size.** Build on step 2:

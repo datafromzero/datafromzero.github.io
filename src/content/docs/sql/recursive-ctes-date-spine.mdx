@@ -5,7 +5,7 @@ description: Build a date spine so days with no orders still appear, and read a 
 stage: sql
 order: 270
 level: advanced
-duration: 25
+duration: 30
 objectives:
   - Generate a continuous series of dates
   - Join facts onto the spine with a left join so empty days show zero
@@ -26,6 +26,10 @@ sources:
     url: https://duckdb.org/docs/stable/sql/functions/date
   - title: 'DuckDB documentation: Timestamp functions'
     url: https://duckdb.org/docs/stable/sql/functions/timestamp
+  - title: 'DuckDB documentation: FROM and JOIN clauses'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from
+  - title: 'Microsoft Support: DATE function'
+    url: https://support.microsoft.com/en-us/office/date-function-e36c0c8c-4104-49da-ab83-82328b832349
 status: draft
 ---
 
@@ -41,7 +45,7 @@ notebook cells leave out the closing `;` that this page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. When you have checked it, set
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. The rule in How it works that the rounds repeat until one returns no rows is not stated in these words on the DuckDB WITH page; it rests on step 2 (the spine ends at 181 days), so check that page again when you review. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -130,26 +134,41 @@ ones showing 0, and you will answer both questions.
 </svg>
 </figure>
 
-A **recursive CTE** repeats a step until it has nothing new to add. It is written `WITH RECURSIVE name AS (anchor UNION
-ALL recursive part)`. The DuckDB documentation: "`WITH RECURSIVE` allows the definition of CTEs which can refer to
-themselves."
+## How it works
 
-- The **anchor** runs once and gives the first rows.
-- The **recursive part** reads the CTE's own name, which stands for the rows the previous round produced, and returns
-  the next rows.
-- It **stops** when a round returns no rows. The documentation warns: "Note that the query must be formulated in a way
-  that ensures termination, otherwise, it may run into an infinite loop." A `WHERE` in the recursive part is the usual
-  brake.
+The days of a report should not depend on which days had orders. A **date spine**, a table with one row per day,
+supplies the days, and the facts are joined on to fill in the numbers. Conceptually, you do three things:
 
-In a sheet, the anchor is the first date you type and the recursive part is `=A2+1`, filled down.
+1. Build the spine: one row per day, from the first day to the last.
+2. Give the facts the same grain, one row per day (`cash_daily` in step 3).
+3. `LEFT JOIN` the facts onto the spine, with the spine on the left.
 
-Does a question need a spine? If the answer must have a row for every period, yes:
+A **recursive CTE** builds the spine without typing 181 dates. It is written `WITH RECURSIVE name AS (anchor UNION ALL
+recursive part)`. The DuckDB documentation: "`WITH RECURSIVE` allows the definition of CTEs which can refer to
+themselves." It runs in rounds, as the round-by-round picture shows:
 
-| Needs a spine | Does not |
-|---|---|
-| a chart or table with every day shown | a total for the whole period |
-| an average per day, empty days included | the list of days that had orders |
-| `LAG` and moving averages (*Comparing to the previous row*, S16), which look at the previous row, not the previous day | counting orders per store |
+1. The **anchor** runs once and gives the first row, January 1.
+2. The **recursive part** runs next. Inside it, the CTE's name stands for the rows the previous round produced. It
+   returns the next rows, and they join the result.
+3. The rounds repeat until one returns no rows, and the CTE is then complete.
+
+The rules:
+
+- **`LEFT JOIN` keeps every row of the left table**, here the spine, and the right table's columns are `NULL` for a row
+  with no partner.
+- **Group the facts before the join.** A day with two fact rows would pair twice and appear twice.
+- **A recursive CTE must be written so that it ends.** The documentation: "Note that the query must be formulated in a
+  way that ensures termination, otherwise, it may run into an infinite loop." Here a `WHERE` in the recursive part does
+  it.
+- **You need a spine when the answer must have a row for every period**: a chart of every day, or `LAG` and moving
+  averages (S16), which look at the previous row, not the previous day. A total for the period does not.
+
+**Excel.** A date is a number (E11, *Dates as numbers*), so `=A2+1` is the next day: the first date you type is the
+anchor, and `=A2+1` filled down is the recursive part.
+
+**A common misconception: "inside the recursive part, the CTE's name means everything found so far."** In the form used
+here, it means only the rows the previous round produced. That is why the recursive part can add 1 to a single day: if
+the name meant every day found, each round would add a day to all of them.
 
 ## Worked example
 

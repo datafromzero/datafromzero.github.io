@@ -26,6 +26,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/query_syntax/setops
   - title: 'DuckDB documentation: Subqueries'
     url: https://duckdb.org/docs/stable/sql/expressions/subqueries
+  - title: 'Microsoft Support: UNIQUE function'
+    url: https://support.microsoft.com/en-us/office/unique-function-c5ab87fd-30a3-4ce9-9d1a-40204fb85e1e
 status: draft
 ---
 
@@ -40,7 +42,7 @@ notebook cells leave out the closing `;` that this page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text of the column-count mismatch with Colab's version. The DuckDB set operations page does not say how `NULL` values are compared; the lesson shows the effect of the walk-in order's empty `customer_id` and filters it out, so check that step in Colab. The stub also named the DataLemur patterns page as a source: it does not mention set operations, so it is not listed. The map notes about the cost of `UNION` against `UNION ALL` and about `MINUS` in Oracle are not in the lesson; they need a source first. Time the lesson against its 25 minutes. When you have checked it, set
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text of the column-count mismatch with Colab's version. The DuckDB set operations page does not say how `NULL` values are compared; the lesson shows the effect of the walk-in order's empty `customer_id` and filters it out, so check that step in Colab. The rule in How it works that two `NULL`s count as one row rests on a result run on DuckDB 2.0.0 (`SELECT NULL INTERSECT SELECT NULL` returns one row), not on a documentation page; check it in Colab. The stub also named the DataLemur patterns page as a source: it does not mention set operations, so it is not listed. The map notes about the cost of `UNION` against `UNION ALL` and about `MINUS` in Oracle are not in the lesson; they need a source first. Time the lesson against its 25 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -385,7 +387,17 @@ queries.
 </svg>
 </figure>
 
-Call the customers who ordered before April **A**, and those who ordered at Harbor **B**.
+## How it works
+
+A **set operation** combines or compares two query results as whole rows, the way you would compare two lists of ids. A
+join makes each row wider; a set operation never changes the width of the rows, only which rows are kept. Call the
+customers who ordered before April **A**, and those who ordered at Harbor **B**. Conceptually, the engine does three
+things:
+
+1. It runs both queries, each to its own result. In the picture above, A and B are the first two columns.
+2. It lines the two results up by column position, casting types where it can.
+3. It compares whole rows and keeps the ones the operator asks for. Customer 4 is in A only, so `UNION` returns it and
+   `INTERSECT` does not.
 
 | Operator | Returns | Duplicates |
 |---|---|---|
@@ -394,12 +406,23 @@ Call the customers who ordered before April **A**, and those who ordered at Harb
 | `A INTERSECT B` | rows in both | removed |
 | `A EXCEPT B` | rows of A that are not in B | removed |
 
-- **Columns match by position.** The DuckDB documentation says the queries need the same number of columns, matches them by
-  position and takes the result's names from the first query. Types are cast when that is possible, and the operation
-  fails when it is not. The names of the second query play no part. (`UNION BY NAME` matches by name; it is not used here.)
-- **Order matters for `EXCEPT`**: `A EXCEPT B` is not `B EXCEPT A`. It is the anti join of S20 and S23, written as sets.
-- **Coverage** ("every category") is a different pattern: count the different categories each customer bought, and keep
-  those whose count equals the number of categories. The second picture shows it.
+The rules:
+
+- **Columns match by position.** The queries need the same number of columns, and the result takes its names from the
+  first query. A type is cast when that is possible; when it is not, the operation fails.
+- **Plain `UNION`, `INTERSECT` and `EXCEPT` remove repeated rows** (the documentation calls this set semantics). Only the
+  `ALL` variants keep them.
+- **`EXCEPT` has a direction.** It keeps the rows that occur only in the left query, so `A EXCEPT B` is not
+  `B EXCEPT A`. It is the anti join of S20 and S23, written as sets.
+- **Two `NULL`s count as the same row** here, unlike in `=` (S19): `SELECT NULL INTERSECT SELECT NULL` returns one row.
+- **"Every" is not a set operation.** A coverage question counts the different categories each customer bought and
+  compares that count with the total, as in step 6.
+
+**Excel.** `UNIQUE` (E19, *Spilling results with FILTER, SORT and UNIQUE*) is the repeat-removing half of `UNION`: put
+one list under the other, and `UNIQUE` over the pasted range keeps each value once.
+
+**A common misconception: "`UNION` is a join."** A join pairs rows and puts the columns of two tables side by side.
+`UNION` puts one result under the other: the columns stay those of the first query, and only the rows change.
 
 ## Worked example
 

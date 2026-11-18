@@ -5,7 +5,7 @@ description: Name a query with CREATE VIEW, reuse it like a table, share only th
 stage: sql
 order: 280
 level: intermediate
-duration: 20
+duration: 25
 objectives:
   - Create a view and query it like a table
   - Tell when a view helps and when a CTE is enough
@@ -27,6 +27,8 @@ sources:
     url: https://duckdb.org/docs/stable/clients/python/overview
   - title: 'PostgreSQL documentation: Overview of trigger behavior'
     url: https://www.postgresql.org/docs/current/trigger-definition.html
+  - title: 'Microsoft Support: About Power Query in Excel'
+    url: https://support.microsoft.com/en-us/office/about-power-query-in-excel-7104fbee-9e62-4cb9-a02e-5bfb1a6c536a
 status: draft
 ---
 
@@ -41,7 +43,7 @@ notebook cells leave out the closing `;` that this page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Check that the `CREATE TRIGGER` cell (the last worked step of the notebook) ends in a Parser Error in Colab too, and look in the DuckDB documentation for a statement on triggers (no page was opened for it). Time the lesson against its 20 minutes. When you have checked it, set
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Check that the `CREATE TRIGGER` cell (the last worked step of the notebook) ends in a Parser Error in Colab too, and look in the DuckDB documentation for a statement on triggers (no page was opened for it). Time the lesson against its 25 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -134,15 +136,39 @@ By the end you will have saved that join once, as a view that holds the definiti
 </svg>
 </figure>
 
-`CREATE VIEW name AS query` saves a query. The DuckDB documentation: "The view is not physically materialized.
-Instead, the query is run every time the view is referenced in a query." So a view keeps the question, not the answer:
-read it later and you get today's rows. It looks like a CTE (S13), and the documentation says: "Regular
-(non-recursive) common-table-expressions are essentially views that are limited in scope to a particular query."
+## How it works
 
-| | CTE | View |
+A **view** is a query saved under a name. Other queries read the name as if it were a table, but what is saved is the
+question, not the answer. Conceptually, three things happen:
+
+1. `CREATE VIEW sales_lines AS …` stores the query in the database. It computes nothing and copies no rows.
+2. A later query that names `sales_lines` in its `FROM` makes the engine run the stored query at that moment. In the
+   picture above, that is the middle box, run again for each of the two reports below it.
+3. The reading query treats the result like any table: it can filter, group and join it.
+
+The rules:
+
+- **A view stores a query, not rows.** The DuckDB documentation: "The view is not physically materialized. Instead, the
+  query is run every time the view is referenced in a query." If the tables change, the next read shows the change.
+- **A view has the grain of its query**, because reading it means running that query. Check the grain before you count.
+- **A view exposes only the columns its query lists**, so even `SELECT *` on it cannot return the rest. That is not a
+  lock: "Regular views can expose data that the view query would filter out (for example via `stats()`)." DuckDB 2.0 added
+  `CREATE SECURE VIEW` for that case. Treat a view as a convenient shape unless your database's documentation promises
+  more.
+- **A CTE is a view with a smaller scope.** The documentation: "Regular (non-recursive) common-table-expressions are
+  essentially views that are limited in scope to a particular query."
+
+| | CTE (S13) | View |
 |---|---|---|
 | Lives | for one query | in the database, until dropped |
 | Use it when | one query needs the step | several queries or people need the same definition |
+
+**Excel.** A Power Query query (E14, *Repeatable cleaning with Power Query*) is the closest thing: it records its steps
+and runs them again each time you refresh. A view is the same recipe, run each time a query reads it.
+
+**A common misconception: "a view is a copy of the data, like a range pasted as values."** A pasted range is a
+snapshot. A view holds no rows at all, only the query, so it cannot go out of date: the next read always runs against
+the tables as they are then.
 
 ## Worked example
 
@@ -223,10 +249,7 @@ setup cell, then one cell per step. Everything is completed orders, 3,286 lines 
    SELECT * FROM orders_shared LIMIT 3;
    ```
 
-   Expected: the second cell shows 3 rows, 5 columns; `orders` has 6, and `customer_id` is missing. *Why:* the view
-   lists the columns it exposes, so even `SELECT *` on it cannot return the rest. It is not a lock: "Regular views can
-   expose data that the view query would filter out (for example via stats())." DuckDB 2.0 added `CREATE SECURE VIEW` for
-   that case. Treat a view as a convenient shape unless your database's documentation promises more.
+   Expected: the second cell shows 3 rows, 5 columns; `orders` has 6, and `customer_id` is missing. *Why:* the view lists only the columns you chose, and it is a convenient shape, not a lock (How it works).
 
 7. **Views live in the database that made them.**
 
