@@ -25,6 +25,10 @@ reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: INSERT statement'
     url: https://duckdb.org/docs/stable/sql/statements/insert
+  - title: 'DuckDB documentation: UPDATE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/update
+  - title: 'DuckDB documentation: DELETE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/delete
   - title: 'DuckDB documentation: Transaction management'
     url: https://duckdb.org/docs/stable/sql/statements/transactions
   - title: 'DuckDB documentation: Concurrency'
@@ -223,26 +227,35 @@ with `ROLLBACK`, and seen why two people editing one count need a transaction.
 </svg>
 </figure>
 
-Three statements change data. `INSERT` adds rows, `UPDATE` changes values in rows that exist, and `DELETE` removes
-rows. `UPDATE` and `DELETE` act on **every row** unless a `WHERE` narrows them. So the habit of this lesson: **write
-the `WHERE` as a `SELECT` first**, read the rows it returns, and only then change them.
+## How it works
 
-A **transaction** is a group of statements that succeed or fail as one. `BEGIN` opens it, `COMMIT` keeps its changes
-and `ROLLBACK` throws them away. Without `BEGIN`, DuckDB commits each statement as soon as it succeeds. The four
-letters of **ACID** describe what a database promises about transactions (the PostgreSQL glossary names them):
+Three statements change data: `INSERT` adds rows, `UPDATE` changes values in rows that exist, and `DELETE` removes
+rows. A **transaction** is a group of statements that succeed or fail as one. In the first picture above, one `UPDATE`
+changes a row and one `DELETE` removes another; the second picture shows two transactions meeting at one row.
+Conceptually:
 
-| Letter | In plain words | Where you meet it |
-|---|---|---|
-| Atomicity | all of a transaction's changes happen, or none | step 4, `ROLLBACK` |
-| Consistency | the data always obeys its rules, such as the key of S31 | step 6 and exercise 2, a repeated key is refused |
-| Isolation | others do not see your changes until you commit | step 5, Ben still sees 49 |
-| Durability | once committed, a change survives a crash | cannot be shown here |
+1. `BEGIN` opens a transaction. Until it ends, other sessions do not see your changes.
+2. Each statement acts on rows: `WHERE` decides which rows `UPDATE` and `DELETE` touch, and `INSERT` adds new ones.
+3. `COMMIT` keeps every change. `ROLLBACK` throws every change away.
 
-The notebook's database lives in memory, so durability cannot be shown. DuckDB's documentation says that a commit
-writes the changes to disk when the database is a file.
+Without `BEGIN`, a statement that succeeds is committed at once (DuckDB calls this auto-commit mode). The rules:
 
-An **idempotent** load gives the same result when you run it twice as when you run it once. It matters because jobs
-are re-run after a failure, and a re-run must not double the data.
+- `UPDATE` changes the named columns in every row that satisfies the `WHERE`, and `DELETE` removes those rows. With no
+  `WHERE`, `DELETE` removes all rows, and `UPDATE` changes all of them. So the habit of this lesson: **write the `WHERE`
+  as a `SELECT` first**, read the rows it returns, and only then change them.
+- A transaction is all-or-nothing, and the changes of an open transaction are invisible to other transactions until it
+  completes (the PostgreSQL tutorial). DuckDB's concurrency model gives snapshot isolation.
+- When two transactions change the same row at the same time, the second to try fails with a conflict error. DuckDB's
+  advice is to rerun that transaction.
+- The four letters of **ACID** name what a database promises about transactions (the PostgreSQL glossary).
+  *Atomicity*: all of a transaction's changes happen or none. *Consistency*: the data stays within its rules, such as
+  the keys of S31. *Isolation*: others do not see your changes before the commit. *Durability*: a committed change
+  survives a crash. The notebook's database lives in memory, so durability cannot be shown.
+- An **idempotent** load gives the same result when you run it twice as when you run it once.
+
+**A common misconception: "`ROLLBACK` is an undo button for anything I ran."** It discards only what the open
+transaction changed. A statement run outside a transaction is already committed, and `ROLLBACK` then answers
+`cannot rollback - no transaction is active` (DuckDB 2.0.0).
 
 ## Worked example
 
@@ -294,8 +307,8 @@ setup cell and the `stock` cell, then one cell per step. Each step gives the sha
    ```
 
    Expected: the first cell prints a `Success` table, the `DELETE` a `Count` table, and each `SELECT` 1 row, 1
-   column. Inside the transaction the count is 0; after `ROLLBACK` it is back to 7. *Why:* a `DELETE` without a
-   `WHERE` removes every row, but the transaction kept the change private until you decided. This is atomicity:
+   column. Inside the transaction the count is 0; after `ROLLBACK` it is back to 7. *Why:* with no `WHERE`, the
+   `DELETE` reached every row, but the transaction kept the change private until you decided. This is atomicity:
    all of it, or none.
 
 5. **Two tills, one count.** Ana and Ben each sell a croissant at the same moment. `con.cursor()` gives each of them
@@ -318,11 +331,9 @@ setup cell and the `stock` cell, then one cell per step. Each step gives the sha
    ```
 
    Expected: Ana's `SELECT` returns 1 row, 1 column. Ben's `SELECT` returns 1 row, 1 column. Ben's `UPDATE` prints
-   an error that starts `TransactionContext Error:` (the notebook catches it). *Why:* Ana sees her own change (48), Ben still sees 49: isolation, which DuckDB's documentation calls snapshot isolation.
-   DuckDB's documentation says that when two transactions change the same row, the second fails and you rerun it.
-   Do that: Ben runs `ROLLBACK`, Ana runs `COMMIT`, then Ben runs `BEGIN`, the same `UPDATE` and `COMMIT`. The check
-   `SELECT units_on_hand ...` now returns 47, because both sales count. Notice `units_on_hand - 1`: the database
-   subtracts from the number as it is now, not from one that someone read earlier.
+   an error that starts `TransactionContext Error:` (the notebook catches it). *Why:* Ana sees her own change (48), Ben still sees 49: isolation.
+   Now rerun, as DuckDB advises: Ben runs `ROLLBACK`, Ana runs `COMMIT`, then Ben runs `BEGIN`, the same `UPDATE` and `COMMIT`. The check
+   `SELECT units_on_hand ...` now returns 47, because both sales count.
 
 6. **Reload one store, safely.** `campus_count` is a staging table of Campus's new counts: three rows, for products
    1, 10 and 6.

@@ -5,7 +5,7 @@ description: Split a wide table into related tables in plain language, and see t
 stage: sql
 order: 330
 level: intermediate
-duration: 25
+duration: 30
 objectives:
   - Spot repeated facts in a wide table
   - Split a table into related tables with keys
@@ -46,7 +46,7 @@ tables are never changed, and every trial change to the copy runs inside a trans
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. Read the wording of the three normal forms against a course text you trust; the Microsoft Learn page is an archived support article. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 30 minutes. Read the wording of the three normal forms against a course text you trust; the Microsoft Learn page is an archived support article. How it works words the second and third forms in the textbook way (part of the key; another non-key column); the Microsoft page words them more loosely, so check those two rules against your course text. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -238,25 +238,39 @@ the known answers stay the same.
 </svg>
 </figure>
 
-**Normalization** is organizing data into tables so that each fact is stored once. The Microsoft Learn description
-gives rules called normal forms; in plain words:
+## How it works
 
-| Form | Rule | In the cafe data |
-|---|---|---|
-| First (1NF) | no repeating groups: one row per thing, not `product_1`, `product_2`, `product_3` columns | an order with three products is three rows, as in the wide table |
-| Second (2NF) | no non-key column depends on only part of the key | the key is the pair (`order_id`, `product_id`); product facts depend on `product_id` alone and order facts on `order_id` alone, so both leave the lines |
-| Third (3NF) | no non-key column depends on another non-key column | store name and city depend on `store_id`, not on the order's key; customer city and tier on `customer_id` |
+**Normalization** is organizing data into tables so that each fact is stored once, in a table whose key identifies it.
+Other tables point to it by key. Microsoft Learn sets three rules for it, called **normal forms**. In the first picture,
+one row of the wide table is one order line, and its key is the pair (`order_id`, `product_id`): 3,287 rows, 3,287
+different pairs. To normalize it:
 
-A sheet that puts order 1001 on one row (`product_1`, `quantity_1`, `product_2`, ...) breaks the first rule: a fourth
-product needs a new column, and counting Espressos needs one sum per column. The wide table's rows are product
-lines, and its key is the pair (`order_id`, `product_id`): its 3,287 rows hold 3,287 different pairs. A one-column key such as
-`order_item_id` could not break the second rule, since no part of it is left over.
+1. Find the facts repeated from row to row: the shaded cells of the first picture.
+2. Move each group of facts into a table of its own, keyed by the column they depend on, and leave that column behind as
+   a foreign key.
+3. Read them together again with a join on the keys.
 
-A badly shaped table fails in three ways, the **anomalies**:
+The rules:
 
-- **Update:** one fact is stored on many rows, so a change that misses some rows leaves two versions.
-- **Insert:** you cannot record a fact until something else exists. A new product needs a sale first.
-- **Delete:** removing one row also removes a fact. Deleting the only sale of a customer erases the customer.
+- **First (1NF):** one row per thing, no repeating columns such as `product_1` and `product_2`: a fourth product
+  would need a new column.
+- **Second (2NF):** no non-key column depends on only part of the key. Product facts depend on `product_id` alone and
+  order facts on `order_id` alone, so both leave the lines. A one-column key cannot break this rule.
+- **Third (3NF):** no non-key column depends on another non-key column. Store name and city depend on `store_id`, not
+  on the order, so they leave the orders; so do customer city and tier, which depend on `customer_id`.
+- A badly shaped table fails in three ways, the **anomalies**. *Update:* a fact stored on many rows can be changed on
+  some and not others, leaving two versions. *Insert:* a fact cannot be recorded until a row for something else exists,
+  as a fourth cafe cannot until it has an order. *Delete:* removing a row also removes a fact, as removing the only line
+  that mentions a product erases the product.
+- **Denormalizing** stores a fact many times on purpose. Microsoft Learn says normalization adds tables that some find
+  cumbersome, and the Azure Architecture Center notes the join cost for read-heavy views. Analysts build a wide table as
+  a view or star schema (S29) over tables that stay normalized.
+
+**Excel.** In E8 (*Bring in a value by key with XLOOKUP*) a price sits on one sheet and each line holds only the code.
+Normalizing does that for every repeated fact.
+
+**A common misconception: "normalized means no value repeats."** Keys repeat: Old Town's `store_id` of 1 sits on all
+729 of its orders in `n_order`. What is stored once is each fact about the store, its name and city.
 
 ## Worked example
 
@@ -332,8 +346,7 @@ all lines, including the extra-zero line of order 2075.
    ```
 
    Expected: a `Count` table with 1 row. *Why:* `DISTINCT` keeps each product once, and the primary key
-   (from S31) would refuse a product with two different names. Name, category and price depend on `product_id`, only part of
-   the key, so they leave the lines. The new table has 15 rows, not 16, for the reason of step 4.
+   (from S31) would refuse a product with two different names. The new table has 15 rows, not 16, for the reason of step 4.
 
 6. **Split out the store facts (3NF), then the rest.**
 
@@ -344,8 +357,7 @@ all lines, including the extra-zero line of order 2075.
 
    Expected: a `Count` table, 1 row. The next notebook cell, done for you, builds `n_customer`, `n_order` and `n_line`
    with the same recipe, each with its primary key, and `n_order` and `n_line` with foreign keys as in the picture; `n_line`
-   keeps `order_item_id` as its key. Store name and city depend on `store_id`, a column of the order facts and not their key,
-   which is the third rule. *Why:* `n_customer` needs `WHERE customer_id IS NOT NULL`: without it, the walk-in's empty row hits the `NOT NULL`
+   keeps `order_item_id` as its key. *Why:* `n_customer` needs `WHERE customer_id IS NOT NULL`: without it, the walk-in's empty row hits the `NOT NULL`
    rule and the insert fails.
 
 7. **Prove the answers did not change.** Rebuild the wide table as a view over the five new tables, then compare.
@@ -383,11 +395,6 @@ the wide table held. This is the insert anomaly: the five tables could record th
 could not.
 
 </details>
-
-The wide table is not useless. For reading it is handy: one table to filter and group, with no joins. Analysts build it
-on purpose, as a view like step 7 or as a star schema (S29), from tables that stay normalized, and rebuild it instead of
-editing it. This is **denormalizing**: one fact stored many times, accepted as the price of easy reading. Microsoft Learn
-says normalization adds tables that some find cumbersome, and the Azure Architecture Center notes the join cost for read-heavy views.
 
 ## Finish it
 

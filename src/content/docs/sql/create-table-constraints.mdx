@@ -5,7 +5,7 @@ description: Define your own table with CREATE TABLE, choose types, and let keys
 stage: sql
 order: 310
 level: intermediate
-duration: 25
+duration: 30
 objectives:
   - Write a CREATE TABLE with types and a primary key
   - Add a foreign key and a NOT NULL, UNIQUE and CHECK constraint
@@ -45,7 +45,7 @@ cells wrap each query as in S1 and leave out the closing `;`.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error messages that step 5 and exercise 2 print with Colab's version. Time the lesson against its 25 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error messages that step 5 and exercise 2 print with Colab's version. Time the lesson against its 30 minutes. The statement in How it works that `UNIQUE` allows an empty value rests on the DuckDB Constraints page saying only that a primary key also forbids `NULL`; DuckDB 2.0.0 stored two `NULL`s in a `UNIQUE` column in a test run, but the page has no sentence for it. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -177,27 +177,39 @@ refused which.
 </svg>
 </figure>
 
-A **constraint** is a rule written into a table's definition. DuckDB checks it when rows are inserted and refuses a row
-that breaks it: you get an error, and the row is not stored. You write the rules next to the columns, in
-`CREATE TABLE name (column type rules, ...)`.
+## How it works
 
-| Rule | Refuses | Written as |
-|---|---|---|
-| `PRIMARY KEY` | a repeated or empty key | `product_id INTEGER PRIMARY KEY`, or `PRIMARY KEY (store_id, product_id)` for two columns |
-| `NOT NULL` | an empty value | `product_name VARCHAR NOT NULL` |
-| `UNIQUE` | a repeated value in a column that is not the key (an empty value is allowed) | `product_name VARCHAR UNIQUE` |
-| `CHECK` | a value that fails your test | `CHECK (units_on_hand >= 0)` |
-| `FOREIGN KEY` | a key with no match in another table | `product_id INTEGER REFERENCES menu (product_id)` |
-| `DEFAULT` | nothing: it fills in a value when you give none | `units_on_hand INTEGER DEFAULT 0` |
+A **constraint** is a rule written into a table's definition, next to a column, in
+`CREATE TABLE name (column type rules, ...)`. DuckDB applies the rules to rows as they go in, and a row that breaks one
+is refused with a `Constraint Error` and not stored. The first picture above writes a table as a form; the second shows
+candidate rows meeting its rules. Conceptually, each new row goes through four steps:
 
-A foreign key can only point at a primary key or `UNIQUE` column. The cafe-sales tables declare neither, so `stock`
-points at `menu`, a copy of `products` that you build with its rules first.
+1. A column the `INSERT` leaves out is filled with its `DEFAULT`, or with `NULL` if it has none.
+2. `NOT NULL` and `CHECK` look at the row alone.
+3. `PRIMARY KEY` and `UNIQUE` compare it with the rows already stored: in the second picture, the stored rows are listed
+   under the candidates.
+4. `FOREIGN KEY` looks in another table. A row that meets every rule is stored.
 
-<Aside type="note" title="Create first, then fill">
-`CREATE TABLE ... AS SELECT` builds a table from a query, but the DuckDB documentation says tables made that way cannot
-carry constraints. So you write the table with its rules, then fill it with `INSERT INTO ... SELECT`. The next lesson,
-*Inserting, updating and deleting safely*, teaches `INSERT` in full; here you need only the forms you see.
-</Aside>
+The rules, and what each refuses:
+
+- `PRIMARY KEY`: a repeated value, or an empty one. A table has at most one primary key, and it may span several
+  columns, as in `PRIMARY KEY (store_id, product_id)`.
+- `UNIQUE`: a repeated value. A table may have several, and an empty value is allowed.
+- `NOT NULL`: an empty value. Without it, a column accepts `NULL`.
+- `CHECK`: a row that makes your Boolean expression false, as in `CHECK (units_on_hand >= 0)`.
+- `FOREIGN KEY`: a value with no match in another table's key. That key must be a primary key or a `UNIQUE` column, so
+  its table is built first. The cafe-sales tables declare neither, so `stock` points at `menu`, a copy of `products`
+  that you build with its rules.
+- `DEFAULT` refuses nothing: it fills in a value when you give none.
+
+**Excel.** Data validation (E18, *Highlight and validate with rules*) restricts the values a user may enter into a cell,
+for example to a dropdown list. A `CHECK ... IN (...)` is the same idea written into the table.
+
+**A common misconception: "a constraint guarantees the data is right."** It guarantees only the rule you wrote:
+`CHECK (unit_price_usd > 0)` accepts 450.00 for a Latte that costs 4.50, because the expression is true for it.
+
+You write the table with its rules, then fill it with `INSERT INTO ... SELECT`, as step 2 does. The next lesson,
+*Inserting, updating and deleting safely*, teaches `INSERT` in full.
 
 ## Worked example
 
