@@ -93,6 +93,7 @@ when two rows tie.
 ## Learn by doing
 
 Five small steps. Each gives you one idea, then you try it in the editor.
+
 Every query starts with the `per_customer` stage from the warm-up. It counts all orders with a customer, canceled
 included; the one canceled order is its customer's only order, far from the top.
 
@@ -363,15 +364,14 @@ FROM ranked
 WHERE rnk <= 3
 ORDER BY store_id, rnk, customer_id;`} />
 
-Expected: 13 rows, 4 columns: 4 rows more than unit 3. *Why:* Old Town keeps 3 rows, Campus 5 (three tie for third place
-on 24 orders) and Harbor 5 (four tie for second). `DENSE_RANK` would keep 4, 5 and 10, because it counts places, not
-rows. With three cards per cafe, only `ROW_NUMBER` fits the policy.
+Expected: 13 rows, 4 columns: 4 rows more than unit 3.
 
 <details>
 <summary>Explain it in your own words: why did <code>RANK</code> return more rows than <code>ROW_NUMBER</code> in this unit?</summary>
 
-At Campus, three customers tie on 24 orders for third place. `ROW_NUMBER` hands them 3, 4 and 5, so only one passes
-`row_num <= 3`; `RANK` hands all three a 3, so all three pass `rnk <= 3`.
+Old Town has no tie at the cut-off, so it keeps 3 rows. At Campus, three customers tie on 24 orders for third place:
+`ROW_NUMBER` hands them 3, 4 and 5, so only one passes `row_num <= 3`, while `RANK` hands all three a 3, so Campus keeps
+5 rows. Harbor also keeps 5: four customers tie for second place.
 
 </details>
 
@@ -412,8 +412,7 @@ Expected: 3 rows, 2 columns, with `3` in every row of `rows_kept`. *Why:* 3 cafe
 - Filter on a rank in the next stage (or with `QUALIFY`), then count the rows of each group.
 
 **Common trap: "a tie means something is wrong with the data."** Equal values are normal: Chai Latte and Cold Brew both
-cost \$4.75, and four of Harbor's customers have 10 orders. A top-N query that ignores ties keeps the wrong number of
-rows: 13 with `RANK`, where the owner wanted 9.
+cost \$4.75, and four of Harbor's customers have 10 orders. A top-N query that ignores ties returns more rows than promised.
 
 </Aside>
 
@@ -590,22 +589,22 @@ It runs and returns the right kind of table:
 ),
 ranked AS (
   SELECT store_id, customer_id, orders,
-         RANK() OVER (PARTITION BY store_id ORDER BY orders DESC) AS rnk
+         DENSE_RANK() OVER (PARTITION BY store_id ORDER BY orders DESC) AS dense_rnk
   FROM per_customer
 )
 SELECT store_id, customer_id, orders
 FROM ranked
-WHERE rnk <= 3
+WHERE dense_rnk <= 3
 ORDER BY store_id, orders DESC, customer_id;`} />
 
 Expected: a table with 3 columns. Count the rows of each cafe, find the flaw and fix it.
 
 <Solution>
 
-The result has 13 rows, not 9: Old Town has 3, but Campus and Harbor have 5. `RANK()` gives tied customers the same
-number, so every customer tied inside the top three stays: three tie for third at Campus, four for second at Harbor.
-The policy was *exactly three*, so the function must be `ROW_NUMBER()` with a tie-breaker, as in unit 3. The row count
-per cafe, unit 5, would have caught it. After the fix: 9 rows, 4 columns.
+The result has 19 rows, not 9: Old Town has 4, Campus 5 and Harbor 10. `DENSE_RANK()` counts places, not rows, so
+every customer tied inside the first three places stays: Harbor's places are 11 orders, 10 orders (four customers) and 9
+orders (five customers). The policy was *exactly three*, so the function must be `ROW_NUMBER()` with a tie-breaker, as
+in unit 3. The row count per cafe, unit 5, would have caught it. After the fix: 9 rows, 4 columns.
 
 </Solution>
 

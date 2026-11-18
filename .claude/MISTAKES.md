@@ -294,6 +294,17 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   Ideas stated the result of the Predict under them (the finer grain of a join, a join of one row with one row). →
   **After restructuring into units, grep every lesson for "step N" and "the picture" and fix them; then read each unit's
   Idea against the Predict under it, and move any sentence that states the result into the Why.**
+- 2026-11-18 — In the S12 to S17 rollout, exercise starters (`-- add your GROUP BY and HAVING lines here`) were not
+  valid SQL, so the runner showed an error before the learner typed anything. → **A `<RunSQL>` starter runs as given:
+  it returns a result or a deliberate error the exercise is about; the learner adds only the missing clause.**
+- 2026-11-18 — Unit Result and Why lines gave away an Explain-it answer (the 3, 5 and 5 rows per cafe), a Remember
+  trap named the numbers of Exercise 3 (13 against 9), and a Why described the grain the Explain-it asks about. →
+  **Before finishing, grep every unit's Expected, Why and Remember against every Explain-it and Exercise 3 answer in the
+  lesson; no sentence outside the answer may state its numbers or its reason.**
+- 2026-11-18 — A spot-the-flaw query broke on an unordered tie (`ORDER BY updated_at DESC` alone), so the wrong row
+  could change between engine versions and hide the flaw. → **A spot-the-flaw bug is a deterministic wrong rule (a
+  tie-breaker in the wrong direction, a wrong function), never an unspecified tie; run it on DuckDB 2.0.0 and 1.4.3 and
+  expect the same rows.**
 
 ## Agents and reviews
 
