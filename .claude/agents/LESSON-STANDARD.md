@@ -8,7 +8,8 @@ No frontmatter `name`, so it is not loaded as an agent. Past mistakes and their 
 ## Read, in this order
 
 1. This file.
-2. The model lesson of the stage (Excel: `src/content/docs/excel/grid-and-tidy-layout.mdx`); match its voice and length.
+2. The model lesson of the stage (Excel: `src/content/docs/excel/grid-and-tidy-layout.mdx`; SQL: `src/content/docs/sql/from-spreadsheet-to-sql.mdx`
+   for one-table lessons and `relational-model.mdx` for keys and joins); match its voice and length.
 3. Your lessons' entries in `research/curriculum/06-curriculum-map.yaml` (`visual`, `notes`, `research`).
 4. `datasets/cafe-sales/README.md` (tables, row counts, built-in surprises). Not the whole SPEC.
 
@@ -67,7 +68,15 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
   `sheets/excel/{lesson-id}.xlsx`; sheets `raw_*`, `calc`, `calc_ex1..3`, `output`. Plus the `TODO(owner)` paragraph
   about the Google Drive `sheet` link, copied from the model lesson.
 - SQL and Python: a notebook `notebooks/{stage}/{lesson-id}.ipynb` without outputs (the `notebook` field), loading
-  data from the release-tag URL in SPEC §7.
+  data from the release-tag URL in SPEC §7 (now `v0.1.0`, D39). SQL notebooks copy the model lesson's setup cell
+  (`con.execute(script)` on `cafe-sales.sql`), use `con.sql("""...""").show()` cells without the closing `;`, one cell per
+  worked step, empty or partial cells per exercise, and no solutions. The lesson renames to `.mdx` for `<OpenInColab />`.
+- SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
+  `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
+  in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what
+  the lesson's prerequisites have not taught yet; name earlier lessons by title and code at first use.
+- Length: about 100 body words per minute of `duration` (a 20-minute lesson is at most about 2,200 words with the
+  exercises); report the count.
 
 ## Done means
 

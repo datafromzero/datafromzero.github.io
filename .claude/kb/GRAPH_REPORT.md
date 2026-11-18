@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 801 nodes, 803 edges, 97 communities (384 isolated nodes).
+- 801 nodes, 806 edges, 97 communities (384 isolated nodes).
 - Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 40, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 64, skill 1, spec-section 25, starlight-component 6, style 5, symbol 141, template 2, token 12.
-- Edges: defines 141, imports 36, mentions 503, overrides 6, references 26, runs 10, specified-by 4, uses 50, uses-token 22, validated-by 5.
+- Edges: defines 141, imports 36, mentions 506, overrides 6, references 26, runs 10, specified-by 4, uses 50, uses-token 22, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -52,15 +52,15 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C70 to C68, src/lib/content-schemas.ts:96)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C84 to C81, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C45 to C1, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C15 to C29, design/README.md:181)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C44 to C1, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C15 to C30, design/README.md:181)
 - `M8` -mentions-> `S4` (C1 to C4, CLAUDE.md:65)
 - `DG6` -mentions-> `DG2` (C61 to C13, design/README.md:226)
-- `M7` -mentions-> `D34` (C44 to C15, CLAUDE.md:60)
-- `S5.2` -mentions-> `D18` (C51 to C46, SPEC.md:230)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C43 to C44, src/lib/repo-files.ts:4)
-- `D5` -mentions-> `S9` (C44 to C69, SPEC.md:32)
-- `M6` -mentions-> `D27` (C49 to C47, CLAUDE.md:57)
+- `M7` -mentions-> `D34` (C43 to C15, CLAUDE.md:60)
+- `S5.2` -mentions-> `D18` (C50 to C45, SPEC.md:230)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C42 to C43, src/lib/repo-files.ts:4)
+- `D5` -mentions-> `S9` (C43 to C69, SPEC.md:32)
+- `M6` -mentions-> `D27` (C48 to C46, CLAUDE.md:57)
 - `S15` -mentions-> `S1` (C64 to C4, SPEC.md:464)
 
 ## Decisions (SPEC §1)
@@ -176,9 +176,9 @@ term: id — file:line
 - footer: `src/components/starlight/Footer.astro` — src/components/starlight/Footer.astro:1
 - nvmrc: `.nvmrc` — .nvmrc:1
 - Authoring components: `S6` — SPEC.md:253
+- LESSON-STANDARD: `agent:LESSON-STANDARD` — .claude/agents/LESSON-STANDARD.md:1
 - Internationalization: `S8` — SPEC.md:314
 - Content model: `S5` — SPEC.md:155
-- LESSON-STANDARD: `agent:LESSON-STANDARD` — .claude/agents/LESSON-STANDARD.md:1
 
 ## Suggested questions
 
