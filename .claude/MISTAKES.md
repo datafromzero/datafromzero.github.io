@@ -286,6 +286,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   shows a phrase with its own example, quote the phrase but do not attribute our example to the page ("the documentation
   uses X; ours is Y"). Never write "the only way" without a source.**
 
+- 2026-11-18 — The S18 and S20 to S23 rollout left stale "step N" references after the steps became units, and two unit
+  Ideas stated the result of the Predict under them (the finer grain of a join, a join of one row with one row). →
+  **After restructuring into units, grep every lesson for "step N" and "the picture" and fix them; then read each unit's
+  Idea against the Predict under it, and move any sentence that states the result into the Why.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
