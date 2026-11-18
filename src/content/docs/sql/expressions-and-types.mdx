@@ -5,7 +5,7 @@ description: Calculate new columns, cast between types and avoid integer-divisio
 stage: sql
 order: 50
 level: beginner
-duration: 25
+duration: 30
 objectives:
   - Write arithmetic expressions with correct precedence
   - Cast text to a number or date and back
@@ -31,6 +31,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/functions/utility
   - title: 'DuckDB documentation: Describe a table or a query'
     url: https://duckdb.org/docs/stable/guides/meta/describe
+  - title: 'Microsoft Learn: Floating-point arithmetic may give inaccurate result in Excel'
+    url: https://learn.microsoft.com/en-us/troubleshoot/microsoft-365-apps/excel/floating-point-arithmetic-inaccurate-result
 status: draft
 ---
 
@@ -45,7 +47,7 @@ table. The notebook cells leave out the closing `;` that this page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. The results here come from DuckDB 2.0.0: an older version in Colab can show other types for a calculation (for example the decimal width in step 3) or other error text. The operator-precedence rule (step 2) is shown by the results in the step and called standard SQL; no DuckDB page was found that states it, so check whether you want one cited. The rule that an expression with a text column and a number needs a cast comes from the `Binder Error` text in exercise 2, not from a documentation page. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to that day and `status: published`.
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. The results here come from DuckDB 2.0.0: an older version in Colab can show other types for a calculation (for example the decimal width in step 3) or other error text. The operator-precedence rule (step 2) is shown by the results in the step and called standard SQL; no DuckDB page was found that states it, so check whether you want one cited. The rule that an expression with a text column and a number needs a cast comes from the `Binder Error` text in exercise 2, not from a documentation page. Time the lesson against its 30 minutes. When you have checked it, set `reviewed` to that day and `status: published`.
 
 ## Warm-up
 
@@ -163,9 +165,41 @@ matters.
 </svg>
 </figure>
 
-An **expression** is a calculation in the `SELECT`: it takes columns and numbers and returns a value for every row, and
-`AS` names the result (S2). The operators are `+`, `-`, `*`, `/` and `%`; the second picture adds `//`. A type name
-comes after `CAST(x AS ...)`:
+## How it works
+
+An **expression** is a calculation in the `SELECT` list. It combines columns, numbers and operators, and SQL works it out
+once for every row, so one expression gives a whole new column. Every value also has a **type**: whole number, decimal,
+text, date. The types of the inputs decide the type of the answer. For each row, the engine does
+this:
+
+1. It takes the row's values, each with its type.
+2. It works out the operators by precedence: brackets first, then `*` and `/`, then `+` and `-`.
+3. It gives each answer a type that follows from the types of its inputs.
+4. `CAST(x AS type)` changes a value's type on purpose.
+
+In the first picture above, one price and one factor go through three types and give three different results; the
+second picture belongs to step 6. The rules:
+
+- Multiplication and division come before addition and subtraction. This is standard SQL: `2 + 3 * 4` is 14, and
+  `(2 + 3) * 4` is 20.
+- `DECIMAL(w,s)` holds exact decimals: `w` digits in all, `s` of them after the point. DuckDB's numeric types page says
+  adding, subtracting or multiplying two decimals gives another decimal, wide enough to hold the exact answer.
+- Dividing a decimal gives floating point, not a decimal (same page).
+- `DOUBLE` is floating point. The same page says such calculations are "only approximate", and that exact money amounts
+  need `DECIMAL`.
+- A cast writes `CAST(x AS type)` or `x::type` (DuckDB's casting page). When the value does not fit the type, the query
+  stops with an error. `TRY_CAST` returns NULL instead.
+
+**Excel.** A formula filled down, as in *Your first formulas* (E2), is one expression run for every row. Microsoft's page
+says "Excel stores numbers using double-precision", a floating-point type like `DOUBLE`. In SQL you choose the type per
+column, and for money that choice is `DECIMAL`.
+
+**A common misconception: "a stray digit far to the right of the decimal point is harmless, so `DOUBLE` is fine for
+money."** On screen it may be, but a comparison sees it. `0.1 + 0.2 = 0.3` is false when the three numbers are `DOUBLE` (the sum is
+0.30000000000000004), and true when they are `DECIMAL(3,1)`. A comparison, a filter or a join on such values can
+disagree with the cents you meant.
+
+The common types:
 
 | Type | Holds | Example |
 |---|---|---|
@@ -221,8 +255,8 @@ cell per step. Each step gives the shape of the result to expect.
 
    Expected: 4 rows, 6 columns, and then 3 rows, 6 columns. Read the `column_name` and `column_type` columns: `unit_price_usd`
    is `DECIMAL(6,2)`, and `happy_price_usd` is `DECIMAL(9,4)`. *Excel:* the formula bar and the format of a cell (E4).
-   *Why:* `DECIMAL` stores exact decimals; multiplying two of them gives a decimal with as many digits as the exact answer
-   needs, according to DuckDB's documentation, so the two decimals of 0.80 and the two of the price become four.
+   *Why:* the two decimals of 0.80 and the two of the price make
+   four in the exact answer, so the result type has four.
 
 4. **Cast to exact cents.**
 
@@ -233,8 +267,7 @@ cell per step. Each step gives the shape of the result to expect.
    WHERE category IN ('coffee', 'tea');
    ```
 
-   Expected: 10 rows, 3 columns, with two decimals. *Why:* `CAST(x AS type)` converts a value to another type (the short form is `x::type`),
-   and `DECIMAL(6,2)` is the type of a price. Here every result is already whole cents, so the cast loses nothing. When a result has
+   Expected: 10 rows, 3 columns, with two decimals. *Why:* `DECIMAL(6,2)` is the type of a price. Here every result is already whole cents, so the cast loses nothing. When a result has
    more decimals than the type allows, a cast rounds, so look at the numbers before you cast money.
 
 5. **See why money is not DOUBLE.**
@@ -246,8 +279,7 @@ cell per step. Each step gives the shape of the result to expect.
    ```
 
    Expected: 10 rows, 2 columns. *Why:* `DOUBLE` stores an approximation, and 4 of the 10 results show stray digits: Cold Brew gives
-   3.8000000000000003 instead of 3.80. DuckDB's documentation says that adding, subtracting and multiplying `DOUBLE` values is only
-   approximate, and to use `DECIMAL` for monetary amounts. One detail to remember: dividing a decimal gives a `DOUBLE`.
+   3.8000000000000003 instead of 3.80.
 
 6. **Meet integer division.**
 
@@ -273,8 +305,7 @@ cell per step. Each step gives the shape of the result to expect.
    ```
 
    Expected: 1 row, 3 columns. *Excel:* a number stored as text (E4). *Why:* text can be turned into a number or a date,
-   and a number into text. Dates are written year-month-day, as in DuckDB's date documentation. Text that does not fit stops the query
-   with an error, which is better than a wrong number.
+   and a number into text. Dates are written year-month-day, as in DuckDB's date documentation.
 
 8. **Verify.** Take the 20 percent off the price and compare with the cents you cast. A mismatch would show up as a row:
 

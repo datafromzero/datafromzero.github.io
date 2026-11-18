@@ -5,7 +5,7 @@ description: 'Treat NULL as unknown: test with IS NULL, see why comparisons with
 stage: sql
 order: 40
 level: beginner
-duration: 20
+duration: 25
 objectives:
   - Test for missing values with IS NULL and IS NOT NULL
   - Predict the result of a comparison that involves NULL
@@ -31,6 +31,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/expressions/in
   - title: 'DuckDB documentation: Utility functions (coalesce)'
     url: https://duckdb.org/docs/stable/sql/functions/utility
+  - title: 'Microsoft Support: AVERAGE function'
+    url: https://support.microsoft.com/en-us/office/average-function-047bac88-d466-426c-a32b-8f33eb960cf6
 status: draft
 ---
 
@@ -46,7 +48,7 @@ table. The notebook cells leave out the closing `;` that this page shows.
 <OpenInColab />
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. Compare the `Conversion Error` text in step 7 with Colab's version. DuckDB's IN page says `IN` with a list in square brackets ignores NULLs, unlike `IN` with parentheses; this lesson uses parentheses only, so decide whether the difference deserves a line. Time the lesson against its 20 minutes. When you have checked it, set `reviewed` to that day and
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. Compare the `Conversion Error` text in step 7 with Colab's version. DuckDB's IN page says `IN` with a list in square brackets ignores NULLs, unlike `IN` with parentheses; this lesson uses parentheses only, so decide whether the difference deserves a line. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to that day and
 `status: published`.
 
 ## Warm-up
@@ -169,10 +171,38 @@ By the end you will have answered both questions, and the second one has a trap:
 </svg>
 </figure>
 
-**NULL** means *unknown*: the value is missing, not zero and not an empty text. It is not a number you can compare.
-Any comparison with NULL, including `NULL = NULL`, gives NULL, and a `WHERE` keeps a row only when its condition is
-true, so a NULL result drops the row (first picture). `AND` and `OR` can sometimes still give an answer, as in the second
-picture: `NULL AND false` is false, and `NULL OR true` is true. The tools:
+## How it works
+
+**NULL** is SQL's marker for a value that is unknown or missing. SQL cannot say whether a test on an unknown value is
+true or false, so it gives a third answer, NULL, and a `WHERE` keeps only one of the three. For each row, the engine
+does this:
+
+1. It reads the row's values. A missing one is NULL.
+2. It works out each comparison. If either side is NULL, the answer is NULL.
+3. It combines the answers with `AND`, `OR` and `NOT`, which work with all three values. The second picture above lists
+   what every pair gives.
+4. `WHERE` keeps the row only if the final answer is true. False and NULL both drop it, and there is no error.
+
+In the first picture above, seven of the eight customers have a NULL, so both tests give NULL for them and drop them.
+The rules:
+
+- Any comparison with NULL returns NULL, including `NULL = NULL` (DuckDB's NULL values page).
+- `AND` and `OR` do not always return NULL: `NULL AND false` is false and `NULL OR true` is true, but `NOT NULL` is NULL
+  (the logical operators page).
+- `IS NULL` and `IS NOT NULL` are the tests for a missing value, and they answer true or false, never NULL (the
+  comparison operators page).
+- `COALESCE(x, d)` returns the first of its arguments that is not NULL, so it gives `d` when `x` is missing (the utility
+  functions page).
+
+**Excel.** In *Numbers are not numbers until you check* (E4), the nearest thing to NULL is an empty cell. `AVERAGE` skips
+empty cells: Microsoft Support says "those values are ignored". A SQL aggregate skips NULL the same way, but a comparison
+does not skip it: it answers NULL.
+
+**A common misconception: "a missing value counts as 0 in a total or an average."** Most aggregate functions, the
+counting and summing functions of a later lesson, ignore NULL (DuckDB's NULL values page). Over customers 1 to 8 of the
+first picture, `AVG(referred_by)` is 3.0: the one value that exists, not 3 shared among eight customers.
+
+The tools:
 
 | SQL | Reads as | In Excel |
 |---|---|---|
@@ -202,7 +232,6 @@ notebook's setup cell, then one cell per step. Each step gives the shape of the 
    ```
 
    Expected: 0 rows, 6 columns, and no error. *Why:* `customer_id = NULL` is NULL for every row, so `WHERE` drops them all.
-   DuckDB's documentation says any comparison with NULL returns NULL, including `NULL = NULL`.
 
 3. **Meet the first trap.**
 
@@ -235,8 +264,7 @@ notebook's setup cell, then one cell per step. Each step gives the shape of the 
    ```
 
    Expected: 1 row, 3 columns: false, false, true. *Why:* 0 is a number and `''` is a text with no characters; both are
-   values. NULL is no value at all. This is the E4 difference between a real 0 and an empty cell. DuckDB's documentation says most aggregate functions ignore NULL, which
-   the lesson *Counting and summing: aggregate functions* shows.
+   values. NULL is no value at all. This is the E4 difference between a real 0 and an empty cell.
 
 6. **Meet the second trap: NOT IN.** You paste a list of customers who already got a thank-you card from a sheet column with an
    empty cell. Which of customers 1 to 8 still need one? First the list without the gap, then with it:
