@@ -29,6 +29,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/dialect/friendly_sql
   - title: 'DuckDB documentation: Python API overview'
     url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'Microsoft Support: Filter data in a range or table'
+    url: https://support.microsoft.com/en-us/office/filter-data-in-a-range-or-table-01832226-31b5-4568-8806-38c37dcc180e
   - title: 'PostgreSQL documentation: SELECT'
     url: https://www.postgresql.org/docs/current/sql-select.html
 status: draft
@@ -290,25 +292,35 @@ and you will have read the answer: **coffee with 5 items and bakery with 3**.
 </svg>
 </figure>
 
-You write `SELECT` first. The engine runs it near the end. The DuckDB documentation says so in its own words: "Logically,
-the FROM clause is where the query starts execution." and "Logically the WHERE clause is applied immediately after the
-FROM clause." For the SELECT clause: "While it appears first in the clause, logically the expressions here are executed
-only at the end." And for the last two: "ORDER BY, LIMIT, and OFFSET are output modifiers. Logically they are applied at
-the very end of the query." Between them, "the WHERE clause occurs before the grouping, the HAVING clause occurs after
-the grouping."
+## How it works
 
-| You write | The engine runs |
-|---|---|
-| 1. `SELECT` | 1. `FROM`: take the table |
-| 2. `FROM` | 2. `WHERE`: keep rows |
-| 3. `WHERE` | 3. `GROUP BY`: make groups |
-| 4. `GROUP BY` | 4. `HAVING`: keep groups |
-| 5. `HAVING` | 5. `SELECT`: choose columns, name them |
-| 6. `ORDER BY` | 6. `ORDER BY`: sort |
-| 7. `LIMIT` | 7. `LIMIT`: cut |
+You write `SELECT` first, but the engine does not read a query from the top. DuckDB's documentation describes a fixed
+**logical order**: the order in which each clause behaves as if it ran. Each clause works on the rows the previous one
+left and hands its own result to the next. The picture above follows the same order, one clause at a time.
 
-Picture the table as a grid. `WHERE` chooses **rows** (and `HAVING` chooses groups). `SELECT` chooses **columns**. They
-never swap jobs, and `WHERE` runs first, on the whole table.
+1. `FROM` takes the table: 16 rows with all four columns.
+2. `WHERE` keeps or drops single rows, judged by the table's own columns. Here 12 rows are left.
+3. `GROUP BY` sorts the remaining rows into groups, one for each value of the key.
+4. `HAVING` keeps or drops whole groups, judged by what a group holds, such as its row count.
+5. `SELECT` builds the output columns, aggregates included, and gives them their names.
+6. `ORDER BY` sorts the output rows, and `LIMIT` cuts the sorted list.
+
+The rules:
+
+- `WHERE` chooses rows and `SELECT` chooses columns. They never swap jobs.
+- A clause cannot use what a later clause creates. At step 2 no group exists yet, so a count is out of reach for
+  `WHERE`; `HAVING` runs after the grouping and is made for it.
+- A name you give with `AS` is created at step 5, so the clauses before it have no such name yet. DuckDB goes further
+  and accepts the name early for a plain expression. Step 7 of the worked example shows where that stops.
+- `ORDER BY` and `LIMIT` are **output modifiers**: they work on the finished result, at the very end.
+
+**Excel.** A sheet makes the same moves by hand: a filter shows only the rows that meet your criteria and hides the
+rest, and a sort rearranges the rows (E5, *Tables, sorting and filtering*), but nothing fixes the order in which you
+click them.
+
+**A common misconception: "`LIMIT` takes the first rows of the table, and then `ORDER BY` sorts them."** The order is
+the other way round: the sort runs first and `LIMIT` cuts the sorted list. `ORDER BY product_name LIMIT 2` returns
+Americano and Avocado Toast, although the first two rows of `products` are Espresso and Americano.
 
 ## Worked example
 

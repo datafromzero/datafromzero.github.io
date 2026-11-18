@@ -5,7 +5,7 @@ description: Compare each row with the previous or next one using LAG and LEAD, 
 stage: sql
 order: 160
 level: intermediate
-duration: 30
+duration: 32
 objectives:
   - Compare a value with the previous period using LAG
   - Compute a change and a percent change safely
@@ -27,8 +27,6 @@ sources:
     url: https://support.microsoft.com/en-us/excel/switch-between-relative-absolute-and-mixed-references
   - title: 'Google Docs Editors Help: AVERAGE'
     url: https://support.google.com/docs/answer/3093615
-  - title: 'DataLemur: 5 SQL interview patterns you need to know'
-    url: https://datalemur.com/blog/sql-interview-patterns
 status: draft
 ---
 
@@ -44,7 +42,7 @@ page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that a zero denominator gives `inf` there, as in step 3, and that the `RANGE` form in step 5 gives the same averages. Time the lesson against its 30 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check that a zero denominator gives `inf` there, as in step 3, and that the `RANGE` form in step 5 gives the same averages. Time the lesson against its 32 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -169,17 +167,37 @@ daily series, and a warning about one function that surprises everybody once.
 </svg>
 </figure>
 
-In S14 a window function worked on a group of rows. Two kinds of window function work on **neighbors** instead:
+## How it works
 
-- `LAG(x)` returns `x` from the row above in the window's order; `LEAD(x)` returns it from the row below. If there
-  is no such row, they return `NULL`. `LAG(x, 7)` looks seven rows up, and a third argument sets a default instead
-  of `NULL`: `LAG(x, 1, 0)`.
-- A **frame** with `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` gives an aggregate the current row and the six rows
-  before it. `AVG` over that frame is a **moving average**: it smooths day-to-day noise. At the start of a series
-  the frame is cropped to the rows that exist.
+Two more kinds of window function (*Window functions: keep the rows, add the context*, S14) work on **neighbors**: `LAG`
+and `LEAD` copy a value from another row of the list, and an aggregate over a **frame**, a set of rows around the
+current one, works on a sliding window. Every row stays and one column is added. The pictures above show both ideas.
 
-**Excel and Google Sheets.** A spreadsheet compares to the row above with a plain reference, and a moving average is
-`AVERAGE` over a range that moves as you copy the formula down. With months in A2 to A7 and orders in B2 to B7:
+1. Build the series first: one row per period, such as a month, from `GROUP BY`.
+2. `ORDER BY` inside `OVER` lines the rows up. "Above" and "below" mean earlier and later in that order, and each
+   `PARTITION BY` group is a separate list.
+3. `LAG(x)` writes beside each row the value of `x` from the row above, and `LEAD(x)` the value from the row below.
+4. A frame function takes the current row and the rows around it, as many as `ROWS BETWEEN` says, works out `AVG` over
+   just those rows, and writes the answer beside the current row. The window then moves down one row.
+
+The rules:
+
+- `LAG(x, n, default)` reaches `n` rows back and `LEAD` reaches `n` rows forward; `n` is 1 if you leave it out. With no
+  row that far away you get `NULL`, unless the third argument supplies a `default`.
+- `LAG` and `LEAD` count rows, not calendar time, and never reach into another partition.
+- `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` counts rows: the current one and the six before it.
+- `RANGE` measures distance in values instead. With dates it takes an `INTERVAL`, as in
+  `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`, which DuckDB's documentation uses "to handle any missing
+  days". *Complete time series and recursive CTEs* (S27) fills the gaps instead.
+
+**Excel.** A reference to the cell above, copied down, moves down with the row, and so does a range such as `B2:B8`
+(E3, *Relative and absolute references*); that is how a sheet does `LAG` and a moving average.
+
+**A common misconception: "a 7-row frame is a 7-day average."** The two agree only while every day has a row. Suppose
+April 2 had no orders and so no row: the frame of April 4 would still hold seven rows, and it would reach back to March
+28, eight calendar days. The `RANGE` form above would hold six rows, March 29 to April 4.
+
+With months in A2 to A7 and orders in B2 to B7, a sheet does it like this:
 
 | SQL | Reads as | In Excel or Google Sheets |
 |---|---|---|
@@ -189,7 +207,7 @@ In S14 a window function worked on a group of rows. Two kinds of window function
 | `AVG(orders) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)` | a 7-row moving average | `=AVERAGE(B2:B8)`, copied down |
 
 In the sheet, the first data row has no row above, so you start the formula one row lower; SQL gives that row a
-`NULL`. Rolling averages are a common interview question.
+`NULL`.
 
 ## Worked example
 
@@ -312,10 +330,7 @@ smooth?** Run the setup cell, then one cell per step.
    Expected: 9 rows, 3 columns, the days around the jump in early April (second picture). *Excel:* `=AVERAGE(B2:B8)` copied
    down. *Why:* the frame is the current day and the six rows before it. The date filter comes after the `smoothed`
    stage: a `WHERE` in the same query would remove the earlier days before the average could see them. Rows are days
-   here because all 181 days from January 1 to June 30 have orders; with a missing day a row-based window would reach
-   back further than 7 days. The DuckDB documentation uses `RANGE` with an `INTERVAL` of days "to handle any missing
-   days", such as `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`; *Complete time series and recursive
-   CTEs* (S27) fills the gaps instead. The first seven rows, to check the cropped start:
+   here because all 181 days from January 1 to June 30 have orders. The first seven rows, to check the cropped start:
 
    ```sql
    WITH daily AS (

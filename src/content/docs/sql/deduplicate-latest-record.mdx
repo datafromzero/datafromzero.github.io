@@ -5,7 +5,7 @@ description: Collapse repeated records to one trustworthy row with a stated surv
 stage: sql
 order: 170
 level: intermediate
-duration: 25
+duration: 26
 objectives:
   - Find duplicate keys with GROUP BY and HAVING
   - Keep one row per entity with ROW_NUMBER and a stated survivor rule
@@ -18,6 +18,8 @@ datasets:
 notebook: notebooks/sql/sql-deduplicate-latest-record.ipynb
 reviewed: 2026-11-16
 sources:
+  - title: 'DuckDB documentation: SELECT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/select
   - title: 'DuckDB documentation: Window functions'
     url: https://duckdb.org/docs/stable/sql/functions/window_functions
   - title: 'DuckDB documentation: QUALIFY clause'
@@ -49,7 +51,7 @@ page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check the practice-table cell and that step 4 prints 8 rows. Decide whether this hand-typed, temporary table fits the dataset rule. In Google Sheets, check which row Remove duplicates keeps (its help page does not say). Time the lesson against its 25 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Check the practice-table cell and that step 4 prints 8 rows. Decide whether this hand-typed, temporary table fits the dataset rule. In Google Sheets, check which row Remove duplicates keeps (its help page does not say). Time the lesson against its 26 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -279,20 +281,36 @@ each customer, and a written rule for why each survived.
 </svg>
 </figure>
 
-A **duplicate** is an entity that appears more than once in a table where it should appear once. Removing duplicates
-means choosing which row survives, and that is a rule about the business, not a trick of SQL:
+## How it works
 
-1. Find the repeats: `GROUP BY` the id, `HAVING COUNT(*) > 1`.
+A **duplicate** is an entity that appears more than once in a table where it should appear once. Choosing the row that
+survives is a rule about the business, not a trick of SQL, so you write the rule down first and let the query follow it.
+
+1. Find the repeats: `GROUP BY` the key and keep the keys that `HAVING COUNT(*) > 1`.
 2. State the **survivor rule** in words: which column orders the rows, in which direction, and what breaks a tie.
-3. Number each entity's rows with `ROW_NUMBER()` in that order and keep number 1 (S15).
-4. Verify: one row for each entity.
+3. Number each entity's rows with `ROW_NUMBER()`: `PARTITION BY` the key, and an `ORDER BY` that is the survivor rule,
+   so the survivor gets number 1. In the picture above, ten rows are numbered inside five customers, and the rows
+   numbered 1 are the ones kept.
+4. Keep number 1 in the next step (a CTE, *Readable queries with CTEs*, S13), then count the rows per entity: each
+   entity should have exactly one.
 
-The same steps return the **latest record per entity**, such as each customer's most recent order: the rule is "newest
+The same steps return the **latest record per entity**, such as each customer's most recent order. The rule is "newest
 first".
 
-**Excel and Google Sheets.** Excel's Remove Duplicates (Data, Data Tools) keeps the first occurrence in the list, so
-the order of your rows is the survivor rule: sort newest first to keep the latest. Google Sheets has a similar command
-(Data, Data cleanup, Remove duplicates); SQL writes the rule down and leaves the source table as it was.
+The rules:
+
+- `ROW_NUMBER` counts from 1 inside each partition, in the order you give (*Ranking and top-N per group*, S15), so
+  exactly one row per entity gets 1.
+- `SELECT DISTINCT` returns only the unique rows of the result, rows identical in every selected column. Two rows of one
+  entity that differ in any selected column both stay, and `DISTINCT` chooses no survivor.
+
+**Excel.** Remove Duplicates (E13, *A cleaning workflow you can defend*) keeps the first occurrence of a value in the
+list and deletes the others, so the order of your rows is the survivor rule. In Google Sheets the command is Data, Data
+cleanup, Remove duplicates.
+
+**A common misconception: "removing duplicates in SQL deletes the extra rows."** A `SELECT` only reads. The query that
+keeps number 1 returns five rows, and the practice table still holds its ten. To change the table itself you need
+`DELETE` (*Inserting, updating and deleting safely*, S32).
 
 ## Worked example
 
@@ -367,9 +385,8 @@ practice-table cell, then one cell per step.
    ORDER BY customer_id, updated_at;
    ```
 
-   Expected: 8 rows, 4 columns, with `update_id` left out. *Why:* `DISTINCT` keeps only the unique rows of the result, rows
-   identical in every selected column. It merged the copies of customers 302 and 305, but
-   customers 301 and 303 still have two rows, and it chose no survivor.
+   Expected: 8 rows, 4 columns, with `update_id` left out. *Why:* `DISTINCT` merged the copies of customers 302 and 305,
+   but customers 301 and 303 still have two rows, and it chose no survivor.
 
 5. **State the rule, then number the rows.** The rule, in words: *the survivor is the record with the latest
    `updated_at`; if two share the same time, the one that arrived later, the higher `update_id`.*
