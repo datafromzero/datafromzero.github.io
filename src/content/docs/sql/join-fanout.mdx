@@ -18,7 +18,6 @@ prerequisites:
   - sql-conditional-aggregation
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-join-fanout.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Joins'
@@ -30,23 +29,31 @@ sources:
 status: draft
 ---
 
-This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB inside a Google Colab notebook, so there is
-nothing to install. In *INNER JOIN: pairing rows on a key* (S19), joining `orders` to `order_items` turned 1,800 rows
-into 3,287. For counting lines that growth is harmless. For a figure that is stored once per order, such as an order
-total, it is a trap: the figure is copied onto every line, and `SUM` adds the copies. Here you meet the trap, then
-repair it.
+In *INNER JOIN: pairing rows on a key* (S19), joining `orders` to `order_items` turned 1,800 rows into 3,287. For counting
+lines that growth is harmless. Here you meet the case where it is not. Every query on this page runs in the editor under
+it: press Run.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
-closing `;` that this page shows. The notebook cells also spell out every CTE in full, where this page writes a comment
-such as `/* as in step 1 */` for a definition you already have.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The 137 different order totals and their 3,094.00 sum in How it works were run on DuckDB 2.0.0 over all 1,800 orders. The stub listed two interview-preparation pages (DataLemur and Interview Query) as sources; they were not opened for this draft and are left out of `sources`, so open them and add them back, or drop them. When you have checked it, set
+TODO(owner): run every block on the page and check each result against its Expected line. Time the lesson against its 30 minutes. The 137 different order totals and their 3,094.00 sum in the Common trap were run on DuckDB 2.0.0 over all 1,800 orders. The stub listed two interview-preparation pages (DataLemur and Interview Query) as sources; they were not opened for this draft and are left out of `sources`, so open them and add them back, or drop them. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> How much did orders that contained coffee bring in, and how much did orders without coffee? Count whole orders: an
+> order with a Cold Brew and a croissant is a coffee order, and its full value counts.
+
+A result called `order_totals` has one row per order: its total in dollars, the sum of its lines as in S19. Unit 1 builds
+it. Its first rows:
+
+| order_id | order_total_usd |
+|---:|---:|
+| 1001 | 14.00 |
+| 1002 | 12.50 |
+| 1003 | 12.50 |
+| 1004 | 6.50 |
+
+To know which orders hold coffee you need the lines and their products.
 
 ## Warm-up
 
@@ -71,35 +78,89 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In *Readable queries with CTEs* (S13), what do you check at each step of a `WITH` query?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+A join copies an order's total onto each of its lines, so adding the totals counts every order once per line, unless you shrink the lines to one row per order first.
 
-   The grain (what one row is) and the row count, by running that step alone.
+{/* CONCEPT: concept-fanout */}
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Press Run on each query. Every figure covers all
+1,800 orders, the canceled one included, and includes the extra-zero line of order 2075.
 
-The owner of the cafes asks:
+### 1. Take a control total first
 
-> How much did orders that contained coffee bring in, and how much did orders without coffee? Count whole orders: an
-> order with a Cold Brew and a croissant is a coffee order, and its full value counts.
+Before you join anything, take a **control total**: a figure you work out first, from rows you can name, that every later
+step must reproduce. Here it is the dollars of all orders, from `order_totals`. Its grain, what one row is, is one order.
 
-A result called `order_totals` has one row per order: its total in dollars, the sum of its lines as in S19. Step 1 builds it. Its first rows:
+**Try it**: build `order_totals`.
 
-| order_id | order_total_usd |
-|---:|---:|
-| 1001 | 14.00 |
-| 1002 | 12.50 |
-| 1003 | 12.50 |
-| 1004 | 6.50 |
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+SELECT COUNT(*) AS orders,
+       COUNT(DISTINCT order_id) AS distinct_ids,
+       SUM(order_total_usd) AS total_usd
+FROM order_totals;`} />
 
-To know which orders hold coffee you need the lines and their products. By the end you will see a join that doubles the
-answer, say why, and get a split that adds back to the control total.
+Expected: 1 row, 3 columns: `1800 | 1800 | 22754.25`. *Why:* the two counts match, so `order_id` is unique: one row per
+order. The total is S19's 22,754.25, the control total every later step must reproduce.
 
-## The picture
+### 2. A join copies the figure onto every line
+
+*INNER JOIN* (S19) gave the counting rule: a key that repeats pairs a row with every match. **Fan-out** is what that rule
+does to a figure stored once per key. The join copies it onto every row it builds for that key, so the result has the
+finer grain, one row per line.
+
+To spot it, compare the row count before and after the join, and the total with the control total.
+
+**Try it**. Before you run it: `order_totals` has 1,800 rows and there are 3,287 lines. How many rows
+will the join return, and will its `SUM` match unit 1?
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+SELECT COUNT(*) AS joined_rows,
+       SUM(t.order_total_usd) AS total_usd
+FROM order_totals AS t
+INNER JOIN order_items AS oi ON t.order_id = oi.order_id;`} />
+
+Expected: 1 row, 2 columns. *Why:* **3287** rows and **48443.50**, more than twice the control total. Each order total
+was added once per line.
+
+**Try it**: see the copies. Each line gets a flag for coffee (`p.category = 'coffee'` is true or
+false), and order 1001 shows what the join did.
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+),
+lines AS (
+  SELECT oi.order_item_id, oi.order_id, p.category = 'coffee' AS is_coffee
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+)
+SELECT l.order_item_id, l.order_id, l.is_coffee, t.order_total_usd
+FROM order_totals AS t
+INNER JOIN lines AS l ON t.order_id = l.order_id
+WHERE t.order_id = 1001
+ORDER BY l.order_item_id;`} />
+
+Expected: 3 rows, 4 columns. *Why:* order 1001 has three lines (a Croissant and two coffees), so its 14.00 appears three
+times: twice among the coffee rows and once among the others. After the join one row is a line, and a per-order figure
+does not belong at that grain.
 
 <figure>
 <svg viewBox="0 0 360 446" width="360" role="img" aria-labelledby="fo-copy-title fo-copy-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -118,6 +179,109 @@ answer, say why, and get a split that adds back to the control total.
 <text x="10" y="416" font-size="11" font-weight="600">Order 1001 shows 14.00 on 3 rows, so it adds 42.00.</text>
 <text x="10" y="434" font-size="11" opacity="0.8">Four orders: 45.50 before the join, 98.50 after.</text>
 </svg>
+</figure>
+
+### 3. Aggregates add every copy
+
+An aggregate reads the result as it stands: `SUM` adds every copy, `COUNT(*)` counts lines, and grouping by a column of
+the lines puts an order into every group where it has a line. So add a figure only at the grain where it is stored. A
+line's quantity can be added over lines; an order's total cannot.
+
+*Excel:* the same trap appears when an order total is copied beside every line and added with `SUMIFS` (E7, *Conditional
+totals with SUMIFS and COUNTIFS*): it adds the sum-range cells of every row that passes the tests, copies included.
+
+**Try it**: ask the question the naive way, one row per line joined to the totals.
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+),
+lines AS (
+  SELECT oi.order_item_id, oi.order_id, p.category = 'coffee' AS is_coffee
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+)
+SELECT l.is_coffee,
+       COUNT(DISTINCT t.order_id) AS orders,
+       SUM(t.order_total_usd) AS revenue_usd
+FROM order_totals AS t
+INNER JOIN lines AS l ON t.order_id = l.order_id
+GROUP BY l.is_coffee
+ORDER BY l.is_coffee DESC;`} />
+
+Expected: 2 rows, 3 columns. *Why:* coffee: 1,259 orders and 23,478.75; the rest: 1,232 orders and 24,964.75. The revenues
+add to 48,443.50, and the order counts add to 2,491 although there are only 1,800 orders. An order with both kinds of
+line lands in both groups, and an order with two coffee lines is summed twice.
+
+### 4. Repair: one row per key before the join
+
+The repair comes before the join: reduce the table whose key repeats to one row per key, with `GROUP BY` on the join key
+in a CTE (S13). Then the join pairs one row with one row, as the counting rule of S19 says it must.
+
+**Try it**: one row per order, flagged coffee or not.
+
+<RunSQL query={`WITH order_flags AS (
+  SELECT oi.order_id,
+         MAX(CASE WHEN p.category = 'coffee' THEN 1 ELSE 0 END) AS has_coffee
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+SELECT COUNT(*) AS orders,
+       COUNT(DISTINCT order_id) AS distinct_ids,
+       SUM(has_coffee) AS coffee_orders
+FROM order_flags;`} />
+
+Expected: 1 row, 3 columns: `1800 | 1800 | 1259`. *Why:* `GROUP BY order_id` makes one row per order, and `MAX` is 1
+when any line of the order is coffee (conditional aggregation, S9). The unique key and the 1,259 coffee orders are
+what the join needs.
+
+**Try it**: join two tables with one row per order. Before you run it: how many rows will the join
+return?
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+),
+order_flags AS (
+  SELECT oi.order_id,
+         MAX(CASE WHEN p.category = 'coffee' THEN 1 ELSE 0 END) AS has_coffee
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+SELECT f.has_coffee,
+       COUNT(*) AS orders,
+       SUM(t.order_total_usd) AS revenue_usd
+FROM order_totals AS t
+INNER JOIN order_flags AS f ON t.order_id = f.order_id
+GROUP BY f.has_coffee
+ORDER BY f.has_coffee DESC;`} />
+
+Expected: 2 rows, 3 columns. *Why:* each side has one row per order, so the join returns 1,800 rows and cannot
+multiply them. Orders with coffee: 1,259 orders and 16,958.00. The others: 541 orders and 5,796.25. That answers the
+owner.
+
+<details>
+<summary>Explain it in your own words: why can the join in unit 4 not multiply rows, while the one in unit 3 did?</summary>
+
+Count the partners each row can find. In unit 3 an order row could find up to three line rows, so one order became up to
+three rows. Here an order row finds exactly one flag row, because you built the flags with one row per order.
+
+</details>
+
+### 5. Reconcile
+
+No new query. 16,958.00 + 5,796.25 = **22,754.25**, the control total of unit 1, and 1,259 + 541 = 1,800. The picture sets
+the three answers side by side.
+
+<figure>
 <svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="fo-bars-title fo-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="fo-bars-title">The same total, three ways</title>
 <desc id="fo-bars-desc">Three horizontal bars. The control total, every order once, is 22,754.25. The naive join gives 23,478.75 for coffee lines plus 24,964.75 for other lines, 48,443.50 in all, more than twice as long. The repaired version gives 16,958.00 for orders with coffee plus 5,796.25 for the others, 22,754.25, the same as the control total.</desc>
@@ -141,184 +305,46 @@ answer, say why, and get a split that adds back to the control total.
 </svg>
 </figure>
 
-## How it works
+**Try it**: a second route to the coffee orders.
 
-*INNER JOIN* (S19) gave the pairing rule: a key that repeats pairs a row with every match. **Fan-out** is what that
-rule does to an aggregate. A figure stored once per key is copied onto every row the join builds for that key.
-Conceptually, four moves cause it, and a fifth, taken before the join, repairs it:
+<RunSQL query={`SELECT COUNT(DISTINCT oi.order_id) AS coffee_orders
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+WHERE p.category = 'coffee';`} />
 
-1. Start from a table whose grain is one row per order, holding a figure of the order, such as its total.
-2. Join it to a table whose key repeats, such as the order lines. Each order row is paired with each of its lines.
-3. The result now has the finer grain: one row per line. The order's total was copied onto each of those rows, as
-   in the first picture above.
-4. An aggregate reads the result as it stands: `SUM` adds every copy, `COUNT(*)` counts lines, and grouping by a column
-   of the lines puts an order into every group where it has a line.
-5. The repair comes before the join: reduce the table whose key repeats to one row per key, with `GROUP BY` on the
-   join key in a CTE (S13). Then the join pairs one row with one row.
+Expected: 1 row, 1 column: `1259`. E21's completed-only Sales of 22,749.25 is 5.00 lower: canceled order 1461 is a
+Mocha, so its 5.00 sits in the coffee figure here.
 
-The rules:
+<Aside type="tip" title="Remember">
 
-- S19's counting rule for an inner join applies unchanged.
-- Add a figure only at the grain where it is stored. A line's quantity can be added over lines; an order's total cannot.
-- To diagnose a fan-out, compare the row count before and after the join, and compare the total with a control total
-  taken before the join, naming the rows it covers.
+- A join copies an order-level figure onto every line of that order.
+- Add a figure only at the grain where it is stored.
+- The repair: `GROUP BY` the join key in a CTE first, then join one row to one row.
+- Check the row counts and the total against a control total taken before the join.
 
-**Excel.** The same trap appears when an order total is copied beside every line and added with `SUMIFS` (E7,
-*Conditional totals with SUMIFS and COUNTIFS*): it adds the sum-range cells of every row that passes the tests, copies
-included.
+**Common trap: "`SUM(DISTINCT …)` fixes the inflated sum."** `DISTINCT` makes an aggregate consider each different value
+once. It cannot tell a copy from a coincidence: orders 1002 and 1003 in the copy picture both total 12.50, so only one of
+them would be added. Over all orders there are only 137 different totals, and adding each once gives 3,094.00, far below
+the real sum. Reduce to one row per key instead.
 
-**A common misconception: "`SUM(DISTINCT …)` fixes the inflated sum."** `DISTINCT` makes an aggregate consider each
-different value once. It cannot tell a copy from a coincidence: orders 1002 and 1003 in the picture both total 12.50,
-so only one of them would be added. Over all orders there are only 137 different totals, and adding each once gives
-3,094.00, far below the real sum. Reduce to one row per key instead.
-
-## Worked example
-
-Question: **how much did orders with coffee, and orders without, bring in?** Run the notebook's setup cell, then one
-cell per step. Each step gives the shape of the result to expect. Every figure covers all 1,800 orders, the canceled
-one included, and includes the extra-zero line of order 2075.
-
-1. **Build `order_totals`.** Grain: one row per order.
-
-   ```sql
-   WITH order_totals AS (
-     SELECT oi.order_id,
-            SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
-     FROM order_items AS oi
-     INNER JOIN products AS p ON oi.product_id = p.product_id
-     GROUP BY oi.order_id
-   )
-   SELECT COUNT(*) AS orders,
-          COUNT(DISTINCT order_id) AS distinct_ids,
-          SUM(order_total_usd) AS total_usd
-   FROM order_totals;
-   ```
-
-   Expected: 1 row, 3 columns: `1800 | 1800 | 22754.25`. *Why:* the two counts match, so `order_id` is unique: one row
-   per order. The total is S19's 22,754.25, the control total every later step must reproduce.
-
-2. **Join the totals to the lines.** Before you run it: `order_totals` has 1,800 rows and there are 3,287 lines. How many
-   rows will the join return, and will its `SUM` match step 1?
-
-   ```sql
-   WITH order_totals AS (/* as in step 1 */)
-   SELECT COUNT(*) AS joined_rows,
-          SUM(t.order_total_usd) AS total_usd
-   FROM order_totals AS t
-   INNER JOIN order_items AS oi ON t.order_id = oi.order_id;
-   ```
-
-   Expected: 1 row, 2 columns. *Why:* **3287** rows and **48443.50**, more than twice the control total. Each order
-   total was added once per line.
-
-3. **Ask the question the naive way.** One row per line, flagged coffee or not, joined to the totals.
-
-   ```sql
-   WITH order_totals AS (/* as in step 1 */),
-   lines AS (
-     SELECT oi.order_item_id, oi.order_id, p.category = 'coffee' AS is_coffee
-     FROM order_items AS oi
-     INNER JOIN products AS p ON oi.product_id = p.product_id
-   )
-   SELECT l.is_coffee,
-          COUNT(DISTINCT t.order_id) AS orders,
-          SUM(t.order_total_usd) AS revenue_usd
-   FROM order_totals AS t
-   INNER JOIN lines AS l ON t.order_id = l.order_id
-   GROUP BY l.is_coffee
-   ORDER BY l.is_coffee DESC;
-   ```
-
-   Expected: 2 rows, 3 columns. *Why:* coffee: 1,259 orders and 23,478.75; the rest: 1,232 orders and 24,964.75. The
-   revenues add to 48,443.50, and the order counts add to 2,491 although there are only 1,800 orders. An order with
-   both kinds of line lands in both groups, and an order with two coffee lines is summed twice.
-
-4. **See the copies.**
-
-   ```sql
-   WITH order_totals AS (/* as in step 1 */),
-   lines AS (/* as in step 3 */)
-   SELECT l.order_item_id, l.order_id, l.is_coffee, t.order_total_usd
-   FROM order_totals AS t
-   INNER JOIN lines AS l ON t.order_id = l.order_id
-   WHERE t.order_id = 1001
-   ORDER BY l.order_item_id;
-   ```
-
-   Expected: 3 rows, 4 columns. *Why:* order 1001 has three lines (a Croissant and two coffees), so its 14.00 appears
-   three times: twice among the coffee rows and once among the others. After the join one row is a line, and a
-   per-order figure does not belong at that grain.
-
-5. **Repair: reduce the many side to one row per order.**
-
-   ```sql
-   WITH order_flags AS (
-     SELECT oi.order_id,
-            MAX(CASE WHEN p.category = 'coffee' THEN 1 ELSE 0 END) AS has_coffee
-     FROM order_items AS oi
-     INNER JOIN products AS p ON oi.product_id = p.product_id
-     GROUP BY oi.order_id
-   )
-   SELECT COUNT(*) AS orders,
-          COUNT(DISTINCT order_id) AS distinct_ids,
-          SUM(has_coffee) AS coffee_orders
-   FROM order_flags;
-   ```
-
-   Expected: 1 row, 3 columns: `1800 | 1800 | 1259`. *Why:* `GROUP BY order_id` makes one row per order, and `MAX` is 1
-   when any line of the order is coffee (conditional aggregation, S9). The unique key and the 1,259 coffee orders are
-   what the join needs.
-
-6. **Join two tables with one row per order.** Before you run it: how many rows will the join return?
-
-   ```sql
-   WITH order_totals AS (/* as in step 1 */),
-   order_flags AS (/* as in step 5 */)
-   SELECT f.has_coffee,
-          COUNT(*) AS orders,
-          SUM(t.order_total_usd) AS revenue_usd
-   FROM order_totals AS t
-   INNER JOIN order_flags AS f ON t.order_id = f.order_id
-   GROUP BY f.has_coffee
-   ORDER BY f.has_coffee DESC;
-   ```
-
-   Expected: 2 rows, 3 columns. *Why:* each side has one row per order, so the join returns 1,800 rows and cannot
-   multiply them. Orders with coffee: 1,259 orders and 16,958.00. The others: 541 orders and 5,796.25. That answers the
-   owner.
-
-7. **Reconcile.** 16,958.00 + 5,796.25 = **22,754.25**, the control total of step 1, and 1,259 + 541 = 1,800. A second
-   route for the coffee orders:
-
-   ```sql
-   SELECT COUNT(DISTINCT oi.order_id) AS coffee_orders
-   FROM order_items AS oi
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   WHERE p.category = 'coffee';
-   ```
-
-   Expected: 1 row, 1 column: `1259`. E21's completed-only Sales of 22,749.25 is 5.00 lower: canceled order 1461 is a
-   Mocha, so its 5.00 sits in the coffee figure here.
-
-<details>
-<summary>Explain it in your own words: why can the join in step 6 not multiply rows, while the one in step 3 did?</summary>
-
-In step 3 the key `order_id` repeated on the lines side, so each order paired with several rows. In step 6 both sides
-hold one row per `order_id`, so each order pairs with exactly one row. You made the key unique by grouping first.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-join-fanout-1">
 
-**How much did orders that contained tea bring in, and how much did the others?** Use the Exercise 1 cell. Expected: 2
-rows, 3 columns, with revenues that add up to step 1's control total.
+**How much did orders that contained tea bring in, and how much did the others?** Expected: 2
+rows, 3 columns, with revenues that add up to unit 1's control total.
 
-Done for you: `order_totals` from step 1, and the step that gives one row per order:
+Done for you: `order_totals` from unit 1, and the step that gives one row per order. The last line only peeks at it:
 
-```sql
-WITH order_totals AS (/* as in step 1 */),
+<RunSQL query={`WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+),
 order_flags AS (
   SELECT oi.order_id,
          MAX(CASE WHEN p.category = 'tea' THEN 1 ELSE 0 END) AS has_tea
@@ -326,15 +352,15 @@ order_flags AS (
   INNER JOIN products AS p ON oi.product_id = p.product_id
   GROUP BY oi.order_id
 )
-```
+SELECT * FROM order_flags ORDER BY order_id LIMIT 5;`} />
 
-Now finish it: after the last `)`, write the query that joins the two on `order_id`, groups by `has_tea`, and shows the
+Now finish it: replace the last line with the query that joins the two on `order_id`, groups by `has_tea`, and shows the
 number of orders and the revenue.
 
 <details>
 <summary>Hint</summary>
 
-Copy the final `SELECT` of step 6 and change the flag's name. Then add the two revenues.
+Copy the final `SELECT` of unit 4 and change the flag's name. Then add the two revenues.
 
 </details>
 
@@ -354,6 +380,20 @@ ORDER BY f.has_tea DESC;
 <Solution>
 
 ```sql
+WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+),
+order_flags AS (
+  SELECT oi.order_id,
+         MAX(CASE WHEN p.category = 'tea' THEN 1 ELSE 0 END) AS has_tea
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
 SELECT f.has_tea,
        COUNT(*) AS orders,
        SUM(t.order_total_usd) AS revenue_usd
@@ -375,14 +415,16 @@ total, and 470 + 1,330 = 1,800.
 <Exercise id="sql-join-fanout-2">
 
 **How much did each payment method bring in, and in how many orders?** A teammate says the three amounts must add up to
-E21's Sales, 22,749.25. Work in the Exercise 2 cells.
+E21's Sales, 22,749.25.
 
-Before you run anything, write two sentences in the first cell: the grain of `orders` and of `order_totals`, and
+Before you run anything, write two sentences as comments in the editor: the grain of `orders` and of `order_totals`, and
 whether joining them can multiply rows, with the number of rows you expect. Then write the query, and compare its total
 with both numbers.
 
 Expected shape, to check your sentences against: 3 rows, 3 columns (the method, its orders, its revenue), most revenue
 first. The figures cover all 1,800 orders, the canceled one included.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -401,7 +443,13 @@ Expected output: *"Three rows, one per payment method, with an order count and a
 <Solution>
 
 ```sql
-WITH order_totals AS (/* as in step 1 */)
+WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
 SELECT o.payment_method,
        COUNT(*) AS orders,
        SUM(t.order_total_usd) AS revenue_usd
@@ -435,10 +483,9 @@ control total taken before the join.
 
 <Exercise id="sql-join-fanout-3">
 
-**Spot the flaw.** A colleague wants the average order value and reuses the join from step 2:
+**Spot the flaw.** A colleague wants the average order value and reuses the join from unit 2:
 
-```sql
-WITH order_totals AS (
+<RunSQL query={`WITH order_totals AS (
   SELECT oi.order_id,
          SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
   FROM order_items AS oi
@@ -447,8 +494,7 @@ WITH order_totals AS (
 )
 SELECT ROUND(AVG(t.order_total_usd), 2) AS avg_order_usd
 FROM order_totals AS t
-INNER JOIN order_items AS oi ON t.order_id = oi.order_id;
-```
+INNER JOIN order_items AS oi ON t.order_id = oi.order_id;`} />
 
 Expected from that query: 1 row, 1 column: `14.74`. The colleague reports "the average order is 14.74". What went wrong, and what
 is the right query?
@@ -460,11 +506,17 @@ with three lines is averaged three times and a one-line order once: bigger order
 divided by 3,287, not 22,754.25 divided by 1,800. Average the table that has one row per order:
 
 ```sql
+WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
 SELECT ROUND(AVG(order_total_usd), 2) AS avg_order_usd FROM order_totals;
 ```
 
-Expected: 1 row, 1 column: `12.64` (the same CTE in front). That is for all 1,800 orders; E21's 12.65 is for the 1,799
-completed ones.
+Expected: 1 row, 1 column: `12.64`. That is for all 1,800 orders; E21's 12.65 is for the 1,799 completed ones.
 
 </Solution>
 
@@ -472,7 +524,7 @@ completed ones.
 
 **Can you do it?** *I can spot a join that copies an order-level figure onto many rows, repair it by aggregating the many
 side to one row per key first, and reconcile the result against a control total.*
-Test: Exercise sql-join-fanout-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-join-fanout-2, done from the empty editor without opening the hints.
 
 The pattern to remember: **in an equality join, rows can be added only on a key that repeats; reduce the repeating
 side to one row per key first, join, then reconcile.** The next lesson, *Joining three tables and a table to itself* (S22), chains joins

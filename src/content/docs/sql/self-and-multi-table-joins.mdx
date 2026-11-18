@@ -17,7 +17,6 @@ prerequisites:
   - sql-dates-and-time
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-self-and-multi-table-joins.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Joins'
@@ -25,21 +24,28 @@ sources:
 status: draft
 ---
 
-This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB inside a Google Colab notebook, so there is
-nothing to install. Real questions need more than two tables. The Campus coffee of *Conditional totals with SUMIFS and
-COUNTIFS* (E7) needs four. A chain of joins is the same join written again and again, as long as you say what one row
-is after each. A table can also be joined to itself, because `customers` holds the key of another row of `customers`.
+Real questions need more than two tables, and sometimes the same table twice. Every query on this page runs in the editor
+under it: press Run.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
-closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 30 minutes. The DuckDB page opened for this lesson does not say that an empty value never pairs in `ON`, or that an `ON` may name any table already in the chain; the lesson shows both by results (steps 5 and 1). Its Self-Joins section does give the error for a repeated table name without aliases, and says a self-join works with every join type. Run on DuckDB 2.0.0, a column that exists in both aliases and is written without one, such as `referred_by` in the self-join, gives `Binder Error: Ambiguous reference to column name "referred_by"` (the full message continues `(use: 'c.referred_by' or 'r.referred_by')`). When you have checked it, set
+TODO(owner): run every block on the page and check each result against its Expected line. Time the lesson against its 30 minutes. The DuckDB page opened for this lesson does not say that an empty value never pairs in `ON`, or that an `ON` may name any table already in the chain; the lesson shows both by results (unit 3 and unit 1). Its Self-Joins section does give the error for a repeated table name without aliases, and says a self-join works with every join type. Run on DuckDB 2.0.0, a column that exists in both aliases and is written without one, such as `referred_by` in the self-join, gives `Binder Error: Ambiguous reference to column name "referred_by"` (the full message continues `(use: 'c.referred_by' or 'r.referred_by')`). When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Excel said Campus sold 112 lines of coffee in March, worth \$706.25, completed orders only. Can SQL rebuild that from
+> the five tables? And some customers were referred by other customers: who referred customer 144?
+
+The Campus coffee of *Conditional totals with SUMIFS and COUNTIFS* (E7) needs four tables. The referrals need one table
+twice: customers 6 and 144 point at the customers 3 and 86 through `referred_by`, and 86 points at nobody:
+
+| customer_id | loyalty_tier | referred_by |
+|---:|---|---:|
+| 3 | gold | NULL |
+| 6 | bronze | 3 |
+| 86 | bronze | NULL |
+| 144 | bronze | 86 |
 
 ## Warm-up
 
@@ -66,35 +72,38 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In *LEFT JOIN and finding rows with no match* (S20), what shows in the order columns for a customer with no orders?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+Each `JOIN` adds the next table's columns beside the rows you already have, and a table can even join itself, playing two roles at once.
 
-   `NULL` in every column of `orders`, on one row for that customer.
+{/* CONCEPT: concept-self-join */}
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Press Run on each query.
 
-The owner of the cafes asks:
+### 1. Chain joins, and ask what one row is
 
-> Excel said Campus sold 112 lines of coffee in March, worth \$706.25, completed orders only. Can SQL rebuild that from
-> the five tables? And some customers were referred by other customers: who referred customer 144?
+A **join chain** writes one `JOIN` after another, and each link works as in *INNER JOIN: pairing rows on a key* (S19): it
+pairs the rows built so far with the next table wherever its `ON` is true. The `ON` may name any table already in the
+chain, not only the one just before.
 
-Customers 6 and 144 point at the customers 3 and 86 through `referred_by`, and 86 points at nobody:
+After each join, ask two questions: *is the key unique in the table I just added?* and *what is one row now?* The
+counting rule of S19 and the fan-out of S21 answer them: the grain stays the same, or becomes finer.
 
-| customer_id | loyalty_tier | referred_by |
-|---:|---|---:|
-| 3 | gold | NULL |
-| 6 | bronze | 3 |
-| 86 | bronze | NULL |
-| 144 | bronze | 86 |
+**Try it**. Before you run it: start from `order_items` and add `orders`, `products` and `stores`, each
+on a key that is unique on the added side. How many rows will you get?
 
-By the end you will have rebuilt the Excel figure from four tables, checked one customer's total by hand, and put a
-customer next to the customer who referred them.
+<RunSQL query={`SELECT COUNT(*) AS joined_rows
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN stores AS s ON o.store_id = s.store_id;`} />
 
-## The picture
+Expected: 1 row, 1 column. *Why:* **3287**, the lines of `order_items`. `order_id` is unique in `orders`, `product_id` in
+`products` and `store_id` in `stores`, so no join adds a line, and each line has a partner, so none drops. One row is
+still one line, now with its store, status, category and price. Each box of the picture answers the two questions for one
+link.
 
 <figure>
 <svg viewBox="0 0 360 374" width="360" role="img" aria-labelledby="mj-chain-title mj-chain-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -106,6 +115,82 @@ customer next to the customer who referred them.
 <g><text x="18" y="50" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">FROM order_items</text><text x="18" y="66" font-size="11" opacity="0.8">one row is a line</text><text x="342" y="50" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="89" font-size="11" opacity="0.8">each line has one order</text><text x="18" y="116" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN orders</text><text x="18" y="132" font-size="11" opacity="0.8">still a line, now with store and status</text><text x="342" y="116" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="155" font-size="11" opacity="0.8">each line has one product</text><text x="18" y="182" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN products</text><text x="18" y="198" font-size="11" opacity="0.8">still a line, now with category and price</text><text x="342" y="182" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="221" font-size="11" opacity="0.8">each order has one store</text><text x="18" y="248" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN stores</text><text x="18" y="264" font-size="11" opacity="0.8">still a line, now with the store name</text><text x="342" y="248" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="287" font-size="11" opacity="0.8">rows leave, none are added</text><text x="18" y="314" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">WHERE Campus, coffee, completed, March</text><text x="18" y="330" font-size="11" opacity="0.8">a line that passes all four</text><text x="342" y="314" text-anchor="end" font-size="12" font-weight="600">112 rows</text></g>
 <text x="10" y="362" font-size="11" font-weight="600">Every key on the far side is unique, so no join adds rows.</text>
 </svg>
+</figure>
+
+### 2. Rebuild E7: conditions run once, at the end
+
+`WHERE`, `GROUP BY` and the rest run once, on the final wide table. So pile up the joins first, then state every
+condition together.
+
+*Excel:* in E7 the four conditions of the Campus coffee were four columns of one sheet, beside each line. A join chain
+builds such a sheet: each `JOIN` brings the next table's columns next to every line.
+
+**Try it**: Campus, coffee, completed orders, March.
+
+<RunSQL query={`SELECT COUNT(*) AS lines,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN stores AS s ON o.store_id = s.store_id
+WHERE s.store_name = 'Campus'
+  AND p.category = 'coffee'
+  AND o.status = 'completed'
+  AND o.ordered_at >= DATE '2026-03-01'
+  AND o.ordered_at < DATE '2026-04-01';`} />
+
+Expected: 1 row, 2 columns: `112 | 706.25`. *Excel:* E7's `COUNTIFS` and `SUMIFS` with the same four conditions. *Why:* the
+rows are completed orders only. Canceled order 1461 is a Campus order from March 1 with a 5.00 coffee line: leave out the
+status condition and you get 113 lines and 711.25. The extra-zero line of order 2075 is an Old Town order from May, so it
+is not in this slice.
+
+### 3. One table, two roles
+
+A **self-join** is an ordinary join with one table named twice, once per role, each with its own alias. Here `c` is the
+customer and `r` is the customer who referred them. Without aliases DuckDB cannot tell the two uses apart and stops with
+an error.
+
+Link the roles through the key: the foreign key of one against the primary key of the other (S18), so
+`c.referred_by = r.customer_id`.
+
+**Try it**: first, how many customers name a referrer?
+
+<RunSQL query={`SELECT COUNT(referred_by) AS referred_customers FROM customers;`} />
+
+Expected: 1 row, 1 column: `30`. *Why:* `COUNT(column)` skips empty values (S7). The other 120 of the 150 customers
+have an empty `referred_by`.
+
+**Try it**. Before you run it: each referred customer has one referrer, because `customer_id` is
+unique. How many pairs will the join return?
+
+<RunSQL query={`SELECT COUNT(*) AS pairs
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id;`} />
+
+Expected: 1 row, 1 column. *Why:* **30**, one pair for each customer counted above. The 120 customers whose
+`referred_by` is empty pair with nobody, so the inner join leaves them out.
+
+### 4. Read the pairs
+
+After a self-join each column name exists twice, so qualify every column with its alias (S19). The rest works as before,
+join types included: a `LEFT` self-join keeps the unpaired rows, as in S20.
+
+**Try it**: look at the pairs.
+
+<RunSQL query={`SELECT c.customer_id AS customer,
+       c.loyalty_tier AS customer_tier,
+       r.customer_id AS referrer,
+       r.loyalty_tier AS referrer_tier
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id
+WHERE c.customer_id IN (6, 30, 34, 144)
+ORDER BY c.customer_id;`} />
+
+Expected: 4 rows, 4 columns. *Why:* customer 144 was referred by customer 86, as in the table of the question. That
+answers the owner. Customer 24 is the referrer of both 30 and 34: one to many again, now inside a single table. The
+picture shows the same rows.
+
+<figure>
 <svg viewBox="0 0 360 424" width="360" role="img" aria-labelledby="mj-self-title mj-self-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="mj-self-title">The customers table played twice: referred and referrer</title>
 <desc id="mj-self-desc">Two grids. First, seven rows of the customers table: 3 gold, 6 bronze referred by 3, 24 bronze, 30 referred by 24, 34 silver referred by 24, 86 bronze and 144 bronze referred by 86. The rows for 6, 30, 34 and 144 are shaded and marked as the referred customer, c; the rows for 3, 24 and 86 are marked as the referrer, r. Second, the self-join result with four rows: c 6 with referrer 3, gold; c 30 with referrer 24, bronze; c 34 with referrer 24, bronze; c 144 with referrer 86, bronze. The columns c.referred_by and r.customer_id are shaded because their values are equal.</desc>
@@ -125,176 +210,82 @@ customer next to the customer who referred them.
 </svg>
 </figure>
 
-## How it works
+### 5. Check by hand
 
-A **join chain** writes one `JOIN` after another, and each link works as in *INNER JOIN: pairing rows on a key* (S19).
-A **self-join** is the same machinery with one table named twice. Conceptually:
+Pick one customer whose lines you can add up yourself, and compare. Customer 144 has few orders. Start the chain at
+`customers` this time.
 
-1. `FROM` names the first table. Its rows are the starting point, and its grain is what one row means.
-2. Each `JOIN` pairs the rows built so far with the next table, wherever its `ON` is true. The `ON` may name any table
-   already in the chain, not only the one just before.
-3. After each join, ask two questions: *is the key unique in the table I just added?* and *what is one row now?* The
-   counting rule of S19 and the fan-out of S21 answer them: the grain stays the same, or becomes finer. In the first
-   picture above, each box answers them for one link.
-4. `WHERE`, `GROUP BY` and the rest run once, on the final wide table.
-5. For a self-join, the table is used twice, once per alias, and the two uses pair like any two tables.
+**Try it**: the lines of customer 144.
 
-The rules:
+<RunSQL query={`SELECT o.order_id, p.product_name, oi.quantity,
+       oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id
+INNER JOIN order_items AS oi ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+WHERE c.customer_id = 144
+ORDER BY oi.order_item_id;`} />
 
-- A self-join needs two different aliases, one for each role. In the second picture, `c` is the customer and `r` is the
-  customer who referred them. Without aliases, DuckDB cannot tell the two copies apart and stops with an error.
-- Link the roles through the key: the foreign key of one copy against the primary key of the other (S18).
-- Qualify every column with its alias (S19): after a self-join, each column name exists twice.
-- A self-join works with every join type, so a `LEFT` self-join keeps the unpaired rows, as in S20.
+Expected: 4 rows, 4 columns. Add the four amounts by hand before you go on. *Why:* the grain is a line again: the first
+join made it one row per order, the second made it one row per line. Now total the same chain in SQL:
 
-**Excel.** In *Conditional totals with SUMIFS and COUNTIFS* (E7), the four conditions of the Campus coffee were four
-columns of one sheet, beside each line. A join chain builds such a sheet: each `JOIN` brings the next table's columns
-next to every line.
+<RunSQL query={`SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS spend_usd
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id
+INNER JOIN order_items AS oi ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+WHERE c.customer_id = 144;`} />
 
-**A common misconception: "a self-join needs a special join, or a copy of the table."** It is an ordinary join. Nothing
-is copied: the table is named twice, and the two aliases keep the two roles apart.
+Expected: 1 row, 1 column: `17.25`. By hand: 4.50 + 4.25 + 5.00 + 3.50 = 17.25. Two orders, both completed.
 
-## Worked example
-
-Question: **can SQL rebuild E7's Campus coffee figure, and who referred customer 144?** Run the notebook's setup cell,
-then one cell per step. Each step gives the shape of the result to expect.
-
-1. **Predict the rows of the chain.** Before you run it: start from `order_items` and add `orders`, `products` and
-   `stores`, each on a key that is unique on the added side. How many rows will you get?
-
-   ```sql
-   SELECT COUNT(*) AS joined_rows
-   FROM order_items AS oi
-   INNER JOIN orders AS o ON oi.order_id = o.order_id
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   INNER JOIN stores AS s ON o.store_id = s.store_id;
-   ```
-
-   Expected: 1 row, 1 column. *Why:* **3287**, the lines of `order_items`. `order_id` is unique in `orders`,
-   `product_id` in `products` and `store_id` in `stores`, so no join adds a line, and each line has a partner, so none drops. One row is still one line,
-   now with its store, status, category and price.
-
-2. **Rebuild E7.** Campus, coffee, completed orders, March.
-
-   ```sql
-   SELECT COUNT(*) AS lines,
-          SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
-   FROM order_items AS oi
-   INNER JOIN orders AS o ON oi.order_id = o.order_id
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   INNER JOIN stores AS s ON o.store_id = s.store_id
-   WHERE s.store_name = 'Campus'
-     AND p.category = 'coffee'
-     AND o.status = 'completed'
-     AND o.ordered_at >= DATE '2026-03-01'
-     AND o.ordered_at < DATE '2026-04-01';
-   ```
-
-   Expected: 1 row, 2 columns: `112 | 706.25`. *Excel:* E7's `COUNTIFS` and `SUMIFS` with the same four conditions.
-   *Why:* the rows are completed orders only. Canceled order 1461 is a Campus order from March 1 with a 5.00 coffee
-   line: leave out the status condition and you get 113 lines and 711.25. The extra-zero line of order 2075 is an Old
-   Town order from May, so it is not in this slice.
-
-3. **Check one customer by hand.** Customer 144 has few orders. Start the chain at `customers` this time:
-
-   ```sql
-   SELECT o.order_id, p.product_name, oi.quantity,
-          oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
-   FROM customers AS c
-   INNER JOIN orders AS o ON o.customer_id = c.customer_id
-   INNER JOIN order_items AS oi ON oi.order_id = o.order_id
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   WHERE c.customer_id = 144
-   ORDER BY oi.order_item_id;
-   ```
-
-   Expected: 4 rows, 4 columns. Add the four amounts by hand before you go on. *Why:* the grain is a line again: the
-   first join made it one row per order, the second made it one row per line. Now total the same chain in SQL:
-
-   ```sql
-   SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS spend_usd
-   FROM customers AS c
-   INNER JOIN orders AS o ON o.customer_id = c.customer_id
-   INNER JOIN order_items AS oi ON oi.order_id = o.order_id
-   INNER JOIN products AS p ON oi.product_id = p.product_id
-   WHERE c.customer_id = 144;
-   ```
-
-   Expected: 1 row, 1 column: `17.25`. By hand: 4.50 + 4.25 + 5.00 + 3.50 = 17.25. Two orders, both completed.
-
-4. **Count the customers who name a referrer.**
-
-   ```sql
-   SELECT COUNT(referred_by) AS referred_customers FROM customers;
-   ```
-
-   Expected: 1 row, 1 column: `30`. *Why:* `COUNT(column)` skips empty values (S7). The other 120 of the 150 customers
-   have an empty `referred_by`.
-
-5. **Join the table to itself.** Before you run it: each referred customer has one referrer, because `customer_id` is
-   unique. How many pairs will the join return?
-
-   ```sql
-   SELECT COUNT(*) AS pairs
-   FROM customers AS c
-   INNER JOIN customers AS r ON c.referred_by = r.customer_id;
-   ```
-
-   Expected: 1 row, 1 column. *Why:* **30**, one pair for each customer counted in step 4. `c` is the customer and `r`
-   the same table in the role of referrer. The 120 customers whose `referred_by` is empty pair with nobody, so the inner
-   join leaves them out.
-
-6. **Look at the pairs.**
-
-   ```sql
-   SELECT c.customer_id AS customer,
-          c.loyalty_tier AS customer_tier,
-          r.customer_id AS referrer,
-          r.loyalty_tier AS referrer_tier
-   FROM customers AS c
-   INNER JOIN customers AS r ON c.referred_by = r.customer_id
-   WHERE c.customer_id IN (6, 30, 34, 144)
-   ORDER BY c.customer_id;
-   ```
-
-   Expected: 4 rows, 4 columns. *Why:* customer 144 was referred by customer 86, as in the table of the question.
-   Customer 24 is the referrer of both 30 and 34: one to many again, now inside a single table. The second picture shows
-   the same rows. That answers the owner.
-
-7. **Verify.** The chain returned E7's 112 lines and 706.25, and customer 144's 17.25 matches the hand total. The 30
-   pairs of step 5 equal the 30 customers of step 4, so no pair was lost or doubled.
+The chain returned E7's 112 lines and 706.25, and customer 144's 17.25 matches the hand total. The 30 pairs of unit 3 equal
+the 30 customers who name a referrer, so no pair was lost or doubled.
 
 <details>
 <summary>Explain it in your own words: why does the chain keep all 3,287 lines, while the self-join returns only 30 of 150 customers?</summary>
 
-In the chain every line has exactly one partner in each added table. In the self-join, 120 customers have an empty
-`referred_by`, and an empty value pairs with nobody, so an inner join drops them. A `LEFT JOIN` (S20) would keep all
-150, with `NULL` for the referrer.
+Count what each row can find. Every line has exactly one order, one product and one store, so the chain loses and adds
+nothing. Most customers have no referrer at all: their `referred_by` holds nothing to look up, so they never get a pair.
+A `LEFT JOIN` (S20) would keep all 150, with `NULL` for the referrer.
 
 </details>
+
+<Aside type="tip" title="Remember">
+
+- Each `JOIN` pairs the rows built so far with the next table. After each, ask: was the key unique, and what is one row now?
+- `WHERE`, `GROUP BY` and the rest run once, on the final wide table.
+- A self-join names the table twice with two aliases, linked foreign key to primary key.
+- Qualify every column with its alias.
+
+**Common trap: "a self-join needs a special join, or a copy of the table."** It is an ordinary join. Nothing is copied:
+the table is named twice, and the two aliases keep the two roles apart.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-self-and-multi-table-joins-1">
 
-**What were the completed sales of each store?** Use the Exercise 1 cell. Expected: 3 rows, 2 columns (the store name
+**What were the completed sales of each store?** Expected: 3 rows, 2 columns (the store name
 and its sales), sorted by store name. The three amounts should add up to E21's Sales, 22,749.25.
 
-Done for you: the grain is a line, the sum is the line amount, and the first join is in place:
+Done for you: the grain is a line, and the first join is in place. This starter shows the units sold for each store
+number, as a stand-in for the answer:
 
-```sql
-SELECT s.store_name,
-       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+<RunSQL query={`SELECT o.store_id,
+       SUM(oi.quantity) AS units
 FROM order_items AS oi
 INNER JOIN orders AS o ON oi.order_id = o.order_id
-```
+GROUP BY o.store_id
+ORDER BY o.store_id;`} />
 
-Now finish it: add the joins to `products` and `stores`, keep only the completed orders, and group by the store name.
+Now finish it: add the joins to `products` and `stores`, keep only the completed orders, and show the store name and the
+sum of the line amounts in place of the store number and the units.
 
 <details>
 <summary>Hint</summary>
 
-The two joins are the ones from step 1, and the `WHERE` is the status test from step 2. `GROUP BY` as in *GROUP BY and
+The two joins are the ones from unit 1, and the `WHERE` is the status test from unit 2. `GROUP BY` as in *GROUP BY and
 HAVING* (S8).
 
 </details>
@@ -339,18 +330,20 @@ kept, Campus would read 9,003.75.
 
 <Exercise id="sql-self-and-multi-table-joins-2">
 
-**How many referred customers live in the same city as the customer who referred them?** Work in the Exercise 2 cells.
+**How many referred customers live in the same city as the customer who referred them?**
 
-Before you run anything, write one sentence in the first cell: what one row of the join is, how many rows it has before
+Before you run anything, write one sentence as a comment in the editor: what one row of the join is, how many rows it has before
 any city condition, and which customers can never be in it. Then write the query.
 
 Expected shape, to check your sentence against: 1 row, 1 column. It counts customers, not dollars, so order 2075 does
 not matter.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
-Start from the self-join of step 4. The city condition compares a column of `c` with a column of `r`.
+Start from the self-join of unit 3. The city condition compares a column of `c` with a column of `r`.
 
 </details>
 
@@ -395,16 +388,15 @@ twice with two aliases, one per role, and links a foreign key of one alias to th
 **Spot the flaw.** A colleague wants each referred customer next to the tier of the customer who referred them, and
 runs this:
 
-```sql
-SELECT c.customer_id AS customer,
+<RunSQL query={`SELECT c.customer_id AS customer,
        r.customer_id AS referrer,
        r.loyalty_tier AS referrer_tier
 FROM customers AS c
-INNER JOIN customers AS r ON c.customer_id = r.referred_by;
-```
+INNER JOIN customers AS r ON c.customer_id = r.referred_by
+ORDER BY c.customer_id;`} />
 
-Expected from that query: 30 rows, 3 columns, as in step 4. Its row for customer 3 reads `3 | 6 | bronze`. The picture showed
-that customer 6 was referred by customer 3, who is gold. What went wrong, and what is the right query?
+Expected from that query: 30 rows, 3 columns, as in unit 3. Its row for customer 3 reads `3 | 6 | bronze`. The picture
+showed that customer 6 was referred by customer 3, who is gold. What went wrong, and what is the right query?
 
 <Solution>
 
@@ -417,7 +409,8 @@ SELECT c.customer_id AS customer,
        r.customer_id AS referrer,
        r.loyalty_tier AS referrer_tier
 FROM customers AS c
-INNER JOIN customers AS r ON c.referred_by = r.customer_id;
+INNER JOIN customers AS r ON c.referred_by = r.customer_id
+ORDER BY c.customer_id;
 ```
 
 Expected: 30 rows, 3 columns, and the row for customer 6 reads `6 | 3 | gold`.
@@ -428,7 +421,7 @@ Expected: 30 rows, 3 columns, and the row for customer 6 reads `6 | 3 | gold`.
 
 **Can you do it?** *I can chain joins across four tables and say what one row is after each, join a table to itself with
 two aliases, and check a total against one customer I can add up by hand.*
-Test: Exercise sql-self-and-multi-table-joins-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-self-and-multi-table-joins-2, done from the empty editor without opening the hints.
 
 The pattern to remember: **after every join, say what one row is and whether the key was unique; a self-join is the
 same join with two aliases.** The next lesson, *Subqueries and EXISTS* (S23), puts a query inside a query.

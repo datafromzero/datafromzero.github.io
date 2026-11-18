@@ -18,7 +18,6 @@ prerequisites:
   - sql-null-handling
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-subqueries.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Subqueries'
@@ -30,19 +29,28 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries* (S1).
-Until now each query read tables. Here a query reads the result of another query: a **subquery**, a `SELECT` in
-parentheses. *Readable queries with CTEs* (S13) showed one nested query as read-only; now you write them.
+Until now each query read tables. Here a query reads the result of another query. *Readable queries with CTEs* (S13) showed
+one nested query as read-only; now you write them. Every query on this page runs in the editor under it: press Run.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
-Python. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL. The
-notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Check that the `NOT IN` query in exercise 3 returns no rows there too. The Subqueries page gives the IN-with-NULL rule but does not mention NOT IN; the 0-versus-5 result of exercise 3 (run on DuckDB 2.0.0) shows the consequence. Time the lesson against its 25 minutes. In How it works, the picture of an uncorrelated subquery as worked out first is a teaching model: the DuckDB page says only that such a subquery is self-contained and can run without the outer query. When you have checked it, set
+TODO(owner): run every block on the page and check each result against its Expected line. The Subqueries page gives the IN-with-NULL rule but does not mention NOT IN; the 0-versus-5 result of exercise 3 (run on DuckDB 2.0.0) shows the consequence. Time the lesson against its 25 minutes. In unit 1, the picture of an uncorrelated subquery as worked out first is a teaching model: the DuckDB page says only that such a subquery is self-contained and can run without the outer query. The error of a scalar subquery that returns several rows (unit 4) and the nested-aggregate message (unit 3) were run on DuckDB 2.0.0: `scalar subqueries can only return a single row` and `aggregate function calls cannot be nested`. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Harbor opened in April. How many of our 150 loyalty customers have ordered there? How many have never ordered
+> anywhere? And how many order more often than the average customer?
+
+The first rows of `customers`:
+
+| customer_id | signup_date | loyalty_tier |
+|---:|---|---|
+| 1 | 2025-06-04 | bronze |
+| 2 | 2025-06-04 | silver |
+| 3 | 2025-06-06 | gold |
+
+Each answer needs facts from `orders`, so each needs a second query inside the first.
 
 ## Warm-up
 
@@ -81,25 +89,50 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+A **subquery** is a query inside a query: the inner one hands the outer one a value, a list, a yes or no, or a whole table.
 
-> Harbor opened in April. How many of our 150 loyalty customers have ordered there? How many have never ordered
-> anywhere? And how many order more often than the average customer?
+{/* CONCEPT: concept-subquery */}
 
-The first rows of `customers`:
+## Learn by doing
 
-| customer_id | signup_date | loyalty_tier |
-|---:|---|---|
-| 1 | 2025-06-04 | bronze |
-| 2 | 2025-06-04 | silver |
-| 3 | 2025-06-06 | gold |
+Five small steps. Press Run on each query. Counts cover all 1,800
+orders, the canceled one included; the walk-in order 1335 has no customer, so it belongs to none.
 
-Each answer needs facts from `orders`, so each needs a second query inside the first. By the end you will have the
-three numbers and know which of four kinds of subquery fits which question.
+### 1. IN: ask against a list
 
-## The picture
+You write a subquery in parentheses; the query around it is the outer query. A subquery that uses nothing from the outer
+query is self-contained, so it can run alone: check it alone first.
+
+Think of its result as worked out first and handed to the outer query. `IN` then asks of each outer row whether its value
+is in that list, and keeps or drops the row, so it adds no rows.
+
+**Try it**: the inner query, alone.
+
+<RunSQL query={`SELECT customer_id
+FROM orders
+WHERE store_id = 3
+ORDER BY customer_id
+LIMIT 8;`} />
+
+Expected: 8 rows, 1 column. *Why:* the inner query must make sense on its own. Customer 5 repeats because each row is an
+order, not a customer.
+
+Now put it in parentheses after `IN`.
+
+<RunSQL query={`SELECT customer_id, signup_date, loyalty_tier
+FROM customers
+WHERE customer_id IN (
+  SELECT customer_id
+  FROM orders
+  WHERE store_id = 3
+)
+ORDER BY customer_id
+LIMIT 6;`} />
+
+Expected: 6 rows, 3 columns; the first is customer 2. *Why:* the outer query asks one thing of each customer: is your id
+in the list? The grain stays one row per customer.
 
 <figure>
 <svg viewBox="0 0 360 338" width="360" role="img" aria-labelledby="sq-in-title sq-in-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -198,6 +231,46 @@ three numbers and know which of four kinds of subquery fits which question.
 <text x="10" y="316" font-size="10" opacity="0.8">Customer 5 is in the list five times; it is still one customer in the result.</text>
 <text x="10" y="330" font-size="10" opacity="0.8">The first 6 of the 150 customers are drawn.</text>
 </svg>
+</figure>
+
+### 2. EXISTS: a yes or no for each row
+
+`EXISTS` asks whether the inner query returns at least one row, and `NOT EXISTS` whether it returns none. Which columns an
+`EXISTS` subquery lists makes no difference; only whether it returns a row. That is why `SELECT 1` is common.
+
+The inner query below mentions a column of the outer row, `c.customer_id`. A subquery that does is **correlated**: it
+cannot run alone, because it needs that row's value. Picture it running once for every outer row, with that row's value
+filled in.
+
+*Excel:* `EXISTS` is the question a lookup answers: did `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) find the
+key, or fall back to its not-found text?
+
+**Try it**: customers with no order.
+
+<RunSQL query={`SELECT customer_id, signup_date, loyalty_tier
+FROM customers c
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM orders o
+  WHERE o.customer_id = c.customer_id
+)
+ORDER BY customer_id;`} />
+
+Expected: 5 rows, 3 columns. *Why:* `c` and `o` are aliases, short names as in joins. For each customer, the inner query asks
+whether an order carries that customer's id. The same five customers as in the warm-up.
+
+**Try it**: read a correlated subquery in the `SELECT` list. Do not write this yet; run it and read it.
+
+<RunSQL query={`SELECT c.customer_id,
+       (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.customer_id) AS orders
+FROM customers c
+WHERE c.customer_id BETWEEN 138 AND 142
+ORDER BY c.customer_id;`} />
+
+Expected: 5 rows, 2 columns. *Why:* for each customer, the inner query counts that customer's orders, so customer 140 shows
+0. The picture shows the same run as a table.
+
+<figure>
 <svg viewBox="0 0 360 246" width="360" role="img" aria-labelledby="sq-corr-title sq-corr-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="sq-corr-title">A correlated NOT EXISTS runs its inner query once per customer</title>
 <desc id="sq-corr-desc">The inner query of NOT EXISTS, SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id, runs once for each customer row. customer 138 finds 1 order; customer 139 finds 1 order; customer 140 finds 0 orders; customer 141 finds 2 orders; customer 142 finds 3 orders. EXISTS is true when at least one order is found, NOT EXISTS when none is. Only customer 140 has none, so only that row is kept.</desc>
@@ -265,199 +338,114 @@ three numbers and know which of four kinds of subquery fits which question.
 </svg>
 </figure>
 
-## How it works
+### 3. A derived table: a subquery in FROM
 
-A **subquery** is a `SELECT` in parentheses inside another query, the outer query. The outer query reads its result as
-one value, a list, a yes-or-no or a table, depending on where the subquery sits. Conceptually:
+A **derived table** is a subquery in `FROM`, with a name. The outer query treats it as a table, so it has a grain of its
+own (S18). Say you want the average of each customer's order count: `AVG(COUNT(*))` stops with `Binder Error: aggregate
+function calls cannot be nested`, so make the counts a table first.
 
-1. A subquery that uses nothing from the outer query is self-contained, so it can run on its own: check it alone first.
-   Think of its result as worked out first and handed to the outer query.
-2. The outer query then uses that result where the subquery sits: against one value, against a list, as a yes-or-no,
-   or as a table in `FROM`. The first picture above shows a list.
-3. A **correlated** subquery uses a column of the outer row. It cannot run alone, because it needs that row's value.
-   Conceptually it runs once for every outer row, with the value as a parameter. In the second picture,
-   `c.customer_id` changes with each row.
-4. DuckDB need not do it literally: it detects a `NOT EXISTS` that is an anti join and plans it as a join.
+**Try it**: the average of a count.
 
-The rules:
+<RunSQL query={`SELECT ROUND(AVG(orders), 2) AS avg_orders, MAX(orders) AS max_orders
+FROM (
+  SELECT customer_id, COUNT(*) AS orders
+  FROM orders
+  WHERE customer_id IS NOT NULL
+  GROUP BY customer_id
+) AS per_customer;`} />
 
-- A scalar subquery must return one value. If it returns more than one, DuckDB raises an error.
-- `IN` and `EXISTS` ask a yes-or-no question of each outer row and keep or drop it, so they add no rows. `IN` asks
-  whether the row's value is in the list. `EXISTS` asks whether the subquery returns at least one row, and `NOT EXISTS`
-  asks whether it returns none.
-- Which columns an `EXISTS` subquery lists makes no difference; only whether it returns a row. That is why `SELECT 1`
-  is common.
-- A derived table is a subquery in `FROM`. The outer query treats it as a table, so it has a grain of its own (S18).
+Expected: 1 row, 2 columns: `12.41` and `29`. *Why:* the inner query has grain one row per customer; the outer query
+summarizes it. It is the same idea as a CTE (S13) written inside `FROM`. The filter drops the walk-in order.
 
-| Kind | Where it sits | The inner query returns |
-|---|---|---|
-| Scalar | anywhere one value fits: `WHERE`, `HAVING`, the `SELECT` list | one row and one column |
-| `IN` | after `x IN` | one column, any number of rows: a list |
-| `EXISTS` | after `EXISTS` or `NOT EXISTS` | any rows: only "is there at least one?" matters |
-| Derived table | in `FROM`, with a name | a whole table |
+### 4. A scalar subquery: one value
 
-**Excel.** A scalar subquery is like a cell holding `=AVERAGE(...)` that other formulas point to. `EXISTS` is the
-question a lookup answers: did `XLOOKUP` (E8, *Bring in a value by key with XLOOKUP*) find the key, or fall back to its
-not-found text?
+A **scalar** subquery returns one value, so it can sit anywhere one value fits: in `WHERE`, in `HAVING` or in the
+`SELECT` list. If it returns more than one value, DuckDB raises an error. *Excel:* it is like a cell holding
+`=AVERAGE(...)` that other formulas point to.
 
-**A common misconception: "a `NOT EXISTS` really runs its inner query once for every row."** The per-row picture is
-how to read it, not always how DuckDB runs it. When a `NOT EXISTS` expresses an anti join, DuckDB plans it as a join
-(step 4 above).
+**Try it**: the average from unit 3, in one value.
 
-## Worked example
+<RunSQL query={`SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2) AS avg_orders
+FROM orders;`} />
 
-Question: **how many customers ordered at Harbor, how many never ordered, and how many order more than average?** Run
-the notebook's setup cell, then one cell per step. Each step gives the shape of the result to expect. Counts cover all
-1,800 orders, the canceled one included; the walk-in order 1335 has no customer, so it belongs to none.
+Expected: 1 row, 1 column: `12.41`. *Why:* 1,799 orders that name a customer, over 145 different customers. Both counts
+skip the empty `customer_id` (S7). Now use it in `HAVING`:
 
-1. **IN: write the inner query alone first.**
+<RunSQL query={`SELECT customer_id, COUNT(*) AS orders
+FROM orders
+WHERE customer_id IS NOT NULL
+GROUP BY customer_id
+HAVING COUNT(*) > (
+  SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2)
+  FROM orders
+)
+ORDER BY orders DESC, customer_id
+LIMIT 5;`} />
 
-   ```sql
-   SELECT customer_id
-   FROM orders
-   WHERE store_id = 3
-   ORDER BY customer_id
-   LIMIT 8;
-   ```
+Expected: 5 rows, 2 columns; the first three have 29 orders. Without `LIMIT 5` the query has 68 rows. *Why:* the inner
+query runs once and gives a single number that each group is compared with.
 
-   Expected: 8 rows, 1 column. *Why:* the inner query must make sense on its own. Customer 5 repeats because each row
-   is an order, not a customer.
+### 5. Check the three answers
 
-   Now put it in parentheses after `IN`:
+One row of four scalar subqueries gives the three answers and two checks.
 
-   ```sql
-   SELECT customer_id, signup_date, loyalty_tier
-   FROM customers
-   WHERE customer_id IN (
-     SELECT customer_id
-     FROM orders
-     WHERE store_id = 3
-   )
-   ORDER BY customer_id
-   LIMIT 6;
-   ```
+**Try it**: the check.
 
-   Expected: 6 rows, 3 columns; the first is customer 2. *Why:* the outer query asks one thing of each customer: is
-   your id in the list? The grain stays one row per customer.
+<RunSQL query={`SELECT
+  (SELECT COUNT(*) FROM customers
+   WHERE customer_id IN (SELECT customer_id FROM orders WHERE store_id = 3)) AS at_harbor,
+  (SELECT COUNT(*) FROM customers c
+   JOIN orders o ON o.customer_id = c.customer_id
+   WHERE o.store_id = 3) AS join_rows,
+  (SELECT COUNT(*) FROM customers c
+   WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS ordered,
+  (SELECT COUNT(*) FROM customers c
+   WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS never;`} />
 
-2. **NOT EXISTS: customers with no order.**
-
-   ```sql
-   SELECT customer_id, signup_date, loyalty_tier
-   FROM customers c
-   WHERE NOT EXISTS (
-     SELECT 1
-     FROM orders o
-     WHERE o.customer_id = c.customer_id
-   )
-   ORDER BY customer_id;
-   ```
-
-   Expected: 5 rows, 3 columns. *Why:* `c` and `o` are aliases, and `o.customer_id = c.customer_id`
-   is what makes it correlated. The same five customers as in the warm-up.
-
-3. **Read a correlated subquery in the `SELECT` list.** Do not write this yet; run it and read it.
-
-   ```sql
-   SELECT c.customer_id,
-          (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.customer_id) AS orders
-   FROM customers c
-   WHERE c.customer_id BETWEEN 138 AND 142
-   ORDER BY c.customer_id;
-   ```
-
-   Expected: 5 rows, 2 columns. *Why:* for each customer, the inner query counts that customer's orders, so customer 140
-   shows 0. This is the second picture as a number.
-
-4. **A derived table: the average of a count.** `AVG(COUNT(*))` is not allowed, so make the counts a table first.
-
-   ```sql
-   SELECT ROUND(AVG(orders), 2) AS avg_orders, MAX(orders) AS max_orders
-   FROM (
-     SELECT customer_id, COUNT(*) AS orders
-     FROM orders
-     WHERE customer_id IS NOT NULL
-     GROUP BY customer_id
-   ) AS per_customer;
-   ```
-
-   Expected: 1 row, 2 columns: `12.41` and `29`. *Why:* the inner query has grain one row per customer; the outer
-   query summarizes it. It is the same idea as a CTE (S13) written inside `FROM`. The filter drops the walk-in order.
-
-5. **Scalar: customers above the average.** The average from step 4, in one value:
-
-   ```sql
-   SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2) AS avg_orders
-   FROM orders;
-   ```
-
-   Expected: 1 row, 1 column: `12.41`. *Why:* 1,799 orders that name a customer, over 145 different customers. Both counts
-   skip the empty `customer_id` (S7). Now use it in `HAVING`:
-
-   ```sql
-   SELECT customer_id, COUNT(*) AS orders
-   FROM orders
-   WHERE customer_id IS NOT NULL
-   GROUP BY customer_id
-   HAVING COUNT(*) > (
-     SELECT ROUND(COUNT(customer_id) * 1.0 / COUNT(DISTINCT customer_id), 2)
-     FROM orders
-   )
-   ORDER BY orders DESC, customer_id
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 2 columns; the first three have 29 orders. Without `LIMIT 5` the query has 68 rows. *Why:* the inner
-   query runs once and gives a single number that each group is compared with.
-
-6. **Verify.** One row of four scalar subqueries:
-
-   ```sql
-   SELECT
-     (SELECT COUNT(*) FROM customers
-      WHERE customer_id IN (SELECT customer_id FROM orders WHERE store_id = 3)) AS at_harbor,
-     (SELECT COUNT(*) FROM customers c
-      JOIN orders o ON o.customer_id = c.customer_id
-      WHERE o.store_id = 3) AS join_rows,
-     (SELECT COUNT(*) FROM customers c
-      WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS ordered,
-     (SELECT COUNT(*) FROM customers c
-      WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)) AS never;
-   ```
-
-   Expected: 1 row, 4 columns: `90 | 355 | 145 | 5`. Answer: **90 customers ordered at Harbor, 5 never ordered, and 68
-   order more than the average customer's 12.41.** Checks: 145 + 5 = 150 customers; the join gives 355 rows, one per
-   Harbor order, while `IN` gives 90, one per customer; and the 5 are the same customers as the anti join of S20.
+Expected: 1 row, 4 columns: `90 | 355 | 145 | 5`. Answer: **90 customers ordered at Harbor, 5 never ordered, and 68
+order more than the average customer's 12.41.** Checks: 145 + 5 = 150 customers; the join gives 355 rows, one per
+Harbor order, while `IN` gives 90, one per customer; and the 5 are the same customers as the anti join of S20.
 
 <details>
 <summary>Explain it in your own words: why does the join give 355 rows and IN only 90?</summary>
 
-The join pairs a customer with every order, so a customer with five Harbor orders appears five times. `IN` only asks
-whether the id is in the list, so a customer appears at most once, however long the list repeats it.
+Count the partners a customer can find. A join builds one row for every matching order, so a customer with five Harbor
+orders turns into five rows. `IN` asks one yes-or-no question per customer, so no customer can turn into more than one
+row, however often the list repeats the id.
 
 </details>
+
+<Aside type="tip" title="Remember">
+
+- Scalar: one value, anywhere one value fits. `IN`: one column, a list. `EXISTS`: any rows; only "is there at least one?" matters.
+- Derived table: a whole table in `FROM`, with a name and a grain of its own.
+- Write the inner query alone and check it before you nest it. A correlated one needs an outer row, so read it row by row.
+
+**Common trap: "a `NOT EXISTS` really runs its inner query once for every row."** The per-row picture is how to read it,
+not always how DuckDB runs it. When a `NOT EXISTS` expresses an anti join, DuckDB plans it as a join.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-subqueries-1">
 
-**What is the average number of lines on an order, and the most lines on one order?** Use the Exercise 1 cell.
+**What is the average number of lines on an order, and the most lines on one order?**
 Expected: 1 row, 2 columns.
 
-Done for you: the outer query. Finish the derived table: one row per order, with its number of lines in a column named
-`lines`.
+Done for you: the outer query. The inner query is a stand-in that gives every order one line. Finish the derived table:
+one row per order, with its number of lines in a column named `lines`.
 
-```sql
-SELECT ROUND(AVG(lines), 2) AS avg_lines, MAX(lines) AS max_lines
+<RunSQL query={`SELECT ROUND(AVG(lines), 2) AS avg_lines, MAX(lines) AS max_lines
 FROM (
-  ...
-) AS per_order;
-```
+  SELECT order_id, 1 AS lines
+  FROM orders
+) AS per_order;`} />
 
 <details>
 <summary>Hint</summary>
 
-The grain of the inner query is one row per order, so it groups `order_items` by `order_id`, as in step 4.
+The grain of the inner query is one row per order, so it groups `order_items` by `order_id`, as in unit 3.
 
 </details>
 
@@ -493,20 +481,22 @@ FROM (
 
 <Exercise id="sql-subqueries-2">
 
-**Which customers placed an order but never a completed one?** Work in the Exercise 2 cells.
+**Which customers placed an order but never a completed one?**
 
-Before you run anything, write one sentence in the first cell: which customers you expect, and how they differ from the
+Before you run anything, write one sentence as a comment in the editor: which customers you expect, and how they differ from the
 five who never ordered. Then write the query with `EXISTS` and `NOT EXISTS`. Try the `NOT EXISTS` half alone as well and
 compare.
 
 Expected shape, to check your sentence against: a list of customer ids, 1 column. The status of an order is `completed`
 or `canceled`.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
 Two conditions on the same customer: an order exists, and no completed order exists. Each is a correlated subquery
-like step 2; the second adds `AND o.status = 'completed'`.
+like unit 2; the second adds `AND o.status = 'completed'`.
 
 </details>
 
@@ -560,11 +550,9 @@ table in `FROM`, with a name.
 
 **Spot the flaw.** A colleague wants the customers who never ordered, and writes:
 
-```sql
-SELECT customer_id
+<RunSQL query={`SELECT customer_id
 FROM customers
-WHERE customer_id NOT IN (SELECT customer_id FROM orders);
-```
+WHERE customer_id NOT IN (SELECT customer_id FROM orders);`} />
 
 Expected from that query: 0 rows, 1 column. The warm-up showed there are 5 such customers. What went wrong, and how do
 you fix it?
@@ -592,7 +580,7 @@ or `NOT EXISTS`, which has no such trap. Both give 5 rows, 1 column: 140, 147, 1
 
 **Can you do it?** *I can write a scalar subquery, an `IN`, an `EXISTS` and a derived table, say what each inner query
 returns, and read a correlated one.*
-Test: Exercise sql-subqueries-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-subqueries-2, done from the empty editor without opening the hints.
 
 The pattern to remember: **write the inner query alone and check it, then put it in parentheses where the outer query
 needs a value, a list, a yes or no, or a table.** The next lesson, *Comparing sets: UNION, INTERSECT, EXCEPT* (S24),
