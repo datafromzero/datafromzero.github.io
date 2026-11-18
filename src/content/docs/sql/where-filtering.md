@@ -3,7 +3,7 @@ id: sql-where-filtering
 title: Filtering rows with WHERE
 description: Keep only the rows you need with comparisons, AND, OR and NOT with parentheses, IN, BETWEEN and LIKE.
 stage: sql
-order: 40
+order: 30
 level: beginner
 duration: 25
 objectives:

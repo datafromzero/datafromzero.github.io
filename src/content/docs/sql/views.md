@@ -3,7 +3,7 @@ id: sql-views
 title: Saving a query as a view
 description: Name a query with CREATE VIEW, reuse it like a table, share only the columns people need, and know what a trigger is.
 stage: sql
-order: 210
+order: 280
 level: intermediate
 duration: 20
 objectives:

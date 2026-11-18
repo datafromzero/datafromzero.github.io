@@ -3,7 +3,7 @@ id: sql-aggregate-functions
 title: 'Counting and summing: aggregate functions'
 description: Summarize a whole table with COUNT, SUM, AVG, MIN and MAX, and know why COUNT(*), COUNT(column) and COUNT(DISTINCT) differ.
 stage: sql
-order: 80
+order: 70
 level: beginner
 duration: 25
 objectives:

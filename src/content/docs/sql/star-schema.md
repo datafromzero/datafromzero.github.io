@@ -3,7 +3,7 @@ id: sql-star-schema
 title: 'Star schema: facts and dimensions'
 description: 'See the shape BI tools expect: one fact table at a clear grain with dimension tables around it, built as views on cafe-sales.'
 stage: sql
-order: 330
+order: 290
 level: intermediate
 duration: 25
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Build a small star schema with views
   - Explain why BI tools prefer this shape
 prerequisites:
-  - sql-normalization
+  - sql-relational-model
   - sql-views
 datasets:
   - cafe-sales

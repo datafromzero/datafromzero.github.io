@@ -3,7 +3,7 @@ id: sql-expressions-and-types
 title: Computed columns and data types
 description: Calculate new columns, cast between types and avoid integer-division and floating-point surprises with money.
 stage: sql
-order: 60
+order: 50
 level: beginner
 duration: 25
 objectives:

@@ -1,9 +1,9 @@
 ---
 id: sql-scaling-and-nosql
 title: 'Beyond one database: scale and NoSQL'
-description: 'A short map of what changes when data outgrows one machine: partitioning, warehouses, and when teams choose a document or key-value store.'
+description: 'A short map of what changes when data outgrows one machine: partitioning, warehouses, and when teams choose a document or key-value store. The core stage, after Python, goes deeper.'
 stage: sql
-order: 340
+order: 350
 level: intermediate
 duration: 15
 objectives:

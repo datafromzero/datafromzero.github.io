@@ -3,7 +3,7 @@ id: sql-conditional-aggregation
 title: Several metrics in one pass
 description: Use CASE inside SUM and COUNT to compute several conditional metrics at once and a percentage with the right denominator.
 stage: sql
-order: 110
+order: 90
 level: intermediate
 duration: 25
 objectives:

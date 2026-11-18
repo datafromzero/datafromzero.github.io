@@ -3,7 +3,7 @@ id: sql-join-fanout
 title: 'Join fan-out: aggregate before you join'
 description: Spot a join that inflates totals, explain it with a diagram, and repair it by aggregating the many side before joining.
 stage: sql
-order: 160
+order: 210
 level: intermediate
 duration: 30
 objectives:

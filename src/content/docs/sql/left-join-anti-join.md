@@ -3,7 +3,7 @@ id: sql-left-join-anti-join
 title: LEFT JOIN and finding rows with no match
 description: Keep unmatched rows with LEFT JOIN, find customers who never ordered with an anti-join, and place conditions in ON or WHERE on purpose.
 stage: sql
-order: 150
+order: 200
 level: intermediate
 duration: 25
 objectives:

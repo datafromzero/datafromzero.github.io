@@ -3,7 +3,7 @@ id: sql-cohort-retention
 title: Cohorts and retention
 description: Assign users to a cohort by first event, then build a retention table by period since signup.
 stage: sql
-order: 270
+order: 260
 level: advanced
 duration: 30
 objectives:

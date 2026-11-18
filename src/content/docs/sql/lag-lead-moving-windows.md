@@ -3,7 +3,7 @@ id: sql-lag-lead-moving-windows
 title: 'Comparing to the previous row: LAG, LEAD and moving averages'
 description: Compare each row with the previous or next one using LAG and LEAD, and smooth a series with a moving-average frame.
 stage: sql
-order: 240
+order: 160
 level: intermediate
 duration: 30
 objectives:

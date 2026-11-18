@@ -3,7 +3,7 @@ id: sql-deduplicate-latest-record
 title: Deduplication and the latest record per entity
 description: Collapse repeated records to one trustworthy row with a stated survivor rule, and find the latest row per entity.
 stage: sql
-order: 250
+order: 170
 level: intermediate
 duration: 25
 objectives:

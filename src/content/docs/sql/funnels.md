@@ -3,7 +3,7 @@ id: sql-funnels
 title: 'Funnels: where do people drop off?'
 description: Define a funnel, count users at each step in order, and compute step conversion and drop-off with a query.
 stage: sql
-order: 260
+order: 250
 level: advanced
 duration: 30
 objectives:

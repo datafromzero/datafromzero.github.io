@@ -3,7 +3,7 @@ id: sql-indexes-and-explain
 title: Indexes and reading a query plan
 description: Explain what an index does, read a simple EXPLAIN output and recognize a full scan.
 stage: sql
-order: 320
+order: 340
 level: advanced
 duration: 25
 objectives:

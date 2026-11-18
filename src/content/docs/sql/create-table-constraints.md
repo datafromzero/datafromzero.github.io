@@ -3,7 +3,7 @@ id: sql-create-table-constraints
 title: Creating tables and constraints
 description: Define your own table with CREATE TABLE, choose types, and let keys and constraints protect the data.
 stage: sql
-order: 290
+order: 310
 level: intermediate
 duration: 25
 objectives:

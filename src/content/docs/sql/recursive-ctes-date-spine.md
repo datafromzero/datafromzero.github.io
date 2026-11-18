@@ -3,7 +3,7 @@ id: sql-recursive-ctes-date-spine
 title: Complete time series and recursive CTEs
 description: Build a date spine so days with no orders still appear, and read a recursive CTE for a simple hierarchy.
 stage: sql
-order: 280
+order: 270
 level: advanced
 duration: 25
 objectives:

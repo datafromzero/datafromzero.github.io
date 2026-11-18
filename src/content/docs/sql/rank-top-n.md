@@ -3,7 +3,7 @@ id: sql-rank-top-n
 title: Ranking and top-N per group
 description: Rank rows inside each group with ROW_NUMBER, RANK and DENSE_RANK, state the tie policy and keep the top N.
 stage: sql
-order: 230
+order: 150
 level: intermediate
 duration: 30
 objectives:

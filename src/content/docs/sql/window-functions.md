@@ -3,7 +3,7 @@ id: sql-window-functions
 title: 'Window functions: keep the rows, add the context'
 description: Add a running total or a share of the group without collapsing rows, using OVER with PARTITION BY and ORDER BY.
 stage: sql
-order: 220
+order: 140
 level: intermediate
 duration: 30
 objectives:

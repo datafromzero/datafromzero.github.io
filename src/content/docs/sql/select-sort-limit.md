@@ -3,7 +3,7 @@ id: sql-select-sort-limit
 title: SELECT, ORDER BY and LIMIT
 description: 'Write your first query: choose columns, name them with aliases, sort with a tie-breaker, and preview a table with LIMIT.'
 stage: sql
-order: 30
+order: 20
 level: beginner
 duration: 25
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Sort by one or several columns with a deterministic tie-breaker
   - Preview a table safely with LIMIT
 prerequisites:
-  - sql-relational-model
+  - sql-from-spreadsheet-to-sql
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

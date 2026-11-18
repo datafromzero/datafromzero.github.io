@@ -3,7 +3,7 @@ id: sql-query-execution-order
 title: 'How a query runs: the order of the clauses'
 description: Learn the order the engine works through a query, from FROM to ORDER BY, and use it to explain the most common SELECT errors.
 stage: sql
-order: 100
+order: 120
 level: intermediate
 duration: 20
 objectives:
