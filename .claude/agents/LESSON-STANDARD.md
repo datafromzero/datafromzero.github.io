@@ -22,7 +22,7 @@ Check yourself.
   learner to produce something; answers in lowercase `<details>`.
 - **The question:** one business question with the data visible (a small table); promise the answer.
 - **The picture:** one static inline SVG (at most two stacked), labels on the grid itself. A concept where rows move may use
-  a step animation instead of one of them (see Step animations below).
+  a step animation instead of one of them (see Step-by-step figures below).
 - **How it works** (SQL lessons; the owner added it because the stage lacked theory): 200–400 words of prose right
   after the picture and before the worked example, in our own words with cafe-sales numbers. In this order: (1) the
   idea in one or two sentences; (2) the mechanism, a numbered list of what SQL does to the rows in logical order
@@ -68,7 +68,7 @@ Check yourself.
 - **Quotes are exact**, or they are paraphrases without quote marks.
 - **SVG pictures match the real data** (codes, store numbers, results).
 
-## Step animations (SPEC D41)
+## Step-by-step figures (SPEC D41)
 
 Pictures and animations are **original work**, drawn from our own cafe-sales rows and our design tokens; external
 visuals (other sites' GIFs, posters, diagrams) may inspire the concept only. Never download, trace or recreate one,
@@ -76,24 +76,41 @@ and never copy its layout, colors, characters, captions or sample tables.
 
 - **When:** only where the idea is rows moving or merging: aggregation and GROUP BY, joins, window functions, CTE
   pipelines, set operations, recursion. Not for syntax, formulas or anything a still picture shows as well. At most one
-  per lesson, in "The picture", in place of one of its two SVGs; the static final frame must carry the whole meaning.
-- **How:** write a spec in `scripts/animations/<lesson-id>.mjs` (copy `sql-inner-join.mjs`): draw the FINAL frame with
-  `row`, `text`, `rect`, `path`, then give moving parts an effect: `in` (fades in), `out` (ends dimmed), `mv: [dx, dy]`
-  (starts offset by multiples of 10, slides to where it is drawn), tied to a `step` and an optional `delay`. Run
-  `node scripts/make-animation.mjs <name> --stats` and paste the `<figure class="sa">` block into the lesson (no blank
-  lines inside it; MDX ends HTML at a blank line). The generator escapes `$` and `*` for you. Rerun and re-paste when the data changes.
+  per lesson, in "The picture", in place of one of its two SVGs.
+- **What the learner gets:** a stepper, not an animation. Back, buttons 1 to N and Next (native radios, no JavaScript);
+  step 1 is the default; each step changes one thing with a 0.45 s fade; all captions stay listed under the figure, the
+  current one marked. Print and reduced motion: the final frame plus all captions (the radios stay hidden in print).
+- **How:** write a spec in `scripts/animations/<lesson-id>.mjs` (copy `sql-inner-join.mjs`): `steps` is
+  `[{ role, clause, text, predict? }]` (at most 6), then draw the FINAL frame with `row`, `text`, `rect`, `path` and give
+  each part that changes an effect: `in: n` (appears at step n), `out: n` (dimmed from n), `hide: n` (gone from n; a
+  frame for one step only is `in: n, hide: n+1`). Shade with `tint(role, level)`, outline with `edge(role)`; `row`
+  draws the tint under the text. Run `node scripts/make-animation.mjs <name> --stats` and paste the `<figure class="sa">`
+  block into the lesson (no blank lines inside it; MDX ends HTML at a blank line). The generator escapes `$` and `*`.
+  Rerun and re-paste when the data changes.
 - **Data:** rows come from the real tables; recompute counts with DuckDB 2.0.0 and say in the spec comment which query
-  you ran. A miniature (a few real rows) may stand in for the full table; say so on the figure.
-- **Captions rule:** 3 to 5 steps, one plain sentence each, in the order they play, so they double as the text
-  description of the motion; the first step needs no animation. The `<title>` and `<desc>` describe the final frame.
-- **No overlap:** text never overlaps other text at any moment of the run. Rows that must change places fade in at
-  their new slot rather than slide through other rows (a slide is fine only along an empty lane). Check every 0.2 s:
-  pause `document.getAnimations()` at each time and compare the text boxes.
-- **Color (optional):** gray shades are the default. `sa-hue` on the figure (or on `<html>`) switches the shades `k1` to
-  `k3` to three color-blind-safe hues, with the shades and labels kept; the owner has not chosen it yet.
-- **Limits:** viewBox width 360 at most; about 15 KB of markup; the run ends within 10 s, once, no loops; shades are
-  the site's grays (opacity steps `k1` to `k3`), never new colors; no `style` attribute, no script, no CSS variable in
-  the markup. Check the lesson at 390 px and 1280 px, light and dark, closed, mid-run and with reduced motion.
+  you ran. A miniature may stand in for the full table; say so on the figure.
+- **Captions:** one plain sentence per step, starting with its clause badge (`clause`, colored by `role`). Order: input
+  (FROM/JOIN), then the clauses in the order the engine applies them. Before a step that reveals a result, the caption
+  before it ends with a **Predict:** prompt that does not give the result away. All captions are visible from step 1, so a
+  caption names the operation, never a number or name a later step reveals. The `<title>` and `<desc>` describe the final frame.
+- **No overlap:** text never overlaps other text at any step or mid-fade; parts only fade in at their own slot, nothing
+  slides through other rows. Put a value in the column of the table it describes. Check with Playwright (text boxes at
+  each step).
+- **Clause colors** (fixed in every lesson, only inside figures; tokens `--c-*` in `src/styles/step-animation.css`; each
+  hue is at least 3:1 on pure black and on pure white; color is never the only cue):
+
+  | Role | Clauses | Hue |
+  | --- | --- | --- |
+  | `src` | FROM, JOIN (input tables) | blue `#0072b2` |
+  | `mat` | ON (the match) | violet `#9a6be0` |
+  | `flt` | WHERE, HAVING (kept or dropped) | red `#c0392b` |
+  | `grp` | GROUP BY (group keys) | green `#00a07a` |
+  | `out` | SELECT, aggregates (output) | gold `#ad9100` |
+  | `win` | OVER, PARTITION BY | magenta `#d6479a` |
+  | `ord` | ORDER BY | gray `#808080` |
+
+  Groups, partitions or keys inside one role are shade steps `k1` to `k4` of that hue (three groups use `k1`, `k2`, `k4`),
+  always next to a label (store_id, product_id). Dimmed means dropped and also gets a "dropped" label.
 
 ## Markup
 

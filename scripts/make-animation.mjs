@@ -1,7 +1,7 @@
 /**
- * Prints the markup of a lesson step animation (SPEC D41, .claude/agents/LESSON-STANDARD.md).
+ * Prints the markup of a lesson step-by-step figure (SPEC D41, .claude/agents/LESSON-STANDARD.md).
  *   node scripts/make-animation.mjs <name>          print the <figure> markup to paste into the lesson
- *   node scripts/make-animation.mjs <name> --stats  also print its size and length (on stderr)
+ *   node scripts/make-animation.mjs <name> --stats  also print its size (on stderr)
  *   node scripts/make-animation.mjs --list
  * A spec is scripts/animations/<name>.mjs and default-exports `() => anim(...)` (see scripts/lib/step-animation.mjs).
  */
@@ -22,8 +22,8 @@ if (!names.includes(name)) {
 	process.exit(1);
 }
 const { default: make } = await import(new URL(`${name}.mjs`, dir));
-const { markup, seconds } = make().build();
+const { markup, steps } = make().build();
 console.log(markup);
 if (flag === '--stats') {
-	console.error(`${markup.length} bytes (${gzipSync(markup).length} gzipped), about ${seconds.toFixed(1)} s`);
+	console.error(`${markup.length} bytes (${gzipSync(markup).length} gzipped), ${steps} steps`);
 }

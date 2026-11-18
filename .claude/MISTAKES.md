@@ -96,6 +96,12 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   join sat in the gap beside the wrong table. → **Check text overlap at every 0.2 s of a run, fade rows in at their slot
   instead of crossing other rows, and put a value in a column of the table it describes.**
 
+- 2026-11-18 — Autoplay step animations took control from the learner, and a caption list that already showed every step
+  gave away the results a "Predict:" prompt asked for. → **Figures are steppers the learner advances; captions state the
+  operation and never the numbers or names a later step reveals; the figure shows them at that step.**
+- 2026-11-18 — A tint rectangle drawn after a row's text dimmed the numbers beneath it. → **Draw tints before text (the
+  generator's `row` does); text is never under a shade.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

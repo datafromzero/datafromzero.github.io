@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 814 nodes, 934 edges, 99 communities (353 isolated nodes).
-- Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 41, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 71, skill 1, spec-section 25, starlight-component 6, style 6, symbol 145, template 2, token 12.
-- Edges: defines 145, imports 36, mentions 528, overrides 6, references 27, runs 10, specified-by 4, uses 149, uses-token 24, validated-by 5.
+- 816 nodes, 938 edges, 99 communities (353 isolated nodes).
+- Nodes: agent 8, build plan 9, component 35, config 10, content 172, content-type 5, decision 41, dependency 17, design-section 15, doc 16, i18n 6, layout 1, module 16, npm-script 19, page 1, research-section 165, rule 10, script 71, skill 1, spec-section 25, starlight-component 6, style 6, symbol 147, template 2, token 12.
+- Edges: defines 147, imports 36, mentions 528, overrides 6, references 27, runs 10, specified-by 4, uses 149, uses-token 26, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -19,14 +19,14 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `src/components/content/OpenInColab.astro` | component | 37 | src/components/content/OpenInColab.astro:1 |
 | 5 | `.claude/HANDOFF.md` | doc | 30 | .claude/HANDOFF.md:1 |
 | 6 | `src/site.ts` | module | 29 | src/site.ts:1 |
-| 7 | `design/README.md` | doc | 23 | design/README.md:1 |
+| 7 | `design/README.md` | doc | 22 | design/README.md:1 |
 | 8 | `D31` Bottom taskbar (amended by D3… | decision | 21 | SPEC.md:58 |
 | 9 | `S6` Authoring components | spec-section | 21 | SPEC.md:254 |
 | 10 | `src/lib/career-quiz.ts` | module | 21 | src/lib/career-quiz.ts:1 |
 | 11 | `D30` Vietnamese paused | decision | 19 | SPEC.md:57 |
 | 12 | `S12` Quality gates (CI on every PR… | spec-section | 19 | SPEC.md:382 |
-| 13 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
-| 14 | `agent:LESSON-STANDARD` | agent | 18 | .claude/agents/LESSON-STANDARD.md:1 |
+| 13 | `agent:LESSON-STANDARD` | agent | 19 | .claude/agents/LESSON-STANDARD.md:1 |
+| 14 | `src/styles/home.css` | style | 19 | src/styles/home.css:1 |
 | 15 | `src/lib/content-schemas.ts` | module | 18 | src/lib/content-schemas.ts:1 |
 
 ## Communities
@@ -36,9 +36,9 @@ Label propagation; each community is named by its top-degree node.
 - **C1 Solution** (60): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx; src/content/docs/sql/aggregate-functions.mdx
 - **C2 HANDOFF.md** (28): .claude/HANDOFF.md; src/site.ts; D30 Vietnamese paused; S8 Internationalization; S14 Content production (replaces migr…; .claude/agents/README.md
 - **C3 career-quiz.ts** (19): src/lib/career-quiz.ts; D33 Career quiz page; R6 Speed first; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES
-- **C4 Tech stack** (10): S2 Tech stack; research/curriculum/07-curriculum-rationale.md; agent:spec-reviewer spec-reviewer; S1 Decision record; S4 Information architecture; research/curriculum/01-competitor-map.md
-- **C5 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C6 LESSON-STANDARD** (9): agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; D41 Lesson step animations; scripts/make-animation.mjs; R5 Motion; scripts/lib/step-animation.mjs
+- **C4 LESSON-STANDARD** (11): agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; D41 Lesson step-by-step figures; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; R5 Motion
+- **C5 Tech stack** (10): S2 Tech stack; research/curriculum/07-curriculum-rationale.md; agent:spec-reviewer spec-reviewer; S1 Decision record; S4 Information architecture; research/curriculum/01-competitor-map.md
+- **C6 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C7 content-schemas.ts** (9): src/lib/content-schemas.ts; src/lib/content-schemas.ts#Classified; src/lib/content-schemas.ts#Kind; src/lib/content-schemas.ts#Lesson; src/lib/content-schemas.ts#REFERENCE_AREAS; src/lib/content-schemas.ts#STAGES
 - **C8 roadmap.ts** (9): src/lib/roadmap.ts; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage; src/lib/roadmap.ts#StageDef
 - **C9 career-quiz-score.ts** (8): src/lib/career-quiz-score.ts; src/lib/career-quiz-score.ts#CAREERS; src/lib/career-quiz-score.ts#Career; src/lib/career-quiz-score.ts#Ranking; src/lib/career-quiz-score.ts#Tally; src/lib/career-quiz-score.ts#Weights
@@ -54,14 +54,14 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C86 to C83, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C45 to C2, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C16 to C31, design/README.md:181)
-- `M8` -mentions-> `S4` (C2 to C4, CLAUDE.md:65)
+- `M8` -mentions-> `S4` (C2 to C5, CLAUDE.md:65)
+- `DG6` -mentions-> `DG2` (C60 to C14, design/README.md:226)
 - `M7` -mentions-> `D34` (C44 to C16, CLAUDE.md:60)
 - `S5.2` -mentions-> `D18` (C51 to C46, SPEC.md:231)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C43 to C44, src/lib/repo-files.ts:4)
 - `D5` -mentions-> `S9` (C44 to C68, SPEC.md:32)
-- `DG6` -mentions-> `DG2` (C60 to C14, design/README.md:226)
 - `M6` -mentions-> `D27` (C49 to C47, CLAUDE.md:57)
-- `S15` -mentions-> `S1` (C63 to C4, SPEC.md:468)
+- `S15` -mentions-> `S1` (C63 to C5, SPEC.md:468)
 
 ## Decisions (SPEC §1)
 
@@ -107,7 +107,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D38 | Career panel button | "Go to <career>" once that career has published lessons, else "Start… | SPEC.md:65 |
 | D39 | Data tag before v1.0.0 | Pre-release tag `v0.1.0` for notebook data (owner decision, 2026-11-1… | SPEC.md:66 §14 §7 §9 |
 | D40 | SQL stage shape | 35 lessons: an Excel-side first lesson, then the research additions;… | SPEC.md:67 |
-| D41 | Lesson step animations | CSS-only, click-to-play step animations in lesson figures (owner deci… | SPEC.md:68 §6 |
+| D41 | Lesson step-by-step figures | CSS-only, learner-controlled steppers in lesson figures (owner decisi… | SPEC.md:68 §6 |
 
 ## CONTRACT sections
 
