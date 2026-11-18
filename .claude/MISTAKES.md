@@ -45,6 +45,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-18 — A commit and push ran after `npm run check` failed (a description over 160 characters), because the
+  commands were joined with `;`. → **Join check, commit and push with `&&`, so nothing is committed after a failed check.**
+
 - 2026-11-17 — Editing `.claude/HANDOFF.md` made CI fail on a stale knowledge graph. → **After changing any `.md`, SPEC,
   CLAUDE.md, `src/`, `scripts/` or config, run `npm run kb`, then `npm run check`, before committing.**
 - 2026-11-17 — Sorting `project-words.txt` rewrote 85 lines. → **Append new words at the end; never re-sort.**
@@ -121,6 +124,14 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   relies on another lesson's skill.**
 - 2026-11-17 — "greyed" in a lesson. → **American English; grep for -our, -ise, grey, cancelled.**
 - 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.**
+
+- 2026-11-18 — The SQL model lesson draft had 3,372 body words for a 20-minute lesson (about twice the Excel model).
+  → **Count body words before reporting; a 20-minute lesson is at most about 2,200 words including exercises, and the
+  report gives the count.**
+
+- 2026-11-18 — After the SQL stage was reordered, S18 still listed only its old prerequisites and missed the S4 and S7
+  skills it uses. → **After any reorder, re-derive each lesson's `prerequisites` from the functions it uses, not from
+  its old neighbors.**
 
 ## Agents and reviews
 

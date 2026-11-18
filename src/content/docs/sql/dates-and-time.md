@@ -3,7 +3,7 @@ id: sql-dates-and-time
 title: Working with dates and time
 description: Extract date parts, truncate timestamps to a month or week, add intervals and group by period without losing the last day.
 stage: sql
-order: 100
+order: 110
 level: intermediate
 duration: 25
 objectives:

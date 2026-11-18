@@ -3,7 +3,7 @@ id: sql-inner-join
 title: 'INNER JOIN: pairing rows on a key'
 description: Combine two tables on a key with INNER JOIN, predict the row count first and check it afterwards.
 stage: sql
-order: 120
+order: 190
 level: beginner
 duration: 25
 objectives:

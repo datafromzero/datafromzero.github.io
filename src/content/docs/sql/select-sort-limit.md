@@ -12,7 +12,7 @@ objectives:
   - Sort by one or several columns with a deterministic tie-breaker
   - Preview a table safely with LIMIT
 prerequisites:
-  - sql-relational-model
+  - sql-from-spreadsheet-to-sql
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

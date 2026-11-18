@@ -3,7 +3,7 @@ id: sql-set-operations
 title: 'Comparing sets: UNION, INTERSECT, EXCEPT'
 description: Stack and compare result sets with UNION, INTERSECT and EXCEPT, and answer coverage questions with grouped counts.
 stage: sql
-order: 180
+order: 240
 level: intermediate
 duration: 25
 objectives:
