@@ -102,6 +102,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — A tint rectangle drawn after a row's text dimmed the numbers beneath it. → **Draw tints before text (the
   generator's `row` does); text is never under a shade.**
 
+- 2026-11-18 — The hidden radios of a stepper were absolutely positioned at the top of the figure, so tapping a step button
+  scrolled the page up 400 to 500 px to focus them. → **A visually hidden form control sits in the flow next to the control
+  that drives it (zero height, reordered with flex), never absolutely positioned elsewhere; after any control change, click
+  every control in Playwright and assert scrollY moves by at most 2 px.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
