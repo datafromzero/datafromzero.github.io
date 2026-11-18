@@ -148,6 +148,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   only the columns.**
 - 2026-11-18 — Results like `-nan` and `inf` depend on the DuckDB version Colab installs. → **SQL notebooks pin
   `duckdb==2.0.0` (`scripts/pin-notebook-duckdb.py`).**
+- 2026-11-18 — A planned objective said a SELECT alias "cannot be used in WHERE", but DuckDB 2.0.0 accepts it for plain
+  expressions (its Friendly SQL page lists it). → **Run every behavior claim in a stub's objectives on the engine the
+  lesson uses before teaching it; teach the running order, name what other databases do from their docs, and report the
+  objective wording.**
 
 ## Agents and reviews
 

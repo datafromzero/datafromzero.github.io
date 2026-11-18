@@ -1,0 +1,465 @@
+---
+id: sql-dates-and-time
+title: Working with dates and time
+description: Extract date parts, truncate timestamps to a month or week, add intervals and group by period without losing the last day.
+stage: sql
+order: 110
+level: intermediate
+duration: 25
+objectives:
+  - Extract year, month and weekday from a timestamp
+  - Truncate a timestamp to a day, week or month
+  - Add and subtract intervals and compute date differences
+  - Group by month and flag an incomplete current period
+  - Name the time zone a timestamp is in
+prerequisites:
+  - sql-group-by-having
+  - sql-expressions-and-types
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-dates-and-time.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Date functions'
+    url: https://duckdb.org/docs/stable/sql/functions/date
+  - title: 'DuckDB documentation: Date types'
+    url: https://duckdb.org/docs/stable/sql/data_types/date
+  - title: 'DuckDB documentation: Timestamp types'
+    url: https://duckdb.org/docs/stable/sql/data_types/timestamp
+  - title: 'DuckDB documentation: Date part functions'
+    url: https://duckdb.org/docs/stable/sql/functions/datepart
+  - title: 'DuckDB documentation: Python API overview'
+    url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'Microsoft Support: YEAR function'
+    url: https://support.microsoft.com/en-us/office/year-function-c64f017a-1354-490d-981f-578e8ec8d3b9
+  - title: 'Microsoft Support: EOMONTH function'
+    url: https://support.microsoft.com/en-us/office/eomonth-function-7314ffa1-2bc9-4005-9d66-f49db127d628
+status: draft
+---
+
+This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
+(S1). It is about the `ordered_at` timestamp: take it apart, cut it to a month, do arithmetic with it, and group by
+month without losing the last day.
+
+**Your practice notebook** loads the five tables of **cafe-sales**. Each query sits between `con.sql("""` and
+`""").show()`: only the text inside the triple quotes is SQL. The notebook cells leave out the closing `;` that this
+page shows.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), which `duckdb` version Colab has, that `con.execute(script)` runs the whole load script, and that `.show()` prints dates and booleans as described. Check that the cafes' time zone is Pacific time (the cafe-sales README says only local time in the San Francisco Bay Area). Time the lesson against its 25 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *GROUP BY and HAVING* (S8): `SELECT payment_method, COUNT(*) FROM orders GROUP BY payment_method` runs on the
+   1,800 orders. How many rows come back, and what is one row?
+
+   <details>
+   <summary>Answer</summary>
+
+   Three rows, one per payment method (card, mobile, cash). Their counts add up to 1,800.
+
+   </details>
+
+2. In *Dates as numbers* (E11): two cells hold real dates, and `=B2-A2` gives a number. What is the number, and why does
+   the subtraction work?
+
+   <details>
+   <summary>Answer</summary>
+
+   The days between the two dates. A date is a number (a serial number) shown with a date format.
+
+   </details>
+
+3. In *Computed columns and data types* (S5), write a query that shows `ordered_at` as a plain date, without the time.
+
+   <details>
+   <summary>Answer</summary>
+
+   `SELECT CAST(ordered_at AS DATE) FROM orders;`
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> How many orders did we take in each month from January to June, and is every month complete?
+
+The first rows of `orders`:
+
+| order_id | ordered_at |
+|---:|---|
+| 1001 | 2026-01-01 08:02:00 |
+| 1002 | 2026-01-01 15:38:00 |
+| 1003 | 2026-01-01 15:47:00 |
+
+By the end you will have a six-row table of monthly counts that adds up to all 1,800 orders, and a check that tells
+you when the last month is only partly there.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 216" width="360" role="img" aria-labelledby="months-bars-title months-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="months-bars-title">Orders per month, January to June 2026</title>
+<desc id="months-bars-desc">Six bars, one per month, with the number of orders and the days in the month: January 242, 31 days; February 218, 28 days; March 258, 31 days; April 349, 30 days; May 380, 31 days; June 353, 30 days. Every month is complete. The six bars add up to 1,800 orders.</desc>
+<defs><pattern id="months-bars-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-opacity="0.6" stroke-width="2" /></pattern></defs>
+<text x="10" y="20" font-size="14" font-weight="600">Orders per month, one bar per month bucket</text>
+<line x1="10" y1="160" x2="350" y2="160" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="24" y="96.31578947368422" width="40" height="63.68421052631579" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="44.0" y="90.31578947368422" font-size="11" font-weight="600" text-anchor="middle">242</text>
+<text x="44.0" y="176" font-size="11" text-anchor="middle">Jan</text>
+<text x="44.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="78" y="102.63157894736842" width="40" height="57.368421052631575" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="98.0" y="96.63157894736842" font-size="11" font-weight="600" text-anchor="middle">218</text>
+<text x="98.0" y="176" font-size="11" text-anchor="middle">Feb</text>
+<text x="98.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">28 days</text>
+<rect x="132" y="92.10526315789474" width="40" height="67.89473684210526" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="152.0" y="86.10526315789474" font-size="11" font-weight="600" text-anchor="middle">258</text>
+<text x="152.0" y="176" font-size="11" text-anchor="middle">Mar</text>
+<text x="152.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="186" y="68.15789473684211" width="40" height="91.84210526315789" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="206.0" y="62.15789473684211" font-size="11" font-weight="600" text-anchor="middle">349</text>
+<text x="206.0" y="176" font-size="11" text-anchor="middle">Apr</text>
+<text x="206.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">30 days</text>
+<rect x="240" y="60.0" width="40" height="100.0" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="260.0" y="54.0" font-size="11" font-weight="600" text-anchor="middle">380</text>
+<text x="260.0" y="176" font-size="11" text-anchor="middle">May</text>
+<text x="260.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="294" y="67.10526315789474" width="40" height="92.89473684210526" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="314.0" y="61.10526315789474" font-size="11" font-weight="600" text-anchor="middle">353</text>
+<text x="314.0" y="176" font-size="11" text-anchor="middle">Jun</text>
+<text x="314.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">30 days</text>
+<text x="10" y="214" font-size="11">Months have 28 to 31 days, and every month is complete.</text>
+</svg>
+<svg viewBox="0 0 360 216" width="360" role="img" aria-labelledby="months-partial-title months-partial-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="months-partial-title">The same months if the export stopped on June 12</title>
+<desc id="months-partial-desc">The bars for January to May are unchanged: 242, 218, 258, 349 and 380. June is drawn hatched with 130 orders, the orders from June 1 to June 12, inside a dashed outline that marks the 353 orders of the full month. Only 12 of the 30 days of June are in the data, so the hatched bar is not a fair month.</desc>
+<defs><pattern id="months-partial-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-opacity="0.6" stroke-width="2" /></pattern></defs>
+<text x="10" y="20" font-size="14" font-weight="600">The same, if the export stopped on June 12</text>
+<line x1="10" y1="160" x2="350" y2="160" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="24" y="96.31578947368422" width="40" height="63.68421052631579" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="44.0" y="90.31578947368422" font-size="11" font-weight="600" text-anchor="middle">242</text>
+<text x="44.0" y="176" font-size="11" text-anchor="middle">Jan</text>
+<text x="44.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="78" y="102.63157894736842" width="40" height="57.368421052631575" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="98.0" y="96.63157894736842" font-size="11" font-weight="600" text-anchor="middle">218</text>
+<text x="98.0" y="176" font-size="11" text-anchor="middle">Feb</text>
+<text x="98.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">28 days</text>
+<rect x="132" y="92.10526315789474" width="40" height="67.89473684210526" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="152.0" y="86.10526315789474" font-size="11" font-weight="600" text-anchor="middle">258</text>
+<text x="152.0" y="176" font-size="11" text-anchor="middle">Mar</text>
+<text x="152.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="186" y="68.15789473684211" width="40" height="91.84210526315789" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="206.0" y="62.15789473684211" font-size="11" font-weight="600" text-anchor="middle">349</text>
+<text x="206.0" y="176" font-size="11" text-anchor="middle">Apr</text>
+<text x="206.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">30 days</text>
+<rect x="240" y="60.0" width="40" height="100.0" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-opacity="0.6" />
+<text x="260.0" y="54.0" font-size="11" font-weight="600" text-anchor="middle">380</text>
+<text x="260.0" y="176" font-size="11" text-anchor="middle">May</text>
+<text x="260.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">31 days</text>
+<rect x="294" y="67.10526315789474" width="40" height="92.89473684210526" fill="none" stroke="currentColor" stroke-opacity="0.6" stroke-dasharray="3 3" />
+<rect x="294" y="125.78947368421052" width="40" height="34.2" fill="url(#months-partial-hatch)" stroke="currentColor" stroke-opacity="0.6" />
+<text x="314.0" y="61.10526315789474" font-size="10" text-anchor="middle" opacity="0.7">353 in full</text>
+<text x="314.0" y="139.78947368421052" font-size="11" font-weight="600" text-anchor="middle" opacity="1">130</text>
+<text x="314.0" y="176" font-size="11" text-anchor="middle">Jun</text>
+<text x="314.0" y="190" font-size="9" text-anchor="middle" opacity="0.7">12 of 30</text>
+<text x="10" y="214" font-size="11">June is hatched: only its first 12 days are in the data, so it looks low.</text>
+</svg>
+</figure>
+
+A **date** has a day; a **timestamp** has a day and a time. `ordered_at` is a timestamp. The functions of this lesson:
+
+| Function | What it returns | In Excel (E11) |
+|---|---|---|
+| `year(x)`, `month(x)`, `day(x)` | that part as a number | `YEAR`, `MONTH`, `DAY` |
+| `dayname(x)`, `isodow(x)` | the weekday name; the weekday number, Monday = 1 to Sunday = 7 | |
+| `date_trunc('month', x)` | the start of the month of `x` (also `'week'`, `'day'`) | |
+| `last_day(x)` | the last day of the month of `x` | `EOMONTH` |
+| `x + INTERVAL 7 DAY` | a date or timestamp moved by an interval | |
+| `date1 - date2` | the days between two dates | subtraction |
+
+**Time zone.** A `TIMESTAMP` holds no time zone: the DuckDB documentation lists it as `TIMESTAMP WITHOUT TIME ZONE` and
+says such timestamps are usually local readings of the clock in an unspecified zone. So the column cannot tell you the
+zone; the dataset notes do. For cafe-sales, `ordered_at` is the local time at the cafes, in the San Francisco Bay Area
+(Pacific time), so 08:02 is 8:02 on the cafe's clock. Data from another zone would need converting first.
+
+## Worked example
+
+Question: **how many orders per month, and is every month complete?** Run the notebook's setup cell, then one cell per
+step.
+
+1. **Look at the type.**
+
+   ```sql
+   SELECT order_id, ordered_at, typeof(ordered_at) AS type
+   FROM orders
+   ORDER BY order_id
+   LIMIT 3;
+   ```
+
+   Expected: 3 rows, 3 columns; `type` reads `TIMESTAMP`. *Why:* no time zone in the type, so you name it yourself: local
+   time at the cafes.
+
+2. **Take a timestamp apart.**
+
+   ```sql
+   SELECT order_id, ordered_at, year(ordered_at) AS yr, month(ordered_at) AS mo, day(ordered_at) AS dom,
+          dayname(ordered_at) AS weekday, isodow(ordered_at) AS dow
+   FROM orders
+   ORDER BY order_id
+   LIMIT 3;
+   ```
+
+   Expected: 3 rows, 7 columns; all three orders fall on Thursday, January 1, `dow` 4. *Excel:* `YEAR`, `MONTH` and `DAY`.
+   *Why:* each function returns one part, so you can group or filter by it.
+
+3. **Subtract two dates.**
+
+   ```sql
+   SELECT store_name, opened_on, DATE '2026-06-30' - opened_on AS days_open
+   FROM stores;
+   ```
+
+   Expected: 3 rows, 3 columns; Harbor has been open `90` days. *Excel:* subtract one date from the other. *Why:* a date
+   behaves like a number of days, as in a sheet.
+
+4. **Add and subtract an interval.**
+
+   ```sql
+   SELECT COUNT(*) AS last_week_orders
+   FROM orders
+   WHERE ordered_at >= DATE '2026-07-01' - INTERVAL 7 DAY
+     AND ordered_at < DATE '2026-07-01';
+   ```
+
+   Expected: 1 row, 1 column: `82`. *Why:* July 1 minus 7 days is June 24, so the range covers June 24 to 30, seven
+   whole days. It includes the first day and stops before the next, as in *Filtering rows with WHERE* (S3).
+
+5. **Cut a timestamp to the start of its day, week and month.**
+
+   ```sql
+   SELECT order_id, ordered_at,
+          CAST(ordered_at AS DATE) AS day,
+          CAST(date_trunc('week', ordered_at) AS DATE) AS week_start,
+          CAST(date_trunc('month', ordered_at) AS DATE) AS month_start
+   FROM orders
+   ORDER BY order_id
+   LIMIT 3;
+   ```
+
+   Expected: 3 rows, 5 columns; `week_start` is Monday, December 29, 2025, before the data begins. *Excel:* none; you
+   would build it with `DATE(YEAR(A2), MONTH(A2), 1)`. *Why:* `date_trunc` always returns a timestamp, so `CAST(... AS DATE)`
+   drops the `00:00:00`.
+
+6. **Group by month.**
+
+   ```sql
+   SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+   FROM orders
+   GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
+   ORDER BY month;
+   ```
+
+   Expected: 6 rows, 2 columns, January to June. *Why:* every order in a month is cut to the same first day, so the
+   groups are months. All 1,800 orders are counted, the canceled one included.
+
+7. **Keep the last day.**
+
+   ```sql
+   SELECT COUNT(*) AS june_between
+   FROM orders
+   WHERE ordered_at BETWEEN '2026-06-01' AND '2026-06-30';
+   ```
+
+   ```sql
+   SELECT COUNT(*) AS june
+   FROM orders
+   WHERE ordered_at >= '2026-06-01' AND ordered_at < '2026-07-01';
+   ```
+
+   Expected: 1 row, 1 column each. The first returns `344`, the second `353`, which is the June row of step 6. *Why:*
+   `'2026-06-30'` stands for the very start of that day, so `BETWEEN` loses the 9 orders placed on June 30 after
+   midnight. Include the first day and stop before the next.
+
+8. **Flag an incomplete period.** The real data ends on June 30. To practice, pretend the file was exported on June 12,
+   by keeping only orders before June 13.
+
+   ```sql
+   SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month,
+          COUNT(*) AS orders,
+          MAX(CAST(ordered_at AS DATE)) AS last_order_day,
+          last_day(MAX(ordered_at)) AS month_end,
+          MAX(CAST(ordered_at AS DATE)) < last_day(MAX(ordered_at)) AS is_partial
+   FROM orders
+   WHERE ordered_at < TIMESTAMP '2026-06-13'
+   GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
+   ORDER BY month;
+   ```
+
+   Expected: 6 rows, 5 columns; only June has `is_partial` true: 130 orders up to June 12, against 353 in the full
+   month. *Excel:* `EOMONTH` gives the same month end. *Why:* a month is partial when its last order day comes before
+   its last calendar day. A partial month looks like a drop but is only missing days. Without the `WHERE`, every month is
+   complete.
+
+9. **Verify.** The six monthly counts, 242 + 218 + 258 + 349 + 380 + 353, add up to 1,800, the Count you read in
+   *Rows, columns and tidy layout* (E1), and June's 353 matches step 7. Answer: **242, 218, 258, 349, 380 and 353
+   orders**, and every month is complete.
+
+<details>
+<summary>Explain it in your own words: why does `BETWEEN '2026-06-01' AND '2026-06-30'` return fewer orders than June has?</summary>
+
+A date written alone means the start of that day, 00:00:00. An order at 10:15 on June 30 comes after it, so it is left
+out. The safe range starts on the first day and stops before the first day of the next month.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-dates-and-time-1">
+
+**Which weekday takes the most orders?** Use the Exercise 1 cell. Expected: 7 rows, 2 columns, busiest weekday first.
+
+The first steps are done for you:
+
+```sql
+SELECT dayname(ordered_at) AS weekday, COUNT(*) AS orders
+FROM orders
+```
+
+Now finish it: add the line that groups by the weekday name, and the line that puts the busiest first.
+
+<details>
+<summary>Hint</summary>
+
+Step 6 grouped by a month; here you group by `dayname(ordered_at)`. Sort by the count, largest first.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+GROUP BY ...
+ORDER BY ... DESC;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT dayname(ordered_at) AS weekday, COUNT(*) AS orders
+FROM orders
+GROUP BY dayname(ordered_at)
+ORDER BY orders DESC;
+```
+
+Saturday is busiest with 340 orders, then Sunday with 315. Thursday is quietest with 211.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-dates-and-time-2">
+
+**How many orders did Harbor take in each month?** Harbor is `store_id` 3. Work in the Exercise 2 cells.
+
+Before you run anything, write one sentence in the first cell: how many rows you expect, and which months. Then write
+the query.
+
+Expected shape, to check your sentence against: 3 rows, 2 columns. Counts cover orders of any status.
+
+<details>
+<summary>Hint</summary>
+
+Take the query of step 6 and add a `WHERE` on `store_id`. Why would the result have fewer than six months?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three rows with two columns, April, May and June, because Harbor opened on April 1; each row is a month with its order count."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT CAST(date_trunc('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+FROM orders
+WHERE store_id = 3
+GROUP BY CAST(date_trunc('month', ordered_at) AS DATE)
+ORDER BY month;
+```
+
+April has 123 orders, May 121 and June 111. They add up to 355, the Harbor total from *From a spreadsheet to SQL: your
+first queries* (S1). Three rows, not six, is correct: Harbor opened on April 1, 2026, so it has no earlier months.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which function gives the start of the month of a timestamp, what type does it return, and how do
+   you turn the result into a plain date? Which time zone is `ordered_at` in, and where do you find that out?
+
+   <details>
+   <summary>Answer</summary>
+
+   `date_trunc('month', x)` returns a timestamp; `CAST(... AS DATE)` makes it a date. The `TIMESTAMP` type holds no
+   zone: `ordered_at` is local time at the cafes, as the dataset notes say.
+
+   </details>
+
+<Exercise id="sql-dates-and-time-3">
+
+**Spot the flaw.** A colleague counts orders per week and reports that the quietest weeks of the half-year are the week
+of June 29 and the week of December 29, "so sales fall at New Year and at the end of June". The query:
+
+```sql
+SELECT CAST(date_trunc('week', ordered_at) AS DATE) AS week_start, COUNT(*) AS orders
+FROM orders
+GROUP BY CAST(date_trunc('week', ordered_at) AS DATE)
+ORDER BY orders
+LIMIT 3;
+```
+
+Expected: 3 rows, 2 columns. Find the flaw and fix the query.
+
+<Solution>
+
+The query returns the week of June 29 with 21 orders, the week of December 29 with 26, then the week of February 2 with 47. The first two weeks are partial. The data starts on Thursday, January 1, so the week that starts on Monday, December 29 holds 4 days; it ends on Tuesday, June 30, so the week of June 29 holds 2 days. Count the days in each week and keep only whole weeks:
+
+```sql
+SELECT CAST(date_trunc('week', ordered_at) AS DATE) AS week_start,
+       COUNT(*) AS orders,
+       COUNT(DISTINCT CAST(ordered_at AS DATE)) AS days
+FROM orders
+GROUP BY CAST(date_trunc('week', ordered_at) AS DATE)
+HAVING COUNT(DISTINCT CAST(ordered_at AS DATE)) = 7
+ORDER BY orders
+LIMIT 3;
+```
+
+Expected: 3 rows, 3 columns. The quietest whole week is the week of February 2, with 47 orders.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can group orders by month, keep the last day of the period, and tell whether the last month is
+complete.*
+Test: Exercise sql-dates-and-time-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **cut to the period, group by the period, and check that the last period is whole.** The next
+lesson, *How a query runs: the order of the clauses* (S12), explains why queries are read in a different order than they
+are written.
