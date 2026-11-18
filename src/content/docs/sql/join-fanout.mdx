@@ -1,0 +1,454 @@
+---
+id: sql-join-fanout
+title: 'Join fan-out: aggregate before you join'
+description: Spot a join that inflates totals, explain it with a diagram, and repair it by aggregating the many side before joining.
+stage: sql
+order: 210
+level: intermediate
+duration: 30
+objectives:
+  - Explain how a join on a non-unique key multiplies rows
+  - Diagnose an inflated revenue figure from a many-to-many join
+  - Pre-aggregate one side in a subquery or CTE before joining
+  - Reconcile the repaired total against the source
+prerequisites:
+  - sql-left-join-anti-join
+  - sql-group-by-having
+  - sql-ctes
+  - sql-conditional-aggregation
+datasets:
+  - cafe-sales
+notebook: notebooks/sql/sql-join-fanout.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+status: draft
+---
+
+This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB inside a Google Colab notebook, so there is
+nothing to install. In *INNER JOIN: pairing rows on a key* (S19), joining `orders` to `order_items` turned 1,800 rows
+into 3,287. For counting lines that growth is harmless. For a figure that is stored once per order, such as an order
+total, it is a trap: the figure is copied onto every line, and `SUM` adds the copies. Here you meet the trap, then
+repair it.
+
+**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
+to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
+closing `;` that this page shows. The notebook cells also spell out every CTE in full, where this page writes a comment
+such as `/* as in step 1 */` for a definition you already have.
+
+<OpenInColab />
+
+TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
+must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The stub listed two interview-preparation pages (DataLemur and Interview Query) as sources; they were not opened for this draft and are left out of `sources`, so open them and add them back, or drop them. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In S19, which total did the join of `order_items` to `products` give, and which rows does it cover?
+
+   <details>
+   <summary>Answer</summary>
+
+   22,754.25: all 3,287 lines of all 1,800 orders. It includes the canceled order 1461 (5.00) and the extra-zero line
+   of order 2075. It is the control total for this lesson.
+
+   </details>
+
+2. In *Labels and buckets with CASE* (S6), write the expression that gives 1 when `category` is coffee and 0 otherwise.
+
+   <details>
+   <summary>Answer</summary>
+
+   `CASE WHEN category = 'coffee' THEN 1 ELSE 0 END`
+
+   </details>
+
+3. In *Readable queries with CTEs* (S13), what do you check at each step of a `WITH` query?
+
+   <details>
+   <summary>Answer</summary>
+
+   The grain (what one row is) and the row count, by running that step alone.
+
+   </details>
+
+## The question
+
+The owner of the cafes asks:
+
+> How much did orders that contained coffee bring in, and how much did orders without coffee? Count whole orders: an
+> order with a Cold Brew and a croissant is a coffee order, and its full value counts.
+
+A table called `order_totals` has one row per order: its total in dollars, the sum of its lines as in S19. Its first rows:
+
+| order_id | order_total_usd |
+|---:|---:|
+| 1001 | 14.00 |
+| 1002 | 12.50 |
+| 1003 | 12.50 |
+| 1004 | 6.50 |
+
+To know which orders hold coffee you need the lines and their products. By the end you will see a join that doubles the
+answer, say why, and get a split that adds back to the control total.
+
+## The picture
+
+<figure>
+<svg viewBox="0 0 360 446" width="360" role="img" aria-labelledby="fo-copy-title fo-copy-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="fo-copy-title">A join on order_id copies each order total onto every line</title>
+<desc id="fo-copy-desc">Two grids. First, order_totals, one row per order: 1001 is 14.00, 1002 is 12.50, 1003 is 12.50 and 1004 is 6.50, together 45.50. Second, the same totals joined to the order lines on order_id: eight rows. Order 1001 has three rows, categories bakery, coffee and coffee, each showing 14.00 and shaded. Order 1002 has two rows showing 12.50, order 1003 has two rows showing 12.50, and order 1004 has one row showing 6.50. Together the eight rows show 98.50, more than twice the 45.50 of the four orders.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A join copies each order total</text>
+<text x="10" y="44" font-size="11" font-weight="600">order_totals: 4 rows, together 45.50</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="52" width="120" height="22" /><rect x="130" y="52" width="220" height="22" /><rect x="10" y="74" width="120" height="22" /><rect x="130" y="74" width="220" height="22" /><rect x="10" y="96" width="120" height="22" /><rect x="130" y="96" width="220" height="22" /><rect x="10" y="118" width="120" height="22" /><rect x="130" y="118" width="220" height="22" /><rect x="10" y="140" width="120" height="22" /><rect x="130" y="140" width="220" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="125" y="67" text-anchor="end">order_id</text><text x="345" y="67" text-anchor="end">order_total_usd</text></g>
+<g><text x="125" y="89" text-anchor="end">1001</text><text x="345" y="89" text-anchor="end">14.00</text><text x="125" y="111" text-anchor="end">1002</text><text x="345" y="111" text-anchor="end">12.50</text><text x="125" y="133" text-anchor="end">1003</text><text x="345" y="133" text-anchor="end">12.50</text><text x="125" y="155" text-anchor="end">1004</text><text x="345" y="155" text-anchor="end">6.50</text></g>
+<text x="10" y="186" font-size="11" font-weight="600">joined to the lines on order_id: 8 rows, together 98.50</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="10" y="216" width="340" height="22" /><rect x="10" y="238" width="340" height="22" /><rect x="10" y="260" width="340" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="194" width="95" height="22" /><rect x="105" y="194" width="70" height="22" /><rect x="175" y="194" width="80" height="22" /><rect x="255" y="194" width="95" height="22" /><rect x="10" y="216" width="95" height="22" /><rect x="105" y="216" width="70" height="22" /><rect x="175" y="216" width="80" height="22" /><rect x="255" y="216" width="95" height="22" /><rect x="10" y="238" width="95" height="22" /><rect x="105" y="238" width="70" height="22" /><rect x="175" y="238" width="80" height="22" /><rect x="255" y="238" width="95" height="22" /><rect x="10" y="260" width="95" height="22" /><rect x="105" y="260" width="70" height="22" /><rect x="175" y="260" width="80" height="22" /><rect x="255" y="260" width="95" height="22" /><rect x="10" y="282" width="95" height="22" /><rect x="105" y="282" width="70" height="22" /><rect x="175" y="282" width="80" height="22" /><rect x="255" y="282" width="95" height="22" /><rect x="10" y="304" width="95" height="22" /><rect x="105" y="304" width="70" height="22" /><rect x="175" y="304" width="80" height="22" /><rect x="255" y="304" width="95" height="22" /><rect x="10" y="326" width="95" height="22" /><rect x="105" y="326" width="70" height="22" /><rect x="175" y="326" width="80" height="22" /><rect x="255" y="326" width="95" height="22" /><rect x="10" y="348" width="95" height="22" /><rect x="105" y="348" width="70" height="22" /><rect x="175" y="348" width="80" height="22" /><rect x="255" y="348" width="95" height="22" /><rect x="10" y="370" width="95" height="22" /><rect x="105" y="370" width="70" height="22" /><rect x="175" y="370" width="80" height="22" /><rect x="255" y="370" width="95" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="100" y="209" text-anchor="end">order_item_id</text><text x="170" y="209" text-anchor="end">order_id</text><text x="180" y="209">category</text><text x="345" y="209" text-anchor="end">order_total_usd</text></g>
+<g><text x="100" y="231" text-anchor="end" font-weight="600">5001</text><text x="170" y="231" text-anchor="end" font-weight="600">1001</text><text x="180" y="231" font-weight="600">bakery</text><text x="345" y="231" text-anchor="end" font-weight="600">14.00</text><text x="100" y="253" text-anchor="end" font-weight="600">5002</text><text x="170" y="253" text-anchor="end" font-weight="600">1001</text><text x="180" y="253" font-weight="600">coffee</text><text x="345" y="253" text-anchor="end" font-weight="600">14.00</text><text x="100" y="275" text-anchor="end" font-weight="600">5003</text><text x="170" y="275" text-anchor="end" font-weight="600">1001</text><text x="180" y="275" font-weight="600">coffee</text><text x="345" y="275" text-anchor="end" font-weight="600">14.00</text><text x="100" y="297" text-anchor="end">5004</text><text x="170" y="297" text-anchor="end">1002</text><text x="180" y="297">bakery</text><text x="345" y="297" text-anchor="end">12.50</text><text x="100" y="319" text-anchor="end">5005</text><text x="170" y="319" text-anchor="end">1002</text><text x="180" y="319">food</text><text x="345" y="319" text-anchor="end">12.50</text><text x="100" y="341" text-anchor="end">5006</text><text x="170" y="341" text-anchor="end">1003</text><text x="180" y="341">coffee</text><text x="345" y="341" text-anchor="end">12.50</text><text x="100" y="363" text-anchor="end">5007</text><text x="170" y="363" text-anchor="end">1003</text><text x="180" y="363">coffee</text><text x="345" y="363" text-anchor="end">12.50</text><text x="100" y="385" text-anchor="end">5008</text><text x="170" y="385" text-anchor="end">1004</text><text x="180" y="385">tea</text><text x="345" y="385" text-anchor="end">6.50</text></g>
+<text x="10" y="416" font-size="11" font-weight="600">Order 1001 shows 14.00 on 3 rows, so it adds 42.00.</text>
+<text x="10" y="434" font-size="11" opacity="0.8">Four orders: 45.50 before the join, 98.50 after.</text>
+</svg>
+<svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="fo-bars-title fo-bars-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="fo-bars-title">The same total, three ways</title>
+<desc id="fo-bars-desc">Three horizontal bars. The control total, every order once, is 22,754.25. The naive join gives 23,478.75 for coffee lines plus 24,964.75 for other lines, 48,443.50 in all, more than twice as long. The repaired version gives 16,958.00 for orders with coffee plus 5,796.25 for the others, 22,754.25, the same as the control total.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One total, three answers</text>
+<text x="10" y="48" font-size="11" font-weight="600">Control total: every order once</text>
+<g fill="currentColor" fill-opacity="0.18" stroke="none"><rect x="10" y="56" width="108.0" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="56" width="108.0" height="22" /></g>
+<text x="124.0" y="72" font-size="12" font-weight="600">22,754.25</text>
+<text x="10" y="94" font-size="11" opacity="0.8">all 1,800 orders (S19)</text>
+<text x="10" y="118" font-size="11" font-weight="600">Naive join: orders and lines</text>
+<g fill="currentColor" fill-opacity="0.18" stroke="none"><rect x="10" y="126" width="111.5" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="126" width="111.5" height="22" /><rect x="121.5" y="126" width="118.5" height="22" /></g>
+<text x="246.0" y="142" font-size="12" font-weight="600">48,443.50</text>
+<text x="10" y="164" font-size="11" opacity="0.8">coffee lines 23,478.75 + other lines 24,964.75</text>
+<text x="10" y="188" font-size="11" font-weight="600">Repaired: one row per order</text>
+<g fill="currentColor" fill-opacity="0.18" stroke="none"><rect x="10" y="196" width="80.5" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="196" width="80.5" height="22" /><rect x="90.5" y="196" width="27.5" height="22" /></g>
+<text x="124.0" y="212" font-size="12" font-weight="600">22,754.25</text>
+<text x="10" y="234" font-size="11" opacity="0.8">coffee orders 16,958.00 + others 5,796.25</text>
+<text x="10" y="262" font-size="11" font-weight="600">Only the repaired split adds back to the control total.</text>
+</svg>
+</figure>
+
+A join on a key that **repeats** on the other side copies each row once per match. That is **fan-out**. A figure kept
+once per order, like `order_total_usd`, then sits on several rows, and a `SUM` over the joined rows adds every copy.
+Grouping by a line-level attribute, as the question seems to ask, also puts one order into several groups.
+
+- **Diagnose it:** compare the row count before and after the join, and compare the total with a control total from
+  before the join. A total that grew is a fan-out.
+- **Repair it: aggregate the many side first.** Reduce the table that repeats to one row per key, with `GROUP BY` on
+  the join key inside a CTE (S13), and then join. Two tables with one row per key can pair only one to one, so the
+  join cannot multiply rows.
+
+## Worked example
+
+Question: **how much did orders with coffee, and orders without, bring in?** Run the notebook's setup cell, then one
+cell per step. Each step gives the shape of the result to expect. Every figure covers all 1,800 orders, the canceled
+one included, and includes the extra-zero line of order 2075.
+
+1. **Build `order_totals`.** Grain: one row per order.
+
+   ```sql
+   WITH order_totals AS (
+     SELECT oi.order_id,
+            SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+     FROM order_items AS oi
+     INNER JOIN products AS p ON oi.product_id = p.product_id
+     GROUP BY oi.order_id
+   )
+   SELECT COUNT(*) AS orders,
+          COUNT(DISTINCT order_id) AS distinct_ids,
+          SUM(order_total_usd) AS total_usd
+   FROM order_totals;
+   ```
+
+   Expected: 1 row, 3 columns: `1800 | 1800 | 22754.25`. *Why:* the two counts match, so `order_id` is unique: one row
+   per order. The total is S19's 22,754.25, the control total every later step must reproduce.
+
+2. **Join the totals to the lines.** Before you run it: `order_totals` has 1,800 rows and there are 3,287 lines. How many
+   rows will the join return, and will its `SUM` match step 1?
+
+   ```sql
+   WITH order_totals AS (/* as in step 1 */)
+   SELECT COUNT(*) AS joined_rows,
+          SUM(t.order_total_usd) AS total_usd
+   FROM order_totals AS t
+   INNER JOIN order_items AS oi ON t.order_id = oi.order_id;
+   ```
+
+   Expected: 1 row, 2 columns. *Why:* **3287** rows and **48443.50**, more than twice the control total. Each order
+   total was added once per line.
+
+3. **Ask the question the naive way.** One row per line, flagged coffee or not, joined to the totals.
+
+   ```sql
+   WITH order_totals AS (/* as in step 1 */),
+   lines AS (
+     SELECT oi.order_item_id, oi.order_id, p.category = 'coffee' AS is_coffee
+     FROM order_items AS oi
+     INNER JOIN products AS p ON oi.product_id = p.product_id
+   )
+   SELECT l.is_coffee,
+          COUNT(DISTINCT t.order_id) AS orders,
+          SUM(t.order_total_usd) AS revenue_usd
+   FROM order_totals AS t
+   INNER JOIN lines AS l ON t.order_id = l.order_id
+   GROUP BY l.is_coffee
+   ORDER BY l.is_coffee DESC;
+   ```
+
+   Expected: 2 rows, 3 columns. *Why:* coffee: 1,259 orders and 23,478.75; the rest: 1,232 orders and 24,964.75. The
+   revenues add to 48,443.50, and the order counts add to 2,491 although there are only 1,800 orders. An order with
+   both kinds of line lands in both groups, and an order with two coffee lines is summed twice.
+
+4. **See the copies.**
+
+   ```sql
+   WITH order_totals AS (/* as in step 1 */),
+   lines AS (/* as in step 3 */)
+   SELECT l.order_item_id, l.order_id, l.is_coffee, t.order_total_usd
+   FROM order_totals AS t
+   INNER JOIN lines AS l ON t.order_id = l.order_id
+   WHERE t.order_id = 1001
+   ORDER BY l.order_item_id;
+   ```
+
+   Expected: 3 rows, 4 columns. *Why:* order 1001 has three lines (a Croissant and two coffees), so its 14.00 appears
+   three times: twice among the coffee rows and once among the others. After the join one row is a line, and a
+   per-order figure does not belong at that grain.
+
+5. **Repair: reduce the many side to one row per order.**
+
+   ```sql
+   WITH order_flags AS (
+     SELECT oi.order_id,
+            MAX(CASE WHEN p.category = 'coffee' THEN 1 ELSE 0 END) AS has_coffee
+     FROM order_items AS oi
+     INNER JOIN products AS p ON oi.product_id = p.product_id
+     GROUP BY oi.order_id
+   )
+   SELECT COUNT(*) AS orders,
+          COUNT(DISTINCT order_id) AS distinct_ids,
+          SUM(has_coffee) AS coffee_orders
+   FROM order_flags;
+   ```
+
+   Expected: 1 row, 3 columns: `1800 | 1800 | 1259`. *Why:* `GROUP BY order_id` makes one row per order, and `MAX` is 1
+   when any line of the order is coffee (conditional aggregation, S9). The unique key and the 1,259 coffee orders are
+   what the join needs.
+
+6. **Join two tables with one row per order.** Before you run it: how many rows will the join return?
+
+   ```sql
+   WITH order_totals AS (/* as in step 1 */),
+   order_flags AS (/* as in step 5 */)
+   SELECT f.has_coffee,
+          COUNT(*) AS orders,
+          SUM(t.order_total_usd) AS revenue_usd
+   FROM order_totals AS t
+   INNER JOIN order_flags AS f ON t.order_id = f.order_id
+   GROUP BY f.has_coffee
+   ORDER BY f.has_coffee DESC;
+   ```
+
+   Expected: 2 rows, 3 columns. *Why:* each side has one row per order, so the join returns 1,800 rows and cannot
+   multiply them. Orders with coffee: 1,259 orders and 16,958.00. The others: 541 orders and 5,796.25. That answers the
+   owner.
+
+7. **Reconcile.** 16,958.00 + 5,796.25 = **22,754.25**, the control total of step 1, and 1,259 + 541 = 1,800. A second
+   route for the coffee orders:
+
+   ```sql
+   SELECT COUNT(DISTINCT oi.order_id) AS coffee_orders
+   FROM order_items AS oi
+   INNER JOIN products AS p ON oi.product_id = p.product_id
+   WHERE p.category = 'coffee';
+   ```
+
+   Expected: 1 row, 1 column: `1259`. E21's completed-only Sales of 22,749.25 is 5.00 lower: canceled order 1461 is a
+   Mocha, so its 5.00 sits in the coffee figure here.
+
+<details>
+<summary>Explain it in your own words: why can the join in step 6 not multiply rows, while the one in step 3 did?</summary>
+
+In step 3 the key `order_id` repeated on the lines side, so each order paired with several rows. In step 6 both sides
+hold one row per `order_id`, so each order pairs with exactly one row. You made the key unique by grouping first.
+
+</details>
+
+## Finish it
+
+<Exercise id="sql-join-fanout-1">
+
+**How much did orders that contained tea bring in, and how much did the others?** Use the Exercise 1 cell. Expected: 2
+rows, 3 columns, with revenues that add up to step 1's control total.
+
+Done for you: `order_totals` from step 1, and the step that gives one row per order:
+
+```sql
+WITH order_totals AS (/* as in step 1 */),
+order_flags AS (
+  SELECT oi.order_id,
+         MAX(CASE WHEN p.category = 'tea' THEN 1 ELSE 0 END) AS has_tea
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+```
+
+Now finish it: after the last `)`, write the query that joins the two on `order_id`, groups by `has_tea`, and shows the
+number of orders and the revenue.
+
+<details>
+<summary>Hint</summary>
+
+Copy the final `SELECT` of step 6 and change the flag's name. Then add the two revenues.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT f.has_tea, COUNT(*) AS orders, SUM(...) AS revenue_usd
+FROM order_totals AS t
+INNER JOIN order_flags AS f ON ... = ...
+GROUP BY ...
+ORDER BY f.has_tea DESC;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT f.has_tea,
+       COUNT(*) AS orders,
+       SUM(t.order_total_usd) AS revenue_usd
+FROM order_totals AS t
+INNER JOIN order_flags AS f ON t.order_id = f.order_id
+GROUP BY f.has_tea
+ORDER BY f.has_tea DESC;
+```
+
+Orders with tea: 470 orders and 6,928.00. The others: 1,330 orders and 15,826.25. They add to 22,754.25, the control
+total, and 470 + 1,330 = 1,800.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-join-fanout-2">
+
+**How much did each payment method bring in, and in how many orders?** A teammate says the three amounts must add up to
+E21's Sales, 22,749.25. Work in the Exercise 2 cells.
+
+Before you run anything, write two sentences in the first cell: the grain of `orders` and of `order_totals`, and
+whether joining them can multiply rows, with the number of rows you expect. Then write the query, and compare its total
+with both numbers.
+
+Expected shape, to check your sentences against: 3 rows, 3 columns (the method, its orders, its revenue), most revenue
+first. The figures cover all 1,800 orders, the canceled one included.
+
+<details>
+<summary>Hint</summary>
+
+Is `order_id` unique on both sides of this join? If it is, the join cannot fan out. Then see what the three amounts add up to.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Three rows, one per payment method, with an order count and a revenue. The counts add up to 1,800 orders."*
+
+</details>
+
+<Solution>
+
+```sql
+WITH order_totals AS (/* as in step 1 */)
+SELECT o.payment_method,
+       COUNT(*) AS orders,
+       SUM(t.order_total_usd) AS revenue_usd
+FROM orders AS o
+INNER JOIN order_totals AS t ON o.order_id = t.order_id
+GROUP BY o.payment_method
+ORDER BY revenue_usd DESC;
+```
+
+Card: 1,001 orders and 12,524.50. Mobile: 546 and 7,065.25. Cash: 253 and 3,164.50. Both tables have one row per
+order, so the join returns 1,800 rows, and the three amounts add to 22,754.25, the control total. They are 5.00 more
+than E21's 22,749.25 because this query keeps the canceled order 1461, which was paid in cash: 253 cash orders here, 252
+completed ones, as in S8.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: why does a join on a repeating key inflate the sum of an order-level figure, and how do you repair it?
+
+<details>
+<summary>Answer</summary>
+
+Each order pairs with every one of its lines, so its figure is copied onto each of them and the sum adds every copy.
+Repair it by aggregating the repeating side to one row per key before the join, and reconcile the result against a
+control total taken before the join.
+
+</details>
+
+<Exercise id="sql-join-fanout-3">
+
+**Spot the flaw.** A colleague wants the average order value and reuses the join from step 2:
+
+```sql
+WITH order_totals AS (
+  SELECT oi.order_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS order_total_usd
+  FROM order_items AS oi
+  INNER JOIN products AS p ON oi.product_id = p.product_id
+  GROUP BY oi.order_id
+)
+SELECT ROUND(AVG(t.order_total_usd), 2) AS avg_order_usd
+FROM order_totals AS t
+INNER JOIN order_items AS oi ON t.order_id = oi.order_id;
+```
+
+Expected from that query: 1 row, 1 column: `14.74`. The colleague reports "the average order is 14.74". What went wrong, and what
+is the right query?
+
+<Solution>
+
+The join to `order_items` is not needed, and it distorts the average. It returns 3,287 rows, one per line, so an order
+with three lines is averaged three times and a one-line order once: bigger orders weigh more. The 14.74 is 48,443.50
+divided by 3,287, not 22,754.25 divided by 1,800. Average the table that has one row per order:
+
+```sql
+SELECT ROUND(AVG(order_total_usd), 2) AS avg_order_usd FROM order_totals;
+```
+
+Expected: 1 row, 1 column: `12.64` (the same CTE in front). That is for all 1,800 orders; E21's 12.65 is for the 1,799
+completed ones.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can spot a join that copies an order-level figure onto many rows, repair it by aggregating the many
+side to one row per key first, and reconcile the result against a control total.*
+Test: Exercise sql-join-fanout-2, done in the notebook from empty cells without opening the hints.
+
+The pattern to remember: **a join can add rows only on a key that repeats; reduce the repeating side to one row per
+key first, join, then reconcile.** The next lesson, *Joining three tables and a table to itself* (S22), chains joins
+and tracks the grain through every one.

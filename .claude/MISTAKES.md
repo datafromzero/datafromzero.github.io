@@ -171,6 +171,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Agents and reviews
 
+- 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
+  hit another batch's server, whose pages also answered 200. Batches also overwrote each other's scratch scripts of the
+  same name. → **Read the port the dev server prints, and check page content (a lesson-specific string), not only the
+  status; keep scratch files in your own `scratchpad/batch{X}/` folder.**
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
   (about 25) and says "then report".**
 - 2026-11-17 — Fresh agents cost about 150 tool calls; a warm fix pass by the same agent cost 10–30. → **Send review
