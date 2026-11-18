@@ -5,6 +5,7 @@
  *   - first-person research notes or process notes outside a TODO(owner) paragraph
  *   - a bare `$` inside an inline SVG (use &#36;)
  *   - `datasets:` naming a folder that does not exist in datasets/
+ *   - a placeholder line left in a written lesson (`XX`, `TBD`, `TODO` outside a TODO(owner) note)
  * Code spans, fenced code and SVG text (which shows data values as they are) are ignored for the spelling check.
  * Lessons that are still unwritten stubs are skipped: their planned datasets may not exist yet.
  */
@@ -63,6 +64,8 @@ for (const stage of STAGES) {
 			if (raw.trim() === '') inTodo = false;
 
 			const prose = raw.replace(/`[^`]*`/g, '');
+			if (!inSvg && /^\s*(XX+|TBD)\s*$/i.test(raw)) report(file, n, `placeholder line "${raw.trim()}"; finish the text`);
+			if (!inSvg && !inTodo && /\bTODO\b(?!\(owner\))/.test(prose)) report(file, n, 'TODO outside a TODO(owner) note; finish the text or write TODO(owner)');
 			const m = !inSvg && prose.match(BRITISH);
 			if (m) report(file, n, `British spelling "${m[0]}"; use American English`);
 			if (!inTodo && FIRST_PERSON.test(prose)) report(file, n, 'first-person or process note in learner text; move it to TODO(owner)');

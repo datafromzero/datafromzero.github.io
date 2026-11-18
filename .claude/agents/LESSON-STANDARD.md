@@ -69,7 +69,8 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
   about the Google Drive `sheet` link, copied from the model lesson.
 - SQL and Python: a notebook `notebooks/{stage}/{lesson-id}.ipynb` without outputs (the `notebook` field), loading
   data from the release-tag URL in SPEC §7 (now `v0.1.0`, D39). SQL notebooks copy the model lesson's setup cell
-  (`con.execute(script)` on `cafe-sales.sql`), use `con.sql("""...""").show()` cells without the closing `;`, one cell per
+  (`%pip install -q duckdb==2.0.0`, then `con.execute(script)` on `cafe-sales.sql`; run
+  `python3 scripts/pin-notebook-duckdb.py` after adding a notebook), use `con.sql("""...""").show()` cells without the closing `;`, one cell per
   worked step, empty or partial cells per exercise, and no solutions. The lesson renames to `.mdx` for `<OpenInColab />`.
 - SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
   `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
