@@ -232,6 +232,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   because a foreign key needs its key) and the fix of a Spot-the-flaw. → **A rule bullet states the rule, never the reason
   that an Explain-it asks for; read each Explain-it and Spot-the-flaw answer against the section before finishing.**
 
+- 2026-11-18 — A "How it works" bullet said "every" is not a set operation, but `INTERSECT` of the three store sets
+  returns the same customers as the coverage count. → **A rule stated more broadly than the docs or a result support
+  must be tested with the counter-case before it is written (for "every", try `INTERSECT`); state only what the test
+  shows, or narrow the claim.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
