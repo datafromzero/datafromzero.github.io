@@ -5,7 +5,7 @@ description: Chain several joins in one query, join a table to itself, and keep 
 stage: sql
 order: 220
 level: intermediate
-duration: 25
+duration: 26
 objectives:
   - Join three or more tables in one query
   - Write a self-join with two aliases
@@ -38,7 +38,7 @@ closing `;` that this page shows.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. The DuckDB page opened for this lesson does not say that an empty value never pairs in `ON`, or what error a self-join without aliases gives; the lesson shows both by results. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 26 minutes. The DuckDB page opened for this lesson does not say that an empty value never pairs in `ON`, or that an `ON` may name any table already in the chain; the lesson shows both by results (steps 5 and 1). Its Self-Joins section does give the error for a repeated table name without aliases, and says a self-join works with every join type. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -125,15 +125,34 @@ customer next to the customer who referred them.
 </svg>
 </figure>
 
-A **join chain** writes one `JOIN` after another. Each one pairs the rows so far with the next table, and each `ON` may
-name any table already in the chain. After every join, ask two questions: *is the key unique in the table I just added?*
-and *what is one row now?* If the key is unique there, the join cannot add rows, and an inner join drops a row only when it finds no partner. If it
-repeats, rows can be added (S21).
+## How it works
 
-A **self-join** joins a table to itself. Write the table twice with two different aliases, one for each role: here `c`
-is the customer and `r` is the customer who referred them. The `ON` links a foreign key of one copy to the primary key
-of the other: `c.referred_by = r.customer_id`. Without two aliases DuckDB cannot tell the copies apart and stops with a
-`Binder Error`. A customer with an empty `referred_by` pairs with nobody, because an empty value never equals anything.
+A **join chain** writes one `JOIN` after another, and each link works as in *INNER JOIN: pairing rows on a key* (S19).
+A **self-join** is the same machinery with one table named twice. Conceptually:
+
+1. `FROM` names the first table. Its rows are the starting point, and its grain is what one row means.
+2. Each `JOIN` pairs the rows built so far with the next table, wherever its `ON` is true. The `ON` may name any table
+   already in the chain, not only the one just before.
+3. After each join, ask two questions: *is the key unique in the table I just added?* and *what is one row now?* The
+   counting rule of S19 and the fan-out of S21 answer them: the grain stays the same, or becomes finer. In the first
+   picture above, each box answers them for one link.
+4. `WHERE`, `GROUP BY` and the rest run once, on the final wide table.
+5. For a self-join, the table is read as two copies, one for each alias, and the copies pair like any two tables.
+
+The rules:
+
+- A self-join needs two different aliases, one for each role. In the second picture, `c` is the customer and `r` is the
+  customer who referred them. Without aliases, DuckDB cannot tell the two copies apart and stops with an error.
+- Link the roles through the key: the foreign key of one copy against the primary key of the other (S18).
+- Qualify every column with its alias (S19): after a self-join, each column name exists twice.
+- A self-join works with every join type, so a `LEFT` self-join keeps the unpaired rows, as in S20.
+
+**Excel.** In *Conditional totals with SUMIFS and COUNTIFS* (E7), every condition had to be a column on the same row as
+the line. A join chain builds that: each `JOIN` brings the next table's columns next to every line.
+
+**A common misconception: "a self-join needs a special join, or a copy of the table."** It is an ordinary join. Nothing
+is copied: the table is named twice, and the two aliases keep the two roles apart. DuckDB allows a self-join with all
+join types.
 
 ## Worked example
 

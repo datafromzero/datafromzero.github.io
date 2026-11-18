@@ -5,7 +5,7 @@ description: 'See the five tables as one linked database: primary and foreign ke
 stage: sql
 order: 180
 level: beginner
-duration: 20
+duration: 23
 objectives:
   - Describe a table in terms of rows, columns and a primary key
   - Explain how a foreign key links two tables
@@ -23,6 +23,8 @@ reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: SELECT statement'
     url: https://duckdb.org/docs/stable/sql/statements/select
+  - title: 'DuckDB documentation: Primary key and unique constraint'
+    url: https://duckdb.org/docs/stable/sql/constraints#primary-key-and-unique-constraint
   - title: 'DuckDB documentation: Foreign keys'
     url: https://duckdb.org/docs/stable/sql/constraints#foreign-keys
   - title: 'DuckDB documentation: List tables'
@@ -50,7 +52,7 @@ to Python. The notebook cells wrap each query as in *From a spreadsheet to SQL* 
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 20 minutes. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Time the lesson against its 23 minutes. The one-to-many and many-to-many rules and the definition of grain in How it works are general database design, not stated on a DuckDB page: source them, or keep them as taught. The `store_id` figure of 716 orders was run on `orders` and counts all statuses. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -223,37 +225,37 @@ number, and say what one row means in each of the five tables.
 </svg>
 </figure>
 
-Each box is a **table**; the names inside are its **columns**, one kind of fact each. The rows are the records,
-drawn in the second picture. This is the tidy shape from E1.
+## How it works
 
-- A **primary key** (PK) is a column whose value identifies exactly one row: never repeated, never empty.
-  `order_id` is the primary key of `orders`.
-- A **foreign key** (FK) is a column that holds values of another table's primary key. `orders.store_id` holds
-  values from `stores.store_id`, so each order points at the store that took it. Each line in the picture joins a
-  foreign key to its primary key.
-- **One-to-many:** one store has many orders; each order has one store. The foreign key sits on the *many* side.
-  Customers and orders work the same way: customer 15 placed 16 orders, and each order names at most one customer.
-- **Many-to-many:** one order holds several products, and one product is on many orders. A single column cannot
-  store that, so a third table sits between them: `order_items`, one row per pairing of an order and a product.
-- The **grain** of a table is what one row stands for, in one sentence that starts "One row is…". Say it before
-  you count or total anything.
+A database keeps each kind of thing in its own **table**, with one **column** for each kind of fact: the tidy shape of
+*Rows, columns and tidy layout* (E1). Tables point at each other through **keys** instead of repeating facts, and
+the second picture follows one key:
 
-| Table | Grain: one row is… |
-|---|---|
-| `stores` | a store |
-| `customers` | a loyalty-program customer |
-| `products` | a menu item |
-| `orders` | an order, one visit to the till |
-| `order_items` | one product line inside an order |
+1. Start from a row of a table that holds a **foreign key** (FK): a column whose values are values of another table's
+   primary key. In the picture, line 5003 of `order_items` holds 1001 in `order_id`.
+2. Look in the other table for the row whose **primary key** (PK) equals that value. A primary key identifies each row,
+   so the search finds at most one: order 1001 in `orders`.
+3. Go the other way: which rows of `order_items` hold 1001? A foreign key may repeat, so this search may find many.
+4. Whatever you found, say what one row stands for: the table's **grain**, one sentence that starts "One row is…".
+   Say it before you count anything, because `COUNT(*)` counts whatever a row stands for.
 
-You have used keys already. In *Tables, sorting and filtering* (E5), an Excel Table was one table. In E8, the code
-you searched *with* was a foreign key, and the column you searched *in* was a primary key.
+The rules:
 
-<Aside type="note" title="Keys here are declared by us, not enforced">
-DuckDB can enforce keys: a primary key constraint also keeps the key from being empty, and a foreign key
-constraint makes sure the key exists in the other table. The cafe-sales tables are plain, without those
-constraints, so you prove the keys by counting. The lesson *Creating tables and constraints* shows how to enforce them.
-</Aside>
+- A primary key is a column, or a set of columns, that identifies each row, so no value repeats. DuckDB also refuses an
+  empty value in a primary key.
+- A foreign key refers to a primary key (or a unique column) of another table, and when DuckDB enforces it, it checks
+  that the value exists there. The cafe-sales tables declare no constraints, so here the keys describe the data and
+  nothing checks them (*Creating tables and constraints* shows how to enforce them).
+- **One-to-many:** one store has many orders, and each order has one store. The foreign key sits on the *many* side.
+- **Many-to-many:** a single column cannot hold several values in one row, so a third table sits between the two, with
+  a foreign key to each: `order_items` in the first picture.
+
+**Excel.** An Excel Table (E5, *Tables, sorting and filtering*) is one table. In *Bring in a value by key with
+XLOOKUP* (E8), the code you searched *with* plays the foreign key and the column you searched *in* plays the primary key.
+
+**A common misconception: "a column with `id` in its name is a key."** Whether a column is a key depends on its table:
+it is one only if its values never repeat there. `store_id` is the primary key of `stores`, but in `orders` it is a
+foreign key and repeats: Campus, store 2, took 716 orders, of any status.
 
 ## Worked example
 
@@ -326,7 +328,16 @@ setup cell, then one cell per step. Each step gives the shape of the result to e
    row of `order_items` is one product line inside one order**. `order_id` repeats, once per line of the same order,
    so it takes only 1,800 values over 3,287 rows. That is why the owner saw two numbers: 1,800 orders, 3,287 lines.
 
-7. **Verify.** 1,800 orders equals the Count in E1, and 3,287 lines equals the lines you counted in E8.
+7. **Verify.** 1,800 orders equals the Count in E1, and 3,287 lines equals the lines you counted in E8. The five tables
+   now have their grains:
+
+   | Table | Grain: one row is… |
+   |---|---|
+   | `stores` | a store |
+   | `customers` | a loyalty-program customer |
+   | `products` | a menu item |
+   | `orders` | an order, one visit to the till |
+   | `order_items` | one product line inside an order |
 
 <details>
 <summary>Explain it in your own words: why does order_items have more rows than orders?</summary>

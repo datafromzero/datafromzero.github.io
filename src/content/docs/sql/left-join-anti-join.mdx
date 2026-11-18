@@ -24,6 +24,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
   - title: 'DuckDB documentation: Semi and anti joins'
     url: https://duckdb.org/docs/stable/sql/query_syntax/from#semi-and-anti-joins
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
 status: draft
 ---
 
@@ -136,20 +138,39 @@ question apart from the first.
 </svg>
 </figure>
 
-An inner join returns only paired rows. An **outer join** also returns unpaired rows, and fills the columns of the
-table that had no partner with `NULL`. The three kinds differ in which table's unpaired rows they keep: `LEFT` keeps
-those of the table written before the `JOIN` keyword, `RIGHT` those of the table after it, `FULL` both. So each join
-is a policy about unpaired rows, and the second picture shows the four policies with their row counts.
+## How it works
 
-- **The anti-join pattern:** `LEFT JOIN`, then `WHERE` the right table's key `IS NULL`. Test a column that is never
-  empty on a real row, such as the primary key. A `NULL` there can only mean "no partner".
-- **`ON` decides who pairs. `WHERE` runs after the join** (S12), on the finished rows. A `WHERE` that tests a column of
-  the right table for a value is false on every unpaired row, because its columns are all `NULL`, so those rows leave
-  and the LEFT JOIN behaves like an inner join. A condition on the right table's rows belongs in `ON`.
-- DuckDB also has `ANTI JOIN`, which returns the rows of the left table that have no match.
+An **outer join** is a join that also returns the rows that found no partner. Conceptually, it builds the joined table
+as in *INNER JOIN: pairing rows on a key* (S19), then adds those unpaired rows back:
 
-*Excel:* when `XLOOKUP` finds nothing (E8), the row stays and shows `#N/A` or your text. A LEFT JOIN does the same with
-`NULL`.
+1. For each row of the left table (the one written before `JOIN`), find the rows of the right table for which `ON` is
+   true. Every match is one joined row.
+2. A left row with no match is kept, as one row whose columns from the right table are all `NULL`. In the first
+   picture above, customers 140 and 147 come out this way.
+3. `RIGHT` and `FULL` do the same for the right table's unpaired rows. A `LEFT` join drops them.
+4. Only then does `WHERE` run, on the finished rows, the padded ones included (*How a query runs: the order of the
+   clauses*, S12).
+
+The rules:
+
+- Each join is a policy about unpaired rows, as the second picture shows. `INNER` keeps neither side's, `LEFT` keeps
+  the left table's, `RIGHT` the right table's and `FULL` both. Every row of a kept side appears at least once.
+- A kept row with no partner has `NULL` in the columns of the other table.
+- `ON` decides which rows pair. `WHERE` only filters the finished rows, and it sees the `NULL`s of the padded ones.
+- To list the rows of one table with no partner in another, keep the unpaired rows: after a `LEFT JOIN`, the rows where
+  a column that is never empty on a real right-table row, such as its primary key, is `NULL`. Test it with `IS NULL`,
+  never `= NULL` (S4).
+- DuckDB also has `ANTI JOIN` (the left rows with no match) and `SEMI JOIN` (the left rows with at least one). Neither
+  returns more rows than the left table has.
+
+**Excel.** When `XLOOKUP` finds nothing (E8, *Bring in a value by key with XLOOKUP*), the row stays and shows `#N/A`,
+or the text you gave for that case. A `LEFT JOIN` does the same with `NULL`.
+
+**A common misconception: "`NOT IN` is just another way to write an anti join."** DuckDB's page says an anti join has
+the logic of `NOT IN`, except that it ignores `NULL` values from the right table. That exception matters here: the
+customer ids of `orders` include a `NULL` (the walk-in order 1335), and a comparison with `NULL` is never true, so a
+`NOT IN` over those ids returns no rows at all, although some customers never ordered. *Subqueries and EXISTS* (S23)
+goes further.
 
 ## Worked example
 
@@ -207,8 +228,7 @@ included, unless a step says otherwise, and count rows, not dollars, so order 20
    ```
 
    Expected: 3 columns. *Why:* **5** rows: customers 140, 147, 148, 149 and 150, who all signed up between June 10 and
-   June 26. `order_id` is the key of `orders`, so `NULL` there means no partner. Always `IS NULL`, never `= NULL` (S4).
-   That answers the first question.
+   June 26. That answers the first question.
 
 5. **Verify with a second route.**
 
@@ -219,8 +239,8 @@ included, unless a step says otherwise, and count rows, not dollars, so order 20
    ORDER BY c.customer_id;
    ```
 
-   Expected: 1 column, the same customers as step 4. *Why:* an anti join returns the rows of the left table with no
-   match. The arithmetic agrees: S8 counted 145 customers who ordered, and 150 − 145 = 5.
+   Expected: 1 column, the same customers as step 4. *Why:* a second route to the same list, with no `NULL` test to
+   write. The arithmetic agrees: S8 counted 145 customers who ordered, and 150 − 145 = 5.
 
 6. **The tempting way to ask about completed orders.**
 
@@ -267,12 +287,6 @@ included, unless a step says otherwise, and count rows, not dollars, so order 20
 
    Expected: 1 row, 1 column each. *Why:* **1800** and **1805**, as in the picture. `RIGHT` keeps every order, with
    order 1335 paired to nobody. `FULL` keeps all three kinds of rows: 1,799 + 5 + 1.
-
-<Aside type="caution" title="NOT IN looks like an anti-join, but it can return nothing">
-`WHERE c.customer_id NOT IN (SELECT customer_id FROM orders)` returns no rows here, because `orders.customer_id`
-holds a `NULL` (the walk-in order 1335) and a comparison with `NULL` is never true. The DuckDB page says an anti join has
-the same logic as `NOT IN`, except that it ignores `NULL` values from the right table. *Subqueries and EXISTS* (S23) goes further.
-</Aside>
 
 <details>
 <summary>Explain it in your own words: why does the WHERE in step 6 lose the five customers, while the same condition in ON keeps them?</summary>

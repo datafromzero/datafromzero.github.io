@@ -23,6 +23,10 @@ reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Joins'
     url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+  - title: 'DuckDB documentation: Aggregate functions (DISTINCT clause)'
+    url: https://duckdb.org/docs/stable/sql/functions/aggregates#distinct-clause-in-aggregate-functions
+  - title: 'Microsoft Support: SUMIFS function'
+    url: https://support.microsoft.com/en-us/office/sumifs-function-c9e748f5-7ea7-455d-9406-611cebce642b
 status: draft
 ---
 
@@ -41,7 +45,7 @@ such as `/* as in step 1 */` for a definition you already have.
 
 TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
 must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The stub listed two interview-preparation pages (DataLemur and Interview Query) as sources; they were not opened for this draft and are left out of `sources`, so open them and add them back, or drop them. When you have checked it, set
+runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 30 minutes. The rule that a join adds rows only on a repeated key follows from the Joins page's statement that a join matches pairs of rows (see the *a* × *b* note in *INNER JOIN*); the page does not state it. The 137 different order totals and their 3,094.00 sum in How it works were run on DuckDB 2.0.0 over all 1,800 orders. The stub listed two interview-preparation pages (DataLemur and Interview Query) as sources; they were not opened for this draft and are left out of `sources`, so open them and add them back, or drop them. When you have checked it, set
 `reviewed` to that day and `status: published`.
 
 ## Warm-up
@@ -137,15 +141,37 @@ answer, say why, and get a split that adds back to the control total.
 </svg>
 </figure>
 
-A join on a key that **repeats** on the other side copies each row once per match. That is **fan-out**. A figure kept
-once per order, like `order_total_usd`, then sits on several rows, and a `SUM` over the joined rows adds every copy.
-Grouping by a line-level attribute, as the question seems to ask, also puts one order into several groups.
+## How it works
 
-- **Diagnose it:** compare the row count before and after the join, and compare the total with a control total from
-  before the join. A total that grew is a fan-out.
-- **Repair it: aggregate the many side first.** Reduce the table that repeats to one row per key, with `GROUP BY` on
-  the join key inside a CTE (S13), and then join. Two tables with one row per key can pair only one to one, so the
-  join cannot multiply rows.
+*INNER JOIN* (S19) gave the pairing rule: a key that repeats pairs a row with every match. **Fan-out** is what that
+rule does to an aggregate. A figure stored once per key is copied onto every row the join builds for that key, and
+`SUM` adds every copy. Conceptually, four moves cause it, and a fifth, taken before the join, repairs it:
+
+1. Start from a table whose grain is one row per order, holding a figure of the order, such as its total.
+2. Join it to a table whose key repeats, such as the order lines. Each order row is paired with each of its lines.
+3. The result now has the finer grain: one row per line. The order's total was copied onto each of those rows, as
+   in the first picture above.
+4. An aggregate reads the result as it stands: `SUM` adds every copy, `COUNT(*)` counts lines, and grouping by a column
+   of the lines puts an order into every group where it has a line.
+5. The repair comes before the join: reduce the table whose key repeats to one row per key, with `GROUP BY` on the
+   join key in a CTE (S13). Then the join pairs one row with one row.
+
+The rules:
+
+- A join adds rows only for a key value that appears more than once on at least one side. If the key is unique on both
+  sides, each key pairs at most once.
+- Add a figure only at the grain where it is stored. A line's quantity can be added over lines; an order's total cannot.
+- To diagnose a fan-out, compare the row count before and after the join, and compare the total with a control total
+  taken before the join, naming the rows it covers.
+
+**Excel.** The same trap appears when an order total is copied beside every line and added with `SUMIFS` (E7,
+*Conditional totals with SUMIFS and COUNTIFS*): it adds the sum-range cells of every row that passes the tests, copies
+included.
+
+**A common misconception: "`SUM(DISTINCT …)` fixes the inflated sum."** `DISTINCT` makes an aggregate consider each
+different value once. It cannot tell a copy from a coincidence: orders 1002 and 1003 in the picture both total 12.50,
+so only one of them would be added. Over all orders there are only 137 different totals, and adding each once gives
+3,094.00, far below the real sum. Reduce to one row per key instead.
 
 ## Worked example
 
