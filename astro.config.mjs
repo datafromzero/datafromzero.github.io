@@ -19,7 +19,7 @@ export default defineConfig({
 	// (rarely used subsets included) and could not be cached or skipped via unicode-range.
 	vite: {
 		build: {
-			assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
+			assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf|csv|wasm)$/.test(file) ? false : undefined),
 		},
 	},
 	site: SITE_URL,
@@ -111,7 +111,7 @@ export default defineConfig({
 		AutoImport({
 			imports: [
 				{
-					'./src/components/content/index.ts': ['Exercise', 'Solution', 'OpenInColab', 'OpenInSheets', 'Term'],
+					'./src/components/content/index.ts': ['Exercise', 'Solution', 'OpenInColab', 'OpenInSheets', 'RunSQL', 'Term'],
 					'@astrojs/starlight/components': ['Aside'],
 				},
 			],

@@ -120,6 +120,16 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   row that rose into its place. → **Draw labels where nothing passes or show them after the part has arrived, and let one part
   leave before the next follows (`half: 'a'` then `'b'`); check text overlap every 0.1 s, counting only what is inside the picture.**
 
+- 2026-11-18 — The Run button of the first `<RunSQL>` did nothing: its script took "the first button in the block", which
+  was the copy button of the highlighted code block. → **A script queries only its own markup (a class or a container);
+  Starlight and Expressive Code add buttons, links and ids inside content blocks.**
+- 2026-11-18 — Every SQL lesson is a draft, so the production build never rendered a lesson component and a broken one would
+  have passed `npm run build`. → **A new authoring component goes into `tests/fixtures/valid` (one correct use) and gets an
+  invalid fixture for its build-time rules; measure speed on the fixture lesson, not on a draft.**
+- 2026-11-18 — A newer npm on the sandbox rewrote 28 unrelated lines of `package-lock.json` when a dependency was added. →
+  **After `npm i`, `git diff package-lock.json` must show additions for the new package only; restore the old lock and
+  merge in just the new entries when it does not.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

@@ -12,7 +12,7 @@ interface MdxNode {
 }
 
 /** SPEC §6: the only components content may use. Auto-imported in astro.config.mjs. */
-const ALLOWED = new Set(['Exercise', 'Solution', 'OpenInColab', 'OpenInSheets', 'Term', 'Aside']);
+const ALLOWED = new Set(['Exercise', 'Solution', 'OpenInColab', 'OpenInSheets', 'RunSQL', 'Term', 'Aside']);
 
 const where = (file: string, n: MdxNode) => `${file}${n.position ? `:${n.position.start.line}` : ''}`;
 
@@ -27,7 +27,7 @@ function checkSpec6(node: MdxNode, file: string) {
 	if (node.type === 'mdxjsEsm' && node.value) {
 		throw new Error(
 			`${where(file, node)}: import/export statements are not allowed in content (SPEC §6). ` +
-				'Exercise, Solution, OpenInColab, OpenInSheets, Term and Aside are available without imports.',
+				'Exercise, Solution, OpenInColab, OpenInSheets, RunSQL, Term and Aside are available without imports.',
 		);
 	}
 	if (isJsx(node)) {

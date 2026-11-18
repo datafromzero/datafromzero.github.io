@@ -113,6 +113,22 @@ headings are gone: their content moves as below.
 - **Quotes are exact**, or they are paraphrases without quote marks.
 - **SVG pictures match the real data** (codes, store numbers, results).
 
+## Runnable SQL (SPEC D42)
+
+In every SQL lesson, a query the learner should run is a `<RunSQL query={`...`} />` (no import; SPEC §6), not a fenced block:
+every **Try it** query and every exercise's starter query (the given first steps, or the broken query of a spot-the-flaw).
+An exercise with a blank start gets a `<RunSQL query={`-- Write your query here, then press Run.`} />` before its hint.
+Hints, half-solutions and solutions stay fenced blocks. Rules:
+
+- The query must run on its own against the five cafe-sales tables (the page starts each visit fresh); a block that needs a
+  table or view from an earlier block says so in the sentence before it. Never use `/* as in step 1 */` fragments in a
+  `RunSQL`: give the full query, or keep a plain fenced block.
+- No backtick, backslash or `${` inside the query (it is a template string); the build stops the lesson if the query is empty.
+- Keep the **Expected:** line next to it: the page shows "n rows × m columns" under the result, so the learner can check it.
+- Results come from DuckDB 1.4.3 in the browser, and the numbers in the lesson from DuckDB 2.0.0. Where a query has no
+  `ORDER BY`, row order can differ (set operations, for example); say "in any order" or add the `ORDER BY`.
+- The notebook (Colab) stays and the lesson text keeps pointing at it as the second route.
+
 ## Step-by-step figures (SPEC D41)
 
 Pictures and animations are **original work**, drawn from our own cafe-sales rows and our design tokens; external

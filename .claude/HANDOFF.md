@@ -50,7 +50,12 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
    200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
    `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.
-5. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
+5. **In-page SQL runner (D42, built 2026-11-18):** `<RunSQL>` is in the three pilot lessons (S8, S14, S19). Rolling it to
+   the other SQL lessons is mechanical (every Try it query and exercise starter; `.claude/agents/LESSON-STANDARD.md`
+   "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
+   learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected
+   result per exercise, and what "same result" means for row order) before it is built.
+6. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
 
 ## Open items and owner decisions still pending
 

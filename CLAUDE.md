@@ -30,11 +30,14 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own and the taskbar script (D31: one script
   under 1 KB gzipped, no GSAP, no library). One exception (D33): `/career-quiz/` adds one scoring script under 4 KB
-  gzipped (vanilla, no GSAP, no storage, sends nothing). Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
+  gzipped (vanilla, no GSAP, no storage, sends nothing). Another exception (D42): a lesson page that uses `<RunSQL>` also
+  ships one small deferred module (`src/scripts/run-sql.ts`, a few KB); the DuckDB-Wasm engine, self-hosted, loads only
+  on the first Run click, so no engine or CDN request happens before it. Lighthouse mobile ≥ 90 perf, ≥ 95 a11y.
 - **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.
-- **No** accounts, saved progress, comments or in-browser code execution (SPEC §15).
+- **No** accounts, saved progress, comments or in-browser code execution (SPEC §15), except the in-page SQL runner of D42
+  (`<RunSQL>`): DuckDB-Wasm self-hosted, loaded on click, no storage, nothing sent anywhere.
 - Any change to a CONTRACT section or a decision in SPEC §1 must update `SPEC.md` in the same PR
   (add or amend the decision row) and `CHANGELOG.md`.
 
@@ -45,7 +48,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    print stylesheet); logo + favicon from `design/logo/`; site name from one config value (`datafromzero`).
 3. **Content model:** `src/content.config.ts` with the schemas in SPEC §5; lesson header (level · duration ·
    reviewed, objectives, prerequisites) and footer (sources, cite this lesson, suggest edit, report issue).
-4. **Authoring components** (SPEC §6): `Exercise`, `Solution` (`<details>`), `OpenInColab`, `OpenInSheets`, `Term`.
+4. **Authoring components** (SPEC §6): `Exercise`, `Solution` (`<details>`), `OpenInColab`, `OpenInSheets`, `RunSQL` (D42), `Term`.
 5. **Homepage:** port `design/homepage-prototype/index.html` to `src/pages/index.astro` with GSAP from npm;
    logo animation ported to CSS from `design/logo/logo-animation.js` (first paint never waits for GSAP).
 6. **Quality gates** (SPEC §12): links validator, prerequisite-graph check, cspell, markdownlint,
@@ -66,7 +69,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
    are static (build-time SVG, CSS, `<details>`), never JS; no progress tracking (D15).
 9. **Motion & speed** (SPEC D28): frame-budget pass (done, `npm run perf`), then the full GSAP plugin set on the
    homepage only, each effect loaded on demand (done; project pages and the `/start/` map are static again by owner
-   decision); budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS.
+   decision); budgets set from an external speed benchmark of learning sites. Lessons stay zero-JS, apart from the click-loaded SQL runner (D42).
 
 ## Agent team
 Subagents live in `.claude/agents/` (model and effort set per agent). Roster, standard flow and

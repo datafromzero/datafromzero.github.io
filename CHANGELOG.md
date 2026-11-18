@@ -7,6 +7,13 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D42 (owner decision): learners run SQL inside the lesson page. The new `<RunSQL query={...} />` component turns a "Try it"
+  query or an exercise starter into an editable box with Run, Reset query and Reset data (Ctrl or Cmd plus Enter runs it) and
+  shows the result table with its row and column count. The engine is DuckDB-Wasm, self-hosted, loaded only on the first Run
+  click, with the five cafe-sales tables created from our own CSV files; nothing is stored and nothing is sent anywhere. One database
+  per page, so a table made in one block is seen by the next. Without JavaScript the block is the plain code. Piloted in GROUP BY and
+  HAVING, window functions and INNER JOIN; the Colab button stays as a second route. Amends D4, the "no in-browser code" line of §15
+  and the zero-JS rule for lessons.
 - SPEC D41 (owner decisions): lesson figures may be CSS-only steppers the learner controls. Back, numbered step buttons and Next
   (a native radio group, no JavaScript) move through at most 6 steps, one change per step with a short fade; all step captions stay
   on the page as a numbered list with a clause badge and "Predict:" prompts. Each SQL clause has one fixed color inside figures.
