@@ -363,6 +363,20 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   anywhere until English and later Spanish are complete. → **No Vietnamese text, data or Vietnam-specific example in lessons,
   notebooks, datasets or the lesson standard; where research says "Vietnamese", write "accented text" (D46: English café names).**
 
+- 2026-11-19 — Running the batch-2 notebooks on pandas 2.2.3 as well as 3.1.1 showed outputs that differ between versions: the byte position
+  in a `UnicodeDecodeError`, `<class 'pandas.Series'>` against `<class 'pandas.core.series.Series'>`, `str` against `object`, and the warning
+  text of a chained assignment (stderr, with a temp-file path). → **Run every Python notebook on the pandas 3.x and the 2.2.x that Colab may
+  ship and diff the captured outputs; print version-independent values (`type(x).__name__`, `error.reason`), keep warnings out of a reveal (capture
+  stdout only) and describe them in the Why, and name each unavoidable difference in the Why of its unit.**
+- 2026-11-19 — The batch-1 pattern of an Aside that says what a later unit shows ("a table built from dictionaries fills a missing key with `NaN`")
+  states the result that the Predict of that unit asks for; the same slipped into batch-2 drafts (Diverge lines, a unit Idea, a Match number that an
+  exercise asks for). → **An Aside, an Idea or a figure never states the result of a Predict or an exercise in the lesson: a Diverge line names the
+  place where the tools differ and says "unit N shows what happens"; a number in a Match line is one that no Predict or exercise asks for.**
+- 2026-11-19 — Review of Python batch 2: an exercise reused a unit's data and its printed fix (`sub(fill_value=0)` on the same two Series), another
+  was the finished function of a unit, and two exercise answers (150 customers, 55 Harbor cash orders) already stood in published lessons. →
+  **An exercise's fix must not already appear as code in a unit of the same lesson on the same data, and an exercise answer must not already appear in
+  an earlier published lesson; grep answer numbers and function bodies across `python/*.mdx` before finishing.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
