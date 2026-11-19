@@ -22,10 +22,9 @@ export default function make({ id = 'dt' } = {}) {
 		desc:
 			'Three calendar lines with ticks at the first of March, April and May. Timestamp t1, March 17 at 14:05, t2, March 29 at 23:59, and t3, April 20 at 09:30, are dots on their lines. One after another each dot slides left to the tick at the start of its own month and gets a new label: March 1 at 00:00 for t1 and t2, April 1 at 00:00 for t3. t1 and t2 end on the same value.',
 		caption: 'DATE_TRUNC(\'month\', t) moves every timestamp back to the first moment of its month. Timestamps of the same month end up equal, so they can be grouped.',
-		phases: ['Timestamps on the calendar', 'T1 snaps down to its month start', 'T2 snaps down too, even on the last day', 'T3 snaps down to April 1', 'Each one is now a month start', 'Same month, same value', 'Same month, same value', 'Same month, same value'],
+		phases: [[1, 'Three timestamps on the calendar'], [2, 't1 snaps down to Mar 1'], [3, 't2 snaps down too'], [4, 't3 snaps down to Apr 1'], [6, 't1 and t2 are now equal']],
 	});
 	a.text(10, 14, 'Snap down to the start of the month', 'f11 b');
-	a.tags(10, 29, [[1, '1 · timestamps on the calendar'], [2, '2 · t1 snaps down to its month start'], [3, '3 · t2 snaps down too'], [4, '4 · t3 snaps down'], [5, '5 · each is now a month start'], [6, '6 · same month, same value']]);
 	[['Mar 1', 100, 'm'], ['Apr 1', 230, 'm'], ['May 1', 350, 'e']].forEach(([t, x, al]) => a.text(x, 54, t, 'f10 b', undefined, al));
 	let d = '';
 	LANES.forEach((_, i) => {

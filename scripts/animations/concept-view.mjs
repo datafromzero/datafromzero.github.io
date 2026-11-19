@@ -15,10 +15,9 @@ export default function make({ id = 'vw' } = {}) {
 		desc:
 			'A table t holds two rows. A view v, a saved query on t, sits next to it. Asking FROM v draws arrows from t through v to an answer: x1 plus x2. A new row, Row 3, arrives in t. The view runs again, and the answer changes to x1 plus x2 plus x3. The view kept the question, not the old answer.',
 		caption: 'A view stores a query, not its rows. You use it like a table, and each time you ask it runs on the data as it is now.',
-		phases: ['A table and a saved query on it', 'You ask the view, like a table', 'The answer is built from t right now', 'New data arrives in t', 'You ask again: the view runs again', 'The answer includes the new row', 'The view kept the question, not the answer', 'Fresh data, fresh answer'],
+		phases: [[1, 'A table and a saved question (the view)'], [2, 'You ask the view like a table'], [4, 'New data arrives in the table'], [5, 'You ask again: the view runs again'], [6, 'The answer includes the new row']],
 	});
 	a.text(10, 14, 'A saved question, a fresh answer', 'f11 b');
-	a.tags(10, 29, [[1, '1 · a table and a saved query'], [2, '2 · you ask the view'], [3, '3 · answer built from t now'], [4, '4 · new data arrives in t'], [5, '5 · ask again: it runs again'], [6, '6 · the answer is fresh'], [7, '7 · it kept the question']]);
 	a.text(10, 54, 'table t', 'f10 b');
 	a.chip(10, 62, 'Row 1', { role: 'src', level: 2, w: 70 });
 	a.chip(10, 92, 'Row 2', { role: 'src', level: 2, w: 70 });

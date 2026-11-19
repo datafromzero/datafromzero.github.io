@@ -17,14 +17,13 @@ export default function make({ id = 'tx' } = {}) {
 		desc:
 			'Two panels, each with a table that holds one row. After BEGIN, two changes wait outside the table as dashed boxes, because they are not final yet. In the top panel the stamp COMMIT slides both changes into the table together, and they become solid rows. In the bottom panel the stamp ROLLBACK undoes both together and the table still holds only its first row.',
 		caption: 'Between BEGIN and COMMIT, several changes wait together and then land together. ROLLBACK undoes all of them. ROLLBACK only means something after BEGIN.',
-		phases: ['A table with one row', 'BEGIN: change 1 waits, not final', 'Change 2 waits too', 'COMMIT on top, ROLLBACK below', 'Top: all land together. Bottom: all undone together', 'Top: the changes are now rows', 'Nothing in between: all or nothing', 'All or nothing'],
+		phases: [[1, 'A table with one row'], [2, 'BEGIN: changes wait, not final'], [4, 'COMMIT above, ROLLBACK below'], [5, 'Above: all land. Below: all undone']],
 	});
 	[
 		[0, 'BEGIN … COMMIT: all land together', [[1, '1 · a table'], [2, '2 · BEGIN: changes wait'], [4, '3 · COMMIT'], [5, '4 · all land together']], 'COMMIT'],
 		[H, 'BEGIN … ROLLBACK: all undone together', [[1, '1 · a table'], [2, '2 · BEGIN: changes wait'], [4, '3 · ROLLBACK'], [5, '4 · all undone together']], 'ROLLBACK'],
 	].forEach(([y0, title, tags, stamp], panel) => {
 		a.text(10, y0 + 14, title, 'f11 b');
-		a.tags(10, y0 + 29, tags);
 		a.text(10, y0 + 60, 'BEGIN', 'f10 b mo', { in: 2 });
 		a.box(170, y0 + 44, 180, 98, { role: 'out', title: 'table' });
 		a.chip(180, y0 + 62, 'Row 1', { role: 'src', level: 2, w: 100, h: 22 });

@@ -14,6 +14,8 @@ export default function make({ id = 'ck' } = {}) {
 		desc:
 			'Three scenes. Standalone: a card named CTE slides into a slot inside the box MAIN. Chained: a card named CTE 1 slides into a slot inside the box CTE 2, and then the box CTE 2, with CTE 1 inside it, slides into a slot inside MAIN. Recursive: a card named CTE with an arrow looping back to itself receives two new rows, one after the other, and then slides into MAIN.',
 		caption: 'A CTE is a named scratch table. Standalone: MAIN uses it. Chained: CTE 2 uses CTE 1, and MAIN uses CTE 2. Recursive: a CTE feeds itself new rows until a round adds none.',
+		phases: [[1, 'Standalone: name it, plug it in'], [2, 'Chained: tables feed tables'], [4, 'Recursive: a table feeds itself']],
+		tag: { x: 350, y: 14, align: 'e' },
 	});
 	const bars = (x, y) => {
 		a.rect(x, y, 54, 6, tint('src', 3), undefined, 3);
@@ -31,7 +33,6 @@ export default function make({ id = 'ck' } = {}) {
 		a.text(x + 10, low ? y + h - 6 : y + 16, 'MAIN', 'f11 b');
 	};
 	const ring = (x, y, w, h, role, at) => a.rect(x - 4, y - 4, w + 8, h + 8, edge(role), { in: at, hide: at + 1, pulse: true }, 10);
-	a.tags(350, 14, [[1, '1 · name it, plug it in'], [2, '2 · tables feed tables'], [4, '3 · a table that feeds itself']], 'f10 b', 'e');
 
 	// standalone
 	a.text(10, 14, 'Standalone', 'f11 b');

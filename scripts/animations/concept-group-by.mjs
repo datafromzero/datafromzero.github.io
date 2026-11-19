@@ -19,9 +19,9 @@ export default function make({ id = 'gb' } = {}) {
 		desc:
 			'Six rows, Row 1 to Row 6, each tagged with a key: A, B, A, C, B, A. The A rows slide into bucket A, the B rows into bucket B and the C row into bucket C. Each bucket then becomes one row with its count: A 3 rows, B 2 rows, C 1 row. HAVING then drops a whole bucket: bucket C, with one row, is marked dropped.',
 		caption: 'GROUP BY sorts the rows into one bucket per key, and each bucket becomes one row. HAVING then keeps or drops whole buckets.',
+		phases: [[1, 'Six rows, each with a key'], [2, 'Rows slide into one bucket per key'], [5, 'Each bucket becomes one row'], [6, 'HAVING drops a whole bucket']],
 	});
 	a.text(10, 14, 'Rows → buckets → one row each', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows, each with a key'], [2, '2 · rows slide into buckets'], [5, '3 · one row per bucket'], [6, '4 · HAVING drops a bucket']], 'f10 b');
 
 	// the empty seats the rows leave behind, and the buckets
 	ROWS.forEach((_, i) => a.rect(SRC.x, SRC.y + SRC.pitch * i, 64, 24, 'bx dsh', undefined, 6));

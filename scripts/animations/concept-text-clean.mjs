@@ -19,10 +19,9 @@ export default function make({ id = 'tc' } = {}) {
 		desc:
 			'A chip holds the messy text with a middle dot for every space: two spaces, Iced, two spaces, Tea, one space. It slides down to TRIM, which cuts the spaces at both ends; down to REPLACE, which turns the double space in the middle into one; and down to LOWER, which makes every letter small. The text ends as iced, one space, tea. Each step leaves a dimmed copy of the text it had.',
 		caption: 'Clean text in small steps, one function each: TRIM removes the spaces at the ends, REPLACE fixes the middle, LOWER makes the letters the same case.',
-		phases: ['Messy text, · is a space', 'The text goes to TRIM', 'TRIM cut the ends', 'The text goes to REPLACE', 'REPLACE fixed the middle', 'The text goes to LOWER', 'LOWER made small letters', 'Clean text'],
+		phases: [[1, 'Messy text, · is a space'], [2, 'TRIM cuts the spaces at the ends'], [4, 'REPLACE turns two spaces into one'], [6, 'LOWER makes small letters']],
 	});
 	a.text(10, 14, 'A chain of small clean-ups', 'f11 b');
-	a.tags(10, 29, [[1, '1 · messy text, · is a space'], [2, '2 · the text goes to TRIM'], [3, '3 · TRIM cut the ends'], [4, '4 · the text goes to REPLACE'], [5, '5 · REPLACE fixed the middle'], [6, '6 · the text goes to LOWER'], [7, '7 · LOWER made small letters'], [8, '8 · clean text']]);
 	T.forEach((_, i) => a.rect(10, Y(i), 100, 26, 'bx dsh', undefined, 6));
 	NOTES.forEach((n, i) => a.text(126, Y(i) + 17, n, 'f11', i ? { in: 2 * i + 1 } : undefined));
 	[0, 1, 2].forEach((i) => a.text(60, Y(i) + 17, T[i], 'f11 mo mu', { in: 2 * i + 3 }, 'm'));

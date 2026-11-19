@@ -22,10 +22,9 @@ export default function make({ id = 'st' } = {}) {
 		desc:
 			'A fact table sits in the middle. Four dimension tables, dim A, dim B, dim C and dim D, slide in one after another from the edges, and a short link labeled with a key joins each one to the fact table: ka, kb, kc and kd. The picture is a star.',
 		caption: 'In a star schema the fact table holds the events, with a key to each dimension. A query joins the fact table to the dimension tables it needs, one join per key.',
-		phases: ['The fact table: one row per event', 'Dimension A arrives', 'Its key joins it, and dimension B arrives', 'Key B joins, dimension C arrives', 'Key C joins, dimension D arrives', 'Key D joins', 'A star: one join per key', 'A star: one join per key'],
+		phases: [[1, 'The fact table: one row per event'], [2, 'Dimension tables arrive one by one'], [6, 'A key links each one to the fact table'], [7, 'A star: one join per key']],
 	});
 	a.text(10, 14, 'A fact table with dimensions around it', 'f11 b');
-	a.tags(10, 29, [[1, '1 · the fact table: one row per event'], [2, '2 · dimension A arrives'], [3, '3 · key a joins; dimension B arrives'], [4, '4 · key b joins; dimension C arrives'], [5, '5 · key c joins; dimension D arrives'], [6, '6 · key d joins'], [7, '7 · a star: one join per key']]);
 	a.box(130, 100, 100, 60, { role: 'out', title: 'fact table' });
 	a.text(140, 148, 'many rows', 'f10');
 	DIMS.forEach(([t, x, y, dx, dy, link, kx, ky], i) => {

@@ -17,9 +17,9 @@ export default function make({ id = 'wh' } = {}) {
 		desc:
 			'Four rows each hold a value x: 9, 3, a question mark meaning no value, and 7. A gate says WHERE x greater than 5. Each row is tested in turn: Row 1 is true and slides through, Row 2 is false and stops at the gate in red, Row 3 is unknown because its value is missing and stops in red, Row 4 is true and slides through.',
 		caption: 'WHERE tests every row. Only rows where the test is true go through; false and unknown (a missing value) are stopped.',
+		phases: [[1, 'Rows, each with a value x'], [2, 'A gate: only true goes through'], [3, 'Row 1 is tested: true, through'], [4, 'Row 2: false, stopped'], [5, 'Row 3: unknown (a ?), stopped'], [6, 'Row 4: true, through']],
 	});
 	a.text(10, 14, 'A gate at every row', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows with a value x'], [2, '2 · a gate: only true goes through'], [3, '3 · each row is tested'], [7, '4 · false and unknown stay behind']]);
 	a.g({ in: 2 }, () => {
 		a.rect(140, 56, 6, 138, 'f-flt k3');
 		a.text(143, 50, 'WHERE x > 5', 'f10 b mo', undefined, 'm');

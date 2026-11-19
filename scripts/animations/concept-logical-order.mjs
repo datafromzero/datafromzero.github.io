@@ -31,17 +31,9 @@ export default function make({ id = 'lo' } = {}) {
 		desc:
 			'Left, the clauses in written order: SELECT, FROM/JOIN/ON, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, each with the number of the step it runs in: SELECT 5, FROM/JOIN/ON 1, WHERE 2, GROUP BY 3, HAVING 4, ORDER BY 6, LIMIT 7. Right: tables t1 and t2 are combined into one table of seven rows. WHERE drops two rows, which slide out. GROUP BY gives the rest their group shade and makes one row per group: A, B and C. HAVING drops group A. SELECT chooses the output, ORDER BY gives the groups a sort number, and LIMIT drops the group that sorts second.',
 		caption: 'The list is the order you write the clauses; the number is the order they run. Each clause works on the table the one before it left.',
+		phases: [[1, 'FROM and JOIN build one table'], [2, 'WHERE drops rows'], [3, 'GROUP BY makes groups; HAVING drops one'], [5, 'SELECT picks the output'], [6, 'ORDER BY sorts; LIMIT cuts']],
 	});
 	a.text(10, 14, 'Written order → run order', 'f11 b');
-	a.tags(10, 29, [
-		[1, '1 · FROM and JOIN build one table'],
-		[2, '2 · WHERE drops rows'],
-		[3, '3 · GROUP BY makes groups'],
-		[4, '4 · HAVING drops a group'],
-		[5, '5 · SELECT picks the output'],
-		[6, '6 · ORDER BY sorts'],
-		[7, '7 · LIMIT cuts'],
-	]);
 
 	// written order, with the clause that runs in each phase lit
 	CLAUSES.forEach(({ run, role }, i) => a.rect(8, 42 + 24 * i, 116, 22, tint(role, 2), { in: run, hide: run + 1 }, 6));

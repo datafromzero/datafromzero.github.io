@@ -15,9 +15,9 @@ export default function make({ id = 'ex' } = {}) {
 		desc:
 			'A table with columns A and B and three rows, a1 b1 to a3 b3. For each row in turn, copies of its A and B cells slide to the right, and a new cell in a new column called A times B appears: a1 times b1, a2 times b2, a3 times b3. The original columns stay unchanged.',
 		caption: 'An expression such as A × B is worked out separately on every row and shows up as a new column. The columns it used stay as they were.',
+		phases: [[1, 'Two columns, A and B'], [2, 'The formula runs on row 1'], [4, 'And on rows 2 and 3'], [5, 'Every row has a new value']],
 	});
 	a.text(10, 14, 'Two cells in, a new cell out', 'f11 b');
-	a.tags(10, 29, [[1, '1 · two columns, A and B'], [2, '2 · the formula runs on each row'], [6, '3 · every row has a new value']]);
 	a.text(34, 54, 'A', 'f10 b', undefined, 'm');
 	a.text(94, 54, 'B', 'f10 b', undefined, 'm');
 	a.text(268, 54, 'A × B', 'f10 b', { in: 2 }, 'm');

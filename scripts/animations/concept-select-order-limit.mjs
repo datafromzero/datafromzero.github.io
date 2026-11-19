@@ -17,9 +17,9 @@ export default function make({ id = 'sol' } = {}) {
 		desc:
 			'A table of four rows r1 to r4 with columns A, B and C; B holds a sort key. SELECT keeps columns A and B, and column C fades away. ORDER BY then deals the rows one by one into a new table on the right, the smallest key first: r2, r4, r1, r3. LIMIT 2 draws a cut line under the second row; the two rows below it fade, and the top 2 rows stay.',
 		caption: 'SELECT chooses the columns, ORDER BY puts the rows in order, and LIMIT keeps only the first rows of that order.',
+		phases: [[1, 'A table with columns A, B and C'], [2, 'SELECT keeps columns A and B'], [3, 'ORDER BY deals the smallest key first'], [7, 'LIMIT 2 draws a cut line'], [8, 'The rows below the line are gone']],
 	});
 	a.text(10, 14, 'Pick, put in order, keep the top', 'f11 b');
-	a.tags(10, 29, [[1, '1 · a table'], [2, '2 · SELECT picks columns'], [3, '3 · ORDER BY: smallest key first'], [7, '4 · LIMIT 2 keeps the top two']]);
 	[['A', 24], ['B', 54], ['A', 204], ['B', 234]].forEach(([t, x]) => a.text(x, 50, t, 'f10 b', undefined, 'm'));
 	a.text(84, 50, 'C', 'f10 b', { hide: 3 }, 'm');
 	ROWS.forEach((_, i) => {

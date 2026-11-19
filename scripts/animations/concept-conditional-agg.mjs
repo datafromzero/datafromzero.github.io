@@ -19,10 +19,9 @@ export default function make({ id = 'ca2' } = {}) {
 		desc:
 			'Five rows with keys A, B, A, C and A sit in a line. Below them are three counters: key equals A, key equals B and key equals C, all starting at 0. One row after another sends a dot down to the counter whose condition it meets, and that counter ticks up. At the end counter A holds 3, counter B holds 1 and counter C holds 1, all filled in a single pass.',
 		caption: 'Conditional aggregation reads the rows once and keeps several counters. Each row ticks only the counter whose condition it meets.',
-		phases: ['Rows, each with a key', 'Row 1 ticks counter A', 'Row 2 ticks counter B', 'Row 3 ticks counter A', 'Row 4 ticks counter C', 'Row 5 ticks counter A', 'Counters now hold 3, 1 and 1', 'One pass filled every counter'],
+		phases: [[1, 'Five rows, three counters at 0'], [2, 'Rows 1 and 2 tick counters A and B'], [4, 'Rows 3 and 4 tick A and C'], [6, 'Row 5 ticks A'], [7, 'One pass filled all three counters']],
 	});
 	a.text(10, 14, 'One pass, several counters', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows, each with a key'], [2, '2 · row 1 ticks A'], [3, '3 · row 2 ticks B'], [4, '4 · row 3 ticks A'], [5, '5 · row 4 ticks C'], [6, '6 · row 5 ticks A'], [7, '7 · one pass, all counters']]);
 	KEYS.forEach((k, i) => {
 		a.chip(RX(i), 46, `Row ${i + 1} · ${k}`, { role: 'src', level: 2, w: 60 });
 		a.rect(RX(i) - 3, 43, 66, 30, 's-out', { in: 2 + i, hide: 3 + i, pulse: true }, 8);

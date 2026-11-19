@@ -17,10 +17,9 @@ export default function make({ id = 'sq' } = {}) {
 		desc:
 			'An outer query box holds four rows with x equal to 3, 8, 2 and 9, and a test x greater than, with an empty slot. An inner query box above it computes the average of x, which is 5.5, and shows it as a value v. The value slides down into the empty slot. The outer query then tests each row against it: 3 and 2 fail and turn red, 8 and 9 stay.',
 		caption: 'A subquery is a query inside a query. The inner one runs first, and its result is used by the outer one, here as the value to compare with.',
-		phases: ['The outer query has an empty slot in its test', 'The inner query runs first', 'Its answer slides into the slot', 'The outer query has everything it needs', 'Rows are tested against the answer', 'Rows 3 and 2 fail', 'Rows 8 and 9 stay', 'Inner answer, outer test'],
+		phases: [[1, 'The outer test has an empty slot'], [2, 'The inner query runs first'], [3, 'Its answer slides into the slot'], [5, 'The outer query tests its rows']],
 	});
 	a.text(10, 14, 'The inner answer feeds the outer query', 'f11 b');
-	a.tags(10, 29, [[1, '1 · the outer test has an empty slot'], [2, '2 · the inner query runs first'], [3, '3 · its answer slides in'], [4, '4 · the outer query has what it needs'], [5, '5 · rows are tested against it']]);
 	a.box(190, 40, 160, 62, { role: 'src', title: 'inner query' });
 	a.text(200, 88, 'AVG(x) → one value', 'f10');
 	a.rect(186, 36, 168, 70, 's-out', { in: 2, hide: 3, pulse: true }, 8);

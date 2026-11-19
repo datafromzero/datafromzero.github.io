@@ -21,10 +21,9 @@ export default function make({ id = 'sh' } = {}) {
 		desc:
 			'One table of five rows with keys A, B, C, A and B. The rows slide into three shards by key: the A rows into shard A, the B rows into shard B, the C row into shard C. A query for key B then appears and its arrow points only at shard B, which lights up. Shards A and C are marked not visited.',
 		caption: 'Sharding splits a big table into pieces by key, often on different machines. A query that names the key goes to one shard and skips the rest.',
-		phases: ['One big table of rows with keys', 'The A rows go to shard A', 'The B rows go to shard B', 'The C row goes to shard C', 'A query asks for key B', 'It visits shard B only', 'Shards A and C were never touched', 'One key, one shard'],
+		phases: [[1, 'One big table of keyed rows'], [2, 'Rows move to shards by key'], [5, 'A query asks for key B'], [6, 'Only shard B is visited']],
 	});
 	a.text(10, 14, 'Split by key, ask one shard', 'f11 b');
-	a.tags(10, 29, [[1, '1 · one big table'], [2, '2 · split by key: A rows'], [3, '3 · B rows'], [4, '4 · C rows'], [5, '5 · a query for key B'], [6, '6 · it visits one shard only']]);
 	ROWS.forEach((_, i) => a.ghost(10, Y(i), 66, 24, { hide: 5 }));
 	Object.entries(BOX).forEach(([k, y]) => {
 		a.rect(150, y, 200, 64, 's-grp', undefined, 6);

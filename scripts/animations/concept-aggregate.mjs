@@ -16,9 +16,9 @@ export default function make({ id = 'ag' } = {}) {
 		desc:
 			'Four rows, Row 1 to Row 4, each hold a value x1 to x4. One after another they slide into a box and are gone. Two counters grow with each row: COUNT goes 1, 2, 3, 4, and SUM goes x1, then x1 plus x2, then x1 plus x2 plus x3, then x1 plus x2 plus x3 plus x4. In the end the four rows have become two numbers.',
 		caption: 'An aggregate such as COUNT or SUM reads many rows and gives back one number. The rows themselves are not in the answer.',
+		phases: [[1, 'Four rows, each with a value'], [2, 'Rows go in one at a time'], [6, 'One number each: COUNT and SUM']],
 	});
 	a.text(10, 14, 'Many rows go in, one number comes out', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows, each with a value'], [2, '2 · one row at a time goes in'], [6, '3 · one number each']]);
 	a.box(110, 44, 120, 148, { role: 'out', title: 'aggregate' });
 	a.text(252, 66, 'COUNT(*)', 'f10 b mo');
 	a.text(252, 120, 'SUM(x)', 'f10 b mo');

@@ -20,10 +20,9 @@ export default function make({ id = 'cn' } = {}) {
 		desc:
 			'A table with three rules, NOT NULL, UNIQUE and CHECK, and five rows waiting. Row 1 follows the rules and goes in. Row 2 has a question mark as its age, which passes CHECK, so it goes in. Row 3 has no name and bounces off NOT NULL. Row 4 repeats a key and bounces off UNIQUE. Row 5 has a bad age and bounces off CHECK. Two rows end up stored.',
 		caption: 'A constraint is a rule the table checks on every new row. A row that breaks a rule is refused and nothing is stored. A ? (NULL) passes a CHECK, so add NOT NULL when it matters.',
-		phases: ['A table with three rules', 'Row 1 follows the rules: in', 'Row 2, age ?, passes CHECK: in', 'Row 3 has no name: NOT NULL says no', 'Row 4 repeats a key: UNIQUE says no', 'Row 5 has a bad age: CHECK says no', 'Refused rows are never stored', 'Two rows stored, three refused'],
+		phases: [[1, 'A table with three rules'], [2, 'Rows 1 and 2 follow the rules: in'], [4, 'Row 3 has no name: NOT NULL says no'], [5, 'Row 4 repeats a key: UNIQUE says no'], [6, 'Row 5 has a bad age: CHECK says no']],
 	});
 	a.text(10, 14, 'Rows that break a rule bounce off', 'f11 b');
-	a.tags(10, 29, [[1, '1 · a table with three rules'], [2, '2 · row 1 follows the rules: in'], [3, '3 · row 2, age ?, passes CHECK'], [4, '4 · no name: NOT NULL says no'], [5, '5 · repeat: UNIQUE says no'], [6, '6 · bad age: CHECK says no'], [7, '7 · refused rows are not stored']]);
 	a.box(150, 44, 200, 208, { role: 'out', title: 'table with rules' });
 	RULES.forEach(([t, y]) => a.text(268, y, t, 'f10 b mo'));
 	[0, 1].forEach((i) => a.ghost(160, Y(i), 100, 24));

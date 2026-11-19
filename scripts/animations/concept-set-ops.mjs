@@ -15,10 +15,9 @@ export default function make({ id = 'so' } = {}) {
 		desc:
 			'Two overlapping circles: set 1 holds the keys A, B and C, set 2 holds B, C and D; B and C sit in the overlap. UNION lights both circles and lists A, B, C, D. INTERSECT lights only the overlap and lists B, C. EXCEPT lights the part of set 1 that is outside set 2 and lists A.',
 		caption: 'UNION keeps every key once, INTERSECT keeps the keys in both lists, and EXCEPT keeps the keys of the first list that are not in the second.',
-		phases: ['Two sets of keys', 'UNION lights everything', 'UNION: every key once', 'INTERSECT lights the overlap', 'INTERSECT: keys in both', 'EXCEPT lights the first set only', 'EXCEPT: in the first, not the second', 'Three operators, three results'],
+		phases: [[1, 'Two sets of keys'], [2, 'UNION: every key once'], [4, 'INTERSECT: keys in both'], [6, 'EXCEPT: in the first, not the second']],
 	});
 	a.text(10, 14, 'Two lists, three ways to combine', 'f11 b');
-	a.tags(10, 29, [[1, '1 · two sets of keys'], [2, '2 · UNION lights everything'], [3, '3 · UNION: every key once'], [4, '4 · INTERSECT lights the overlap'], [5, '5 · INTERSECT: keys in both'], [6, '6 · EXCEPT: first set only'], [7, '7 · EXCEPT: in 1, not in 2']]);
 	const v = a.venn({ x1: 100, x2: 170, y: 104, r: 56 });
 	for (const k of ['L', 'O', 'R']) v.region(k, tint('out', 3), { in: 2, hide: 4 });
 	v.region('O', tint('out', 3), { in: 4, hide: 6 });

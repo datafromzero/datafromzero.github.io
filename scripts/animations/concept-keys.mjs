@@ -17,10 +17,9 @@ export default function make({ id = 'ky' } = {}) {
 		desc:
 			'Table P has rows P1 and P2, each with a unique primary key. Table C has rows C1, C2, C3 and C4, each storing a P key as a foreign key. Arrows run from the foreign keys to the P rows they name: C1 and C2 both point at P1, C3 points at P2, so one P row has many C rows. C4 stores P9, a key that no P row has; its arrow ends at a dashed empty seat, and it is marked refused.',
 		caption: 'A primary key identifies one row of its table. A foreign key stores that value in another table, so one parent row can have many children. A foreign key must name a parent that exists.',
-		phases: ['P: a unique key on every row (PK)', 'C: each row stores a P key (FK)', 'C1 points at P1', 'C2 points at P1 too', 'C3 points at P2', 'One P row, many C rows', 'An FK with no P row is refused', 'Keys keep the tables consistent'],
+		phases: [[1, 'Table P: a unique key per row (PK)'], [2, 'Table C stores a P key in each row (FK)'], [3, 'Each FK points at its P row'], [6, 'One P row can have many C rows'], [7, 'An FK with no P row is refused']],
 	});
 	a.text(10, 14, 'Keys link tables', 'f11 b');
-	a.tags(10, 29, [[1, '1 · P: a unique key per row (PK)'], [2, '2 · C: each row stores a P key (FK)'], [3, '3 · C1 points at P1'], [4, '4 · C2 points at P1 too'], [5, '5 · C3 points at P2'], [6, '6 · one P row, many C rows'], [7, '7 · an FK with no P row is refused'], [8, '8 · keys keep tables consistent']]);
 	a.text(10, 56, 'P', 'f10 b');
 	a.text(200, 56, 'C', 'f10 b', { in: 2 });
 	a.chip(10, 80, 'P1', { role: 'mat', level: 3, w: 90 });

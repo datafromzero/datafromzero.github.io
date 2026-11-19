@@ -18,9 +18,9 @@ export default function make({ id = 'nu' } = {}) {
 		desc:
 			'Top panel: three rows hold x1, a question mark meaning no value, and x3. The test equals NULL answers a question mark, unknown, for every row, so it never says yes. The test IS NULL answers no, yes, no. Bottom panel: SUM adds x1 and x3 through arrows into a result x1 plus x3, and the row with the question mark is skipped.',
 		caption: 'A ? (NULL) is no value, so = NULL can only answer ? . IS NULL gives a clear yes or no. Aggregates such as SUM skip the ?.',
+		phases: [[1, 'A ? means \'no value\''], [2, '= NULL answers ? for every row'], [4, 'IS NULL answers yes or no'], [6, 'SUM adds only the values it sees'], [8, 'The sum is x1 + x3, the ? skipped']],
 	});
 	a.text(10, 14, 'Asking about a ?', 'f11 b');
-	a.tags(10, 29, [[1, '1 · a ? is "no value"'], [2, '2 · = NULL: the answer is always ?'], [4, '3 · IS NULL: a clear yes or no']]);
 	const ry = (y0, i) => y0 + 52 + 28 * i;
 	V.forEach((v, i) => a.chip(10, ry(0, i), v, { role: 'src', level: v === '?' ? 3 : 2, w: 60 }));
 	a.text(135, 46, 'v = NULL', 'f10 b mo', { in: 2 }, 'm');
@@ -33,7 +33,6 @@ export default function make({ id = 'nu' } = {}) {
 	a.rect(196, 52, 78, 86, 's-out', { in: 4, hide: 6, pulse: true }, 8);
 
 	a.text(10, H + 14, 'SUM(v) skips the ?', 'f11 b');
-	a.tags(10, H + 29, [[6, 'SUM adds only the values it can see']]);
 	V.forEach((v, i) => a.chip(10, ry(H, i), v, { role: 'src', level: v === '?' ? 3 : 2, w: 60 }));
 	a.text(80, ry(H, 1) + 16, 'skipped', 'f10 b', { in: 6 });
 	a.arrow(74, ry(H, 0) + 12, 266, H + 92, 's-out', { in: 6, draw: true });

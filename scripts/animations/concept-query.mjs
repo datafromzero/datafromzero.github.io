@@ -13,9 +13,9 @@ export default function make({ id = 'cq' } = {}) {
 		desc:
 			'A table of four rows, Row 1 to Row 4, goes towards a box called your query. Copies of the rows slide into the box; the table itself stays. Two rows, Row 2 and Row 4, come out and slide into a new table on the right. The first table has 4 rows, the new one has 2 rows.',
 		caption: 'A query is a question you ask a table. The table stays as it was; the answer comes back as a new table, often smaller.',
+		phases: [[1, 'A table of four rows'], [2, 'You ask a question'], [3, 'Its rows go through the query'], [4, 'Two rows come out'], [5, 'They become a new, smaller table']],
 	});
 	a.text(10, 14, 'Ask a question, get a table back', 'f11 b');
-	a.tags(10, 29, [[1, '1 · a table'], [2, '2 · you ask a question'], [3, '3 · its rows go through'], [5, '4 · a new table comes back']]);
 	a.badge(10, 38, '4 rows', 'src');
 	a.badge(350, 38, '2 rows', 'out', { in: 6 }, 'e');
 	const col = (x, level, role, labels, fx) => labels.forEach(([t, y]) => a.chip(x, y, t, { role, level, w: 70, fx }));

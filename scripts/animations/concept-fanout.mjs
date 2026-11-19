@@ -18,10 +18,9 @@ export default function make({ id = 'fo' } = {}) {
 		desc:
 			'One order row O1 with an amount a, and three item rows I1, I2 and I3 that all belong to it. Arrows connect O1 to each item. The join makes one result row per match, so there are three result rows, each holding a copy of the amount a next to one item. SUM of a adds a three times, even though O1 has one amount.',
 		caption: 'When one row matches several rows, a join returns it once per match. Adding up a column of the one-side then counts each value several times.',
-		phases: ['One order row, three item rows', 'O1 matches all three items', 'The join makes a row for I1', 'And a row for I2', 'And a row for I3', 'SUM adds a three times', 'The amount a is counted 3 times', 'One row became three'],
+		phases: [[1, 'One order row, three item rows'], [2, 'The order matches all three items'], [3, 'The join makes one row per match'], [6, 'SUM adds the amount three times'], [7, 'The amount a is counted 3 times']],
 	});
 	a.text(10, 14, 'One row meets three, and becomes three', 'f11 b');
-	a.tags(10, 29, [[1, '1 · one order row, three item rows'], [2, '2 · O1 matches all three'], [3, '3 · I1 joins: a result row'], [4, '4 · I2 joins: another'], [5, '5 · I3 joins: another'], [6, '6 · SUM adds a three times'], [7, '7 · a is counted 3 times']]);
 	a.chip(10, 56, 'O1 · amount a', { role: 'src', level: 3, w: 90 });
 	[0, 1, 2].forEach((i) => {
 		a.ghost(250, IY(i), 90, 24);

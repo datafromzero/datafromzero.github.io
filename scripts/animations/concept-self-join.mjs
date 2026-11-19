@@ -19,10 +19,9 @@ export default function make({ id = 'sj' } = {}) {
 		desc:
 			'A table T has four rows; each row notes the number of its boss row in the same table: Row 1 has none, Rows 2 and 3 have boss 1, and Row 4 has boss 2. A copy of the rows slides to the right, and the two copies are named T AS e and T AS b. Arrows then pair each row of e with its boss in b: Row 2 and Row 3 with Row 1, and Row 4 with Row 2. Row 1 has no boss, so it has no pair.',
 		caption: 'A self join joins a table to itself. Aliases such as e and b give the two copies different names, so each row of one copy can be matched with a row of the other.',
-		phases: ['One table T; rows name a boss row', 'A copy of T slides over', 'Two names for one table: e and b', 'Row 2 pairs with its boss, Row 1', 'Row 3 pairs with Row 1 too', 'Row 4 pairs with Row 2', 'Row 1 has no boss, so no pair', 'Pairs of rows from the same table'],
+		phases: [[1, 'One table T; rows name a boss row'], [2, 'A copy of T slides over'], [3, 'Two names for one table: e and b'], [4, 'Rows pair with their boss row'], [7, 'Row 1 has no boss, so no pair']],
 	});
 	a.text(10, 14, 'One table, used twice', 'f11 b');
-	a.tags(10, 29, [[1, '1 · one table T'], [2, '2 · a copy slides over'], [3, '3 · two names: e and b'], [4, '4 · Row 2 pairs with Row 1'], [5, '5 · Row 3 pairs with Row 1'], [6, '6 · Row 4 pairs with Row 2'], [7, '7 · Row 1 has no boss, no pair']]);
 	a.text(10, 52, 'T', 'f10 b mo', { hide: 3 });
 	a.text(10, 52, 'T AS e', 'f10 b mo', { in: 3 });
 	a.text(240, 52, 'T AS b', 'f10 b mo', { in: 3 });

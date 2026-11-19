@@ -203,21 +203,23 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   `node scripts/make-animation.mjs concept-join:left --stats` prints the markup for the lesson (variants after a colon).
   About 3 to 5 KB of animation markup (two are about 7 KB) plus about 3 KB of step controls per animation; the CSS is shared.
 - **Pause and steps:** autoplay is the default. Under the figure the learner has Pause / Play (a native checkbox, 44 px, WCAG 2.2.2),
-  Back, Next and one button per phase, "1 2 3 … 8" (a native radio group `[auto, 1..8]`, no JavaScript). Choosing a step stops the loop and
-  shows that phase's frame, finished and still, with its phase label; Back and Next move through the phases, arrow keys work, the focus ring
-  is visible, and "▶ Play" returns to autoplay. A numbered list of the eight phase captions sits under the figure with the current one
-  marked, and each radio is labeled "Step k of 8: caption". Never remove any of it. Everything comes from the generator, so a spec only
-  supplies the phase labels.
-- **Phase captions:** one short plain-words caption per phase (8). By default they are the `tags` labels (their "n ·" number removed, the
-  label held until the next one); a spec whose tags skip phases passes `phases: [8 captions]` to `anim` instead. Caption what you see in
-  that phase ("Row 2 pairs with its boss, Row 1"), not the idea of the whole figure.
+  Back, Next and one button per step, "1 2 3 … N" with N = 3 to 6 (a native radio group `[auto, 1..N]`, no JavaScript). Choosing a step
+  stops the loop and shows the settled frame at the end of that step, with its label; Back and Next move through the steps, arrow keys
+  work, the focus ring is visible, and "▶ Play" returns to autoplay. A numbered list of the step captions sits under the figure with the
+  current one marked, and each radio is labeled "Step k of N: caption". Never remove any of it. Everything comes from the generator.
+- **Steps and captions:** a spec gives `phases: [[firstPhase, 'caption'], ...]` to `anim`: 3 to 6 steps, the first starts at phase 1, a
+  step lasts until the next one starts (a step may cover several phases of the 8). The generator draws the in-figure label ("k · caption")
+  and builds the buttons and the caption list from the same words, so never call `tags` for the phase label and never repeat a caption.
+  Say what changes at that step, in plain words ("Row 2: false, stopped", "Fewer reach step 3"), not the idea of the whole figure, and
+  keep each under about 40 characters. Step k shows the frame at the end of its last phase, so everything that step does must be finished
+  by then.
 - **Static view:** print shows the final state (everything that stays to the end, arrows drawn), all captions and no controls, so design
-  the last phase as the picture you would print. Reduced motion shows phase 1, still, and the step buttons switch frames instantly (no
+  the last phase as the picture you would print. Reduced motion shows step 1, still, and the step buttons switch frames instantly (no
   motion at all). Hold the last phase for about a second: leave it idle.
 - **No overlap:** text never over text at any moment. A moving part never crosses a label: put the label where nothing passes, or show it after the part has arrived. Two labels that share a slot get windows that touch without
   overlapping (`{ in: 5, hide: 6 }` then `{ in: 6, hide: 7 }`). Check the frames every 0.1 s in Playwright (390 and 1280 px, light and dark), and sample
   the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins). Then click every step button and
-  check that its frame equals the running loop paused at the end of the same phase.
+  check that its frame equals the running loop paused at the end of the last phase of that step.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
 ## Markup

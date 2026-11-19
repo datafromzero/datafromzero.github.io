@@ -18,9 +18,9 @@ export default function make({ id = 'cs' } = {}) {
 		desc:
 			'Three rows wait on the left; three columns of tests follow: WHEN 1, WHEN 2 and ELSE. All rows step to WHEN 1. Row 1 passes: it is marked yes, stops, and gets label A. Rows 2 and 3 fail: they are marked no and step on to WHEN 2. Row 2 passes and gets label B. Row 3 fails again and steps on to ELSE, where it gets label C.',
 		caption: 'CASE walks each row down the WHEN tests in order. The first test that is true gives the row its label and the walk stops. A row that passes none gets ELSE.',
+		phases: [[1, 'Three rows wait'], [2, 'Every row tries WHEN 1'], [3, 'Row 1 says yes: label A, stop'], [4, 'The rest try WHEN 2: row 2 gets B'], [6, 'Row 3 reaches ELSE and gets C']],
 	});
 	a.text(10, 14, 'Walk down the tests, first yes wins', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows wait'], [2, '2 · every row tries WHEN 1'], [4, '3 · the rest try WHEN 2'], [6, '4 · what is left gets ELSE']]);
 	[['WHEN 1', 117], ['WHEN 2', 187], ['ELSE', 257]].forEach(([t, x]) => a.text(x, 52, t, 'f10 b mo', undefined, 'm'));
 	a.grid(82, 58, [70, 70, 70], 3, 32);
 	ROWS.forEach(([t, stop, label], i) => {

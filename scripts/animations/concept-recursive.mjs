@@ -17,10 +17,9 @@ export default function make({ id = 'rc' } = {}) {
 		desc:
 			'A box of new rows holds the anchor row, which joins the result column on the right. Round 1 reads that row and finds two new rows, which join the result. Round 2 reads those and finds one new row, which joins the result. Round 3 finds nothing new, so a badge says it adds nothing and it stops. The result holds four rows.',
 		caption: 'A recursive CTE starts from an anchor row. Each round uses the rows the last round added to find more. It stops when a round adds no rows.',
-		phases: ['The anchor row is the start', 'The anchor joins the result', 'Round 1 reads it and finds two rows', 'They join the result', 'Round 2 finds one row', 'It joins the result', 'Round 3 finds nothing: stop', 'Four rows, then it stopped'],
+		phases: [[1, 'The anchor row is the start'], [2, 'The anchor joins the result'], [3, 'Round 1 finds two rows, they join'], [5, 'Round 2 finds one row, it joins'], [7, 'Round 3 finds nothing: stop']],
 	});
 	a.text(10, 14, 'Round after round, until nothing new', 'f11 b');
-	a.tags(10, 29, [[1, '1 · the anchor row'], [2, '2 · it joins the result'], [3, '3 · round 1 finds two rows'], [4, '4 · they join the result'], [5, '5 · round 2 finds one row'], [6, '6 · it joins the result'], [7, '7 · round 3 finds none: stop']]);
 	a.box(10, 44, 110, 92, { role: 'src', title: 'new rows' });
 	a.text(240, 54, 'result', 'f10 b', undefined, 'm');
 	[0, 1, 2, 3].forEach((i) => a.ghost(220, SLOT(i), 80, 24));

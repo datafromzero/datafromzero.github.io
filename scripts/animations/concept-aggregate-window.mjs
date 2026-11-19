@@ -16,13 +16,13 @@ export default function make({ id = 'cw' } = {}) {
 		desc:
 			'Two panels. First, an aggregate, many rows into one answer: three rows each hold a value x1, x2 or x3. The values slide, one after another, into one spot, the rows leave empty seats, and one result row holds Σ: 3 rows become 1 row. Second, a window function, every row keeps its seat and gets a note: the same three rows stay in place, arrows read the group into one Σ bubble, and a copy of Σ slides back next to each row: 3 rows stay 3 rows.',
 		caption: 'An aggregate (GROUP BY) turns a group of rows into one row. A window function (OVER) keeps every row and adds the group result as a new column.',
+		phases: [[1, 'Three rows, each with a value'], [2, 'The group is read into one Σ'], [5, 'Top: one row left. Bottom: a note per row']],
 	});
 	for (const [y0, title, role, tags] of [
 		[0, 'Many rows → one answer', 'out', [[1, '1 · rows, each with a value'], [2, '2 · the values flow into one spot'], [5, '3 · one answer']]],
 		[H, 'Every row keeps its seat and gets a note', 'win', [[1, '1 · rows, each with a value'], [2, '2 · the group is read'], [5, '3 · a note is delivered to each row']]],
 	]) {
 		a.text(10, y0 + 14, title, 'f11 b');
-		a.tags(10, y0 + 29, tags);
 		const ry = (i) => y0 + 38 + 30 * i;
 		const row = (i) => {
 			a.rect(10, ry(i), 96, 26, tint('src', 2), undefined, 6);

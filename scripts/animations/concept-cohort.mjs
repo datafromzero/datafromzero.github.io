@@ -18,10 +18,9 @@ export default function make({ id = 'co' } = {}) {
 		desc:
 			'A grid with three rows, the cohorts Start 1, Start 2 and Start 3, and three columns, month 0, month 1 and month 2. Month 0 fills for every cohort. Month 1 fills for Start 1 and Start 2, and month 2 fills only for Start 1, each new cell sliding out of the cell before it. The three cells in the lower right corner stay empty and are marked not yet, so the filled cells form a triangle. Darker cells mean more users.',
 		caption: 'Each row is a cohort: the users who started in the same month. Reading across shows how that group changes month after month. Later cohorts have fewer months so far, which makes the triangle.',
-		phases: ['Cohorts by start month, months across', 'Month 0: everyone in the cohort', 'Month 1: who is still here', 'Month 2, for the oldest cohort', 'The empty corner has not happened yet', 'A triangle of cells', 'A triangle of cells', 'A triangle of cells'],
+		phases: [[1, 'Cohorts by start month'], [2, 'Month 0: everyone in the cohort'], [3, 'Month 1: who is still here'], [4, 'Month 2, for the oldest cohort'], [5, 'The empty corner has not happened yet']],
 	});
 	a.text(10, 14, 'Groups by start month', 'f11 b');
-	a.tags(10, 29, [[1, '1 · cohorts by start month'], [2, '2 · month 0: everyone in'], [3, '3 · month 1: who is still here'], [4, '4 · month 2, oldest cohort only'], [5, '5 · the corner has not happened yet'], [6, '6 · a triangle']]);
 	[0, 1, 2].forEach((j) => a.text(X(j) + 36, 58, `month ${j}`, 'f10 b mo', undefined, 'm'));
 	[0, 1, 2].forEach((i) => {
 		a.chip(10, Y(i), `Start ${i + 1}`, { role: 'grp', level: 2 + i, w: 70, h: 28 });

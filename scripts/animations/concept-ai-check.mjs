@@ -16,10 +16,9 @@ export default function make({ id = 'ai' } = {}) {
 		desc:
 			'A draft query written by an AI sits on the left. Two checks follow: row count and known total. The first draft passes the row count check but its total differs, so it is marked fix it and slides down to try again. The second draft passes both checks and is marked trusted.',
 		caption: 'Treat an AI-written query as a draft. Check the row count and a total you already know before you trust the result.',
-		phases: ['The AI writes a draft query', 'Check the row count: ok', 'Check a known total: it differs', 'One check failed: do not trust it', 'Fix the query and run it again', 'The row count matches', 'The known total matches', 'Both checks passed: trusted'],
+		phases: [[1, 'The AI writes a draft query'], [2, 'Check the row count: ok'], [3, 'Check a known total: it differs'], [5, 'Fix the query and run it again'], [6, 'Both checks pass'], [8, 'Now it is trusted']],
 	});
 	a.text(10, 14, 'A draft is not an answer until it is checked', 'f11 b');
-	a.tags(10, 29, [[1, '1 · the AI writes a draft'], [2, '2 · check the row count: ok'], [3, '3 · check a known total: differs'], [4, '4 · one check failed: not trusted'], [5, '5 · fix it and run it again'], [6, '6 · the row count matches'], [7, '7 · the known total matches'], [8, '8 · both passed: trusted']]);
 	a.text(135, 52, 'row count', 'f10 b mo', undefined, 'm');
 	a.text(215, 52, 'known total', 'f10 b mo', undefined, 'm');
 	LY.forEach((y) => a.ghost(10, y, 70, 26));

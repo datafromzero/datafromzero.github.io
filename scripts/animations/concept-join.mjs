@@ -50,14 +50,10 @@ export default function make({ id, variant = 'left' } = {}) {
 			}[variant]
 		} Two circles in the corner show which keys are kept.`,
 		caption: CAPTION[variant],
+		phases: [[1, 'Two tables, each with keys'], [2, 'Matching keys shake hands'], [3, 'The pairs move into the result'], [4, { inner: 'Rows with no partner are not kept', left: 'Left rows with no partner are kept (NULL)', right: 'Right rows with no partner are kept (NULL)', full: 'Rows with no partner are kept (NULL)' }[variant]], [5, `The result has ${rows} rows`]],
+		tag: { y: 27 },
 	});
 	a.text(10, 14, TITLE[variant], 'f11 b');
-	a.tags(10, 27, [
-		[1, '1 · two tables, each with keys'],
-		[2, '2 · matching keys shake hands'],
-		[3, '3 · the pairs move into the result'],
-		[4, { inner: '4 · no partner: not kept', left: '4 · left rows with no partner are kept', right: '4 · right rows with no partner are kept', full: '4 · rows with no partner are kept' }[variant]],
-	]);
 	a.text(10, 41, 't1', 'f10 mu');
 	a.text(150, 41, 't2', 'f10 mu');
 	a.text(220, 41, 'result', 'f10 mu');
@@ -108,9 +104,10 @@ function cross(id) {
 		title: TITLE.cross,
 		desc: 'Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Lines join every row of the first table to every row of the second. Every pairing becomes a row of the result, three at a time, 9 rows in all.',
 		caption: CAPTION.cross,
+		phases: [[1, 'Two tables, each with keys'], [2, 'Every row meets every row'], [3, 'Every pairing becomes a result row'], [6, 'The result has 9 rows']],
+		tag: { y: 27 },
 	});
 	a.text(10, 14, TITLE.cross, 'f11 b');
-	a.tags(10, 27, [[1, '1 · two tables, each with keys'], [2, '2 · every row meets every row'], [3, '3 · every pairing is a row']]);
 	a.text(10, 41, 't1', 'f10 mu');
 	a.text(100, 41, 't2', 'f10 mu');
 	a.text(220, 41, 'result', 'f10 mu');
@@ -143,6 +140,8 @@ function all(id) {
 		title: TITLE.all,
 		desc: 'Two small tables of labels: keys A, B and C, and keys B, C and D. Keys B and C match. The animation steps through LEFT JOIN, RIGHT JOIN, INNER JOIN and FULL JOIN, naming each, lighting the rows it keeps and listing its result: LEFT 3 rows, RIGHT 3 rows, INNER 2 rows, FULL 4 rows. Rows with no partner that a join does not keep are marked red.',
 		caption: CAPTION.all,
+		phases: [[1, 'LEFT JOIN: every row of t1 is kept'], [3, 'RIGHT JOIN: every row of t2 is kept'], [5, 'INNER JOIN: only the pairs are kept'], [7, 'FULL JOIN: every row of both is kept']],
+		tag: { y: 27 },
 	});
 	a.text(10, 14, TITLE.all, 'f11 b');
 	a.text(10, 41, 't1', 'f10 mu');
@@ -151,12 +150,6 @@ function all(id) {
 	// red layers first (under the chips' text), per type window
 	const red = (key) => types.filter((t) => !t[key]).map((t) => ({ role: 'flt', level: 3, fx: { in: t.from, hide: t.to } }));
 	const mat = [{ role: 'mat', level: 3 }];
-	// the type name and what it keeps, one at a time
-	types.forEach((t, i) => {
-		const fx = { in: t.from, ...(i < 3 ? { hide: t.to } : {}) };
-		a.text(10, 27, `${i + 1} · ${t.name}`, 'f10 b', fx);
-		a.text(110, 27, t.note, 'f10', fx);
-	});
 	L.forEach(([k, v], i) => a.chip(10, Y(i), `${k} ${v}`, { w: W, flags: i === 0 ? red('keepL') : mat }));
 	R.forEach(([k, v], j) => a.chip(80, Y(j + 1), `${k} ${v}`, { w: W, flags: j === 2 ? red('keepR') : mat }));
 	a.path(`M62 ${Y(1) + 12}L80 ${Y(1) + 12}M62 ${Y(2) + 12}L80 ${Y(2) + 12}`, 's-mat');

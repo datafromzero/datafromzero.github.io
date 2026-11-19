@@ -22,10 +22,9 @@ export default function make({ id = 'rt' } = {}) {
 		desc:
 			'Four rows sorted by score from high to low: 9, 8, 8 and 7; the two rows with 8 tie. ROW_NUMBER numbers them 1, 2, 3, 4 and never repeats. RANK gives 1, 2, 2, 4: the tied rows share 2 and the next number skips 3. DENSE_RANK gives 1, 2, 2, 3: the tied rows share 2 and no number is skipped.',
 		caption: 'ROW_NUMBER never repeats a number. RANK gives tied rows the same number and then skips ahead. DENSE_RANK gives tied rows the same number and skips nothing.',
-		phases: ['Rows sorted by score; two tie', 'ROW_NUMBER counts rows 1 and 2', 'ROW_NUMBER: 3 and 4, never repeats', 'RANK: 1 and 2', 'RANK: the tie shares 2, then skips to 4', 'DENSE_RANK: 1 and 2', 'DENSE_RANK: the tie shares 2, then 3', 'Same rows, three numberings'],
+		phases: [[1, 'Rows sorted by score; two tie'], [2, 'ROW_NUMBER: 1, 2, 3, 4, no repeats'], [4, 'RANK: 1, 2, 2, 4, skips 3'], [6, 'DENSE_RANK: 1, 2, 2, 3, no gap']],
 	});
 	a.text(10, 14, 'Same rows, three numberings', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows sorted by score; two tie'], [2, '2 · ROW_NUMBER counts 1, 2'], [3, '3 · ROW_NUMBER: 3, 4 · no repeats'], [4, '4 · RANK: 1, 2'], [5, '5 · RANK: the tie shares 2, skips 3'], [6, '6 · DENSE_RANK: 1, 2'], [7, '7 · DENSE_RANK: tie shares 2, then 3']]);
 	SCORE.forEach((s, i) => a.chip(10, Y(i), `Row ${i + 1} · ${s}`, { role: 'src', level: 2, w: 82 }));
 	a.rect(6, Y(1) - 4, 90, 62, 's-win dsh', undefined, 8);
 	COLS.forEach(([name, cx, nums, note, p]) => {

@@ -19,10 +19,9 @@ export default function make({ id = 'dd' } = {}) {
 		desc:
 			'Five rows with keys A, A, B, A and B. The rows of key A are numbered 1, 2 and 3, and the rows of key B are numbered 1 and 2. The rows numbered 1 are kept; the three other rows turn red and are marked dropped. The two kept rows slide into a clean table on the right, one row per key.',
 		caption: 'To remove duplicates, number the rows within each key with ROW_NUMBER, then keep only the rows numbered 1.',
-		phases: ['Rows with a key; some keys repeat', 'Number the rows of key A', 'Number the rows of key B', 'Keep only number 1', 'The other rows are dropped', 'First kept row moves on', 'Second kept row moves on', 'One row per key'],
+		phases: [[1, 'Rows with a key; some keys repeat'], [2, 'Number the rows within each key'], [4, 'Keep only #1'], [5, 'The other rows are dropped'], [6, 'The kept rows move to a clean table']],
 	});
 	a.text(10, 14, 'Number the repeats, keep #1', 'f11 b');
-	a.tags(10, 29, [[1, '1 · rows with a key; some repeat'], [2, '2 · number the rows of key A'], [3, '3 · number the rows of key B'], [4, '4 · keep only #1'], [5, '5 · the rest are dropped'], [6, '6 · the kept rows move on'], [8, '7 · one row per key']]);
 	a.text(250, 52, 'clean table', 'f10 b', undefined, 'm');
 	ROWS.forEach((_, i) => a.ghost(10, Y(i), 80, 24));
 	a.ghost(210, Y(0), 80, 24);
