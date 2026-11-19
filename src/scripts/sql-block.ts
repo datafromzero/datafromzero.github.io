@@ -55,6 +55,7 @@ function drawResult(out: HTMLElement, r: Result, title?: string) {
 			const td = el('td', v ?? 'NULL');
 			if (v === null) td.className = 'null';
 			else if (r.numeric[i]) td.className = 'n';
+			else if (v.includes('\n')) td.className = 'ml'; // a text plan (EXPLAIN): keep its line breaks
 			tr.append(td);
 		});
 	}
