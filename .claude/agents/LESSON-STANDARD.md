@@ -68,6 +68,7 @@ headings are gone: their content moves as below.
 - **The big idea:** one plain sentence saying what the tool does to the rows, then the concept animation on its own
   line as an MDX comment marker, `{/* CONCEPT: concept-name */}`, which the lead replaces with the generated markup.
   No other text between the sentence and the animation.
+  After changing a spec or `step-animation.mjs`, run `node scripts/refresh-concept-figures.mjs` (`--check` to test) to re-paste every concept figure.
 - **Learn by doing:** one line of orientation, then the units. A unit is about 80 to 200 words of prose plus its
   queries and carries exactly one rule:
   1. **Idea:** the rule in one to three short sentences, plain words, with one Excel or cafe comparison only when it
