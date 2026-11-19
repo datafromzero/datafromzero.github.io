@@ -3,6 +3,7 @@
 // 1 standalone: the CTE card slides into MAIN; 2 and 3 chained: the CTE 1 card slides into CTE 2, then CTE 2 (with CTE 1 inside)
 // slides into MAIN; 4 and 5 recursive: a loop arrow draws and two new rows slide into the CTE that feeds itself; 6 it slides into
 // MAIN; 7 and 8 hold. A soft ring pulses where something has just landed.
+// Key idea only: no count strip, because the figure shows three structures, not rows to count.
 import { anim, edge, tint } from '../lib/step-animation.mjs';
 
 export default function make({ id = 'ck' } = {}) {
@@ -14,7 +15,11 @@ export default function make({ id = 'ck' } = {}) {
 		desc:
 			'Three scenes. Standalone: a card named CTE slides into a slot inside the box MAIN. Chained: a card named CTE 1 slides into a slot inside the box CTE 2, and then the box CTE 2, with CTE 1 inside it, slides into a slot inside MAIN. Recursive: a card named CTE with an arrow looping back to itself receives two new rows, one after the other, and then slides into MAIN.',
 		caption: 'A CTE is a named scratch table. Standalone: MAIN uses it. Chained: CTE 2 uses CTE 1, and MAIN uses CTE 2. Recursive: a CTE feeds itself new rows until a round adds none.',
-		phases: [[1, 'Standalone: name it, plug it in'], [2, 'Chained: tables feed tables'], [4, 'Recursive: a table feeds itself']],
+		phases: [
+			[1, 'Standalone: name it, plug it in', { role: 'src', key: 'Standalone: a CTE gives a query a name, and the main query uses that name like a table.', changes: [['+', 'CTE: a named result'], ['+', 'MAIN uses it']] }],
+			[2, 'Chained: tables feed tables', { role: 'mat', key: 'Chained: each CTE can use the ones before it, so a long job becomes small steps.', changes: [['+', 'CTE 2 uses CTE 1'], ['+', 'MAIN uses CTE 2']] }],
+			[4, 'Recursive: a table feeds itself', { role: 'win', key: 'Recursive: a CTE reads its own rows, round after round, until a round adds none.', changes: [['+', 'a loop: the CTE feeds itself'], ['+', '2 new rows added']] }],
+		],
 		tag: { x: 350, y: 14, align: 'e' },
 	});
 	const bars = (x, y) => {

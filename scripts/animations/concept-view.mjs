@@ -4,6 +4,7 @@
 // 5 the view runs again (ring); 6 the answer changes to include the new row; 7 and 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out): CREATE VIEW vw AS SELECT SUM(v) s FROM base; with base = 1, 2 SELECT * FROM vw gives 3;
 // after INSERT INTO base VALUES (10) the same SELECT gives 13. The view stored the query, not the result.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 export default function make({ id = 'vw' } = {}) {
@@ -15,7 +16,19 @@ export default function make({ id = 'vw' } = {}) {
 		desc:
 			'A table t holds two rows. A view v, a saved query on t, sits next to it. Asking FROM v draws arrows from t through v to an answer: x1 plus x2. A new row, Row 3, arrives in t. The view runs again, and the answer changes to x1 plus x2 plus x3. The view kept the question, not the old answer.',
 		caption: 'A view stores a query, not its rows. You use it like a table, and each time you ask it runs on the data as it is now.',
-		phases: [[1, 'A table and a saved question (the view)'], [2, 'You ask the view like a table'], [4, 'New data arrives in the table'], [5, 'You ask again: the view runs again'], [6, 'The answer includes the new row']],
+		phases: [
+			[1, 'A table and a saved question (the view)', { role: 'src', key: 'A view is a saved query. It sits on top of a table and holds no rows of its own.', changes: [['+', 'table t: 2 rows'], ['+', 'view v: a saved query']] }],
+			[2, 'You ask the view like a table', { role: 'mat', key: 'Asking FROM v runs the saved query on the table, so the answer is built right now.', changes: [['+', 'answer: x1 + x2']] }],
+			[4, 'New data arrives in the table', { role: 'src', key: 'The data changes: a new row arrives in the table, and the view is not touched.', changes: [['+', 'Row 3 in table t']] }],
+			[5, 'You ask again: the view runs again', { role: 'mat', key: 'Asking again runs the saved query again, on the table as it is now.', changes: [['~', 'the view runs a second time']] }],
+			[6, 'The answer includes the new row', { role: 'out', key: 'The new answer includes Row 3. The view kept the question, not the old answer.', changes: [['~', 'answer: x1 + x2 + x3']] }],
+		],
+		counters: [
+			{ label: 'table rows', role: 'src', values: [[1, 2], [4, 3]] },
+			{ label: 'rows in view', role: 'mat', values: [[1, 0]] },
+			{ label: 'view runs', role: 'mat', values: [[2, 1], [5, 2]] },
+			{ label: 'rows summed', role: 'out', values: [[3, 2], [6, 3]] },
+		],
 	});
 	a.text(10, 14, 'A saved question, a fresh answer', 'f11 b');
 	a.text(10, 54, 'table t', 'f10 b');

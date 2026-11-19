@@ -2,6 +2,7 @@
 // 8 s loop of 8 phases: 1 two columns A and B; 2 to 4 on each row in turn copies of its A and B cells slide into the new column
 // and 3 to 5 the computed cell "A × B" replaces them; 6 to 8 hold, every row has a new value and A and B are unchanged.
 // Facts (DuckDB 2.0.0, concept2/facts.out): an expression such as 2*3 gives 6 per row and leaves its source columns as they were.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const Y = (i) => 62 + 32 * i;
@@ -15,7 +16,17 @@ export default function make({ id = 'ex' } = {}) {
 		desc:
 			'A table with columns A and B and three rows, a1 b1 to a3 b3. For each row in turn, copies of its A and B cells slide to the right, and a new cell in a new column called A times B appears: a1 times b1, a2 times b2, a3 times b3. The original columns stay unchanged.',
 		caption: 'An expression such as A × B is worked out separately on every row and shows up as a new column. The columns it used stay as they were.',
-		phases: [[1, 'Two columns, A and B'], [2, 'The formula runs on row 1'], [4, 'And on rows 2 and 3'], [5, 'Every row has a new value']],
+		phases: [
+			[1, 'Two columns, A and B', { role: 'src', key: 'A table has columns. An expression works with the values in them.', changes: [['+', '2 columns, 3 rows']] }],
+			[2, 'The formula runs on row 1', { role: 'out', key: 'An expression such as A × B uses the cells of one row to make a new value.', changes: [['+', 'a new column A × B'], ['+', 'row 1: a1 × b1']] }],
+			[4, 'And on rows 2 and 3', { role: 'out', key: 'The same formula runs on each row separately, using that row’s own cells.', changes: [['+', 'row 2: a2 × b2']] }],
+			[5, 'Every row has a new value', { role: 'out', key: 'The columns A and B stay as they were; the result is a new column.', changes: [['+', 'row 3: a3 × b3']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 3]] },
+			{ label: 'columns', role: 'out', values: [[1, 2], [2, 3]] },
+			{ label: 'new values', role: 'out', values: [[3, 1], [4, 2], [5, 3]] },
+		],
 	});
 	a.text(10, 14, 'Two cells in, a new cell out', 'f11 b');
 	a.text(34, 54, 'A', 'f10 b', undefined, 'm');

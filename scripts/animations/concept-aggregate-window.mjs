@@ -3,6 +3,7 @@
 // spot; 5 the rows are gone and one Σ row stands; 6 its row count. Window function, "every row keeps its seat and gets a
 // note": 1 the same rows; 2 to 4 arrows read the group into one Σ bubble; 5 to 7 a copy of Σ slides back to each row, one per
 // phase; 8 hold.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const H = 140; // top of the second panel
@@ -16,7 +17,16 @@ export default function make({ id = 'cw' } = {}) {
 		desc:
 			'Two panels. First, an aggregate, many rows into one answer: three rows each hold a value x1, x2 or x3. The values slide, one after another, into one spot, the rows leave empty seats, and one result row holds Σ: 3 rows become 1 row. Second, a window function, every row keeps its seat and gets a note: the same three rows stay in place, arrows read the group into one Σ bubble, and a copy of Σ slides back next to each row: 3 rows stay 3 rows.',
 		caption: 'An aggregate (GROUP BY) turns a group of rows into one row. A window function (OVER) keeps every row and adds the group result as a new column.',
-		phases: [[1, 'Three rows, each with a value'], [2, 'The group is read into one Σ'], [5, 'Top: one row left. Bottom: a note per row']],
+		phases: [
+			[1, 'Three rows, each with a value', { role: 'src', key: 'Both pictures start from the same rows, each with a value.', changes: [['+', '3 rows in each picture']] }],
+			[2, 'The group is read into one Σ', { role: 'grp', key: 'Both read the whole group and work out one Σ from it.', changes: [['+', 'Σ, worked out from all 3 rows']] }],
+			[5, 'Top: one row left. Bottom: a note per row', { role: 'win', key: 'An aggregate keeps only Σ. A window function keeps every row and adds Σ to each.', changes: [['−', 'aggregate: 3 rows become 1'], ['+', 'window: a Σ note on every row']] }],
+		],
+		counters: [
+			{ label: 'aggregate rows', role: 'out', values: [[1, 3], [5, 1]] },
+			{ label: 'window rows', role: 'win', values: [[1, 3], [5, 3]] },
+			{ label: 'Σ notes', role: 'win', values: [[5, 1], [6, 2], [7, 3]] },
+		],
 	});
 	for (const [y0, title, role, tags] of [
 		[0, 'Many rows → one answer', 'out', [[1, '1 · rows, each with a value'], [2, '2 · the values flow into one spot'], [5, '3 · one answer']]],

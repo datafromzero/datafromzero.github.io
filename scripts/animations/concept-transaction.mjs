@@ -4,6 +4,7 @@
 // Facts (DuckDB 2.0.0, concept2/facts.out): on a table with row 1, BEGIN; INSERT 2; INSERT 3; ROLLBACK; leaves only row 1, and the same
 // with COMMIT leaves rows 1, 2, 3. Outside an explicit transaction ROLLBACK is an error in DuckDB ("cannot rollback - no transaction is
 // active"), so ROLLBACK only makes sense after BEGIN.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const H = 160; // top of the second panel
@@ -17,7 +18,17 @@ export default function make({ id = 'tx' } = {}) {
 		desc:
 			'Two panels, each with a table that holds one row. After BEGIN, two changes wait outside the table as dashed boxes, because they are not final yet. In the top panel the stamp COMMIT slides both changes into the table together, and they become solid rows. In the bottom panel the stamp ROLLBACK undoes both together and the table still holds only its first row.',
 		caption: 'Between BEGIN and COMMIT, several changes wait together and then land together. ROLLBACK undoes all of them. ROLLBACK only means something after BEGIN.',
-		phases: [[1, 'A table with one row'], [2, 'BEGIN: changes wait, not final'], [4, 'COMMIT above, ROLLBACK below'], [5, 'Above: all land. Below: all undone']],
+		phases: [
+			[1, 'A table with one row', { role: 'src', key: 'Both pictures start from the same table, which has one row.', changes: [['+', 'table: 1 row']] }],
+			[2, 'BEGIN: changes wait, not final', { role: 'grp', key: 'BEGIN opens a transaction. Changes made inside it wait and are not final yet.', changes: [['+', '2 changes waiting, not final']] }],
+			[4, 'COMMIT above, ROLLBACK below', { role: 'ord', key: 'You end the transaction with COMMIT to keep the changes, or ROLLBACK to throw them all away.', changes: [['+', 'COMMIT above'], ['+', 'ROLLBACK below']] }],
+			[5, 'Above: all land. Below: all undone', { role: 'out', key: 'COMMIT lands every change at once, and ROLLBACK undoes every change at once. Never half.', changes: [['+', 'COMMIT: the table has 3 rows'], ['−', 'ROLLBACK: the table has 1 row']] }],
+		],
+		counters: [
+			{ label: 'waiting', role: 'grp', values: [[1, 0], [2, 1], [3, 2], [5, 0]] },
+			{ label: 'table: COMMIT', role: 'out', values: [[1, 1], [6, 3]] },
+			{ label: 'table: ROLLBACK', role: 'flt', values: [[1, 1], [5, 1]] },
+		],
 	});
 	[
 		[0, 'BEGIN … COMMIT: all land together', [[1, '1 · a table'], [2, '2 · BEGIN: changes wait'], [4, '3 · COMMIT'], [5, '4 · all land together']], 'COMMIT'],

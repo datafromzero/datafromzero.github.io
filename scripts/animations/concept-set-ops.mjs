@@ -4,6 +4,7 @@
 // list B C; 6 EXCEPT lights what is only in set 1 and 7 its list A; 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out): UNION gives A, B, C, D (repeats removed; UNION ALL would give B and C twice);
 // INTERSECT gives B, C; set 1 EXCEPT set 2 gives A (set 2 EXCEPT set 1 would give D, so the order matters).
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 export default function make({ id = 'so' } = {}) {
@@ -15,7 +16,17 @@ export default function make({ id = 'so' } = {}) {
 		desc:
 			'Two overlapping circles: set 1 holds the keys A, B and C, set 2 holds B, C and D; B and C sit in the overlap. UNION lights both circles and lists A, B, C, D. INTERSECT lights only the overlap and lists B, C. EXCEPT lights the part of set 1 that is outside set 2 and lists A.',
 		caption: 'UNION keeps every key once, INTERSECT keeps the keys in both lists, and EXCEPT keeps the keys of the first list that are not in the second.',
-		phases: [[1, 'Two sets of keys'], [2, 'UNION: every key once'], [4, 'INTERSECT: keys in both'], [6, 'EXCEPT: in the first, not the second']],
+		phases: [
+			[1, 'Two sets of keys', { role: 'src', key: 'Each set is a list of keys. B and C are in both lists.', changes: [['+', 'set 1: A, B, C'], ['+', 'set 2: B, C, D']] }],
+			[2, 'UNION: every key once', { role: 'out', key: 'UNION keeps every key from either list, once each. UNION ALL would keep B and C twice.', changes: [['+', '4 keys: A, B, C, D']] }],
+			[4, 'INTERSECT: keys in both', { role: 'out', key: 'INTERSECT keeps only the keys that are in both lists.', changes: [['−', 'A and D left out'], ['+', '2 keys: B, C']] }],
+			[6, 'EXCEPT: in the first, not the second', { role: 'out', key: 'EXCEPT keeps the keys of the first list that are not in the second. The order of the lists matters.', changes: [['−', 'B and C removed'], ['+', '1 key: A']] }],
+		],
+		counters: [
+			{ label: 'set 1', role: 'src', values: [[1, 3]] },
+			{ label: 'set 2', role: 'src', values: [[1, 3]] },
+			{ label: 'result rows', role: 'out', values: [[3, 4], [5, 2], [7, 1]] },
+		],
 	});
 	a.text(10, 14, 'Two lists, three ways to combine', 'f11 b');
 	const v = a.venn({ x1: 100, x2: 170, y: 104, r: 56 });

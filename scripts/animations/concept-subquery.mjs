@@ -4,6 +4,7 @@
 // 5 the rows are tested against v: 3 and 2 fail (red), 8 and 9 stay; 6 to 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out and facts2.out): SELECT x FROM t WHERE x > (SELECT AVG(x) FROM t) over 3, 8, 2, 9 gives 8 and 9 (the average
 // is 5.5); the inner query is evaluated first and gives one value.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const X = [3, 8, 2, 9];
@@ -17,7 +18,18 @@ export default function make({ id = 'sq' } = {}) {
 		desc:
 			'An outer query box holds four rows with x equal to 3, 8, 2 and 9, and a test x greater than, with an empty slot. An inner query box above it computes the average of x, which is 5.5, and shows it as a value v. The value slides down into the empty slot. The outer query then tests each row against it: 3 and 2 fail and turn red, 8 and 9 stay.',
 		caption: 'A subquery is a query inside a query. The inner one runs first, and its result is used by the outer one, here as the value to compare with.',
-		phases: [[1, 'The outer test has an empty slot'], [2, 'The inner query runs first'], [3, 'Its answer slides into the slot'], [5, 'The outer query tests its rows']],
+		phases: [
+			[1, 'The outer test has an empty slot', { role: 'src', key: 'The outer query’s test has a gap: it needs a value from somewhere else.', changes: [['+', 'outer test: x > (empty slot)']] }],
+			[2, 'The inner query runs first', { role: 'src', key: 'The inner query runs first and works out one value, here AVG(x).', changes: [['+', 'inner result: one value v']] }],
+			[3, 'Its answer slides into the slot', { role: 'out', key: 'That value is plugged into the outer query’s test.', changes: [['~', 'the empty slot is filled with v']] }],
+			[5, 'The outer query tests its rows', { role: 'flt', key: 'Now the outer query tests every row against v and keeps only the rows that pass.', changes: [['−', '2 rows fail the test'], ['~', '2 rows kept']] }],
+		],
+		counters: [
+			{ label: 'outer rows', role: 'src', values: [[1, 4]] },
+			{ label: 'inner value', role: 'src', values: [[2, 1]] },
+			{ label: 'kept', role: 'out', values: [[5, 2]] },
+			{ label: 'dropped', role: 'flt', values: [[5, 2]] },
+		],
 	});
 	a.text(10, 14, 'The inner answer feeds the outer query', 'f11 b');
 	a.box(190, 40, 160, 62, { role: 'src', title: 'inner query' });

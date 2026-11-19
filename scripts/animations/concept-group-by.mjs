@@ -2,6 +2,7 @@
 // bucket becomes one row. 8 s loop of 8 phases: 1 six rows, each tagged with a key (A, B, C); 2 the A rows slide into their
 // bucket, 3 the B rows, 4 the C row; 5 each bucket becomes one row with its count; 6 HAVING drops a whole bucket (C, which holds
 // one row); 7 and 8 hold.
+// Live counters and Key idea (D41): counts are the rows drawn in the picture at that phase; each appears with its phase.
 import { anim } from '../lib/step-animation.mjs';
 
 const ROWS = [['A', 0], ['B', 0], ['A', 1], ['C', 0], ['B', 1], ['A', 2]]; // key, slot in its bucket
@@ -19,7 +20,18 @@ export default function make({ id = 'gb' } = {}) {
 		desc:
 			'Six rows, Row 1 to Row 6, each tagged with a key: A, B, A, C, B, A. The A rows slide into bucket A, the B rows into bucket B and the C row into bucket C. Each bucket then becomes one row with its count: A 3 rows, B 2 rows, C 1 row. HAVING then drops a whole bucket: bucket C, with one row, is marked dropped.',
 		caption: 'GROUP BY sorts the rows into one bucket per key, and each bucket becomes one row. HAVING then keeps or drops whole buckets.',
-		phases: [[1, 'Six rows, each with a key'], [2, 'Rows slide into one bucket per key'], [5, 'Each bucket becomes one row'], [6, 'HAVING drops a whole bucket']],
+		phases: [
+			[1, 'Six rows, each with a key', { role: 'src', key: 'Every row carries a key; rows with the same key will be grouped together.', changes: [['+', '6 rows, each with a key']] }],
+			[2, 'Rows slide into one bucket per key', { role: 'grp', key: 'GROUP BY gives each key its own bucket and moves the rows in.', changes: [['+', '3 buckets: A, B, C'], ['~', 'rows moved into their bucket']] }],
+			[5, 'Each bucket becomes one row', { role: 'out', key: 'An aggregate turns each bucket into one row.', changes: [['−', '6 rows folded into 3'], ['+', 'a count for each bucket']] }],
+			[6, 'HAVING drops a whole bucket', { role: 'flt', key: 'HAVING keeps or drops a whole bucket, never single rows.', changes: [['−', 'bucket C dropped (it held 1 row)']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 6]] },
+			{ label: 'groups', role: 'grp', values: [[2, 1], [3, 2], [4, 3]] },
+			{ label: 'result', role: 'out', values: [[5, 3]] },
+			{ label: 'after HAVING', role: 'flt', values: [[6, 2]] },
+		],
 	});
 	a.text(10, 14, 'Rows → buckets → one row each', 'f11 b');
 

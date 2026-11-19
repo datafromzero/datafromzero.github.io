@@ -2,7 +2,9 @@
 // input rows, GROUP BY shades them by store, they gather into one bucket per store, each bucket collapses to one row with
 // COUNT(*), HAVING drops the small group. Parts only fade in at their own slot, so text never overlaps at any moment.
 // Checked with DuckDB 2.0.0: SELECT store_id, COUNT(*) FROM orders WHERE order_id BETWEEN 1719 AND 1728 GROUP BY store_id
-// gives store 2: 5, store 1: 3, store 3: 2.
+// gives store 2: 5, store 1: 3, store 3: 2; with HAVING COUNT(*) >= 3 it gives stores 2 and 1 (3 groups, 2 after HAVING).
+// Each step also sets live counters (rows 10, groups 3, after HAVING 2), a Key idea and What changed (D41); a count appears at the
+// step that shows it, so step 1 gives nothing of the Predict away.
 import { anim, tint, edge } from '../lib/step-animation.mjs';
 
 // order_id, store_id in the order they were placed
@@ -27,23 +29,40 @@ export default function make({ id = 'gbh' } = {}) {
 				clause: 'FROM',
 				text: 'Ten orders from the sample, in the order they were placed. Each row has an order_id and a store_id.',
 				predict: 'GROUP BY store_id will make one group per store. How many groups will there be, and how many rows will go into each?',
+				counts: [{ label: 'rows', value: 10 }],
+				key: 'Every query starts from a pile of rows, and each clause works on what the one before left.',
+				changes: [['+', '10 rows from orders']],
 			},
 			{
 				role: 'grp',
 				clause: 'GROUP BY',
 				text: 'GROUP BY store_id gives every row the shade of its store. Rows with the same store_id belong to the same group.',
+				counts: [{ label: 'groups', value: 3 }],
+				key: 'Rows with the same value in the GROUP BY column belong to one group.',
+				changes: [['~', 'rows shaded by store_id'], ['+', '3 groups']],
 			},
-			{ role: 'grp', clause: 'GROUP BY', text: 'The rows gather into one bucket per store, in the order they were placed.' },
+			{
+				role: 'grp',
+				clause: 'GROUP BY',
+				text: 'The rows gather into one bucket per store, in the order they were placed.',
+				key: 'Grouping drops no rows; it only sorts them into buckets.',
+				changes: [['~', '10 rows regrouped into 3 buckets']],
+			},
 			{
 				role: 'out',
 				clause: 'COUNT(*)',
 				text: 'Each bucket collapses to one result row, and COUNT(*) is the number of rows the bucket held.',
 				predict: 'HAVING COUNT(*) >= 3 will test each of these rows. Which ones will it keep?',
+				key: 'An aggregate turns each group into one number, so the result has one row per group.',
+				changes: [['−', '10 rows folded into 3'], ['+', 'column COUNT(*)']],
 			},
 			{
 				role: 'flt',
 				clause: 'HAVING',
 				text: "HAVING COUNT(*) >= 3 keeps a row only if its group has at least 3 rows; a row that fails is dropped (dimmed). Compare it with your prediction. This is a ten-order sample; the lesson's query uses 500 on the full table.",
+				counts: [{ label: 'after HAVING', value: 2 }],
+				key: 'WHERE filters rows before grouping; HAVING filters whole groups after it.',
+				changes: [['−', '1 group dropped (store 3)']],
 			},
 		],
 	});

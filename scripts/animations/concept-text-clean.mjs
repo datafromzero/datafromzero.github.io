@@ -4,6 +4,7 @@
 // Each step the chip leaves behind a dimmed copy of the text it had, so the whole chain shows at the end.
 // Facts (DuckDB 2.0.0, concept2/facts.out): TRIM('  Iced  Tea ') = 'Iced  Tea' (only the ends), REPLACE(…, '  ', ' ') = 'Iced Tea',
 // LOWER(…) = 'iced tea'.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const T = ['··Iced··Tea·', 'Iced··Tea', 'Iced·Tea', 'iced·tea'];
@@ -19,7 +20,17 @@ export default function make({ id = 'tc' } = {}) {
 		desc:
 			'A chip holds the messy text with a middle dot for every space: two spaces, Iced, two spaces, Tea, one space. It slides down to TRIM, which cuts the spaces at both ends; down to REPLACE, which turns the double space in the middle into one; and down to LOWER, which makes every letter small. The text ends as iced, one space, tea. Each step leaves a dimmed copy of the text it had.',
 		caption: 'Clean text in small steps, one function each: TRIM removes the spaces at the ends, REPLACE fixes the middle, LOWER makes the letters the same case.',
-		phases: [[1, 'Messy text, · is a space'], [2, 'TRIM cuts the spaces at the ends'], [4, 'REPLACE turns two spaces into one'], [6, 'LOWER makes small letters']],
+		phases: [
+			[1, 'Messy text, · is a space', { role: 'src', key: 'Real text is often messy: extra spaces and mixed capitals make equal values look different.', changes: [['+', 'raw text: 12 characters']] }],
+			[2, 'TRIM cuts the spaces at the ends', { role: 'out', key: 'TRIM removes spaces only at the two ends, not in the middle.', changes: [['−', '3 spaces cut from the ends']] }],
+			[4, 'REPLACE turns two spaces into one', { role: 'out', key: 'REPLACE swaps one piece of text for another: here two spaces become one.', changes: [['−', '1 space less: 8 characters']] }],
+			[6, 'LOWER makes small letters', { role: 'out', key: 'LOWER changes every letter to a small letter, so Iced and iced match.', changes: [['~', 'I and T become i and t']] }],
+		],
+		counters: [
+			{ label: 'spaces', role: 'src', values: [[1, 5], [3, 2], [5, 1]] },
+			{ label: 'length', role: 'out', values: [[1, 12], [3, 9], [5, 8], [7, 8]] },
+			{ label: 'capitals', role: 'win', values: [[1, 2], [7, 0]] },
+		],
 	});
 	a.text(10, 14, 'A chain of small clean-ups', 'f11 b');
 	T.forEach((_, i) => a.rect(10, Y(i), 100, 26, 'bx dsh', undefined, 6));

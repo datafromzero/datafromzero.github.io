@@ -2,6 +2,7 @@
 // 1 a table of four rows; 2 the question box lights up; 3 copies of the rows slide into the box (the table itself stays);
 // 4 two rows come out inside the box; 5 they slide out into a new, smaller table; 6 to 8 hold with the row counts.
 // Facts: a SELECT never changes the table it reads (DuckDB 2.0.0, concept2/facts2.out: SELECT x FROM t WHERE x > 5 returns 8 and 9, and the table still has all four rows afterwards).
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 export default function make({ id = 'cq' } = {}) {
@@ -13,7 +14,18 @@ export default function make({ id = 'cq' } = {}) {
 		desc:
 			'A table of four rows, Row 1 to Row 4, goes towards a box called your query. Copies of the rows slide into the box; the table itself stays. Two rows, Row 2 and Row 4, come out and slide into a new table on the right. The first table has 4 rows, the new one has 2 rows.',
 		caption: 'A query is a question you ask a table. The table stays as it was; the answer comes back as a new table, often smaller.',
-		phases: [[1, 'A table of four rows'], [2, 'You ask a question'], [3, 'Its rows go through the query'], [4, 'Two rows come out'], [5, 'They become a new, smaller table']],
+		phases: [
+			[1, 'A table of four rows', { role: 'src', key: 'A table stores rows. A query asks a question about them.', changes: [['+', 'table: 4 rows']] }],
+			[2, 'You ask a question', { role: 'out', key: 'The query is the question: it says which rows and columns you want back.', changes: [['+', 'your query']] }],
+			[3, 'Its rows go through the query', { role: 'mat', key: 'The query reads copies of the rows; the table itself is not touched.', changes: [['~', '4 rows read'], ['+', 'copies, not the table']] }],
+			[4, 'Two rows come out', { role: 'out', key: 'Only the rows that answer the question come out.', changes: [['−', '2 of 4 rows left behind'], ['+', '2 rows in the answer']] }],
+			[5, 'They become a new, smaller table', { role: 'out', key: 'The answer is a new, smaller table. The first table still has all 4 rows.', changes: [['+', 'new table: 2 rows']] }],
+		],
+		counters: [
+			{ label: 'table rows', role: 'src', values: [[1, 4], [5, 4]] },
+			{ label: 'rows read', role: 'mat', values: [[3, 4]] },
+			{ label: 'rows returned', role: 'out', values: [[4, 2]] },
+		],
 	});
 	a.text(10, 14, 'Ask a question, get a table back', 'f11 b');
 	a.badge(10, 38, '4 rows', 'src');

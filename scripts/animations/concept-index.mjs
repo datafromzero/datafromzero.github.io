@@ -5,6 +5,7 @@
 // Facts: an index lets the engine find matching rows without reading every row, but the engine decides whether using it pays off
 // (DuckDB's docs give a selectivity guideline, not a rule, and the lesson run showed the engine using an index on a 355-row filter; see
 // MISTAKES), so the picture says "can jump", not "always jumps".
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const LABEL = ['r1', 'r2 K', 'r3', 'r4', 'r5 K', 'r6'];
@@ -20,7 +21,17 @@ export default function make({ id = 'ix' } = {}) {
 		desc:
 			'Six rows r1 to r6; r2 and r5 hold the key K. Top: a full scan moves a frame over the rows one at a time, and each row it has read turns darker, until all six are read. Bottom: an index says K is in r2 and r5, arrows jump straight to those two rows, and only they are read, before the scan above has finished.',
 		caption: 'A full scan reads every row to find the matches. An index is a lookup list that can jump straight to them. The engine decides when using an index is worth it.',
-		phases: [[1, 'Scan starts at row 1; index knows K'], [2, 'Index jumps to r2 and r5; scan reads on'], [3, 'Index done: 2 rows read; scan reads on'], [7, 'Scan done: 6 rows read']],
+		phases: [
+			[1, 'Scan starts at row 1; index knows K', { role: 'src', key: 'To find K, the engine can read every row (a scan) or look it up in an index.', changes: [['+', '6 rows, 2 of them hold K']] }],
+			[2, 'Index jumps to r2 and r5; scan reads on', { role: 'mat', key: 'An index is a lookup list that says where K is, so the engine can jump straight to those rows.', changes: [['+', 'jumps to r2 and r5']] }],
+			[3, 'Index done: 2 rows read; scan reads on', { role: 'out', key: 'Through the index only the matching rows are read, while the scan keeps reading row by row.', changes: [['~', 'index: 2 rows read'], ['~', 'scan: still reading']] }],
+			[7, 'Scan done: 6 rows read', { role: 'flt', key: 'A full scan finishes only after every row is read. The engine decides when an index pays off.', changes: [['~', 'scan: 6 rows read']] }],
+		],
+		counters: [
+			{ label: 'rows with K', role: 'src', values: [[1, 2]] },
+			{ label: 'scan reads', role: 'flt', values: [[1, 1], [3, 2], [4, 3], [5, 4], [6, 5], [7, 6]] },
+			{ label: 'index reads', role: 'mat', values: [[1, 0], [3, 2]] },
+		],
 	});
 	a.text(10, 14, 'Full scan: read every row', 'f11 b');
 	LABEL.forEach((t, i) => {

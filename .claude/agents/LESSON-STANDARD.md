@@ -178,6 +178,38 @@ and never copy its layout, colors, characters, captions or sample tables.
   Groups, partitions or keys inside one role are shade steps `k1` to `k4` of that hue (three groups use `k1`, `k2`, `k4`),
   always next to a label (store_id, product_id). Dimmed means dropped and also gets a "dropped" label.
 
+### Live counts and Key idea (SPEC D41)
+
+Optional, in both figure types; a spec without them renders as before. Every concept animation and the three data steppers carry them;
+only `concept-cte-kinds` has a Key idea without a strip (it shows three structures, not rows to count). A new figure adds the strip when
+each step changes something countable (rows, groups, pairs, rounds, shards, characters), and leaves it out, saying so in the spec
+comment, when counting would add nothing.
+
+- **Count strip** (up to 5 counters above the picture): a stepper step lists the counters it sets, `counts: [{ label, value, role? }]`
+  (`role` defaults to the step's clause color); a concept animation gives `counters: [{ label, role, values: [[phase, 'text'], ...] }]`.
+  A counter shows "—" until its first step; a counter set at the current step is lit (a step of several phases keeps it lit to its end).
+  Labels are short (`rows`, `groups`, `after HAVING`, `FROM`, `WHERE`) and values are the rows or items drawn in the picture at that step;
+  with 4 or 5 counters keep every label word under about 8 letters (the strip is 64 px per counter at 390 px). A value may be a short
+  text (`1 of 3`, `3 × 3`, `n1 − n2`) when the figure is abstract. Align the counter phases with the step boundaries of `phases`: a counter
+  that ticks in the phase after its step's last phase shows at the next step, not at the step the caption describes.
+  Recompute every number in a data stepper with DuckDB 2.0.0 and note the query in the spec comment.
+- **Key idea and What changed** (under the controls, current step only): `key: 'one plain rule'` (a sentence of at most 110 characters, the
+  takeaway of that step, not a restated caption) and `changes: [['+', 'column orders'], ['−', '1 row dropped'], ['~', 'rows reordered']]`
+  (at most 3 chips of a few words). A concept animation gives them as a third item of each `phases` entry, with the step's `role`:
+  `[2, 'caption', { role: 'grp', key: '...', changes: [...] }]`. Once one step has a key idea, every step has one.
+- **No spoilers:** a count, key idea or change belongs to the step that shows it; step 1 gives inputs only, and no key idea names the
+  result a "Predict:" prompt asks for before the step that shows it.
+- **Print and reduced motion:** print shows the final counts and, in a block before the caption list, every step's Key idea and What
+  changed, numbered `Step 1 · key idea`, `Step 2 · key idea` by a CSS counter; reduced
+  motion shows step 1 and the buttons switch instantly. Check the step frames, the 50 ms samples of a loop (never two counter states or two
+  key ideas at once), no scroll on tap, and 390 and 1280 px in light and dark.
+- **Size:** the generator writes each counter label once and swaps only the value; the words "Key idea", "Step n" and the spoken
+  Added, Removed and Changed come from the stylesheet. Expect about 0.3 to 0.4 KB gzipped per figure for a strip and a panel.
+- **Claims:** every sentence in a key idea or chip is checked on DuckDB 2.0.0 or against the spec's evidence comment before it stays, and
+  never states what a "Predict:" or "how many" prompt after the figure asks for (for example CASE without ELSE).
+- After a change to a generator or spec, re-paste both kinds with `node scripts/refresh-concept-figures.mjs` (`--check` tests that the
+  lessons are current; it also re-pastes the data steppers, found by the name of their radios).
+
 ## Concept animations (SPEC D41)
 
 The data steppers above serve the exercises and the worked example. A **concept animation** explains the idea itself:

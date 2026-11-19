@@ -1,7 +1,9 @@
 // S14 window functions: stores 1 and 2, January 1 to 3 of cafe-sales v1 (the lesson's own day-by-store rows), four steps
 // the learner advances one at a time: six rows, GROUP BY collapses them to two, PARTITION BY shades the six, the window
 // value fills in beside each. Parts only fade in at their own slot, so text never overlaps at any moment.
-// Checked with DuckDB 2.0.0 (completed orders per store and day): store 1: 2, 3, 3 (total 8); store 2: 2, 4, 3 (total 9).
+// Checked with DuckDB 2.0.0 (completed orders per store and day): store 1: 2, 3, 3 (total 8); store 2: 2, 4, 3 (total 9);
+// GROUP BY store_id gives 2 rows, SUM(orders) OVER (PARTITION BY store_id) keeps all 6. Live counters (rows after each clause), a Key
+// idea and What changed per step (D41); each shows only at its own step.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const ROWS = [
@@ -24,22 +26,34 @@ export default function make({ id = 'win' } = {}) {
 				clause: 'FROM',
 				text: 'Six daily rows: stores 1 and 2, January 1 to 3. Each row is one store on one day.',
 				predict: 'GROUP BY store_id would collapse them. How many rows would come out?',
+				counts: [{ label: 'FROM', value: 6 }],
+				key: 'A table is a pile of rows; nothing is combined or removed yet.',
+				changes: [['+', '6 rows: store_id, day, orders']],
 			},
 			{
 				role: 'grp',
 				clause: 'GROUP BY',
 				text: 'GROUP BY store_id collapses the rows that share a store_id into a single row. The days are gone: only one total per store is left.',
+				counts: [{ label: 'GROUP BY', value: 2 }],
+				key: 'GROUP BY collapses rows: you get one row per group and lose the detail.',
+				changes: [['−', '4 rows folded away'], ['−', 'column day'], ['+', 'column SUM(orders)']],
 			},
 			{
 				role: 'win',
 				clause: 'PARTITION BY',
 				text: 'A window function keeps all six rows. PARTITION BY store_id only marks which rows belong together: one partition per store, shaded.',
 				predict: 'SUM(orders) OVER (PARTITION BY store_id) will add one more column. What will it show on each row of store 1?',
+				counts: [{ label: 'PARTITION', value: 6 }],
+				key: 'PARTITION BY only marks which rows belong together; it never removes a row.',
+				changes: [['~', 'rows shaded into 2 partitions']],
 			},
 			{
 				role: 'win',
 				clause: 'SUM OVER',
 				text: "SUM(orders) OVER (PARTITION BY store_id) writes each partition's total on every one of its rows, so the number of rows does not change. Compare it with your prediction.",
+				counts: [{ label: 'OVER', value: 6 }],
+				key: 'A window function adds a column and keeps every row.',
+				changes: [['+', 'column: the store total on each row'], ['~', 'all 6 rows kept']],
 			},
 		],
 	});

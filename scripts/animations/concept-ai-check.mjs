@@ -3,6 +3,7 @@
 // 4 the draft is not trusted ("fix it"); 5 the draft slides down to try again; 6 and 7 both checks say ok; 8 trusted.
 // Facts: a process, not engine output. Checks named here are the ones the lesson teaches: a row count that makes sense for the question
 // (a join that changes the count is the usual cause of a wrong total, see the fan-out figure) and a total you can confirm another way.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const LY = [64, 134];
@@ -16,7 +17,19 @@ export default function make({ id = 'ai' } = {}) {
 		desc:
 			'A draft query written by an AI sits on the left. Two checks follow: row count and known total. The first draft passes the row count check but its total differs, so it is marked fix it and slides down to try again. The second draft passes both checks and is marked trusted.',
 		caption: 'Treat an AI-written query as a draft. Check the row count and a total you already know before you trust the result.',
-		phases: [[1, 'The AI writes a draft query'], [2, 'Check the row count: ok'], [3, 'Check a known total: it differs'], [5, 'Fix the query and run it again'], [6, 'Both checks pass'], [8, 'Now it is trusted']],
+		phases: [
+			[1, 'The AI writes a draft query', { role: 'src', key: 'An AI-written query is only a draft: it can run without an error and still be wrong.', changes: [['+', 'draft 1']] }],
+			[2, 'Check the row count: ok', { role: 'out', key: 'Check 1: does the number of rows make sense for the question?', changes: [['+', 'row count: ok']] }],
+			[3, 'Check a known total: it differs', { role: 'flt', key: 'Check 2 compares a total you know another way. A difference means the draft is wrong.', changes: [['+', 'known total: differs'], ['+', 'draft 1 marked “fix it”']] }],
+			[5, 'Fix the query and run it again', { role: 'src', key: 'Fix the query, then run every check again: a fix can break something else.', changes: [['~', 'draft 1 becomes draft 2']] }],
+			[6, 'Both checks pass', { role: 'out', key: 'Check the new draft the same way. This time both checks agree.', changes: [['+', 'row count: ok'], ['+', 'known total: ok']] }],
+			[8, 'Now it is trusted', { role: 'out', key: 'Trust a result only after every check passes.', changes: [['+', 'draft 2 is trusted']] }],
+		],
+		counters: [
+			{ label: 'draft', role: 'src', values: [[1, 1], [5, 2]] },
+			{ label: 'checks passed', role: 'out', values: [[2, '1 of 2'], [3, '1 of 2'], [6, '1 of 2'], [7, '2 of 2']] },
+			{ label: 'trusted?', role: 'out', values: [[1, 'no'], [8, 'yes']] },
+		],
 	});
 	a.text(10, 14, 'A draft is not an answer until it is checked', 'f11 b');
 	a.text(135, 52, 'row count', 'f10 b mo', undefined, 'm');

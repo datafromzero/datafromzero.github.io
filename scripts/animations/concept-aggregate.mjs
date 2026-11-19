@@ -2,6 +2,7 @@
 // 8 s loop of 8 phases: 1 four rows with a value each; 2 to 5 one row per phase slides into the box (and is gone), COUNT ticks up
 // by one and SUM adds that row's value; 6 to 8 hold: COUNT is 4, SUM is the total of x1 to x4, and a ring marks the two answers.
 // Facts (DuckDB 2.0.0, concept2/facts.out): over 10, NULL, 30 COUNT(*) is 3 and SUM is 40; an aggregate over many rows returns one row.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const Y = (i) => 70 + 30 * i;
@@ -16,7 +17,16 @@ export default function make({ id = 'ag' } = {}) {
 		desc:
 			'Four rows, Row 1 to Row 4, each hold a value x1 to x4. One after another they slide into a box and are gone. Two counters grow with each row: COUNT goes 1, 2, 3, 4, and SUM goes x1, then x1 plus x2, then x1 plus x2 plus x3, then x1 plus x2 plus x3 plus x4. In the end the four rows have become two numbers.',
 		caption: 'An aggregate such as COUNT or SUM reads many rows and gives back one number. The rows themselves are not in the answer.',
-		phases: [[1, 'Four rows, each with a value'], [2, 'Rows go in one at a time'], [6, 'One number each: COUNT and SUM']],
+		phases: [
+			[1, 'Four rows, each with a value', { role: 'src', key: 'A table has many rows; an aggregate will read all of them.', changes: [['+', '4 rows, each with a value']] }],
+			[2, 'Rows go in one at a time', { role: 'out', key: 'COUNT adds 1 for every row it reads, and SUM adds that row’s value.', changes: [['−', 'rows go into the box one by one'], ['~', 'COUNT and SUM grow with each row']] }],
+			[6, 'One number each: COUNT and SUM', { role: 'out', key: 'Without GROUP BY, all the rows become one row: here it holds a COUNT and a SUM.', changes: [['−', '4 rows folded into 1 row'], ['+', '2 numbers: COUNT and SUM']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 4]] },
+			{ label: 'COUNT', role: 'out', values: [[2, 1], [3, 2], [4, 3], [5, 4]] },
+			{ label: 'result rows', role: 'out', values: [[6, 1]] },
+		],
 	});
 	a.text(10, 14, 'Many rows go in, one number comes out', 'f11 b');
 	a.box(110, 44, 120, 148, { role: 'out', title: 'aggregate' });

@@ -4,6 +4,7 @@
 // 1 FROM/JOIN/ON; 2 WHERE (two rows slide out, the rest close the gaps); 3 GROUP BY (the kept rows take their group's shade and a
 // one-row-per-group table appears); 4 HAVING (group A slides out, the others move up); 5 SELECT (the output is chosen); 6 ORDER BY
 // (a sort number appears); 7 LIMIT (the group that sorts second slides out); 8 hold.
+// Live counters and Key idea (D41): counts are the rows drawn in the picture at that phase; each appears with its phase.
 import { anim, tint, edge } from '../lib/step-animation.mjs';
 
 const CLAUSES = [
@@ -31,7 +32,20 @@ export default function make({ id = 'lo' } = {}) {
 		desc:
 			'Left, the clauses in written order: SELECT, FROM/JOIN/ON, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, each with the number of the step it runs in: SELECT 5, FROM/JOIN/ON 1, WHERE 2, GROUP BY 3, HAVING 4, ORDER BY 6, LIMIT 7. Right: tables t1 and t2 are combined into one table of seven rows. WHERE drops two rows, which slide out. GROUP BY gives the rest their group shade and makes one row per group: A, B and C. HAVING drops group A. SELECT chooses the output, ORDER BY gives the groups a sort number, and LIMIT drops the group that sorts second.',
 		caption: 'The list is the order you write the clauses; the number is the order they run. Each clause works on the table the one before it left.',
-		phases: [[1, 'FROM and JOIN build one table'], [2, 'WHERE drops rows'], [3, 'GROUP BY makes groups; HAVING drops one'], [5, 'SELECT picks the output'], [6, 'ORDER BY sorts; LIMIT cuts']],
+		phases: [
+			[1, 'FROM and JOIN build one table', { role: 'src', key: 'FROM and JOIN run first: they build the table everything else works on.', changes: [['+', 't1 and t2 combined: 7 rows']] }],
+			[2, 'WHERE drops rows', { role: 'flt', key: 'WHERE runs before grouping, so it only sees single rows.', changes: [['−', '2 rows dropped'], ['~', '5 rows left']] }],
+			[3, 'GROUP BY makes groups; HAVING drops one', { role: 'grp', key: 'GROUP BY builds the groups first; only then can HAVING drop a whole group.', changes: [['~', '5 rows became 3 groups'], ['−', 'group A dropped by HAVING']] }],
+			[5, 'SELECT picks the output', { role: 'out', key: 'SELECT is written first but runs late: it only picks what to show.', changes: [['+', 'the output columns chosen']] }],
+			[6, 'ORDER BY sorts; LIMIT cuts', { role: 'ord', key: 'ORDER BY sorts what is left, and LIMIT cuts the sorted result.', changes: [['~', 'groups sorted'], ['−', 'LIMIT drops the group that sorts second']] }],
+		],
+		counters: [
+			{ label: 'FROM', role: 'src', values: [[1, 7]] },
+			{ label: 'WHERE', role: 'flt', values: [[2, 5]] },
+			{ label: 'GROUP BY', role: 'grp', values: [[3, 3]] },
+			{ label: 'HAVING', role: 'flt', values: [[4, 2]] },
+			{ label: 'LIMIT', role: 'ord', values: [[7, 1]] },
+		],
 	});
 	a.text(10, 14, 'Written order → run order', 'f11 b');
 
