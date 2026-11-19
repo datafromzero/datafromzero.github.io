@@ -191,6 +191,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- Print: the Open in Colab and Make a copy buttons print as plain black text with their address, not as a black box.
 - Concept animations: the step buttons 1 to N have their bottom edge again (it was missing on every lesson).
 - SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
   so the plan boxes line up.
