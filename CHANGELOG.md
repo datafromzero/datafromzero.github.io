@@ -7,6 +7,15 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Concept animations, 29 more (D41 amended, owner decisions): one abstract, looping schematic per SQL idea, each with a plain-words
+  metaphor, a changing phase label, a Pause button and its own spec `scripts/animations/concept-*.mjs` (`node scripts/make-animation.mjs
+  concept-<key>`): query, select-order-limit, where, null, expression, case, aggregate, conditional-agg, text-clean, date truncation,
+  rank-ties, sliding-window, removing duplicates, keys, fanout, self-join, subquery, set-ops, funnel, cohort, recursive, view, star, ai-check,
+  constraints, transaction, normalize, index and shard. Facts shown were checked in DuckDB 2.0.0 (RANK skips after ties, a CHECK that
+  is NULL passes, ROLLBACK works only inside BEGIN, and so on). Every concept animation, the 10 earlier ones too, now also has step
+  buttons: Back, Next and 1 to 8 (CSS only) stop the loop and show each phase as a still frame, with the eight phase captions listed
+  under the figure and "Play" to resume. Reduced motion shows phase 1 and the buttons switch instantly; print shows the final frame and
+  the captions.
 - SQL runner, next step (D42 amended, owner decisions): the block is now two separate boxes, the editor and the output, side by
   side where there is room and stacked on phones, with an empty state in the output before the first run. The editor is CodeMirror
   with SQL colors; a Tables button lists the five cafe-sales tables with columns, types and row counts and inserts or previews a

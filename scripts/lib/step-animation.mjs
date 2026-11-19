@@ -24,7 +24,9 @@
  *   move({ dx, dy, at, half, fx }, body)  `body()` slides by (dx, dy) px (multiples of 10) during phase `at`, ease-in-out;
  *                               half 'a' or 'b' uses only the first or the second half of the phase (one part leaves, then another follows)
  *   tags(x, y, [[phase, text], ...])  a small label that changes with the phase (windows touch, never overlap)
- * `anim({ loop: { cycle }, caption })` makes a concept animation instead of a stepper (see `loopFx` below).
+ * `anim({ loop: { cycle }, caption, phases })` makes a concept animation instead of a stepper (see `loopFx` below). It also gets Back, Next and
+ * step buttons 1 to 8 (CSS only, see step-animation.css): `phases` is an optional array of 8 short captions, one per phase; by default they are
+ * the `tags` labels held until the next label.
  *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
@@ -69,7 +71,9 @@ const loopFx = (id) => (fx) => {
 	return c;
 };
 
-export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
+const escA = (s) => esc(s).replace(/"/g, '&quot;');
+
+export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases }) {
 	if (w > 360) throw new Error(`${id}: viewBox width ${w} is over 360`);
 	if (loop && (!Number.isInteger(loop.cycle) || loop.cycle < 4 || loop.cycle > 8)) throw new Error(`${id}: loop.cycle is 4 to 8 seconds`);
 	if (loop && !caption) throw new Error(`${id}: a concept animation needs a caption`);
@@ -81,6 +85,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
 		if (!s.clause || !s.text) throw new Error(`${id}: step ${i + 1} needs a clause and a text`);
 	});
 	const stack = [[]];
+	const tagLists = []; // every `tags` call, for the phase captions of a concept animation
 
 	/** Classes for an effect. */
 	const stepFx = (fx) => {
@@ -101,6 +106,24 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
 		return s ? ` class="${s}"` : '';
 	};
 	const push = (s) => stack[stack.length - 1].push(s);
+
+	/** One caption per phase of a concept animation: `phases` if given, else the phase labels (`tags`) without their "n ·" number. */
+	const phaseCaptions = () => {
+		if (phases) {
+			if (phases.length !== PHASES) throw new Error(`${id}: phases needs ${PHASES} captions`);
+			return phases;
+		}
+		return Array.from({ length: PHASES }, (_, i) => {
+			const seen = [];
+			for (const list of tagLists) {
+				const hit = list.filter(([ph]) => ph <= i + 1).pop();
+				const t = hit && String(hit[1]).replace(/^\d+ · /, '');
+				if (t && !seen.includes(t)) seen.push(t);
+			}
+			const c = seen.join('; ') || 'Hold';
+			return c[0].toUpperCase() + c.slice(1);
+		});
+	};
 
 	const api = {
 		/** A group; children are drawn by `body()`. With no effect it is a plain `<g>`. */
@@ -153,6 +176,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
 		},
 		/** A small label that changes with the phase: [[phase, text], ...]; each lasts until the next one, the last stays. */
 		tags(x, y, list, c = 'f10 b', align = 's') {
+			tagLists.push(list);
 			list.forEach(([phase, text], i) => api.text(x, y, text, c, { in: phase, ...(list[i + 1] ? { hide: list[i + 1][0] } : {}) }, align));
 		},
 		/** A dashed slot where a row would be but does not exist (the start of a window, the row above the first). */
@@ -264,12 +288,25 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption }) {
 		/** Build the figure markup (no blank lines: MDX would end the HTML block at one). */
 		build() {
 			if (loop) {
-				// the checkbox comes first in the markup (the state selector needs it before the svg) and is reordered by CSS
+				// the pause checkbox and the radios (r0 = auto, r1..r8 = step k) come first in the markup (the state selectors need them
+				// before everything they style) and sit in the flow right above the controls (CSS order)
+				const caps = phaseCaptions();
+				const radios = [`<input class="sa-r r0" type="radio" name="${id}" id="${id}-r0" aria-label="Play automatically" checked />`]
+					.concat(caps.map((c, i) => `<input class="sa-r r${i + 1}" type="radio" name="${id}" id="${id}-r${i + 1}" aria-label="Step ${i + 1} of ${PHASES}: ${escA(c)}" />`))
+					.join('\n');
 				const svg =
 					`<svg class="sa-svg ca-svg" viewBox="0 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
 					`<title id="${id}-t">${esc(title)}</title>\n<desc id="${id}-d">${esc(desc)}</desc>\n${stack[0].join('\n')}\n</svg>`;
-				const btn = `<div class="ca-ctl">\n<label class="ca-btn" for="${id}-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>\n</div>`;
-				const markup = `<figure class="ca not-content t${loop.cycle}">\n<input class="ca-pp" type="checkbox" id="${id}-pp" aria-label="Pause the animation" />\n${svg}\n${btn}\n<p class="ca-cap">${esc(caption)}</p>\n</figure>`;
+				const lab = (cls, target, inner) => `<label class="${cls}" for="${id}-${target}">${inner}</label>`;
+				const range = Array.from({ length: PHASES + 1 }, (_, k) => k);
+				const bks = range.map((k) => (k < 2 ? `<span class="sa-nav bk bk${k}" aria-hidden="true"></span>` : lab(`sa-nav bk bk${k}`, `r${k - 1}`, '<span class="sr">Back</span>')));
+				const nxs = range.map((k) => (k === PHASES ? lab(`sa-nav nx rs nx${k}`, 'r1', '<span class="sr">Start over</span>') : lab(`sa-nav nx nx${k}`, `r${k + 1}`, '<span class="sr">Next</span>')));
+				const sbs = range.slice(1).map((k) => lab(`sa-sb sb${k}`, `r${k}`, String(k)));
+				const btn =
+					`<div class="sa-ctl">\n${lab('ca-btn', 'pp', '<span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span>')}\n` +
+					`${lab('ca-btn ca-au', 'r0', '<span aria-hidden="true">&#9654;</span> Play')}\n${bks.join('\n')}\n${nxs.join('\n')}\n<span class="sa-sbs">${sbs.join('')}</span>\n</div>`;
+				const lis = caps.map((c) => `<li>${esc(c)}</li>`).join('\n');
+				const markup = `<figure class="ca sa not-content t${loop.cycle}">\n<input class="ca-pp" type="checkbox" id="${id}-pp" aria-label="Pause the animation" />\n${radios}\n${svg}\n${btn}\n<p class="ca-cap">${esc(caption)}</p>\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
 				return { markup, steps: 0 };
 			}
 			const range = Array.from({ length: N }, (_, i) => i + 1);

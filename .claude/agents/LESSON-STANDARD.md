@@ -197,15 +197,25 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   `{ in: k, hide: m }` (appears at phase k, gone from phase m; default: stays to the end), an arrow or line `{ in: k, draw: true }`.
   Parts that are always there have no effect. Draw with `chip`, `move`, `tags`, `row`/`grid`, `box`, `badge`, `arrow`, `venn`, `ghost`. Ready animations (paste with the command
   after the name): `concept-group-by` (S8), `concept-aggregate-window` (S14), `concept-cte-kinds`, `concept-join:inner|left|right|full|cross`,
-  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`.
+  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`. Also ready (one per key, marker `{/* CONCEPT: <key> */}`): `concept-query`, `-select-order-limit`, `-where`, `-null`, `-expression`, `-case`, `-aggregate`, `-conditional-agg`, `-text-clean`, `-date-trunc`, `-rank-ties`, `-sliding-window`, `-dedup`, `-keys`, `-fanout`, `-self-join`, `-subquery`, `-set-ops`, `-funnel`, `-cohort`, `-recursive`, `-view`, `-star`, `-ai-check`, `-constraints`, `-transaction`, `-normalize`, `-index`, `-shard` (each with `concept-` in front). The facts each one shows are in its spec's header comment with the DuckDB run that checked them.
   `node scripts/make-animation.mjs concept-join:left --stats` prints the markup for the lesson (variants after a colon).
-  About 5 KB of markup per animation (two of them are about 7 KB); the CSS is shared.
-- **Pause:** every concept animation has the native-checkbox Pause / Play button (44 px, WCAG 2.2.2). Never remove it.
-- **Static view:** reduced motion and print show the final state (everything that stays to the end, arrows drawn) and no
-  button, so design the last phase as the picture you would print. Hold it for about a second: leave the last phase idle.
+  About 3 to 5 KB of animation markup (two are about 7 KB) plus about 3 KB of step controls per animation; the CSS is shared.
+- **Pause and steps:** autoplay is the default. Under the figure the learner has Pause / Play (a native checkbox, 44 px, WCAG 2.2.2),
+  Back, Next and one button per phase, "1 2 3 … 8" (a native radio group `[auto, 1..8]`, no JavaScript). Choosing a step stops the loop and
+  shows that phase's frame, finished and still, with its phase label; Back and Next move through the phases, arrow keys work, the focus ring
+  is visible, and "▶ Play" returns to autoplay. A numbered list of the eight phase captions sits under the figure with the current one
+  marked, and each radio is labeled "Step k of 8: caption". Never remove any of it. Everything comes from the generator, so a spec only
+  supplies the phase labels.
+- **Phase captions:** one short plain-words caption per phase (8). By default they are the `tags` labels (their "n ·" number removed, the
+  label held until the next one); a spec whose tags skip phases passes `phases: [8 captions]` to `anim` instead. Caption what you see in
+  that phase ("Row 2 pairs with its boss, Row 1"), not the idea of the whole figure.
+- **Static view:** print shows the final state (everything that stays to the end, arrows drawn), all captions and no controls, so design
+  the last phase as the picture you would print. Reduced motion shows phase 1, still, and the step buttons switch frames instantly (no
+  motion at all). Hold the last phase for about a second: leave it idle.
 - **No overlap:** text never over text at any moment. A moving part never crosses a label: put the label where nothing passes, or show it after the part has arrived. Two labels that share a slot get windows that touch without
-  overlapping (`{ in: 5, hide: 6 }` then `{ in: 6, hide: 7 }`). Check the frames every 0.25 s in Playwright, and sample
-  the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins).
+  overlapping (`{ in: 5, hide: 6 }` then `{ in: 6, hide: 7 }`). Check the frames every 0.1 s in Playwright (390 and 1280 px, light and dark), and sample
+  the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins). Then click every step button and
+  check that its frame equals the running loop paused at the end of the same phase.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
 ## Markup

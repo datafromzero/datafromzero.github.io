@@ -34,7 +34,10 @@ export default function make({ id = 'gb' } = {}) {
 		const y = SRC.y + SRC.pitch * i;
 		const dx = 130 + 70 * slot - SRC.x;
 		const dy = BUCKETS[k].top + 10 - y;
-		a.move({ dx, dy, at: AT[k], fx: { hide: 5 } }, () => a.chip(SRC.x, y, `Row ${i + 1} · ${k}`, { role: 'grp', level: SHADE[k] }));
+		const chip = () => a.chip(SRC.x, y, `Row ${i + 1} · ${k}`, { role: 'grp', level: SHADE[k] });
+		// the last row slides along its own line first and then up, so it never passes over the row above it
+		if (i === 5) a.move({ dx, at: AT[k], half: 'a', fx: { hide: 5 } }, () => a.move({ dy, at: AT[k], half: 'b' }, chip));
+		else a.move({ dx, dy, at: AT[k], fx: { hide: 5 } }, chip);
 	});
 	for (const [k, { top, n }] of Object.entries(BUCKETS)) {
 		a.chip(130, top + 10, n === 1 ? '1 row' : `${n} rows`, {
