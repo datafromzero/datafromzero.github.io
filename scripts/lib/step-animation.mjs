@@ -30,6 +30,17 @@
  * buttons 1..N, Back, Next and the numbered caption list under the figure (CSS only, see step-animation.css). Choosing step k shows the
  * settled frame at the end of the last phase of that step. Do not call `tags` for the phase label in a spec.
  *
+ * Live counts and key ideas (optional, both figure types; a spec without them renders exactly as before):
+ *   stepper:  a step may carry `counts: [{ label, value, role? }]` (the counters this step sets; `role` defaults to the step's),
+ *             `key: 'one short rule'` and `changes: [['+', 'column orders'], ['−', '1 row dropped'], ['~', 'rows reordered']]`.
+ *             A strip of labeled counters sits above the figure ("—" until its step; the counters set at the current step are lit in
+ *             their clause color); the current step's Key idea and What changed sit under the controls. CSS only (radios).
+ *   concept:  `anim({ counters: [{ label, role, values: [[phase, 'text'], ...] }] })` and a third item on each `phases` entry,
+ *             `[1, 'caption', { role, key, changes }]`. Counters and the Key idea panel follow the phases of the loop (same keyframes
+ *             as the picture, so a step button shows them at the end of its last phase); a counter set in a step stays lit to the end of it.
+ *   Nothing may spoil a Predict: a count, key idea or change belongs to the step that shows it; step 1 shows inputs only.
+ *   Print shows the final counter values and every step's Key idea and What changed in the caption list.
+ *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
 
@@ -75,7 +86,24 @@ const loopFx = (id) => (fx) => {
 
 const escA = (s) => esc(s).replace(/"/g, '&quot;');
 
-export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {} }) {
+const SIGNS = { '+': 'pl', '−': 'mi', '~': 'ch' };
+const SIGN_WORD = { '+': 'Added: ', '−': 'Removed: ', '~': 'Changed: ' };
+
+/** Normalizes `changes` to [[sign, text], ...] with a typographic minus; throws on an unknown sign. */
+const checkChanges = (id, where, changes = []) =>
+	changes.map(([sg, text]) => {
+		const sign = sg === '-' ? '−' : sg;
+		if (!SIGNS[sign] || typeof text !== 'string' || !text) throw new Error(`${id}: ${where} changes are [['+' | '−' | '~', 'text'], ...]`);
+		return [sign, text];
+	});
+
+/** The chips of "What changed"; `sr` adds the screen-reader words (the panel on screen; the print copy has the sign from CSS). */
+const chips = (changes, sr) =>
+	changes.length
+		? `<span class="sa-chs">${changes.map(([sg, t]) => `<span class="sa-ch ${SIGNS[sg]}">${sr ? `<span class="sr">${SIGN_WORD[sg]}</span>` : ''}${esc(t)}</span>`).join('')}</span>`
+		: '';
+
+export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters }) {
 	if (w > 360) throw new Error(`${id}: viewBox width ${w} is over 360`);
 	if (loop && (!Number.isInteger(loop.cycle) || loop.cycle < 4 || loop.cycle > 8)) throw new Error(`${id}: loop.cycle is 4 to 8 seconds`);
 	if (loop && !caption) throw new Error(`${id}: a concept animation needs a caption`);
@@ -93,6 +121,18 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 		if (!ROLES.includes(s.role)) throw new Error(`${id}: step ${i + 1} has an unknown role "${s.role}"`);
 		if (!s.clause || !s.text) throw new Error(`${id}: step ${i + 1} needs a clause and a text`);
 	});
+	// live counts, key ideas and changes (optional; all steps carry a key idea once one does)
+	const meta = loop ? (phases ?? []).map((p) => p[2]) : steps;
+	const hasNow = meta.some((m) => m?.key);
+	if (hasNow) {
+		meta.forEach((m, i) => {
+			if (!m?.key || typeof m.key !== 'string') throw new Error(`${id}: step ${i + 1} needs a key idea (every step has one once one does)`);
+			if (m.key.length > 110) throw new Error(`${id}: step ${i + 1} key idea is over 110 characters`);
+			m.changes = checkChanges(id, `step ${i + 1}`, m.changes);
+			if (m.changes.length > 3) throw new Error(`${id}: step ${i + 1} has more than 3 changes`);
+		});
+		if (loop) meta.forEach((m, i) => { if (!ROLES.includes(m.role)) throw new Error(`${id}: phases[${i}] third item needs a role`); });
+	}
 	const stack = [[]];
 
 	/** Classes for an effect. */
@@ -114,6 +154,65 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 		return s ? ` class="${s}"` : '';
 	};
 	const push = (s) => stack[stack.length - 1].push(s);
+
+	/** A counter: one <i> per state ({ value, hl, cls }), stacked in one cell by the stylesheet. */
+	const counterMarkup = (label, role, states) =>
+		`<span class="sa-n c-${role}">${states.map((st) => `<i${cls(st.cls, st.hl ? 'hl' : '')}><small>${esc(label)}</small><b>${esc(st.value)}</b></i>`).join('')}</span>`;
+	/** The Key idea line and What changed chips of one step (`sr`: the panel on screen; otherwise the print copy). */
+	const keyMarkup = (m, sr) => `<b>Key idea</b> ${esc(m.key)}${chips(m.changes, sr)}`;
+	/** Stepper counters: a step lists the counters it sets; "—" until a counter's first step; lit at the steps that set it. */
+	const stepperStrip = () => {
+		const list = [];
+		steps.forEach((st, i) =>
+			(st.counts ?? []).forEach((c) => {
+				if (!c.label || c.value === undefined) throw new Error(`${id}: step ${i + 1} counts are [{ label, value }]`);
+				const role = c.role ?? st.role;
+				if (!ROLES.includes(role)) throw new Error(`${id}: counter "${c.label}" has an unknown role "${role}"`);
+				let e = list.find((x) => x.label === c.label);
+				if (!e) list.push((e = { label: c.label, role, ev: new Map() }));
+				e.ev.set(i + 1, String(c.value));
+			}),
+		);
+		if (!list.length) return '';
+		if (list.length > 5) throw new Error(`${id}: at most 5 counters`);
+		const cells = list.map((e) => {
+			const states = [];
+			let value = '—';
+			for (let k = 1; k <= N; k++) {
+				if (e.ev.has(k)) value = e.ev.get(k);
+				const hl = e.ev.has(k);
+				const last = states[states.length - 1];
+				if (last && last.value === value && last.hl === hl) last.ks.push(k);
+				else states.push({ value, hl, ks: [k] });
+			}
+			return counterMarkup(e.label, e.role, states.map((st) => ({ ...st, cls: st.ks.map((k) => `v${k}`).join(' ') })));
+		});
+		return `<div class="sa-cn sa-st" role="group" aria-label="Row counts at this step">${cells.join('')}</div>`;
+	};
+	/** Concept counters follow the phases: values [[phase, text], ...]; a counter set in a step stays lit to the end of that step. */
+	const conceptStrip = () => {
+		if (!counters?.length) return '';
+		if (counters.length > 5) throw new Error(`${id}: at most 5 counters`);
+		const firsts = phases.map((x) => x[0]);
+		const stepEnd = (p) => (firsts.find((f) => f > p) ?? PHASES + 1) - 1;
+		const cells = counters.map(({ label, role, values }) => {
+			if (!ROLES.includes(role) || !values?.length) throw new Error(`${id}: counter "${label}" needs a role and values [[phase, text], ...]`);
+			values.forEach(([p], i) => {
+				if (!Number.isInteger(p) || p < 1 || p > PHASES || (i && p <= values[i - 1][0])) throw new Error(`${id}: counter "${label}" phases must increase, 1 to ${PHASES}`);
+			});
+			const states = [];
+			for (let p = 1; p <= PHASES; p++) {
+				const q = values.filter(([f]) => f <= p).pop();
+				const value = q ? String(q[1]) : '—';
+				const hl = q ? p <= stepEnd(q[0]) : false;
+				const last = states[states.length - 1];
+				if (last && last.value === value && last.hl === hl) last.to = p;
+				else states.push({ value, hl, from: p, to: p });
+			}
+			return counterMarkup(label, role, states.map((st) => ({ ...st, cls: fxClasses({ in: st.from, ...(st.to < PHASES ? { hide: st.to + 1 } : {}) }).join(' ') })));
+		});
+		return `<div class="sa-cn" aria-hidden="true">${cells.join('')}</div>`;
+	};
 
 	const api = {
 		/** A group; children are drawn by `body()`. With no effect it is a plain `<g>`. */
@@ -297,8 +396,15 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				const btn =
 					`<div class="sa-ctl">\n${lab('ca-btn', 'pp', '<span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span>')}\n` +
 					`${lab('ca-btn ca-au', 'r0', '<span aria-hidden="true">&#9654;</span> Play')}\n${bks.join('\n')}\n${nxs.join('\n')}\n<span class="sa-sbs">${sbs.join('')}</span>\n</div>`;
-				const lis = caps.map((c) => `<li>${esc(c)}</li>`).join('\n');
-				const markup = `<figure class="ca sa not-content t${loop.cycle}">\n<input class="ca-pp" type="checkbox" id="${id}-pp" aria-label="Pause the animation" />\n${radios}\n${svg}\n${btn}\n<p class="ca-cap">${esc(caption)}</p>\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
+				const lis = caps.map((c, i) => `<li>${esc(c)}${hasNow ? ` <span class="sa-px">${keyMarkup(meta[i], false)}</span>` : ''}</li>`).join('\n');
+				const strip = conceptStrip();
+				// the Key idea panel: step k shows from its first phase to the one before the next step's (the last stays)
+				const now = hasNow
+					? `\n<div class="sa-now" aria-hidden="true">\n${meta
+							.map((m, i) => `<div${cls(`c-${m.role}`, fxClasses({ in: phases[i][0], ...(phases[i + 1] ? { hide: phases[i + 1][0] } : {}) }))}>${keyMarkup(m, false)}</div>`)
+							.join('\n')}\n</div>`
+					: '';
+				const markup = `<figure class="ca sa not-content t${loop.cycle}">\n<input class="ca-pp" type="checkbox" id="${id}-pp" aria-label="Pause the animation" />\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${btn}${now}\n<p class="ca-cap">${esc(caption)}</p>\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
 				return { markup, steps: 0 };
 			}
 			const range = Array.from({ length: N }, (_, i) => i + 1);
@@ -330,11 +436,17 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 					(s, i) =>
 						`<li id="${id}-c${i + 1}"><span class="sa-cl c-${s.role}">${esc(s.clause)}</span> ${esc(s.text)}` +
 						(s.predict ? ` <b class="sa-pr">Predict:</b> ${esc(s.predict)}` : '') +
+						(hasNow ? ` <span class="sa-px">${keyMarkup(s, false)}</span>` : '') +
 						'</li>',
 				)
 				.join('\n');
+			const strip = stepperStrip();
+			// the current step's Key idea and What changed (the panel keeps the height of the tallest, so nothing below jumps)
+			const now = hasNow
+				? `\n<div class="sa-now sa-st">\n${steps.map((s, i) => `<div class="z${i + 1} c-${s.role}">${keyMarkup(s, true)}</div>`).join('\n')}\n</div>`
+				: '';
 			// not-content keeps Starlight's own list and form styling off the figure
-			const markup = `<figure class="sa not-content">\n${radios}\n${svg}\n${ctl}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
+			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
 			return { markup, steps: N };
 		},
 	};

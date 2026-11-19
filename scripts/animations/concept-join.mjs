@@ -5,6 +5,7 @@
 // also keeps move in (with NULL cells), or are marked red and stay behind; 5 the row count; 6 to 8 hold.
 // CROSS has no keys to match: every row meets every row, and every pairing is a result row, three at a time.
 // `all` steps through LEFT, RIGHT, INNER and FULL, two phases each, with the type name lit.
+// The `left` variant also carries live counters, a Key idea and What changed (D41 pilot); the other variants do not yet.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const L = [['A', 'l1'], ['B', 'l2'], ['C', 'l3']];
@@ -24,6 +25,22 @@ const CAPTION = {
 	full: 'FULL JOIN keeps every row of both tables. A row with no partner is kept, with NULL in the other table’s columns.',
 	cross: 'CROSS JOIN has no keys to match: every row of the first table meets every row of the second.',
 	all: 'The four joins differ only in which unpaired rows they keep: LEFT the first table’s, RIGHT the second’s, INNER neither, FULL both.',
+};
+// the pilot's live counts for LEFT JOIN (the rows drawn at each phase) with a Key idea and What changed per step
+const LEFT_LIVE = {
+	phases: [
+		[1, 'Two tables, each with keys', { role: 'src', key: 'A join starts from two tables; every row has a key.', changes: [['+', 't1: 3 rows'], ['+', 't2: 3 rows']] }],
+		[2, 'Matching keys shake hands', { role: 'mat', key: 'Rows with equal keys are a match; the others have no partner.', changes: [['+', '2 matches: B and C']] }],
+		[3, 'The pairs move into the result', { role: 'mat', key: 'Each match becomes one result row, with the columns of both tables.', changes: [['+', '2 result rows'], ['+', 'columns from t1 and t2']] }],
+		[4, 'Left rows with no partner are kept (NULL)', { role: 'src', key: 'LEFT JOIN also keeps the t1 rows with no partner and fills the gap with NULL.', changes: [['+', 'row A, t1 only'], ['+', 'NULL in the t2 column']] }],
+		[5, 'The result has 3 rows', { role: 'out', key: 'Every t1 row appears at least once, so the result never has fewer rows than t1.', changes: [['~', '3 rows: 2 matched, 1 kept alone']] }],
+	],
+	counters: [
+		{ label: 't1', role: 'src', values: [[1, 3]] },
+		{ label: 't2', role: 'src', values: [[1, 3]] },
+		{ label: 'matches', role: 'mat', values: [[2, 2]] },
+		{ label: 'result rows', role: 'out', values: [[3, 2], [4, 3]] },
+	],
 };
 const Y = (i) => 44 + 30 * i; // row i of a source column or of the result
 const W = 52;
@@ -52,6 +69,7 @@ export default function make({ id, variant = 'left' } = {}) {
 		caption: CAPTION[variant],
 		phases: [[1, 'Two tables, each with keys'], [2, 'Matching keys shake hands'], [3, 'The pairs move into the result'], [4, { inner: 'Rows with no partner are not kept', left: 'Left rows with no partner are kept (NULL)', right: 'Right rows with no partner are kept (NULL)', full: 'Rows with no partner are kept (NULL)' }[variant]], [5, `The result has ${rows} rows`]],
 		tag: { y: 27 },
+		...(variant === 'left' ? LEFT_LIVE : {}),
 	});
 	a.text(10, 14, TITLE[variant], 'f11 b');
 	a.text(10, 41, 't1', 'f10 mu');

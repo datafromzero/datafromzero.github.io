@@ -4,6 +4,8 @@
 // each stop appears the phase after (x1, x1..x2, x1..x3, x2..x4); 6 to 8 LAG shows, per row, the value of the row above (none, x1, x2, x3).
 // Facts (DuckDB 2.0.0, concept2/facts.out), v = 2, 4, 6, 8, 10: avg(v) OVER (ORDER BY i ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) is
 // 2.0, 3.0, 4.0, 6.0, 8.0 (the first rows average fewer rows); lag(v) OVER (ORDER BY i) is NULL, 2, 4, 6, 8.
+// Live counters and Key idea (D41): counts are the rows drawn in the picture at that phase; each appears with its phase.
+// The counters count what is drawn: rows in the frame (1, 2, 3, 3), averages shown (x1 from the start, then one per phase), LAG values shown.
 import { anim } from '../lib/step-animation.mjs';
 
 const Y0 = 100;
@@ -20,7 +22,18 @@ export default function make({ id = 'sw' } = {}) {
 		desc:
 			'Four ordered rows x1 to x4. A frame covering the current row and the two rows before it starts on row 1, where the two seats above are empty. It slides down one row at a time, and each stop gives that row the average of the rows inside the frame: x1, then x1 to x2, then x1 to x3, then x2 to x4. A second column, LAG, shows for each row the value of the row above it: none, x1, x2, x3.',
 		caption: 'A window frame is the current row plus the rows around it. The frame slides down and each row gets its own result. LAG reads a value from the row above.',
-		phases: [[1, 'The frame is this row and the 2 before'], [2, 'The frame slides down, row by row'], [5, 'Every row has its average'], [6, 'LAG shows the row above']],
+		phases: [
+			[1, 'The frame is this row and the 2 before', { role: 'src', key: 'Rows are ordered first; a frame is the current row plus the rows around it.', changes: [['+', '4 ordered rows'], ['+', 'a frame: this row and the 2 before']] }],
+			[2, 'The frame slides down, row by row', { role: 'win', key: 'The frame slides one row at a time, and each row gets the average of its own frame.', changes: [['~', 'frame moves down the rows'], ['+', 'an average per row']] }],
+			[5, 'Every row has its average', { role: 'win', key: 'The first rows have fewer rows in their frame, so they average fewer values.', changes: [['+', '4 averages: x1, x1..x2, x1..x3, x2..x4']] }],
+			[6, 'LAG shows the row above', { role: 'win', key: 'LAG reads a value from the row above; the first row has none.', changes: [['+', 'column LAG'], ['~', 'first row: none (NULL)']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 4]] },
+			{ label: 'in frame', role: 'win', values: [[1, 1], [2, 2], [3, 3]] },
+			{ label: 'averages', role: 'win', values: [[1, 1], [3, 2], [4, 3], [5, 4]] },
+			{ label: 'LAG values', role: 'win', values: [[6, 1], [7, 2], [8, 3]] },
+		],
 	});
 	a.text(10, 14, 'A frame slides down the rows', 'f11 b');
 	a.text(132, 52, 'LAG', 'f10 b mo', { in: 6 }, 'm');

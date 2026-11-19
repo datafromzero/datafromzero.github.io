@@ -7,6 +7,13 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Lesson figures, live counts and Key idea (D41 amended, owner decision; pilot): a strip of small labeled counters above the figure
+  ("—" until its step; the counter that changed is lit in its clause color; in autoplay they follow the phases) shows what each
+  clause does to the number of rows, for example `rows 10`, `groups 3`, `after HAVING 2`. Under the controls the current step
+  also gets one short Key idea sentence and What changed chips (`+` added, `−` removed, `~` changed). CSS only, no JavaScript, in
+  both the data steppers and the concept animations; print shows the final counts and every step's text, and nothing appears
+  before its step, so a Predict is never given away. Pilot on the three data steppers (S8, S14, S19, numbers recomputed with
+  DuckDB 2.0.0) and five concept animations (group-by, where, logical order, left join, sliding window).
 - SPEC D43 (owner decision): the SQL stage has no notebooks or Colab; every query runs in the lesson page (D42), and Colab
   is introduced in the Python stage. `scripts/refresh-concept-figures.mjs` re-pastes every concept figure into the lessons
   from the generators (`--check` tests that they are current).

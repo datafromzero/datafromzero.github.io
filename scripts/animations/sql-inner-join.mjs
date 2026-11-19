@@ -3,7 +3,8 @@
 // nothing to pair with. The result is drawn grouped by product so each match appends rows in one block (a join promises
 // no row order). Parts only fade in at their own slot, so text never overlaps at any moment.
 // Checked with DuckDB 2.0.0: order_items JOIN products ON product_id for order_id 1001 to 1003 returns 7 rows;
-// products 1, 6 and 10 pair twice, 15 once, 16 never.
+// products 1, 6 and 10 pair twice, 15 once, 16 never (result rows 2, 4, 7 after products 1, 6, 10 and 15). Live counters, a Key idea
+// and What changed per step (D41); each shows only at its own step, so step 1 gives nothing of the Predict away.
 import { anim, tint, edge } from '../lib/step-animation.mjs';
 
 // order_item_id, product_id
@@ -30,18 +31,41 @@ export default function make({ id = 'ij' } = {}) {
 				clause: 'JOIN',
 				text: 'Two tables: seven order_items lines and five of the sixteen products. They share the column product_id.',
 				predict: 'INNER JOIN keeps every pair of rows whose product_ids are equal. Which product will have no line to pair with, and how many rows will the result have?',
+				counts: [{ label: 'lines', value: 7 }, { label: 'products', value: 5 }],
+				key: 'A join starts from two tables that share a column.',
+				changes: [['+', 'table order_items, 7 lines'], ['+', 'table products, 5 rows']],
 			},
 			{
 				role: 'mat',
 				clause: 'ON',
 				text: 'ON order_items.product_id = products.product_id matches product 1: every line with product_id 1 pairs with Espresso, and each pair adds one row to the result.',
+				counts: [{ label: 'result rows', value: 2, role: 'mat' }],
+				key: 'ON decides which rows pair up: every pair with equal keys becomes one result row.',
+				changes: [['+', '2 rows for product 1'], ['+', 'column product_name']],
 			},
-			{ role: 'mat', clause: 'ON', text: 'Product 6 is matched the same way: every line with product_id 6 pairs with Cold Brew.' },
-			{ role: 'mat', clause: 'ON', text: 'Products 10 and 15 are matched the same way, and their pairs join the result.' },
+			{
+				role: 'mat',
+				clause: 'ON',
+				text: 'Product 6 is matched the same way: every line with product_id 6 pairs with Cold Brew.',
+				counts: [{ label: 'result rows', value: 4 }],
+				key: 'One product can match many lines, and every match adds its own row.',
+				changes: [['+', '2 rows for product 6']],
+			},
+			{
+				role: 'mat',
+				clause: 'ON',
+				text: 'Products 10 and 15 are matched the same way, and their pairs join the result.',
+				counts: [{ label: 'result rows', value: 7 }],
+				key: 'The same test runs for every key, and the result only ever grows by pairs.',
+				changes: [['+', '3 rows for products 10 and 15']],
+			},
 			{
 				role: 'mat',
 				clause: 'ON',
 				text: 'A product that matches no line adds nothing to the result, so INNER JOIN drops it and its row is dimmed. Compare the result with your prediction.',
+				counts: [{ label: 'no match', value: 1, role: 'flt' }],
+				key: 'INNER JOIN keeps only matches: a row with no partner leaves no trace in the result.',
+				changes: [['−', 'product 16 left out (no lines)'], ['~', 'the result stays at 7 rows']],
 			},
 		],
 	});
