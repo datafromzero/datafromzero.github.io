@@ -27,6 +27,14 @@ export const ROADMAP_STAGES: readonly StageDef[] = [
 	{ id: 'ml-engineer', title: 'ML / AI Engineer', code: 'ML', branch: true },
 ];
 
+/**
+ * One-page cheatsheets (SPEC D44): a stage with an entry here has a printable page at `href`, linked from the sidebar
+ * (after the stage's lessons) and from the stage on /start/. SQL first; the other stages add one line when built.
+ */
+export const CHEATSHEETS: Readonly<Record<string, { label: string; href: string }>> = {
+	sql: { label: 'SQL in a nutshell', href: '/sql/cheatsheet/' },
+};
+
 /** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8`; `undefined` for an unknown stage. */
 export function lessonCode(stage: string, order: number): string | undefined {
 	const def = ROADMAP_STAGES.find((s) => s.id === stage);

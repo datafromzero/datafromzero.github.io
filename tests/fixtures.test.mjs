@@ -35,6 +35,12 @@ describe('valid fixtures', () => {
 		assert.ok(!page('sql/sql-joins').includes('Unlocks next'));
 		assert.ok(exists(join(sandbox, 'dist', 'reference', 'sql', 'inner-join', 'index.html')));
 		assert.match(page('sql/sql-joins'), /<math/); // formulas render as MathML
+		// SPEC D44: the cheatsheet exists and its own content ships no script.
+		const sheet = page('sql/cheatsheet');
+		assert.match(sheet, /SQL in a nutshell/);
+		const body = sheet.slice(sheet.indexOf('class="cs not-content"'), sheet.indexOf('cs-foot'));
+		assert.ok(body.length > 1000 && !body.includes('<script'));
+		assert.match(sheet, /<svg class="csf/);
 	});
 });
 

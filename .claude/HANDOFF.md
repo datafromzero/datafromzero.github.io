@@ -34,6 +34,12 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
 - **Open issues and PRs:** issue #41 (Excel checks in the real apps, Sheets copy links).
 
+- **SQL cheatsheet (D44, 2026-11-19):** `/sql/cheatsheet/` "SQL in a nutshell", one printable no-JS page (two A4 sides) from
+  `src/data/cheatsheets/sql.ts` through `src/components/cheatsheet/Cheatsheet.astro`; run `python3 scripts/check-cheatsheet-sql.py`
+  (needs Python `duckdb`) after editing a pattern. Excel and Python get the same page by adding a data file, a `CHEATSHEETS` line
+  in `src/lib/roadmap.ts` and a page in `src/pages/{stage}/`. Also decided the same day: a small linear algebra block at the start of
+  the Data Scientist and ML Engineer tracks (planned, not written).
+
 ## What comes next (build plan item 8, content)
 
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
