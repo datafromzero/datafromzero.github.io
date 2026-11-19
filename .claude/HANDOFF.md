@@ -101,8 +101,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   their notebooks, one figure each and three exercises each (the blank-cell Exercise 2 starts at P11). Every notebook was run from the top on pandas 3.1.1 and
   2.2.3, with the data from the real `v0.1.0` tag URLs, solutions injected, starters failing and one wrong answer per exercise rejected; the only
   output that differs between the two versions is the text dtype in P11 unit 1 (`str` on pandas 3, `object` on 2.2), named in its Why. Choices that
-  the owner may reverse: P9 pairs `read_excel` and `read_sql` in one unit and drops the DuckDB demo and `csv` module; the SQL route uses `sqlite3` on an
-  in-memory database built from the cafe-sales tables (the tag has no database file; `cafe-sales.sql` is a DuckDB script); P10 leaves out `axis`,
+  the owner may reverse: P9 drops `read_sql`, the DuckDB demo and the `csv` module to keep four ideas (the title and the closing line of P8 still name SQL; a TODO
+  proposes P23 or P26 for `read_sql`, on a `sqlite3` database built in memory because the tag has no database file); P10 leaves out `axis`,
   seeded `default_rng` and `@`; P12 leaves out `sort_values` and the `loc` label slice; P13 leaves out `lambda`. Still open for the owner: which pandas version
   Colab gives a new notebook today (its published package list names 2.2.3 and says it may be stale) and whether `openpyxl` is installed there, plus edits and
   approval of every lesson text.
