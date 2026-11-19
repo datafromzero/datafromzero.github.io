@@ -254,6 +254,53 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   check that its frame equals the running loop paused at the end of the last phase of that step.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
+## Python stage (D45, D46): teaching rules
+
+Owner decision, 2026-11-19: adopt every recommendation of research issue #66 §1 as the rules below. They sit on the interleaved
+shape above and on the "Files per lesson" bullet for Python. Each rule is checkable by reading the lesson and the notebook; a
+reviewer ticks them one by one.
+
+1. **Density and minutes.** A lesson teaches 3 to 4 new concepts, one per numbered unit of Learn by doing, plus at most one last
+   Check unit that teaches nothing new. Learn by doing opens with the line "About N minutes, K new ideas: a, b, c." where N is
+   the frontmatter `duration` and K the number of concept units. A fifth concept goes to another lesson. The length rule holds
+   (about 100 body words per minute).
+2. **Predict first, result hidden.** Every concept unit runs Idea (never states the result), Try it, **Predict:**, then the
+   result inside `<details><summary>Reveal the result</summary>`, copied from a run of the notebook.
+3. **Match, then diverge.** The "You already know this" Aside names one earlier Excel or SQL lesson by code and title and carries
+   two bold lines: **Match** (the familiar action, its Python twin and the same number) and **Diverge** (the one place the
+   outputs differ). A unit shows the divergence with a run. A twin is the closest tool, not the closest word: VLOOKUP's twin is
+   `Series.map`, never `merge`.
+4. **Production from a blank cell.** From `dataframe-first-look` on, Exercise 2 starts from an empty cell with only the expected
+   result stated, no `None` placeholder. Before that the pre-filled share thins out: placeholders (`answer = None`) in the first
+   lessons, a one-line comment starter in the middle, a comment-only cell from `lists-and-loops` on.
+5. **Free, collapsed hints and solutions.** Every notebook exercise is followed by a hint cell and a solution cell, each a
+   markdown cell holding a `<details>` block, so nothing costs points and nothing shows until opened. The page carries the same
+   hint, half-solution and Solution.
+6. **One adversarial case per trap.** A trap named in a lesson's Remember box has a check case where the naive code gives a wrong
+   answer: `check(..., traps={naive_answer: "message"})`, `check_function(...)` with the boundary value, or `rerun_cell(...)`.
+   The notebook comment names the trap, so wrong code cannot pass by luck.
+7. **Expected outputs on the page.** Every Try it and every exercise prints its expected output on the lesson page, copied from a
+   run (never typed): in the revealed result for units, in the Solution for exercises. A learner can verify with no notebook
+   state at all.
+8. **Run all from the top** is a named ritual, taught in `first-notebook`: restart the session, run every cell from the first,
+   read the last cell. Every notebook's Setup cell says so in one comment and the notebook ends with a scoreboard cell. No cell
+   raises on purpose (a lesson that shows an error uses `show_error`), so Run all never stops.
+9. **Starter notebook.** `first-notebook` starts with three cells before its Setup: a text cell that names the medium, one
+   pre-written arithmetic cell on cafe prices, and a text cell saying the lesson's cells start below.
+10. **Pandas lessons, later.** The boolean mask is printed alone before it filters, with `.shape` before and after. Groupby is
+    entered through three doors in sequence: PivotTable recall in the Warm-up, split-apply-combine as the big idea, and
+    `value_counts()` shown to be a groupby in the first exercise. Every merge uses `validate=` from the first one, with the
+    expected row count predicted before the run and `indicator=` where provenance matters.
+11. **Data and numbers.** Cafe-sales values only, never foo and bar. Every stated number and output is computed from `datasets/`
+    and checked by running the notebook from the top against the local files (solutions injected), with the notebook's own
+    data cell reading the release tag. The accented menu names of D46 live in `datasets/cafe-menu-accents/` (frontmatter
+    `datasets: [cafe-menu-accents]`), linked to the products by `product_id`, and are read from the first release tag that contains them.
+12. **Animations.** D41 applies unchanged: data steppers and autoplay concept animations with Pause are allowed in Python lessons,
+    exactly as in the SQL stage (owner, 2026-11-19; the "no autoplay loops" line of issue #66 is superseded).
+13. **Sources.** Official pages only (python.org, Colab, jupyter.org, ipython.org, pandas, NumPy; Microsoft Learn or DuckDB for
+    an Excel or SQL twin), each opened, with the access date in the title. A Colab screen, menu name or shortcut that no opened
+    page states goes in `TODO(owner)` and the report says so.
+
 ## Markup
 
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,
@@ -277,7 +324,7 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   Python stage (D43). SQL lessons have no notebook. Learners arrive knowing only Excel and SQL (owner, 2026-11-19, D45): `first-notebook`
   opens with a story and no typing (run written cells, change one value, then write a line); every lesson up to `dataframe-first-look` starts with a
   "You already know this" Excel and SQL bridge and meets each new piece of syntax next to its twin; pure-Python lessons stay small, point toward the
-  DataFrame and use cafe-sales values, never foo and bar; notebooks start with pre-filled cells and grow blank working cells gradually.
+  DataFrame and use cafe-sales values, never foo and bar; notebooks start with pre-filled cells and grow blank working cells gradually. The rules of "Python stage (D45, D46): teaching rules" apply to every Python lesson.
 - SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
   `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
   in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what

@@ -353,6 +353,15 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   bridge trap 11), and an issue said "8 lessons to 6" where its own list gives 9 to 8. → **Check a stub's objective against the
   research that now governs it, and recount any figure in a brief from the list it summarizes; report the mismatch instead of
   copying it.**
+- 2026-11-19 — A Python exercise ("define `line_amount` with a default") already passed with nothing written, because a unit
+  cell above it defined a function of the same name. → **An exercise's target name is never defined by an earlier cell; run the
+  starter notebook from the top and confirm that no exercise check passes, and that a plausible wrong answer is rejected.**
+- 2026-11-19 — A hint of a notebook exercise showed the output of the solved run, not of the starter the learner sees. → **Text
+  that shows what the starter prints comes from a hidden cell that runs the starter, not from the solved notebook run.**
+- 2026-11-19 — Reveal blocks showed `(float, int, str, bool)` for cells whose raw output is `<class 'float'>` and so on. → **A reveal block must be the notebook's raw printed output, including `<class '...'>` wrappers; if a shorter form reads better, change the cell to print it.**
+- 2026-11-19 — Research issues #61 and #66 and a first brief built a Vietnamese menu file; the owner withdrew it: no Vietnamese
+  anywhere until English and later Spanish are complete. → **No Vietnamese text, data or Vietnam-specific example in lessons,
+  notebooks, datasets or the lesson standard; where research says "Vietnamese", write "accented text" (D46: English café names).**
 
 ## Agents and reviews
 
