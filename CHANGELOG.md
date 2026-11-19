@@ -179,6 +179,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- Concept animations: the step buttons 1 to N have their bottom edge again (it was missing on every lesson).
 - SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
   so the plan boxes line up.
 - Print: the Back, Next and step buttons of the lesson steppers are hidden, as those of the concept animations already were;
