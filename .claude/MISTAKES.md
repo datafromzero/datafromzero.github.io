@@ -183,6 +183,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Lessons (details in LESSON-STANDARD.md)
 
+- 2026-11-19 — Vietnamese crept back in while the language is paused (D30): a Vietnamese UI string in `vi.json` and a
+  Vietnamese menu data file planned for a Python trap (owner correction). → **No Vietnamese anywhere (strings, data,
+  examples, research-driven "Vietnamese" lessons) until English and then Spanish are complete; generalize to
+  accented English names (Café, Jalapeño) when a text trap needs accents.**
+
 - 2026-11-17 — Text said "on the left / on the right" but the content stacks. → **Never describe layout by position;
   say "first / below".**
 - 2026-11-17 — A wide side-by-side SVG was unreadable on phones. → **At most two stacked 360-wide SVGs.**
