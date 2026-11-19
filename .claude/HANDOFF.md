@@ -1,7 +1,7 @@
 # Handoff: state of the work on 2026-11-17
 
 For the next lead session. Read `CLAUDE.md` first (rules, merging policy, commands), then this file.
-`SPEC.md` is authoritative; decisions D1–D34 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
+`SPEC.md` is authoritative; decisions D1–D43 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
 
 ## Who is who
 
@@ -40,8 +40,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
    names) and sends Google Sheets `/copy` links; each link becomes a `sheet` field plus `<OpenInSheets />`.
-2. **Next stages:** SQL (35 lessons, D40, DuckDB in Colab, notebooks in `notebooks/sql/` loading `cafe-sales.sql` from the
-   `v0.1.0` tag, D39), then Python and core. Use the
+2. **Next stages:** SQL (35 lessons, D40; every query runs in the page, no notebooks or Colab, D43), then Python (where Colab starts; notebooks
+   load data from the `v0.1.0` tag, D39) and core. Use the
    lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
    `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
    lesson first (the lead or one writer drafts it; the owner approves it before the other batches start).
@@ -50,7 +50,15 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 4. **Source links:** DuckDB, Power BI and Looker Studio URLs in the drafts were all opened on 2026-11-17 and return
    200. The DuckDB `docs/stable/...` URLs are redirect stubs to the current version (`docs/2.0/...`); the anchors
    `#foreign-keys`, `#syntax` and `#joins` exist there. Keep the `stable` form. Recheck only if a lesson adds new ones.
-5. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
+5. **In-page SQL runner (D42, built and amended 2026-11-18):** `<RunSQL>` is two boxes (editor, output) with a Tables panel, friendly
+   errors, Auto-run and background loading near the block; `/sql/playground/` is the same runner full height (shared markup
+   `SqlPad.astro`, CSS `src/styles/sql-runner.css`, scripts `run-sql.ts` > `sql-block.ts` > `sql-editor.ts` and `sql-runtime.ts`). It is in
+   the three pilot lessons (S8, S14, S19). Rolling `<RunSQL>` out to all 35 lessons waits for the interleaved rewrite (owner-approved default). Rolling it to
+   the other SQL lessons is mechanical (every Try it query and exercise starter; `.claude/agents/LESSON-STANDARD.md`
+   "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
+   learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected
+   result per exercise, and what "same result" means for row order) before it is built.
+6. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
 
 ## Open items and owner decisions still pending
 

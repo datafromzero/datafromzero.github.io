@@ -1,0 +1,541 @@
+---
+id: sql-indexes-and-explain
+title: Indexes and reading a query plan
+description: Explain what an index does, read a simple EXPLAIN output and recognize a full scan.
+stage: sql
+order: 340
+level: advanced
+duration: 25
+objectives:
+  - Explain an index with the book-index mental model
+  - Create a single-column and a composite index
+  - Read EXPLAIN for a full scan and an index scan
+  - Name a filter that cannot use an index
+  - Prove an optimized query returns the same result
+prerequisites:
+  - sql-create-table-constraints
+  - sql-where-filtering
+  - sql-aggregate-functions
+  - sql-set-operations
+  - sql-subqueries
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Indexes'
+    url: https://duckdb.org/docs/stable/sql/indexes
+  - title: 'DuckDB documentation: EXPLAIN'
+    url: https://duckdb.org/docs/stable/guides/meta/explain
+  - title: 'DuckDB documentation: Indexing (performance guide)'
+    url: https://duckdb.org/docs/stable/guides/performance/indexing
+  - title: 'DuckDB documentation: CREATE INDEX statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_index
+  - title: 'DuckDB documentation: Profiling (EXPLAIN ANALYZE)'
+    url: https://duckdb.org/docs/stable/dev/profiling
+  - title: 'DuckDB: Why DuckDB'
+    url: https://duckdb.org/why_duckdb
+  - title: 'DuckDB documentation: Storage format'
+    url: https://duckdb.org/docs/stable/internals/storage
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+status: draft
+---
+
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
+This lesson is honest about one thing first. DuckDB is built for analytics: its documentation says it processes batches
+of values at a time, to answer questions over large parts of a table. Indexes matter differently there than in the
+transactional databases that many courses teach on. You learn the idea, then see how much DuckDB uses it. You work on
+copies, so the cafe-sales tables never get an index. A block that makes a table or an index says so if it already exists:
+press **Reset data** and start again. Timings say nothing on 1,800 rows, so this lesson never compares them.
+
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 25 minutes. The plans on the page come from DuckDB 1.4.3 in the browser and the numbers from 2.0.0. The lesson and its figure rely only on the `Type:` and `Filters:` lines and the row counts, which read the same in both; the boxes are drawn differently, 2.0.0 adds a `Row Groups Scanned` line and a `Table:` line, and in both a plain `EXPLAIN` prints `Sequential Scan` after the index exists while `EXPLAIN ANALYZE` prints `Index Scan`. A newer DuckDB may differ. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> The till screen looks up one order by its number all day: "order 1001". A friend says "add an index". What is an
+> index, and will it help here?
+
+The lookup returns one row of `orders`, which has 1,800:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02 | completed | mobile |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Filtering rows with WHERE* (S3), write the query that returns order 1001 from `orders`.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT * FROM orders WHERE order_id = 1001;
+   ```
+
+   One row: customer 15, store 2.
+
+   </details>
+
+2. In *Creating tables and constraints* (S31), which rule makes a column's values unique and never empty?
+
+   <details>
+   <summary>Answer</summary>
+
+   `PRIMARY KEY`. `UNIQUE` also forbids repeats, but it allows an empty value.
+
+   </details>
+
+## The big idea
+
+An **index** is a sorted shortcut to rows: instead of reading every row to find one, the database looks the value up and
+goes straight to the rows.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ix-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="ix" id="ix-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="ix" id="ix-r1" aria-label="Step 1 of 4: Scan starts at row 1; index knows K" />
+<input class="sa-r r2 o2" type="radio" name="ix" id="ix-r2" aria-label="Step 2 of 4: Index jumps to r2 and r5; scan reads on" />
+<input class="sa-r r3 o6" type="radio" name="ix" id="ix-r3" aria-label="Step 3 of 4: Index done: 2 rows read; scan reads on" />
+<input class="sa-r r4 o8" type="radio" name="ix" id="ix-r4" aria-label="Step 4 of 4: Scan done: 6 rows read" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 272" width="360" role="img" aria-labelledby="ix-t ix-d">
+<title id="ix-t">A full scan reads every row; an index can jump to the matching rows</title>
+<desc id="ix-d">Six rows r1 to r6; r2 and r5 hold the key K. Top: a full scan moves a frame over the rows one at a time, and each row it has read turns darker, until all six are read. Bottom: an index says K is in r2 and r5, arrows jump straight to those two rows, and only they are read, before the scan above has finished.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Scan starts at row 1; index knows K</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · Index jumps to r2 and r5; scan reads on</text>
+<text class="f10 b w4 d3 tmp" x="10" y="29">3 · Index done: 2 rows read; scan reads on</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Scan done: 6 rows read</text>
+<text class="f11 b" x="10" y="14">Full scan: read every row</text>
+<g><rect class="f-src k2" x="10" y="56" width="44" height="24" rx="6" /><rect class="f-src k4" x="10" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="32" y="72">r1</text></g>
+<g><rect class="f-src k2" x="60" y="56" width="44" height="24" rx="6" /><rect class="f-src k4 w6 d3" x="60" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="82" y="72">r2 K</text></g>
+<g><rect class="f-src k2" x="110" y="56" width="44" height="24" rx="6" /><rect class="f-src k4 w5 d4" x="110" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="132" y="72">r3</text></g>
+<g><rect class="f-src k2" x="160" y="56" width="44" height="24" rx="6" /><rect class="f-src k4 w4 d5" x="160" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="182" y="72">r4</text></g>
+<g><rect class="f-src k2" x="210" y="56" width="44" height="24" rx="6" /><rect class="f-src k4 w3 d6" x="210" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="232" y="72">r5 K</text></g>
+<g><rect class="f-src k2" x="260" y="56" width="44" height="24" rx="6" /><rect class="f-src k4 w2 d7" x="260" y="56" width="44" height="24" rx="6" /><text class="f11 m" x="282" y="72">r6</text></g>
+<g class="w8"><g class="mv m2 x5 y0"><g class="w8"><g class="mv m3 x5 y0"><g class="w8"><g class="mv m4 x5 y0"><g class="w8"><g class="mv m5 x5 y0"><g class="w8"><g class="mv m6 x5 y0"><rect class="s-flt" x="7" y="52" width="50" height="32" rx="7" /></g></g></g></g></g></g></g></g></g></g>
+<text class="f11 b w2 d7" x="10" y="104">read 6 rows</text>
+<text class="f11 b" x="10" y="134">Index: jump to the matching rows</text>
+<g><rect class="f-mat k3" x="10" y="166" width="130" height="24" rx="6" /><text class="f11 m" x="75" y="182">index: K → r2, r5</text></g>
+<g><rect class="f-src k2" x="10" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="32" y="232">r1</text></g>
+<g><rect class="f-src k2" x="60" y="216" width="44" height="24" rx="6" /><rect class="f-out k4 w6 d3" x="60" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="82" y="232">r2 K</text></g>
+<g><rect class="f-src k2" x="110" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="132" y="232">r3</text></g>
+<g><rect class="f-src k2" x="160" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="182" y="232">r4</text></g>
+<g><rect class="f-src k2" x="210" y="216" width="44" height="24" rx="6" /><rect class="f-out k4 w6 d3" x="210" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="232" y="232">r5 K</text></g>
+<g><rect class="f-src k2" x="260" y="216" width="44" height="24" rx="6" /><text class="f11 m" x="282" y="232">r6</text></g>
+<path class="s-mat dr p7 d2" pathLength="1" d="M82 192L82 214M85.04 207.7L82 214L78.96 207.7" />
+<path class="s-mat dr p7 d2" pathLength="1" d="M130 192L232 214M226.48 209.69L232 214L225.2 215.65" />
+<text class="f11 b w6 d3" x="10" y="270">read 2 rows</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ix-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ix-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ix-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ix-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ix-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ix-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ix-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ix-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ix-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ix-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ix-r1">1</label><label class="sa-sb sb2" for="ix-r2">2</label><label class="sa-sb sb3" for="ix-r3">3</label><label class="sa-sb sb4" for="ix-r4">4</label></span>
+</div>
+<p class="ca-cap">A full scan reads every row to find the matches. An index is a lookup list that can jump straight to them. The engine decides when using an index is worth it.</p>
+<ol class="sa-steps">
+<li>Scan starts at row 1; index knows K</li>
+<li>Index jumps to r2 and r5; scan reads on</li>
+<li>Index done: 2 rows read; scan reads on</li>
+<li>Scan done: 6 rows read</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Four small steps. Ignore the times in a plan.
+
+### 1. Read a plan
+
+Before it runs a query, the database writes a **query plan**: the steps it will take, in order. `EXPLAIN` prints the plan
+without running the query. `EXPLAIN ANALYZE` runs it and prints the plan with measured numbers. For a table with a filter,
+the plan shows a **scan**; the simplest is the **full scan**, which the plan calls `Sequential Scan`: read the rows one
+after another and test the filter on each.
+
+**Try it** (copy the table). You add indexes to a copy, and a table made this way starts with no rules and no indexes (S31).
+
+<RunSQL query={`CREATE TABLE orders_ix AS SELECT * FROM orders;`} />
+
+Expected: 1 row, 1 column: the 1,800 rows copied.
+
+**Try it** (a plan, not run). The plan arrives as text in one cell of the output. Find the `Type:` line in it.
+
+<RunSQL query={`EXPLAIN SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: a plan with one scan: `Type: Sequential Scan`, the columns it outputs, the `Filters:` test on `order_id` and `~1 row`.
+*Why:* the `~` marks an estimate, because the query was not run. A scan with a filter is the plan of every `WHERE` on a table
+with no index.
+
+**Try it** (a plan, run). Before you run it: which `Type:` will it show, and will the row count still be a guess?
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: a time, then a scan with `Type: Sequential Scan`, the filter and `1 row`. *Why:* now the row count is real: the
+engine read every row of the table and kept 1.
+
+### 2. Make an index
+
+An index is a sorted structure that holds one column's values and, beside each, the position of its rows, like the
+alphabetic index at the back of a book. The picture is a model: DuckDB's real structure is an ART, an adaptive radix tree.
+`CREATE INDEX` builds one, and DuckDB also builds one for each `PRIMARY KEY` and `UNIQUE` column. DuckDB has a second kind
+for free: **min-max indexes** (zonemaps), created for you on columns of the general-purpose types, which let it skip any
+**row group** (a horizontal slice of a table's rows) whose min-max range does not contain the filter value.
+
+<figure>
+<svg viewBox="0 0 360 252" width="360" role="img" aria-labelledby="index-title index-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="index-title">A sorted index beside the first six orders, with pointers to the rows</title>
+<desc id="index-desc">Left: the first six rows of orders in stored order, with row number, order_id and customer_id: row 1 order 1001 customer 15, row 2 order 1002 customer 46, row 3 order 1003 customer 61, row 4 order 1004 customer 40, row 5 order 1005 customer 31, row 6 order 1006 customer 15. Right: an index on customer_id, sorted: 15 points to rows 1 and 6, 31 to row 5, 40 to row 4, 46 to row 2 and 61 to row 3. Lines join each index entry to its rows. Customer 15 and its two rows are shaded.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">An index is a sorted list with pointers</text>
+<text x="10" y="42" font-size="11" font-weight="600">orders, as stored</text>
+<text x="200" y="42" font-size="11" font-weight="600">index on customer_id</text>
+<rect x="10" y="70" width="160" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="180" width="160" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="48" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="48" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="48" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="70" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="70" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="70" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="92" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="92" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="92" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="114" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="114" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="114" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="136" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="136" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="136" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="158" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="158" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="158" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="180" width="34" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="44" y="180" width="58" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="102" y="180" width="68" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="39" y="63.0" font-size="10" font-weight="600" text-anchor="end">row</text>
+<text x="97" y="63.0" font-size="10" font-weight="600" text-anchor="end">order_id</text>
+<text x="165" y="63.0" font-size="10" font-weight="600" text-anchor="end">customer_id</text>
+<text x="39" y="85.0" font-size="11" text-anchor="end">1</text>
+<text x="97" y="85.0" font-size="11" text-anchor="end">1001</text>
+<text x="165" y="85.0" font-size="11" text-anchor="end">15</text>
+<text x="39" y="107.0" font-size="11" text-anchor="end">2</text>
+<text x="97" y="107.0" font-size="11" text-anchor="end">1002</text>
+<text x="165" y="107.0" font-size="11" text-anchor="end">46</text>
+<text x="39" y="129.0" font-size="11" text-anchor="end">3</text>
+<text x="97" y="129.0" font-size="11" text-anchor="end">1003</text>
+<text x="165" y="129.0" font-size="11" text-anchor="end">61</text>
+<text x="39" y="151.0" font-size="11" text-anchor="end">4</text>
+<text x="97" y="151.0" font-size="11" text-anchor="end">1004</text>
+<text x="165" y="151.0" font-size="11" text-anchor="end">40</text>
+<text x="39" y="173.0" font-size="11" text-anchor="end">5</text>
+<text x="97" y="173.0" font-size="11" text-anchor="end">1005</text>
+<text x="165" y="173.0" font-size="11" text-anchor="end">31</text>
+<text x="39" y="195.0" font-size="11" text-anchor="end">6</text>
+<text x="97" y="195.0" font-size="11" text-anchor="end">1006</text>
+<text x="165" y="195.0" font-size="11" text-anchor="end">15</text>
+<rect x="200" y="70" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="200" y="48" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="48" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="200" y="70" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="70" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="200" y="92" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="92" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="200" y="114" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="114" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="200" y="136" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="136" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="200" y="158" width="74" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="274" y="158" width="76" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="269" y="63.0" font-size="10" font-weight="600" text-anchor="end">customer_id</text>
+<text x="279" y="63.0" font-size="10" font-weight="600">rows</text>
+<text x="269" y="85.0" font-size="11" text-anchor="end">15</text>
+<text x="279" y="85.0" font-size="11">1, 6</text>
+<text x="269" y="107.0" font-size="11" text-anchor="end">31</text>
+<text x="279" y="107.0" font-size="11">5</text>
+<text x="269" y="129.0" font-size="11" text-anchor="end">40</text>
+<text x="279" y="129.0" font-size="11">4</text>
+<text x="269" y="151.0" font-size="11" text-anchor="end">46</text>
+<text x="279" y="151.0" font-size="11">2</text>
+<text x="269" y="173.0" font-size="11" text-anchor="end">61</text>
+<text x="279" y="173.0" font-size="11">3</text>
+<path d="M200 81 L170 81" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<path d="M200 81 L170 191" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<path d="M200 103 L170 169" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<path d="M200 125 L170 147" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<path d="M200 147 L170 103" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<path d="M200 169 L170 125" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<text x="10" y="222" font-size="11" font-weight="600">Customer 15: read the short sorted list, then go to rows 1 and 6.</text>
+<text x="10" y="238" font-size="11" opacity="0.8">With no index, every row has to be read to be sure.</text>
+</svg>
+</figure>
+
+**Try it** (create the index).
+
+<RunSQL query={`CREATE INDEX idx_orders_order_id ON orders_ix (order_id);`} />
+
+**Try it** (run the lookup again). Same query as before.
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE order_id = 1001;`} />
+
+Expected: the same plan, now with `Type: Index Scan` and `1 row`. *Why:* the engine went to the row through the index. The
+answer to the owner: yes, for a lookup of one row by key. Your plan has more lines than the figure; the figure keeps
+only the ones to compare.
+
+<figure>
+<svg viewBox="0 0 360 244" width="360" role="img" aria-labelledby="plans-title plans-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="plans-title">EXPLAIN ANALYZE before and after CREATE INDEX</title>
+<desc id="plans-desc">Two sets of plan lines from EXPLAIN ANALYZE on the table orders_ix, which has 1,800 rows, for the filter on order_id equal to 1001. Before the index: Type Sequential Scan, the filter order_id=1001, 1 row. After the index: Type Index Scan, the same filter, 1 row.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">The same filter, before and after</text>
+<text x="10" y="42" font-size="11" font-weight="600">Before CREATE INDEX</text>
+<rect x="10" y="50" width="250" height="66" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="16" y="68" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Type: Sequential Scan</text>
+<text x="16" y="86" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">Filters: order_id=1001</text>
+<text x="16" y="104" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">1 row</text>
+<text x="10" y="138" font-size="11" font-weight="600">After CREATE INDEX</text>
+<rect x="10" y="146" width="250" height="66" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="16" y="164" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Type: Index Scan</text>
+<text x="16" y="182" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">Filters: order_id=1001</text>
+<text x="16" y="200" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">1 row</text>
+<text x="10" y="232" font-size="11" opacity="0.8">EXPLAIN ANALYZE, abridged: only the lines to compare.</text>
+</svg>
+</figure>
+
+ART indexes exist mainly to enforce keys and to speed up point lookups and very highly selective queries, under 0.1% of the
+rows. That is guidance: the engine's rule for an index scan is 2,048 rows or 0.1% of the table, whichever is larger.
+
+### 3. The filter has to fit the index
+
+DuckDB tries an index scan for equality (`=`) and `IN` conditions.
+
+**Try it** (a function of the column). Before you run it: the index on `order_id` exists. Will this filter use it?
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE CAST(order_id AS VARCHAR) = '1001';`} />
+
+Expected: `Type: Sequential Scan` and `1 row`, although the index exists. *Why:* DuckDB uses an index scan only for an index defined on one plain column, not on an expression, and the index holds
+`order_id` values, not their text. A filter on a function of the column must compute the function for every row, so it scans
+them all. Write the plain
+filter, as in unit 2, to keep the index useful.
+
+**Try it** (a composite index). An index can span two columns, written `ON table (a, b)`.
+
+<RunSQL query={`CREATE INDEX idx_orders_store_payment ON orders_ix (store_id, payment_method);`} />
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders_ix WHERE store_id = 3 AND payment_method = 'card';`} />
+
+Expected: a scan, and above it a projection step. *Why:* the plan scans every row (`Type: Sequential Scan`) and returns 180
+rows, so DuckDB did not use the composite index: it spans two columns, not one plain column. An index on `store_id` alone is used
+for `store_id = 3`. The composite index was built and kept up to date for nothing.
+
+### 4. The price of an index, and a check
+
+An index slows down loading and updates, so changes on an indexed table perform worse, and it can take a significant share
+of DuckDB's memory. An ART index does not change how fast joins, aggregations or sorts run. *Excel:* `XLOOKUP` (E8, *Bring
+in a value by key with XLOOKUP*) has a binary-search mode that relies on the lookup list being sorted, and returns invalid
+results if it is not. By analogy, sorted order saves reading, and keeping the order is the upkeep: the bargain an index
+makes.
+
+**Try it** (same answer, with and without the index). Before you run it: how many rows should differ?
+
+<RunSQL query={`SELECT COUNT(*) AS differing_rows FROM (
+  (SELECT * FROM orders WHERE order_id = 1001 EXCEPT SELECT * FROM orders_ix WHERE order_id = 1001)
+  UNION ALL
+  (SELECT * FROM orders_ix WHERE order_id = 1001 EXCEPT SELECT * FROM orders WHERE order_id = 1001)
+);`} />
+
+Expected: 1 row, 1 column. *Why:* each `EXCEPT` lists rows that one side has and the other lacks, and `UNION ALL` joins the two
+lists. The count is **0**: the indexed copy returns exactly the original row. An index changes how a row is found, never
+which rows qualify.
+
+<details>
+<summary>Explain it in your own words: why does this check run EXCEPT in both directions?</summary>
+
+One `EXCEPT` lists only the rows its first query has and its second lacks. If the indexed copy returned an extra row,
+that direction would still count 0 differences. Running it both ways and adding the lists catches a missing row and an
+extra one.
+
+</details>
+
+<Aside type="tip" title="Remember">
+
+- `EXPLAIN` shows the plan; `EXPLAIN ANALYZE` runs the query and shows what happened. Read the `Type:` line.
+- An ART index serves a plain `=` or `IN` filter on its one column, mostly for a few rows.
+- An index costs upkeep and memory, and never changes which rows come back.
+
+**Common trap: "an index makes every query faster, so index every column."** An ART index mainly serves highly selective
+lookups, and it costs upkeep and memory all the time.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-indexes-and-explain-1">
+
+**Index the lookup of an order's lines.** Use `items_ex1`, a copy of `order_items` (3,287 rows, many lines per order).
+Expected: a plan with a `Type:` line each time.
+
+Done for you: the copy, and the plan before the index. (`CREATE OR REPLACE` lets you run it again for a fresh copy.)
+
+<RunSQL query={`CREATE OR REPLACE TABLE items_ex1 AS SELECT * FROM order_items;
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;`} />
+
+Now finish it: create a single-column index on `order_id`, run the same `EXPLAIN ANALYZE` again, and say what changed in the
+`Type:` line.
+
+<RunSQL query={`-- Add the CREATE INDEX line here, then press Run once.
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;`} />
+
+<details>
+<summary>Hint</summary>
+
+Copy unit 2: `CREATE INDEX name ON table (column);`, then the same `EXPLAIN ANALYZE` line.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE INDEX idx_items_order ON items_ex1 (...);
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;
+```
+
+</details>
+
+<Solution>
+
+```sql
+CREATE INDEX idx_items_order ON items_ex1 (order_id);
+EXPLAIN ANALYZE SELECT * FROM items_ex1 WHERE order_id = 1001;
+```
+
+Before: `Type: Sequential Scan` and 3 rows. After: `Type: Index Scan`, still 3 rows. The same 3 lines come back; only the
+way they are found changed.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-indexes-and-explain-2">
+
+**Which filters will use the index on `customer_id`?** Run this first. It makes `orders_ex2`, a copy of `orders`, with an
+index on `customer_id`. (Run it again for a fresh copy.)
+
+<RunSQL query={`CREATE OR REPLACE TABLE orders_ex2 AS SELECT * FROM orders;
+CREATE INDEX idx_orders_ex2_customer ON orders_ex2 (customer_id);`} />
+
+Here are three filters:
+
+- (a) `WHERE customer_id = 15`
+- (b) `WHERE CAST(customer_id AS VARCHAR) = '15'`
+- (c) `WHERE status = 'canceled'`
+
+Before you run anything else, write one line per filter: `Index Scan` or `Sequential Scan`, and why. Then run
+`EXPLAIN ANALYZE SELECT * FROM orders_ex2 ...` for each. Finally, check with `EXCEPT` that (a) and (b) return the same rows.
+
+Expected shape: three plans, each with a `Type:` line, a `Filters:` line and a row count. Counts cover orders of any status.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+An index helps a filter on exactly the indexed column, written plainly. Ask of each filter: is it that column, and is it
+wrapped in anything?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "(a) Index Scan: the filter is the indexed column, written plainly. (b) ... because the column is wrapped in a function. (c) ... because no index is on `status`."
+
+</details>
+
+<Solution>
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM orders_ex2 WHERE customer_id = 15;
+EXPLAIN ANALYZE SELECT * FROM orders_ex2 WHERE CAST(customer_id AS VARCHAR) = '15';
+EXPLAIN ANALYZE SELECT * FROM orders_ex2 WHERE status = 'canceled';
+```
+
+(a) is an `Index Scan` with 16 rows: the filter is the indexed column. (b) is a `Sequential Scan` with 16 rows: the function wraps
+the column. (c) is a `Sequential Scan` with 1 row: nothing is indexed on `status`, and the one canceled order is found by
+reading all of them. Check (a) against (b) with the symmetric `EXCEPT` of unit 4; it returns 0: the rewrite changes the way
+the rows are found, not which rows.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: explain an index with the book-index picture, and say which kind of index DuckDB builds without being asked.
+
+<details>
+<summary>Answer</summary>
+
+An index is a short sorted list of one column's values with pointers to the rows, like a book's index of terms with page
+numbers: you look in the list instead of reading everything. It costs upkeep on every insert and update. DuckDB builds
+min-max (zonemap) indexes on its own, and an ART index for each primary key and `UNIQUE` column.
+
+</details>
+
+<Exercise id="sql-indexes-and-explain-3">
+
+**Spot the flaw.** A colleague creates an index on `orders_ex3 (order_id)`, runs the plain `EXPLAIN` below, and sees
+`Type: Sequential Scan`. "The index is not used, so it is useless," says the colleague, and drops it. Run it yourself:
+
+<RunSQL query={`CREATE OR REPLACE TABLE orders_ex3 AS SELECT * FROM orders;
+CREATE INDEX idx_orders_ex3 ON orders_ex3 (order_id);
+EXPLAIN SELECT * FROM orders_ex3 WHERE order_id = 1001;`} />
+
+Expected: a plan whose `Type:` line reads `Sequential Scan`. What went wrong, and what should the colleague have run?
+
+<details>
+<summary>Hint</summary>
+
+Does plain `EXPLAIN` run the query? Run both versions of the last line and compare the `Type:` lines.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "Plain EXPLAIN only ... the query, so it cannot show what the engine did. The colleague should have run ..."
+
+</details>
+
+<Solution>
+
+Plain `EXPLAIN` prints the plan without running the query. It prints `Sequential Scan` for this query whether or not the
+index exists, so the line proves nothing about the index. `EXPLAIN ANALYZE` runs the query and prints `Type: Index Scan`. The
+colleague should have run `EXPLAIN ANALYZE`. Whether to keep an index is a separate decision, weighed against its price in
+unit 4.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can explain an index with the book picture, create a single-column index, read `EXPLAIN ANALYZE` for a
+full scan and an index scan, name a filter that ignores the index, and prove a rewrite returns the same rows.*
+Test: Exercise sql-indexes-and-explain-2, done from an empty editor without opening the hints.
+
+The pattern to remember: **read the plan that ran, not the one that was drawn, and prove the answer did not move.** The
+next lesson, *Beyond one database: scale and NoSQL*, asks what changes when the data outgrows one machine.

@@ -8,7 +8,7 @@ Files in this folder define Claude Code subagents (frontmatter `name`, `model`, 
 | Agent | Model · effort | Role | When |
 |---|---|---|---|
 | *lead* (main session) | Opus · medium | Plans, writes briefs, small edits, merges batches, commits, PRs | always |
-| `content-producer` | Sonnet · high | Lessons: draft text (D24) or material around the owner's text; exercises, workbooks, notebooks, sources | each lesson batch |
+| `content-producer` | Sonnet · high | Lessons: draft text (D24) or material around the owner's text; exercises, workbooks, notebooks (Python stage only, D43), sources | each lesson batch |
 | `content-reviewer` | Sonnet · high · read-only | Fact-checks a lesson batch: recomputes numbers, checks formulas and tool claims, lesson standard | each lesson batch |
 | `site-builder` | Sonnet · medium (high for visual work) | Code, config, schemas, components, CI, project pages, tokens, homepage motion, a11y | code changes |
 | `spec-reviewer` | Opus · high · read-only | CONTRACT, SPEC decisions, code, URL and dataset changes | each code PR, each SPEC change |

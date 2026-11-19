@@ -1,0 +1,461 @@
+---
+id: sql-ai-assisted-queries
+title: Using an AI assistant for SQL, with checks
+description: Draft a query with an assistant by supplying the schema and the grain, then verify it with row counts and a hand check.
+stage: sql
+order: 300
+level: advanced
+duration: 25
+objectives:
+  - Write a prompt that includes the schema, the question and the output grain
+  - Explain a drafted query clause by clause
+  - Check a drafted query with a row count and a hand-computed total
+  - Catch a fan-out, NULL or grain error planted in a draft
+prerequisites:
+  - sql-join-fanout
+  - sql-self-and-multi-table-joins
+  - sql-window-functions
+  - excel-ai-draft-and-verify
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'NIST AI 600-1: Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile'
+    url: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf
+  - title: 'DuckDB documentation: Joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+status: draft
+---
+
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
+It teaches no particular AI product: "the assistant" means any chatbot or tool that drafts SQL for you, and the drafts
+here were written by hand for the lesson. It is the loop of *Using an AI assistant on a spreadsheet, safely* (E22),
+applied to queries.
+
+TODO(owner): run every block on the page in order and check each result against its Expected line. The explanation of `NOT IN` with an empty value in Exercise 1 is a standard-SQL rule shown by the result; no DuckDB page was opened for it, so add one if you want a citation. Time the lesson against its 25 minutes. The NIST sentences in unit 2 are quoted or paraphrased from the PDF (section 2.2, Confabulation); working the known answer before you see the draft's number rests on the E22 lesson alone: find a source, or keep it as practice. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> An assistant wrote me a query for the average order value of each store. It says Old Town 6.84, Campus 6.90 and
+> Harbor 7.14. Someone told me last month it was about 12. Can I trust the query?
+
+The draft ran without an error and returned this:
+
+| store_name | orders | avg_order_value |
+|---|---:|---:|
+| Campus | 1304 | 6.9 |
+| Harbor | 645 | 7.14 |
+| Old Town | 1337 | 6.84 |
+
+A table is not a verdict.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Join fan-out* (S21), a query joins `orders` to `order_items`. One row of the result is what?
+
+   <details>
+   <summary>Answer</summary>
+
+   One order line, because an order with three lines is paired with three rows. Counting rows then counts lines, not
+   orders.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), write the query that shows the orders with no customer.
+
+   <details>
+   <summary>Answer</summary>
+
+   `SELECT * FROM orders WHERE customer_id IS NULL;` It returns 1 row: order 1335, the walk-in.
+
+   </details>
+
+## The big idea
+
+A query from an assistant is a **draft**: running it proves only that it runs, so you test it against numbers the draft did
+not produce.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ai-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="ai" id="ai-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="ai" id="ai-r1" aria-label="Step 1 of 6: The AI writes a draft query" />
+<input class="sa-r r2 o2" type="radio" name="ai" id="ai-r2" aria-label="Step 2 of 6: Check the row count: ok" />
+<input class="sa-r r3 o4" type="radio" name="ai" id="ai-r3" aria-label="Step 3 of 6: Check a known total: it differs" />
+<input class="sa-r r4 o5" type="radio" name="ai" id="ai-r4" aria-label="Step 4 of 6: Fix the query and run it again" />
+<input class="sa-r r5 o7" type="radio" name="ai" id="ai-r5" aria-label="Step 5 of 6: Both checks pass" />
+<input class="sa-r r6 o8" type="radio" name="ai" id="ai-r6" aria-label="Step 6 of 6: Now it is trusted" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 190" width="360" role="img" aria-labelledby="ai-t ai-d">
+<title id="ai-t">An AI draft is trusted only after it passes your checks</title>
+<desc id="ai-d">A draft query written by an AI sits on the left. Two checks follow: row count and known total. The first draft passes the row count check but its total differs, so it is marked fix it and slides down to try again. The second draft passes both checks and is marked trusted.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · The AI writes a draft query</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · Check the row count: ok</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">3 · Check a known total: it differs</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">4 · Fix the query and run it again</text>
+<text class="f10 b w2 d6 tmp" x="10" y="29">5 · Both checks pass</text>
+<text class="f10 b w1 d8" x="10" y="29">6 · Now it is trusted</text>
+<text class="f11 b" x="10" y="14">A draft is not an answer until it is checked</text>
+<text class="f10 b mo m" x="135" y="52">row count</text>
+<text class="f10 b mo m" x="215" y="52">known total</text>
+<rect class="bx dsh" x="10" y="64" width="70" height="26" />
+<rect class="bx dsh" x="10" y="134" width="70" height="26" />
+<text class="f11 mu m w3 d6" x="45" y="81">draft 1</text>
+<g class="w8"><g class="mv m5 x0 y7"><rect class="f-src k2" x="10" y="64" width="70" height="26" rx="6" /><text class="f11 m w4 tmp" x="45" y="81">draft 1</text><text class="f11 m w3 d6" x="45" y="81">draft 2</text></g></g>
+<g class="w7 d2"><rect class="f-out k3" x="100" y="64" width="70" height="26" rx="6" /><text class="f11 m" x="135" y="81">ok</text></g>
+<g class="w6 d3"><rect class="f-flt k3" x="180" y="64" width="70" height="26" rx="6" /><text class="f11 m" x="215" y="81">differs</text></g>
+<g class="w5 d4"><rect class="f-flt k4" x="262" y="64" width="88" height="26" rx="6" /><text class="f11 m" x="306" y="81">fix it</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="100" y="134" width="70" height="26" rx="6" /><text class="f11 m" x="135" y="151">ok</text></g>
+<g class="w2 d7"><rect class="f-out k3" x="180" y="134" width="70" height="26" rx="6" /><text class="f11 m" x="215" y="151">ok</text></g>
+<g class="w1 d8"><rect class="f-out k4" x="262" y="134" width="88" height="26" rx="6" /><text class="f11 m" x="306" y="151">trusted</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ai-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ai-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ai-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ai-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ai-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="ai-r4"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk6" for="ai-r5"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ai-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ai-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ai-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ai-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="ai-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx5" for="ai-r6"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx6" for="ai-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ai-r1">1</label><label class="sa-sb sb2" for="ai-r2">2</label><label class="sa-sb sb3" for="ai-r3">3</label><label class="sa-sb sb4" for="ai-r4">4</label><label class="sa-sb sb5" for="ai-r5">5</label><label class="sa-sb sb6" for="ai-r6">6</label></span>
+</div>
+<p class="ca-cap">Treat an AI-written query as a draft. Check the row count and a total you already know before you trust the result.</p>
+<ol class="sa-steps">
+<li>The AI writes a draft query</li>
+<li>Check the row count: ok</li>
+<li>Check a known total: it differs</li>
+<li>Fix the query and run it again</li>
+<li>Both checks pass</li>
+<li>Now it is trusted</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Counts cover completed
+orders (1,799 of the 1,800); amounts include the extra-zero line (order 2075).
+
+### 1. Ask with the schema and the grain
+
+An assistant has never seen your tables. Tell it what it cannot see: your columns, what one row of each table is (the
+**grain**, S18), how an amount is worked out, and what one row of the answer should stand for.
+
+**Try it.** Send this prompt to any assistant. It holds column names and no customer data; the caution
+box in E22 lists what never to paste.
+
+> *I use DuckDB. Tables: orders(order_id, customer_id, store_id, ordered_at, status, payment_method);
+> order_items(order_item_id, order_id, product_id, quantity, discount_usd); products(product_id, product_name,
+> category, unit_price_usd); stores(store_id, store_name, city, opened_on). One row of orders is one order; one row
+> of order_items is one product line. A line's amount is quantity × unit_price_usd − discount_usd. status is
+> 'completed' or 'canceled'. Question: the average order value of completed orders for each store. Output: one row
+> per store with store_name, orders and avg_order_value. Give only the SQL.*
+
+*Why:* every fact the assistant would otherwise guess is on the page. What comes back is a draft: the next unit has it.
+
+### 2. Read the draft, then run it
+
+Running a draft proves only that it runs. NIST's generative AI profile (NIST AI 600-1) calls content that is "confidently
+stated but erroneous or false" *confabulation*, and says people may believe it, often because the response sounds sure.
+The assistant's own explanation is no help: NIST notes that generated explanations can be confabulated too, and may lead people to trust a wrong answer.
+
+So **read** first. Say what each clause does, `FROM` first. A join returns one row for each matched pair of rows (DuckDB:
+it "uses a rule to match pairs of rows"), so after a join ask what one row now stands for. Then check the **rows**: work
+out how many rows the output grain you asked for must give.
+
+**Try it.** Before you run it: the prompt asked for one row per store. How many rows must come back?
+
+<RunSQL query={`SELECT s.store_name,
+       COUNT(*) AS orders,
+       ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd) / COUNT(*), 2) AS avg_order_value
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN products AS p ON p.product_id = i.product_id
+JOIN stores AS s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+Expected: 3 columns, as asked. *Why:* the joins give one row per line (S21), so `COUNT(*)` counts lines, not orders. That
+is a suspicion, not yet a proof.
+
+### 3. Reconcile with one table
+
+**Reconcile**: compare a count or total from the draft with the same figure from one table, where no join can repeat a
+row.
+
+**Try it.**
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders WHERE status = 'completed';`} />
+
+Expected: 1 row, 1 column: `1799`. *Why:* the draft's `orders` column adds up to 1,304 + 645 + 1,337 = 3,286, the completed
+lines. The one-table count has no join to go wrong, so the draft loses. **Reject.**
+
+### 4. Work the known answer first
+
+A **known answer** is a small frame you total on paper before you run the draft on it. Work it first, so the draft's
+number cannot sway yours. The frame is seven orders, 1458 to 1464, with the canceled one among them.
+
+<figure>
+<svg viewBox="0 0 360 240" width="360" role="img" aria-labelledby="frame-title frame-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="frame-title">A known-answer frame: orders 1458 to 1464</title>
+<desc id="frame-desc">Seven orders with the store, the number of lines, the amount and the status. Order 1461 at Campus is canceled.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A frame small enough to work by hand</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="10" y="132" width="340" height="24" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="36" width="70" height="24" /><rect x="80" y="36" width="90" height="24" /><rect x="170" y="36" width="50" height="24" /><rect x="220" y="36" width="62" height="24" /><rect x="282" y="36" width="68" height="24" /><rect x="10" y="60" width="70" height="24" /><rect x="80" y="60" width="90" height="24" /><rect x="170" y="60" width="50" height="24" /><rect x="220" y="60" width="62" height="24" /><rect x="282" y="60" width="68" height="24" /><rect x="10" y="84" width="70" height="24" /><rect x="80" y="84" width="90" height="24" /><rect x="170" y="84" width="50" height="24" /><rect x="220" y="84" width="62" height="24" /><rect x="282" y="84" width="68" height="24" /><rect x="10" y="108" width="70" height="24" /><rect x="80" y="108" width="90" height="24" /><rect x="170" y="108" width="50" height="24" /><rect x="220" y="108" width="62" height="24" /><rect x="282" y="108" width="68" height="24" /><rect x="10" y="132" width="70" height="24" /><rect x="80" y="132" width="90" height="24" /><rect x="170" y="132" width="50" height="24" /><rect x="220" y="132" width="62" height="24" /><rect x="282" y="132" width="68" height="24" /><rect x="10" y="156" width="70" height="24" /><rect x="80" y="156" width="90" height="24" /><rect x="170" y="156" width="50" height="24" /><rect x="220" y="156" width="62" height="24" /><rect x="282" y="156" width="68" height="24" /><rect x="10" y="180" width="70" height="24" /><rect x="80" y="180" width="90" height="24" /><rect x="170" y="180" width="50" height="24" /><rect x="220" y="180" width="62" height="24" /><rect x="282" y="180" width="68" height="24" /><rect x="10" y="204" width="70" height="24" /><rect x="80" y="204" width="90" height="24" /><rect x="170" y="204" width="50" height="24" /><rect x="220" y="204" width="62" height="24" /><rect x="282" y="204" width="68" height="24" /></g>
+<text x="15" y="52" font-weight="600" font-size="11">order_id</text><text x="85" y="52" font-weight="600" font-size="11">store</text><text x="175" y="52" font-weight="600" font-size="11">lines</text><text x="225" y="52" font-weight="600" font-size="11">amount</text><text x="287" y="52" font-weight="600" font-size="11">status</text><text x="15" y="76" font-size="11">1458</text><text x="85" y="76" font-size="11">Old Town</text><text x="212" y="76" text-anchor="end" font-size="11">3</text><text x="276" y="76" text-anchor="end" font-size="11">14.25</text><text x="287" y="76" font-size="10.5">completed</text><text x="15" y="100" font-size="11">1459</text><text x="85" y="100" font-size="11">Campus</text><text x="212" y="100" text-anchor="end" font-size="11">2</text><text x="276" y="100" text-anchor="end" font-size="11">14.00</text><text x="287" y="100" font-size="10.5">completed</text><text x="15" y="124" font-size="11">1460</text><text x="85" y="124" font-size="11">Old Town</text><text x="212" y="124" text-anchor="end" font-size="11">1</text><text x="276" y="124" text-anchor="end" font-size="11">13.50</text><text x="287" y="124" font-size="10.5">completed</text><text x="15" y="148" font-size="11">1461</text><text x="85" y="148" font-size="11">Campus</text><text x="212" y="148" text-anchor="end" font-size="11">1</text><text x="276" y="148" text-anchor="end" font-size="11">5.00</text><text x="287" y="148" font-size="10.5" font-weight="700">canceled</text><text x="15" y="172" font-size="11">1462</text><text x="85" y="172" font-size="11">Campus</text><text x="212" y="172" text-anchor="end" font-size="11">1</text><text x="276" y="172" text-anchor="end" font-size="11">13.50</text><text x="287" y="172" font-size="10.5">completed</text><text x="15" y="196" font-size="11">1463</text><text x="85" y="196" font-size="11">Old Town</text><text x="212" y="196" text-anchor="end" font-size="11">1</text><text x="276" y="196" text-anchor="end" font-size="11">4.00</text><text x="287" y="196" font-size="10.5">completed</text><text x="15" y="220" font-size="11">1464</text><text x="85" y="220" font-size="11">Campus</text><text x="212" y="220" text-anchor="end" font-size="11">2</text><text x="276" y="220" text-anchor="end" font-size="11">17.00</text><text x="287" y="220" font-size="10.5">completed</text>
+</svg>
+</figure>
+
+*Excel:* the same loop as E22: work out the answer by hand, then run the drafted formula.
+
+**Try it.** Before you run it: from the frame, work out the average completed order of Old Town and of
+Campus. Then run the draft on the same seven orders.
+
+<RunSQL query={`SELECT s.store_name,
+       COUNT(*) AS orders,
+       ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd) / COUNT(*), 2) AS avg_order_value
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN products AS p ON p.product_id = i.product_id
+JOIN stores AS s ON s.store_id = o.store_id
+WHERE o.status = 'completed' AND o.order_id BETWEEN 1458 AND 1464
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+Expected: 2 rows, 3 columns. *Why:* the draft gives Old Town 5 "orders" and 6.35, Campus 5 and 8.90. Both are rejected, and
+the cause is visible: 31.75 divided by 5 lines.
+
+### 5. Fix it, then check again
+
+A fix is another draft, so run the checks again. Here the cause is `COUNT(*)`: count distinct orders instead. Then hunt
+for rows with an empty key: DuckDB says an inner join returns only the rows that get paired, so such a row vanishes
+silently. This question has none.
+
+**Try it.**
+
+<RunSQL query={`SELECT s.store_name,
+       COUNT(DISTINCT o.order_id) AS orders,
+       ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd) / COUNT(DISTINCT o.order_id), 2) AS avg_order_value
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN products AS p ON p.product_id = i.product_id
+JOIN stores AS s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+Expected: 3 rows, 3 columns: Campus 715 and 12.59, Harbor 355 and 12.98, Old Town 729 and 12.54. *Why:* the orders add up to
+1,799. With the `BETWEEN` line of unit 4 it gives 10.58 and 14.83, the hand answers. A second route: Old Town's sales of
+9,144.25 divided by its 729 orders is 12.54. The answer to the owner: **6.84 was the average line; the average order at
+Old Town is 12.54.**
+
+<details>
+<summary>Explain it in your own words: why did the row count pass while the draft was wrong?</summary>
+
+The output grain was right: one row per store. The error was in what `COUNT(*)` counted. A row count checks the shape;
+only a total or a known answer checks the numbers.
+
+</details>
+
+Here are the five checks, and how this draft fared.
+
+<figure>
+<svg viewBox="0 0 360 304" width="360" role="img" aria-labelledby="chk-title chk-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="chk-title">Five checks on a drafted query, and how the lesson's draft fares</title>
+<desc id="chk-desc">A list of five checks. 1, read it clause by clause: COUNT(*) after a join counts lines, so suspect. 2, rows: one row per store is expected and the draft returns 3, so it passes. 3, reconcile: the draft's orders column adds to 3,286 while completed orders number 1,799, so it fails. 4, known answer: worked by hand, the Old Town average order on a small frame is 10.58 and the draft gives 6.35, so it fails. 5, NULLs: not triggered by this question.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Five checks: this draft, run through them</text>
+<rect x="10" y="44" width="340" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" /><text x="18" y="61" font-size="11" font-weight="700">1  Read it</text><text x="110" y="61" font-size="10">Say what every clause does.</text><text x="110" y="76" font-size="10">COUNT(&#42;) after a join counts lines.</text><text x="18" y="77" font-size="10" font-weight="400">suspect</text><rect x="10" y="94" width="340" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" /><text x="18" y="111" font-size="11" font-weight="700">2  Rows</text><text x="110" y="111" font-size="10">Expect one row per store: 3 rows.</text><text x="110" y="126" font-size="10">The draft returns 3 rows.</text><text x="18" y="127" font-size="10" font-weight="700">PASS</text><rect x="10" y="144" width="340" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" /><text x="18" y="161" font-size="11" font-weight="700">3  Reconcile</text><text x="110" y="161" font-size="10">Its orders column adds to 3,286; a count of</text><text x="110" y="176" font-size="10">completed orders gives 1,799.</text><text x="18" y="177" font-size="10" font-weight="700">FAIL</text><rect x="10" y="194" width="340" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" /><text x="18" y="211" font-size="11" font-weight="700">4  Known answer</text><text x="110" y="211" font-size="10">Frame by hand: Old Town 10.58.</text><text x="110" y="226" font-size="10">The draft gives 6.35.</text><text x="18" y="227" font-size="10" font-weight="700">FAIL</text><rect x="10" y="244" width="340" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" /><text x="18" y="261" font-size="11" font-weight="700">5  NULLs</text><text x="110" y="261" font-size="10">Do rows with an empty key survive the joins?</text><text x="110" y="276" font-size="10">Not triggered by this question: Exercise 1.</text><text x="18" y="277" font-size="10" font-weight="400">not tested</text>
+</svg>
+</figure>
+
+<Aside type="tip" title="Remember">
+
+- Running a draft proves only that it runs. Test it against something the draft did not produce.
+- The five checks: read, rows, reconcile, known answer, empty keys.
+- Work your own answer before you look at the draft's.
+
+**Common trap: "a clear explanation means the query is right."** The explanation is more text from the same source, and it
+can be wrong in the same confident way. Only a comparison with something else counts.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-ai-assisted-queries-1">
+
+**An assistant drafts "customers who never ordered". Do you accept it?** The dataset's description says five customers
+signed up and never ordered. Expected shape: 1 column. The number of rows is what you check.
+
+The first steps are done for you: the prompt gave the schema and "customers with no order", and you read the draft: it tests
+each customer against the `customer_id` values of `orders`.
+
+<RunSQL query={`SELECT customer_id
+FROM customers
+WHERE customer_id NOT IN (SELECT customer_id FROM orders);`} />
+
+Now finish it: compare its row count with the five, find out why with one query on `orders`, and write a draft that passes.
+
+<details>
+<summary>Hint</summary>
+
+Use the check of *NULL: unknown is not zero* (S4): how many rows of `orders` have an empty `customer_id`? Then use the
+anti-join of *LEFT JOIN and finding rows with no match* (S20).
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT c.customer_id
+FROM customers AS c
+LEFT JOIN orders AS o ON ...
+WHERE o.order_id IS NULL;
+```
+
+</details>
+
+<Solution>
+
+The draft returns 0 rows, not 5. `SELECT COUNT(*) - COUNT(customer_id) FROM orders;` returns `1`: order 1335, the
+walk-in, has no customer, so the list inside `NOT IN` contains an empty value. A comparison with an empty value is
+neither true nor false, so no customer passes the "differs from every value" test (a standard-SQL rule; the result shows
+it).
+
+```sql
+SELECT c.customer_id
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id;
+```
+
+It returns 5 rows: customers 140, 147, 148, 149 and 150.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-ai-assisted-queries-2">
+
+**An assistant drafts the running total of completed sales, one row per day.** Work in the Exercise 2 blocks.
+
+Before you run anything, write one sentence: how many rows the result should have, and its last value. Then run the
+draft, check it, and write a fixed query and the prompt that states the output grain.
+
+Expected shape: 2 columns (the day and the running total). The draft is a window function (S14).
+
+<RunSQL query={`SELECT CAST(o.ordered_at AS DATE) AS order_day,
+       SUM(i.quantity * p.unit_price_usd - i.discount_usd) OVER (ORDER BY CAST(o.ordered_at AS DATE)) AS running_sales
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN products AS p ON p.product_id = i.product_id
+WHERE o.status = 'completed'
+ORDER BY order_day;`} />
+
+<details>
+<summary>Hint</summary>
+
+What grain does this query return? The window runs over the rows that reach it: build one row per day first, in a CTE
+(S13).
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One row for each day of the period, with the running total beside it; the last value equals the completed-sales total."*
+Write a `daily` step with `GROUP BY` the day, then the window over `daily`.
+
+</details>
+
+<Solution>
+
+The draft returns 3,286 rows, one per line, not 181: its last value is 22,749.25, the right total, so an end-of-series
+check passes while the grain is wrong. A prompt that would help says: *"Output: one row per day with order_day and
+running_sales, 181 rows."* Fixed:
+
+```sql
+WITH daily AS (
+  SELECT CAST(o.ordered_at AS DATE) AS order_day,
+         SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS sales
+  FROM orders AS o
+  JOIN order_items AS i ON i.order_id = o.order_id
+  JOIN products AS p ON p.product_id = i.product_id
+  WHERE o.status = 'completed'
+  GROUP BY CAST(o.ordered_at AS DATE)
+)
+SELECT order_day, ROUND(SUM(sales) OVER (ORDER BY order_day), 2) AS running_sales
+FROM daily
+ORDER BY order_day;
+```
+
+181 rows; the first three values are 45.50, 121.25 and 186.75, and the last is 22,749.25. The total was right and the row
+count wrong, which is why you run more than one check.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the five checks, and say what each compares the draft with.
+
+<details>
+<summary>Answer</summary>
+
+Read (the clauses against what you asked), rows (the output grain you expect), reconcile (a one-table count or total),
+known answer (your hand work on a small frame), empty keys. None uses the assistant's own claims as the standard.
+
+</details>
+
+<Exercise id="sql-ai-assisted-queries-3">
+
+**Spot the flaw.** For the sales of each store, an assistant drafts the query below. A colleague checks that it returns 3
+rows and that Harbor's 4,606.25 matches the pivot, and accepts it. Expected: 3 rows, 2 columns. What went wrong, and which
+check would have caught it?
+
+<RunSQL query={`SELECT s.store_name,
+       ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd), 2) AS sales
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN products AS p ON p.product_id = i.product_id
+JOIN stores AS s ON s.store_id = o.store_id
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+<Solution>
+
+The draft has no filter on `status`, so it adds the canceled line too. The checks passed by luck: three stores are
+three rows, and Harbor has no canceled lines. Campus has the canceled order 1461 (5.00): the draft gives 9,003.75, not the
+completed 8,998.75.
+
+A known-answer frame has to contain the trap. On orders 1458 to 1464, which include 1461, the draft gives Campus 49.50;
+by hand the completed orders add up to 44.50. Reconciling the three stores with the completed total fails too: 22,754.25
+against 22,749.25. The fix is `WHERE o.status = 'completed'`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a prompt with the schema, the question and the output grain, read a draft clause by clause,
+and test it with a row count, a reconciled total and a hand-computed frame.*
+Test: Exercise sql-ai-assisted-queries-2, done from an empty editor without opening the hints.
+
+The pattern to remember: **draft, then check against something the draft did not produce, then decide.**

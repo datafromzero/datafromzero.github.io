@@ -13,14 +13,33 @@ No frontmatter `name`, so it is not loaded as an agent. Past mistakes and their 
 3. Your lessons' entries in `research/curriculum/06-curriculum-map.yaml` (`visual`, `notes`, `research`).
 4. `datasets/cafe-sales/README.md` (tables, row counts, built-in surprises). Not the whole SPEC.
 
-## Shape (seven `##` headings, exactly)
+## Shape (seven `##` headings, exactly; SQL lessons have eight)
 
-Warm-up · The question · The picture · Worked example · Finish it · On your own · Check yourself.
+Warm-up · The question · The picture · **How it works (SQL lessons only)** · Worked example · Finish it · On your own ·
+Check yourself.
 
 - **Warm-up:** 2–3 recall prompts from earlier lessons (use their frontmatter objectives), at least one asks the
   learner to produce something; answers in lowercase `<details>`.
 - **The question:** one business question with the data visible (a small table); promise the answer.
-- **The picture:** one static inline SVG (at most two stacked), labels on the grid itself.
+- **The picture:** one static inline SVG (at most two stacked), labels on the grid itself. A concept where rows move may use
+  a step animation instead of one of them (see Step-by-step figures below).
+- **How it works** (SQL lessons; the owner added it because the stage lacked theory): 200–400 words of prose right
+  after the picture and before the worked example, in our own words with cafe-sales numbers. In this order: (1) the
+  idea in one or two sentences; (2) the mechanism, a numbered list of what SQL does to the rows in logical order
+  (`FROM` first for a query with several clauses), tied to the picture with "in the picture above…" without depending
+  on it; (3) the rules, stated precisely, one bullet each (`GROUP BY`: every selected column is a key or inside an
+  aggregate, and `WHERE` and `HAVING` run at different moments; windows: the row count never changes, and the default
+  frame; joins: a join keeps every pair of rows where `ON` is true, `NULL` never equals anything, and a repeated key
+  multiplies rows); (4) one **Excel** sentence that names the E-lesson by code and title; (5) one **common
+  misconception** and why it is wrong. A tiny snippet only if it clarifies a rule; no new exercises. List every predict
+  and spot-the-flaw prompt in the lesson first: no sentence of the section may state a prompt's answer or reuse its
+  query. Define each term on first use.
+  Theory lives here only: the prose after the picture and the later sections must not restate it (the Excel mapping
+  table may stay at the end of the section). **Sourcing:** each rule rests on a sentence in a page you opened (the
+  DuckDB 2.0 docs, the engine the lesson runs), written in your own words; add the page to `sources` only if a claim of
+  the section sits there. A rule the docs do not state is shown by a result you ran, or goes in `TODO(owner)`, and the
+  report says which. Recompute every number with DuckDB 2.0.0. Never copy or closely paraphrase another teaching site's
+  text, examples or diagrams. Count the section in the lesson's body words and raise `duration` by the length rule.
 - **Worked example:** numbered steps, each with *why*; the last step verifies (row count, reconciled total, a
   second method); then a self-explanation `<details>`.
 - **Finish it:** `<Exercise>` 1, faded: first steps given, learner finishes.
@@ -31,10 +50,56 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
 - Every exercise: hint `<details>`, half-solution `<details>`, then exactly one `<Solution>`.
 - One new idea per lesson. Keep within `duration`; say so in the report if it cannot fit.
 
+## Pilot shape (interleaved)
+
+**Status: pilot, waiting for the owner to approve or reject it.** Written for the owner's direction: "interleave theory
+and exercises so the learner can study easily, balancing knowledge and practice; no dry, wordy prose; animations must be
+beautiful and memorable; always stand where a learner who knows nothing about data analysis stands." Piloted on S8
+(`group-by-having`), S14 (`window-functions`) and S19 (`inner-join`). Until the owner decides, every other lesson keeps
+the shape above, and a lesson uses one shape or the other, never a mix. Everything outside "Shape" and "How it works"
+above (rules, figures, files, done means) applies unchanged.
+
+**Headings, in this order** (`##` unless marked): The question · Warm-up · The big idea · Learn by doing (with 3 to 5
+`###` units, numbered) · Remember · Finish it · On your own · Check yourself. The `How it works` and `The picture`
+headings are gone: their content moves as below.
+
+- **The question:** as above, in one or two human sentences, with the data visible. No "by the end you will" paragraph.
+- **Warm-up:** at most 2 recall prompts (use earlier lessons' objectives), at least one that produces something.
+- **The big idea:** one plain sentence saying what the tool does to the rows, then the concept animation on its own
+  line as an MDX comment marker, `{/* CONCEPT: concept-name */}`, which the lead replaces with the generated markup.
+  No other text between the sentence and the animation.
+  After changing a spec or `step-animation.mjs`, run `node scripts/refresh-concept-figures.mjs` (`--check` to test) to re-paste every concept figure.
+- **Learn by doing:** one line of orientation, then the units. A unit is about 80 to 200 words of prose plus its
+  queries and carries exactly one rule:
+  1. **Idea:** the rule in one to three short sentences, plain words, with one Excel or cafe comparison only when it
+     helps. Define every new word in the sentence that uses it (row, column, key, aggregate, grain, NULL...); a lesson
+     never uses a term before it has been explained. Idea sentences never state the answer to a Predict in the unit.
+  2. **Try it:** the worked-example query in a `<RunSQL>` block, introduced with "**Try it:**" (no step numbers: the
+     SQL stage has no notebook to stay in step with, D43).
+  3. **Predict:** keep the existing prompts, before the query.
+  4. **Result:** the Expected line (columns only after a "how many rows?" prompt), then the data **stepper** if this unit
+     is the one it illustrates (D41: byte for byte from the generator), and any static figure that the unit's rule
+     explains.
+  5. **Why:** one line. A unit may use a self-explanation `<details>` instead of the line.
+  The last unit is a short **check** (reconcile the result with a second route or an Excel total). Theory is never
+  stated twice: a rule appears in the unit where it is first needed and nowhere else except the Remember box. The
+  `Excel` mapping table is dropped: each unit carries its own Excel line.
+- **Remember:** an `<Aside type="tip" title="Remember">` after the last unit with 3 to 5 one-line rules and one bold
+  **Common trap:** line (the former misconception, still correct, with the failing result named). A summary, so very
+  short; no new rule appears in it.
+- **Practice:** Finish it, On your own and Check yourself unchanged; only wording fixes the new shape needs (a hint
+  that said "step 4" now says "unit 2").
+- **Voice:** speak to "you"; short sentences; paragraphs of at most 3 sentences; one idea per paragraph; the cafe
+  example first, the general rule second; no "it is important to note", no stacked definitions, no jokes or fluff. One
+  word for one thing: where a figure says "group" (or "partition"), the text says the same.
+- **Length:** the same limit, about 100 body words per minute of `duration`. The pilot should read lighter, so cut every
+  word a unit does not need; keep every rule, source, number and Predict.
+- **Sourcing and numbers:** unchanged. Each rule keeps the doc sentence it rested on; recompute every number with DuckDB.
+
 ## Rules the reviews kept catching
 
 - **Exercises never overwrite** the worked example's sheet, cells or output. Each exercise has its own pre-built
-  sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`; notebooks: their own cells). Anything the text calls "done for you"
+  sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`). Anything the text calls "done for you"
   must exist in the file.
 - **Raw data is never edited**, not in examples and not in solutions (`raw_*` sheets, source CSVs).
 - **Summary cells sit where a filter cannot hide them** (above the data or on another sheet).
@@ -48,6 +113,114 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
   person, no "I could not find", and no process notes like "checked as SQL".
 - **Quotes are exact**, or they are paraphrases without quote marks.
 - **SVG pictures match the real data** (codes, store numbers, results).
+
+## Runnable SQL (SPEC D42)
+
+In every SQL lesson, a query the learner should run is a `<RunSQL query={`...`} />` (no import; SPEC §6), not a fenced block:
+every **Try it** query and every exercise's starter query (the given first steps, or the broken query of a spot-the-flaw).
+An exercise with a blank start gets a `<RunSQL query={`-- Write your query here, then press Run.`} />` before its hint.
+Hints, half-solutions and solutions stay fenced blocks. Rules:
+
+- The query must run on its own against the five cafe-sales tables (the page starts each visit fresh); a block that needs a
+  table or view from an earlier block says so in the sentence before it. Never use `/* as in step 1 */` fragments in a
+  `RunSQL`: give the full query, or keep a plain fenced block.
+- No backtick, backslash or `${` inside the query (it is a template string); the build stops the lesson if the query is empty.
+- Keep the **Expected:** line next to it: the output box shows "n rows × m columns" above the result, so the learner can check it.
+- The block is two boxes (editor, output) with a Tables button listing the five tables; in the text say "the editor" and "the output",
+  never "on the left / on the right". A blank starter (`-- Write your query here`) is fine for an open exercise.
+- The block loads itself in the background; never tell learners to wait for it or mention an engine, a download or DuckDB.
+- Results come from DuckDB 1.4.3 in the browser, and the numbers in the lesson from DuckDB 2.0.0. Where a query has no
+  `ORDER BY`, row order can differ (set operations, for example); say "in any order" or add the `ORDER BY`.
+- The SQL stage has no notebooks and no Colab link (D43): every query runs in the page. Never write `con.sql`, `.show()`,
+  `%pip`, "notebook" or "Colab" in a SQL lesson, and never add a `notebook` field or `<OpenInColab />`.
+
+## Step-by-step figures (SPEC D41)
+
+Pictures and animations are **original work**, drawn from our own cafe-sales rows and our design tokens; external
+visuals (other sites' GIFs, posters, diagrams) may inspire the concept only. Never download, trace or recreate one,
+and never copy its layout, colors, characters, captions or sample tables.
+
+- **When:** only where the idea is rows moving or merging: aggregation and GROUP BY, joins, window functions, CTE
+  pipelines, set operations, recursion. Not for syntax, formulas or anything a still picture shows as well. At most one
+  per lesson, in "The picture", in place of one of its two SVGs.
+- **What the learner gets:** a stepper, not an animation. Back, buttons 1 to N and Next (native radios, no JavaScript);
+  step 1 is the default; each step changes one thing with a 0.45 s fade; all captions stay listed under the figure, the
+  current one marked. Print and reduced motion: the final frame plus all captions (the radios stay hidden in print).
+- **How:** write a spec in `scripts/animations/<lesson-id>.mjs` (copy `sql-inner-join.mjs`): `steps` is
+  `[{ role, clause, text, predict? }]` (at most 6), then draw the FINAL frame with `row`, `text`, `rect`, `path` and give
+  each part that changes an effect: `in: n` (appears at step n), `out: n` (dimmed from n), `hide: n` (gone from n; a
+  frame for one step only is `in: n, hide: n+1`). Shade with `tint(role, level)`, outline with `edge(role)`; `row`
+  draws the tint under the text. Run `node scripts/make-animation.mjs <name> --stats` and paste the `<figure class="sa">`
+  block into the lesson (no blank lines inside it; MDX ends HTML at a blank line). The generator escapes `$` and `*`.
+  Rerun and re-paste when the data changes.
+- **Data:** rows come from the real tables; recompute counts with DuckDB 2.0.0 and say in the spec comment which query
+  you ran. A miniature may stand in for the full table; say so on the figure.
+- **Captions:** one plain sentence per step, starting with its clause badge (`clause`, colored by `role`). Order: input
+  (FROM/JOIN), then the clauses in the order the engine applies them. Before a step that reveals a result, the caption
+  before it ends with a **Predict:** prompt that does not give the result away. All captions are visible from step 1, so a
+  caption names the operation, never a number or name a later step reveals. The `<title>` and `<desc>` describe the final frame.
+- **No overlap:** text never overlaps other text at any step or mid-fade; parts only fade in at their own slot, nothing
+  slides through other rows. Put a value in the column of the table it describes. Check with Playwright (text boxes at
+  each step).
+- **Clause colors** (fixed in every lesson, only inside figures; tokens `--c-*` in `src/styles/step-animation.css`; each
+  hue is at least 3:1 on pure black and on pure white; color is never the only cue):
+
+  | Role | Clauses | Hue |
+  | --- | --- | --- |
+  | `src` | FROM, JOIN (input tables) | blue `#0072b2` |
+  | `mat` | ON (the match) | violet `#9a6be0` |
+  | `flt` | WHERE, HAVING (kept or dropped) | red `#c0392b` |
+  | `grp` | GROUP BY (group keys) | green `#00a07a` |
+  | `out` | SELECT, aggregates (output) | gold `#ad9100` |
+  | `win` | OVER, PARTITION BY | magenta `#d6479a` |
+  | `ord` | ORDER BY | gray `#808080` |
+
+  Groups, partitions or keys inside one role are shade steps `k1` to `k4` of that hue (three groups use `k1`, `k2`, `k4`),
+  always next to a label (store_id, product_id). Dimmed means dropped and also gets a "dropped" label.
+
+## Concept animations (SPEC D41)
+
+The data steppers above serve the exercises and the worked example. A **concept animation** explains the idea itself:
+abstract, schematic, looping, like an animated cheat-sheet figure. Owner request, 2026-11-18.
+
+- **Where:** at the top of "How it works", before its prose, one per lesson (the join lessons use the variant of their
+  join type). Never in place of the data stepper of "The picture".
+- **One metaphor, in plain words:** each animation has one picture the learner can say aloud, written as its title line
+  ("Many rows → one answer", "Every row keeps its seat and gets a note", "Keys shake hands", "A CTE is a named scratch table").
+  A small step label under it (`tags`) changes with the phase ("1 · rows" → "2 · grouped" → "3 · one row each").
+- **Motion where it carries the idea:** rows, keys and tables really slide (`move`, ease-in-out, one phase), not just fade.
+  `half: 'a'` or `'b'` makes one part leave in the first half of a phase and the next follow in the second. Rounded chips
+  (`chip`), a soft ring where something landed (`pulse: true`), empty dashed seats where a part left (`ghost`). Distances are
+  multiples of 10 px.
+- **Abstract only:** no cafe-sales values and no real numbers. Rows are plain cells with labels such as Row 1, Col 3, t1,
+  t2, A, B, C, x1, Σ. Original drawing, our tokens and clause colors; nothing taken from other sites' diagrams.
+- **How:** a spec `scripts/animations/concept-<name>.mjs` that calls `anim({ id, h, loop: { cycle }, title, desc,
+  caption })` (cycle 4 to 8 s; copy `concept-aggregate-window.mjs`). The loop is 8 phases. A part has an effect
+  `{ in: k, hide: m }` (appears at phase k, gone from phase m; default: stays to the end), an arrow or line `{ in: k, draw: true }`.
+  Parts that are always there have no effect. Draw with `chip`, `move`, `tags`, `row`/`grid`, `box`, `badge`, `arrow`, `venn`, `ghost`. Ready animations (paste with the command
+  after the name): `concept-group-by` (S8), `concept-aggregate-window` (S14), `concept-cte-kinds`, `concept-join:inner|left|right|full|cross`,
+  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`. Also ready (one per key, marker `{/* CONCEPT: <key> */}`): `concept-query`, `-select-order-limit`, `-where`, `-null`, `-expression`, `-case`, `-aggregate`, `-conditional-agg`, `-text-clean`, `-date-trunc`, `-rank-ties`, `-sliding-window`, `-dedup`, `-keys`, `-fanout`, `-self-join`, `-subquery`, `-set-ops`, `-funnel`, `-cohort`, `-recursive`, `-view`, `-star`, `-ai-check`, `-constraints`, `-transaction`, `-normalize`, `-index`, `-shard` (each with `concept-` in front). The facts each one shows are in its spec's header comment with the DuckDB run that checked them.
+  `node scripts/make-animation.mjs concept-join:left --stats` prints the markup for the lesson (variants after a colon).
+  About 3 to 5 KB of animation markup (two are about 7 KB) plus about 3 KB of step controls per animation; the CSS is shared.
+- **Pause and steps:** autoplay is the default. Under the figure the learner has Pause / Play (a native checkbox, 44 px, WCAG 2.2.2),
+  Back, Next and one button per step, "1 2 3 … N" with N = 3 to 6 (a native radio group `[auto, 1..N]`, no JavaScript). Choosing a step
+  stops the loop and shows the settled frame at the end of that step, with its label; Back and Next move through the steps, arrow keys
+  work, the focus ring is visible, and "▶ Play" returns to autoplay. A numbered list of the step captions sits under the figure with the
+  current one marked, and each radio is labeled "Step k of N: caption". Never remove any of it. Everything comes from the generator.
+- **Steps and captions:** a spec gives `phases: [[firstPhase, 'caption'], ...]` to `anim`: 3 to 6 steps, the first starts at phase 1, a
+  step lasts until the next one starts (a step may cover several phases of the 8). The generator draws the in-figure label ("k · caption")
+  and builds the buttons and the caption list from the same words, so never call `tags` for the phase label and never repeat a caption.
+  Say what changes at that step, in plain words ("Row 2: false, stopped", "Fewer reach step 3"), not the idea of the whole figure, and
+  keep each under about 40 characters. Step k shows the frame at the end of its last phase, so everything that step does must be finished
+  by then.
+- **Static view:** print shows the final state (everything that stays to the end, arrows drawn), all captions and no controls, so design
+  the last phase as the picture you would print. Reduced motion shows step 1, still, and the step buttons switch frames instantly (no
+  motion at all). Hold the last phase for about a second: leave it idle.
+- **No overlap:** text never over text at any moment. A moving part never crosses a label: put the label where nothing passes, or show it after the part has arrived. Two labels that share a slot get windows that touch without
+  overlapping (`{ in: 5, hide: 6 }` then `{ in: 6, hide: 7 }`). Check the frames every 0.1 s in Playwright (390 and 1280 px, light and dark), and sample
+  the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins). Then click every step button and
+  check that its frame equals the running loop paused at the end of the last phase of that step.
+- **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
 ## Markup
 
@@ -67,17 +240,16 @@ Warm-up · The question · The picture · Worked example · Finish it · On your
   `common.py`, do not edit it), built by `python3 scripts/build-lesson-sheets.py {lesson-id}` into
   `sheets/excel/{lesson-id}.xlsx`; sheets `raw_*`, `calc`, `calc_ex1..3`, `output`. Plus the `TODO(owner)` paragraph
   about the Google Drive `sheet` link, copied from the model lesson.
-- SQL and Python: a notebook `notebooks/{stage}/{lesson-id}.ipynb` without outputs (the `notebook` field), loading
-  data from the release-tag URL in SPEC §7 (now `v0.1.0`, D39). SQL notebooks copy the model lesson's setup cell
-  (`%pip install -q duckdb==2.0.0`, then `con.execute(script)` on `cafe-sales.sql`; run
-  `python3 scripts/pin-notebook-duckdb.py` after adding a notebook), use `con.sql("""...""").show()` cells without the closing `;`, one cell per
-  worked step, empty or partial cells per exercise, and no solutions. The lesson renames to `.mdx` for `<OpenInColab />`.
+- Python: a notebook `notebooks/python/{lesson-id}.ipynb` without outputs (the `notebook` field), loading data from the
+  release-tag URL in SPEC §7 (now `v0.1.0`, D39); the lesson renames to `.mdx` for `<OpenInColab />`. Colab starts in the
+  Python stage (D43). SQL lessons have no notebook.
 - SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
   `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
   in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what
   the lesson's prerequisites have not taught yet; name earlier lessons by title and code at first use.
 - Length: about 100 body words per minute of `duration` (a 20-minute lesson is at most about 2,200 words with the
-  exercises); report the count.
+  exercises); report the count. Body words: everything after the frontmatter except the `<svg>` blocks, code and the
+  `TODO(owner)` paragraph included, split on whitespace.
 
 ## Done means
 

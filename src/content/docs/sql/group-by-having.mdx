@@ -16,7 +16,6 @@ prerequisites:
   - sql-aggregate-functions
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-group-by-having.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: GROUP BY clause'
@@ -36,24 +35,34 @@ sources:
 status: draft
 ---
 
-This lesson uses the same setup as *From a spreadsheet to SQL* (S1): DuckDB, a free database engine, inside a Google
-Colab notebook, so there is nothing to install. One `COUNT(*)` answers a question about the whole table. The owner
-usually wants one answer per cafe, per payment method or per customer. `GROUP BY` gives you one result row for each.
+This lesson uses the same tables as *From a spreadsheet to SQL* (S1): the five tables of **cafe-sales**, the invented
+three-cafe chain we use from Excel to Python. Each query runs in the editor on this page.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. As in S1, each query sits between `con.sql("""` and `""").show()`, and the notebook cells leave out the
-closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Compare the error text in exercise 3 with Colab's version. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB pages used here do not say where the `SELECT` list falls between `HAVING` and `ORDER BY`, so the order in the text and in Check yourself rests on general SQL knowledge; source it in *How a query runs* (S12). When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line, including the error of exercise 3. Time the lesson against its 25 minutes. Source, or drop, the statement in the exercise 2 solution that the walk-in order forms its own `NULL` group: the DuckDB pages opened for this lesson do not state how `GROUP BY` treats `NULL`. The DuckDB SELECT page says the `SELECT` list is evaluated only at the end and that `ORDER BY` and `LIMIT` are applied at the very end; it gives no explicit sequence between those two, so the `SELECT`-then-`ORDER BY` order in unit 4 and in Check yourself rests on that reading; source it in *How a query runs* (S12). When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> How many orders did each cafe take, and how did customers pay at each one? Which cafes took at least 500 completed
+> orders?
+
+One `COUNT(*)` gives one number for the whole table. The owner wants one for each cafe.
+
+Each order is one **row** of the `orders` table. Its store and payment method are **columns**. Four rows (the stores
+are 1 Old Town, 2 Campus and 3 Harbor):
+
+| order_id | store_id | status | payment_method |
+|---:|---:|---|---|
+| 1105 | 2 | completed | cash |
+| 1106 | 1 | completed | card |
+| 1107 | 1 | completed | mobile |
+| 1108 | 1 | completed | card |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In *Counting and summing: aggregate functions* (S7), write one query that returns the number of orders and the
    number of different customers who placed them.
@@ -80,27 +89,211 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+`GROUP BY` sorts your rows into **groups**, like buckets: one group for each different value of a column you pick.
+Then it turns every group into a single row.
 
-> How many orders did each cafe take, and how did customers pay at each one? Which cafes took at least 500 completed
-> orders?
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="gb-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="gb" id="gb-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="gb" id="gb-r1" aria-label="Step 1 of 4: Six rows, each with a key" />
+<input class="sa-r r2 o4" type="radio" name="gb" id="gb-r2" aria-label="Step 2 of 4: Rows slide into one bucket per key" />
+<input class="sa-r r3 o5" type="radio" name="gb" id="gb-r3" aria-label="Step 3 of 4: Each bucket becomes one row" />
+<input class="sa-r r4 o8" type="radio" name="gb" id="gb-r4" aria-label="Step 4 of 4: HAVING drops a whole bucket" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 224" width="360" role="img" aria-labelledby="gb-t gb-d">
+<title id="gb-t">GROUP BY sorts rows into buckets, one bucket per key</title>
+<desc id="gb-d">Six rows, Row 1 to Row 6, each tagged with a key: A, B, A, C, B, A. The A rows slide into bucket A, the B rows into bucket B and the C row into bucket C. Each bucket then becomes one row with its count: A 3 rows, B 2 rows, C 1 row. HAVING then drops a whole bucket: bucket C, with one row, is marked dropped.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Six rows, each with a key</text>
+<text class="f10 b w3 d2 tmp" x="10" y="29">2 · Rows slide into one bucket per key</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">3 · Each bucket becomes one row</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · HAVING drops a whole bucket</text>
+<text class="f11 b" x="10" y="14">Rows → buckets → one row each</text>
+<rect class="bx dsh" x="10" y="40" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="70" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="100" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="130" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="160" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="190" width="64" height="24" rx="6" />
+<rect class="bx" x="110" y="30" width="236" height="44" rx="8" />
+<text class="f14 b w6 d3" x="116" y="56">A</text>
+<rect class="bx" x="110" y="90" width="236" height="44" rx="8" />
+<text class="f14 b w5 d4" x="116" y="116">B</text>
+<rect class="bx" x="110" y="150" width="236" height="44" rx="8" />
+<text class="f14 b w4 d5" x="116" y="176">C</text>
+<g class="w4 tmp"><g class="mv m2 x12 y0"><g><rect class="f-grp k1" x="10" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="56">Row 1 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x12 y3"><g><rect class="f-grp k2" x="10" y="70" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="86">Row 2 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2 x19 yn6"><g><rect class="f-grp k1" x="10" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="116">Row 3 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m4 x12 y3"><g><rect class="f-grp k4" x="10" y="130" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="146">Row 4 · C</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x19 yn6"><g><rect class="f-grp k2" x="10" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="176">Row 5 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2a x26 y0"><g class="w8"><g class="mv m2b x0 yn15"><g><rect class="f-grp k1" x="10" y="190" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="206">Row 6 · A</text></g></g></g></g></g>
+<g class="w4 d5"><rect class="f-out k3" x="130" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="56">3 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="36" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="116">2 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="96" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="160" width="64" height="24" rx="6" /><rect class="f-flt k3 w3 d6" x="130" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="176">1 row</text></g>
+<rect class="s-flt u2 d5 tmp" x="126" y="156" width="72" height="32" rx="8" />
+<text class="f10 b w3 d6" x="204" y="176">dropped</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="gb-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="gb-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="gb-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="gb-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="gb-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="gb-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="gb-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="gb-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="gb-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="gb-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="gb-r1">1</label><label class="sa-sb sb2" for="gb-r2">2</label><label class="sa-sb sb3" for="gb-r3">3</label><label class="sa-sb sb4" for="gb-r4">4</label></span>
+</div>
+<p class="ca-cap">GROUP BY sorts the rows into one bucket per key, and each bucket becomes one row. HAVING then keeps or drops whole buckets.</p>
+<ol class="sa-steps">
+<li>Six rows, each with a key</li>
+<li>Rows slide into one bucket per key</li>
+<li>Each bucket becomes one row</li>
+<li>HAVING drops a whole bucket</li>
+</ol>
+</figure>
 
-The `orders` table has the store and the payment method on every row. Four of its rows (the stores are 1 Old Town,
-2 Campus and 3 Harbor):
+## Learn by doing
 
-| order_id | store_id | status | payment_method |
-|---:|---:|---|---|
-| 1105 | 2 | completed | cash |
-| 1106 | 1 | completed | card |
-| 1107 | 1 | completed | mobile |
-| 1108 | 1 | completed | card |
+Five small steps. Each gives you one idea, then you try it in the editor.
 
-By the end you will have said what one result row means before writing each query, grouped by one and by two columns,
-and answered both questions.
+### 1. One group per store
 
-## The picture
+The column you pick is the **key**. `GROUP BY store_id` makes one group for each store, and every group becomes one row.
+Say what that row stands for before you write the query: *one row per store*. That is the **grain**.
+
+**Try it:**
+
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Read it: *count the orders in each store's group*. `COUNT(*)` is an **aggregate**: it turns a group into one number.
+
+Expected: 3 rows, 2 columns: store 1 has 729 orders, store 2 has 716 and store 3 has 355. *Excel:* a PivotTable (E15)
+is the same machine: `store` in Rows is the key, and a count in Values is the aggregate.
+
+*Why:* three stores, three groups, three rows. The counts add up to 1,800, every order, the canceled one included.
+
+### 2. Two columns, one group per pair
+
+Pick two columns and a group is one **pair**: store 1 with card is one group, store 1 with cash is another. To show a
+column beside the count, it must be in `GROUP BY`. Any other column has many values in a group, so DuckDB stops with an
+error saying the column "must appear in the GROUP BY clause".
+
+**Try it.** Grain: *one row per store and payment method*. Before you run it: how many rows?
+
+<RunSQL query={`SELECT store_id, payment_method, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id, payment_method
+ORDER BY store_id, payment_method;`} />
+
+Expected: 3 columns. *Excel:* `payment_method` in Columns, read as a list.
+
+*Why:* 3 stores times 3 methods is 9, because every store has orders in all three. A pair with no orders gets no group,
+so no row. Store 1 reads card 421, cash 91, mobile 217.
+
+### 3. `WHERE` clears rows before the groups
+
+`WHERE` runs before any group exists, so it can test only a row's own columns, such as `status`.
+
+**Try it.** Grain: *one row per store, completed orders only*.
+
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+Expected: 3 rows, 2 columns: 729, 715 and 355. *Excel:* `status` in Filters, set to completed.
+
+*Why:* the canceled order 1461 never reaches a group. Campus, store 2, goes from 716 to 715.
+
+### 4. `HAVING` clears groups after the count
+
+`HAVING` runs after the groups are built, so it can test what a group holds, such as its size. A group that fails is
+dropped whole.
+
+**Try it:**
+
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed'
+GROUP BY store_id
+HAVING COUNT(*) >= 500
+ORDER BY store_id;`} />
+
+Expected: 2 rows, 2 columns: store 1 with 729 and store 2 with 715. *Why:* Harbor's group has 355 orders, so its row
+is gone. That answers the owner: Old Town and Campus.
+
+Now watch ten orders go through the same steps.
+
+<figure class="sa not-content">
+<input class="sa-r r1" type="radio" name="gbh" id="gbh-r1" aria-label="Step 1 of 5: FROM" aria-describedby="gbh-c1" checked />
+<input class="sa-r r2" type="radio" name="gbh" id="gbh-r2" aria-label="Step 2 of 5: GROUP BY" aria-describedby="gbh-c2" />
+<input class="sa-r r3" type="radio" name="gbh" id="gbh-r3" aria-label="Step 3 of 5: GROUP BY" aria-describedby="gbh-c3" />
+<input class="sa-r r4" type="radio" name="gbh" id="gbh-r4" aria-label="Step 4 of 5: COUNT(&#42;)" aria-describedby="gbh-c4" />
+<input class="sa-r r5" type="radio" name="gbh" id="gbh-r5" aria-label="Step 5 of 5: HAVING" aria-describedby="gbh-c5" />
+<svg class="sa-svg" viewBox="0 0 360 406" width="360" role="img" aria-labelledby="gbh-t gbh-d">
+<title id="gbh-t">GROUP BY drops ten orders into one bucket per store, and HAVING drops a small bucket</title>
+<desc id="gbh-d">Five steps. Ten orders, 1719 to 1728, each with a store_id. GROUP BY gives each store its own shade and gathers the orders into one bucket per store: store 2 gets five, store 1 gets three and store 3 gets two. Each bucket becomes one result row with COUNT(&#42;): store 2, 5; store 1, 3; store 3, 2. HAVING COUNT(&#42;) at least 3 keeps stores 2 and 1 and drops store 3, shown dimmed. This is a ten-order sample; the lesson query uses 500 on the full table.</desc>
+<text class="f14 b" x="10" y="20">Ten orders, GROUP BY store_id</text>
+<g><rect class="bx" x="10" y="40" width="60" height="20" /><rect class="bx" x="70" y="40" width="56" height="20" /><rect class="f-src k2" x="10" y="40" width="116" height="20" /><text class="f10 b e" x="65" y="54">order_id</text><text class="f10 b e" x="121" y="54">store_id</text></g>
+<g><rect class="bx" x="10" y="60" width="60" height="20" /><rect class="bx" x="70" y="60" width="56" height="20" /><rect class="f-grp k2 fx i2" x="10" y="60" width="116" height="20" /><text class="f11 e" x="65" y="74">1719</text><text class="f11 e" x="121" y="74">2</text></g>
+<g><rect class="bx" x="10" y="80" width="60" height="20" /><rect class="bx" x="70" y="80" width="56" height="20" /><rect class="f-grp k1 fx i2" x="10" y="80" width="116" height="20" /><text class="f11 e" x="65" y="94">1720</text><text class="f11 e" x="121" y="94">1</text></g>
+<g><rect class="bx" x="10" y="100" width="60" height="20" /><rect class="bx" x="70" y="100" width="56" height="20" /><rect class="f-grp k4 fx i2" x="10" y="100" width="116" height="20" /><text class="f11 e" x="65" y="114">1721</text><text class="f11 e" x="121" y="114">3</text></g>
+<g><rect class="bx" x="10" y="120" width="60" height="20" /><rect class="bx" x="70" y="120" width="56" height="20" /><rect class="f-grp k2 fx i2" x="10" y="120" width="116" height="20" /><text class="f11 e" x="65" y="134">1722</text><text class="f11 e" x="121" y="134">2</text></g>
+<g><rect class="bx" x="10" y="140" width="60" height="20" /><rect class="bx" x="70" y="140" width="56" height="20" /><rect class="f-grp k1 fx i2" x="10" y="140" width="116" height="20" /><text class="f11 e" x="65" y="154">1723</text><text class="f11 e" x="121" y="154">1</text></g>
+<g><rect class="bx" x="10" y="160" width="60" height="20" /><rect class="bx" x="70" y="160" width="56" height="20" /><rect class="f-grp k4 fx i2" x="10" y="160" width="116" height="20" /><text class="f11 e" x="65" y="174">1724</text><text class="f11 e" x="121" y="174">3</text></g>
+<g><rect class="bx" x="10" y="180" width="60" height="20" /><rect class="bx" x="70" y="180" width="56" height="20" /><rect class="f-grp k2 fx i2" x="10" y="180" width="116" height="20" /><text class="f11 e" x="65" y="194">1725</text><text class="f11 e" x="121" y="194">2</text></g>
+<g><rect class="bx" x="10" y="200" width="60" height="20" /><rect class="bx" x="70" y="200" width="56" height="20" /><rect class="f-grp k2 fx i2" x="10" y="200" width="116" height="20" /><text class="f11 e" x="65" y="214">1726</text><text class="f11 e" x="121" y="214">2</text></g>
+<g><rect class="bx" x="10" y="220" width="60" height="20" /><rect class="bx" x="70" y="220" width="56" height="20" /><rect class="f-grp k2 fx i2" x="10" y="220" width="116" height="20" /><text class="f11 e" x="65" y="234">1727</text><text class="f11 e" x="121" y="234">2</text></g>
+<g><rect class="bx" x="10" y="240" width="60" height="20" /><rect class="bx" x="70" y="240" width="56" height="20" /><rect class="f-grp k1 fx i2" x="10" y="240" width="116" height="20" /><text class="f11 e" x="65" y="254">1728</text><text class="f11 e" x="121" y="254">1</text></g>
+<text class="f11 b fx i3" x="140" y="36">one bucket per store_id</text>
+<g class="fx i3"><rect class="s-grp" x="138" y="46" width="212" height="42" /><text class="f10 b" x="145" y="58">store_id 2</text><rect class="bx" x="145" y="63" width="36" height="20" /><rect class="f-grp k2" x="145" y="63" width="36" height="20" /><text class="f10 m" x="163" y="77">1719</text><rect class="bx" x="185" y="63" width="36" height="20" /><rect class="f-grp k2" x="185" y="63" width="36" height="20" /><text class="f10 m" x="203" y="77">1722</text><rect class="bx" x="225" y="63" width="36" height="20" /><rect class="f-grp k2" x="225" y="63" width="36" height="20" /><text class="f10 m" x="243" y="77">1725</text><rect class="bx" x="265" y="63" width="36" height="20" /><rect class="f-grp k2" x="265" y="63" width="36" height="20" /><text class="f10 m" x="283" y="77">1726</text><rect class="bx" x="305" y="63" width="36" height="20" /><rect class="f-grp k2" x="305" y="63" width="36" height="20" /><text class="f10 m" x="323" y="77">1727</text></g>
+<g class="fx i3"><rect class="s-grp" x="138" y="110" width="212" height="42" /><text class="f10 b" x="145" y="122">store_id 1</text><rect class="bx" x="145" y="127" width="36" height="20" /><rect class="f-grp k1" x="145" y="127" width="36" height="20" /><text class="f10 m" x="163" y="141">1720</text><rect class="bx" x="185" y="127" width="36" height="20" /><rect class="f-grp k1" x="185" y="127" width="36" height="20" /><text class="f10 m" x="203" y="141">1723</text><rect class="bx" x="225" y="127" width="36" height="20" /><rect class="f-grp k1" x="225" y="127" width="36" height="20" /><text class="f10 m" x="243" y="141">1728</text></g>
+<g class="fx i3 o5 od"><rect class="s-grp" x="138" y="174" width="212" height="42" /><text class="f10 b" x="145" y="186">store_id 3</text><rect class="bx" x="145" y="191" width="36" height="20" /><rect class="f-grp k4" x="145" y="191" width="36" height="20" /><text class="f10 m" x="163" y="205">1721</text><rect class="bx" x="185" y="191" width="36" height="20" /><rect class="f-grp k4" x="185" y="191" width="36" height="20" /><text class="f10 m" x="203" y="205">1724</text></g>
+<text class="f11 b fx i4" x="10" y="272">one row per bucket</text>
+<g class="fx i4"><g><rect class="bx" x="10" y="280" width="90" height="20" /><rect class="bx" x="100" y="280" width="90" height="20" /><rect class="f-out k2" x="100" y="280" width="90" height="20" /><text class="f10 b e" x="95" y="294">store_id</text><text class="f10 b e" x="185" y="294">COUNT(&#42;)</text></g></g>
+<g class="fx i4"><g><rect class="bx" x="10" y="300" width="90" height="20" /><rect class="bx" x="100" y="300" width="90" height="20" /><rect class="f-grp k2" x="10" y="300" width="180" height="20" /><text class="f11 e" x="95" y="314">2</text><text class="f11 e" x="185" y="314">5</text></g></g>
+<g class="fx i4"><g><rect class="bx" x="10" y="320" width="90" height="20" /><rect class="bx" x="100" y="320" width="90" height="20" /><rect class="f-grp k1" x="10" y="320" width="180" height="20" /><text class="f11 e" x="95" y="334">1</text><text class="f11 e" x="185" y="334">3</text></g></g>
+<g class="fx i4 o5 od"><g><rect class="bx" x="10" y="340" width="90" height="20" /><rect class="bx" x="100" y="340" width="90" height="20" /><rect class="f-grp k4" x="10" y="340" width="180" height="20" /><text class="f11 e" x="95" y="354">3</text><text class="f11 e" x="185" y="354">2</text></g></g>
+<text class="f11 b fx i5" x="200" y="354">dropped</text>
+<text class="f11 b fx i5" x="10" y="382">HAVING COUNT(&#42;) &gt;= 3 keeps stores 2 and 1</text>
+<text class="f11 mu" x="10" y="398">Orders 1719 to 1728 only; the lesson's query uses 500.</text>
+</svg>
+<div class="sa-ctl">
+<span class="sa-nav bk bk1" aria-hidden="true">&#9664;</span>
+<label class="sa-nav bk bk2" for="gbh-r1"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="gbh-r2"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="gbh-r3"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="gbh-r4"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<span class="sa-sbs"><label class="sa-sb c-src sb1" for="gbh-r1">1</label><label class="sa-sb c-grp sb2" for="gbh-r2">2</label><label class="sa-sb c-grp sb3" for="gbh-r3">3</label><label class="sa-sb c-out sb4" for="gbh-r4">4</label><label class="sa-sb c-flt sb5" for="gbh-r5">5</label></span>
+<label class="sa-nav nx nx1" for="gbh-r2"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="gbh-r3"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="gbh-r4"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="gbh-r5"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx5" for="gbh-r1"><span aria-hidden="true">&#8634;</span><span class="sr">Start over</span></label>
+</div>
+<ol class="sa-steps">
+<li id="gbh-c1"><span class="sa-cl c-src">FROM</span> Ten orders from the sample, in the order they were placed. Each row has an order_id and a store_id. <b class="sa-pr">Predict:</b> GROUP BY store_id will make one group per store. How many groups will there be, and how many rows will go into each?</li>
+<li id="gbh-c2"><span class="sa-cl c-grp">GROUP BY</span> GROUP BY store_id gives every row the shade of its store. Rows with the same store_id belong to the same group.</li>
+<li id="gbh-c3"><span class="sa-cl c-grp">GROUP BY</span> The rows gather into one bucket per store, in the order they were placed.</li>
+<li id="gbh-c4"><span class="sa-cl c-out">COUNT(&#42;)</span> Each bucket collapses to one result row, and COUNT(&#42;) is the number of rows the bucket held. <b class="sa-pr">Predict:</b> HAVING COUNT(&#42;) &gt;= 3 will test each of these rows. Which ones will it keep?</li>
+<li id="gbh-c5"><span class="sa-cl c-flt">HAVING</span> HAVING COUNT(&#42;) &gt;= 3 keeps a row only if its group has at least 3 rows; a row that fails is dropped (dimmed). Compare it with your prediction. This is a ten-order sample; the lesson's query uses 500 on the full table.</li>
+</ol>
+</figure>
+
+SQL works through the clauses in this order: `FROM`, `WHERE`, `GROUP BY`, then each group's aggregates, `HAVING`,
+`SELECT`, and last `ORDER BY` and `LIMIT`. Here is your query with its real counts. *How a query runs: the order of the
+clauses* (S12) goes deeper.
 
 <figure>
 <svg viewBox="0 0 360 268" width="360" role="img" aria-labelledby="flow-title flow-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -131,139 +324,58 @@ and answered both questions.
 <text x="342" y="45">1,800 rows</text><text x="342" y="93">1,799 rows</text><text x="342" y="141">3 groups</text><text x="342" y="189">2 groups</text><text x="342" y="237">2 rows</text>
 </g>
 </svg>
-<svg viewBox="0 0 360 150" width="360" role="img" aria-labelledby="buckets-title buckets-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="buckets-title">GROUP BY store_id: one bucket per store</title>
-<desc id="buckets-desc">Three horizontal bars, one per store, showing how many of the 1,800 orders each store took: store 1, Old Town, 729; store 2, Campus, 716; store 3, Harbor, 355. They add up to 1,800. The same buckets come from a PivotTable with store in Rows.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">GROUP BY store_id: three buckets</text>
-<g font-size="11">
-<text x="10" y="55">1 Old Town</text><text x="10" y="85">2 Campus</text><text x="10" y="115">3 Harbor</text>
-</g>
-<g fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-opacity="0.45">
-<rect x="90" y="40" width="200" height="20" /><rect x="90" y="70" width="196.4" height="20" /><rect x="90" y="100" width="97.4" height="20" />
-</g>
-<g font-size="12" font-weight="600">
-<text x="296" y="55">729</text><text x="292" y="85">716</text><text x="193" y="115">355</text>
-</g>
-<text x="10" y="142" font-size="11" opacity="0.8">All 1,800 orders: 729 + 716 + 355. A PivotTable puts store in Rows.</text>
-</svg>
 </figure>
 
-`GROUP BY` sorts the rows into buckets by the value of a column, or of several columns together. Then every aggregate
-in `SELECT` works inside its own bucket, and the result has one row per bucket. What one result row means is the
-**grain** of the result. Say it in words before you write the query: *one row per store*. A bucket exists only if at
-least one row falls into it. Every column in `SELECT` is either in `GROUP BY` or inside an aggregate.
-
-`WHERE` and `HAVING` both filter, but at different moments. `WHERE` keeps or drops **rows**, before grouping. `HAVING`
-keeps or drops **groups**, after the counting. So only `HAVING` can test `COUNT(*)`. The engine works through the
-clauses in this order: `FROM` first, then `WHERE`, then `GROUP BY`, then `HAVING`, then the `SELECT` list, and `ORDER BY`
-and `LIMIT` at the very end. The DuckDB documentation says that `FROM` is where a query starts, that `WHERE` comes
-right after it, that `HAVING` comes after the grouping, and that `ORDER BY` and `LIMIT` are applied at the very end. The
-lesson *How a query runs: the order of the clauses* (S12) goes deeper.
-
-| SQL | In the PivotTable (E15) |
-|---|---|
-| `GROUP BY store_id` | `store` in Rows |
-| `GROUP BY store_id, payment_method` | `store` in Rows and `payment_method` in Columns, as a list instead of a grid |
-| `COUNT(*)` | a count in Values |
-| `WHERE status = 'completed'` | `status` in Filters, set to completed |
-
-## Worked example
-
-Question: **how many orders did each cafe take, how did customers pay, and which cafes passed 500 completed orders?**
-Run the notebook's setup cell, then one cell per step. Each step starts with the grain and shows the shape of the
-result to expect.
-
-1. **Group by one column.** Grain: *one row per store*.
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns: store 1 has 729 orders, store 2 has 716 and store 3 has 355. *Excel:* a PivotTable
-   with `store` in Rows. *Why:* there are three stores, so there are three groups and three rows. The counts add up to
-   1,800, every order, the canceled one included.
-
-2. **Group by two columns.** Grain: *one row per store and payment method*. Before you run it: how many rows?
-
-   ```sql
-   SELECT store_id, payment_method, COUNT(*) AS orders
-   FROM orders
-   GROUP BY store_id, payment_method
-   ORDER BY store_id, payment_method;
-   ```
-
-   Expected: 3 columns. *Excel:* `payment_method` in Columns, read as a list. *Why:* a group is one combination of
-   the two values: 3 stores times 3 methods is 9, because every store has orders in all three methods. A combination
-   with no orders would not appear at all. Store 1 reads card 421, cash 91, mobile 217.
-
-3. **Filter rows before grouping with `WHERE`.** Grain: *one row per store, completed orders only*.
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   WHERE status = 'completed'
-   GROUP BY store_id
-   ORDER BY store_id;
-   ```
-
-   Expected: 3 rows, 2 columns: 729, 715 and 355. *Excel:* `status` in Filters, set to completed. *Why:* `WHERE` runs
-   before the grouping, so the canceled order 1461 never reaches a bucket. Campus, store 2, goes from 716 to 715.
-
-4. **Filter groups after counting with `HAVING`.**
-
-   ```sql
-   SELECT store_id, COUNT(*) AS orders
-   FROM orders
-   WHERE status = 'completed'
-   GROUP BY store_id
-   HAVING COUNT(*) >= 500
-   ORDER BY store_id;
-   ```
-
-   Expected: 2 rows, 2 columns: store 1 with 729 and store 2 with 715. *Why:* `HAVING` looks at one row per group,
-   after the count exists. Harbor's group has 355, so the whole group is dropped. `WHERE` could not do this, because
-   when it runs there is no count yet. This answers the owner: Old Town and Campus.
-
-5. **Verify with a second route.**
-
-   ```sql
-   SELECT COUNT(*) AS completed_orders FROM orders WHERE status = 'completed';
-   ```
-
-   Expected: 1 row, 1 column: `1799`. *Why:* it equals 729 + 715 + 355 from step 3, and the 1,799 completed orders
-   the till system reported in *A cleaning workflow you can defend* (E13). The groups lost no rows and counted none twice.
-
 <details>
-<summary>Explain it in your own words: why can step 4 drop Harbor, when step 3 could only drop single orders?</summary>
+<summary>Explain it in your own words: why can HAVING drop Harbor's whole row, when the WHERE of unit 3 could only drop single orders?</summary>
 
 `WHERE` sees one order at a time and has no idea how many orders a store has. `HAVING` runs after the grouping, so it
 sees the finished count per store and can drop a whole store at once.
 
 </details>
 
+### 5. Check that the groups add up
+
+After any `GROUP BY`, add the groups back together. They should give the whole.
+
+**Try it:**
+
+<RunSQL query={`SELECT COUNT(*) AS completed_orders FROM orders WHERE status = 'completed';`} />
+
+Expected: 1 row, 1 column: `1799`. *Why:* it equals 729 + 715 + 355 from unit 3, and the 1,799 completed orders the
+till system reported in *A cleaning workflow you can defend* (E13). The groups lost no rows and counted none twice.
+
+<Aside type="tip" title="Remember">
+
+- A key picks the groups, and every group becomes one row. Say the grain first.
+- Show only the key and aggregates.
+- `WHERE` filters rows before the groups; `HAVING` filters groups after the count.
+- The order: `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`.
+
+**Common trap: "`HAVING` is just a second `WHERE`."** They run at different moments. `WHERE MAX(order_id) > 1500` fails,
+because no maximum exists yet. `HAVING status = 'completed'` fails too, because a group holds many statuses, not one.
+Ask what you are judging: a row or a group.
+
+</Aside>
+
 ## Finish it
 
 <Exercise id="sql-group-by-having-1">
 
 **How many completed orders were paid by card, by mobile and by cash, largest first?** Grain: one row per payment
-method. Use the Exercise 1 cell. Expected: 3 rows, 2 columns.
+method. Expected: 3 rows, 2 columns.
 
 The first steps are done for you: the table is `orders`, and the query starts
 
-```sql
-SELECT payment_method, COUNT(*) AS orders
-FROM orders
-```
+<RunSQL query={`SELECT payment_method, COUNT(*) AS orders
+FROM orders`} />
 
 Now finish it: keep only the completed orders, group by the payment method, and sort by the count, largest first.
 
 <details>
 <summary>Hint</summary>
 
-Steps 3 and 1 have the `WHERE` and the `GROUP BY` lines. In the sort, use the name you gave the count.
+Units 3 and 1 have the `WHERE` and the `GROUP BY` lines. In the sort, use the name you gave the count.
 
 </details>
 
@@ -301,19 +413,21 @@ cash orders but only 252 completed ones.
 
 <Exercise id="sql-group-by-having-2">
 
-**How many orders did each customer place, and who placed at least 20?** Work in the Exercise 2 cells.
+**How many orders did each customer place, and who placed at least 20?**
 
-Before you run anything, write two sentences in the first cell: the grain (one row per what?), and how many rows you
+Before you run anything, write two sentences as comments in the editor: the grain (one row per what?), and how many rows you
 expect from the query without a filter. Use what you know: the `customers` table has 150 customers, five of them never
 ordered, and one order has no customer.
 
 Then run the query without a filter, and add the filter. Expected shape for the filtered query: 34 rows, 2 columns
 (`customer_id` and the count), most orders first, ties broken by `customer_id`. Every order counts, canceled or not.
 
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
 <details>
 <summary>Hint</summary>
 
-Group `orders` by `customer_id`, as in step 1. The filter is on the count, so it goes in `HAVING`, as in step 4. For the
+Group `orders` by `customer_id`, as in unit 1. The filter is on the count, so it goes in `HAVING`, as in unit 4. For the
 sort, see *SELECT, ORDER BY and LIMIT* (S2): two columns, then the tie-breaker.
 
 </details>
@@ -369,18 +483,16 @@ their order.
 
 **Spot the flaw.** A colleague wants the stores with more than 500 orders and writes this. It gives an error, not a table:
 
-```sql
-SELECT store_id, COUNT(*) AS orders
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
 FROM orders
 WHERE COUNT(*) > 500
-GROUP BY store_id;
-```
+GROUP BY store_id;`} />
 
-Expected: an error that starts with `Binder Error`. Read it, then fix the query.
+Expected: an error that says `WHERE clause cannot contain aggregates!`. Read it, then fix the query.
 
 <Solution>
 
-The first line of the error reads `Binder Error: WHERE clause cannot contain aggregates!`. `WHERE` runs right after
+The error reads `WHERE clause cannot contain aggregates!`. `WHERE` runs right after
 `FROM`, before any group exists, so there is no count to compare. A condition on a count belongs to `HAVING`:
 
 ```sql
@@ -399,7 +511,7 @@ Expected: 2 rows, 2 columns: store 1 with 729 orders and store 2 with 716 (all o
 
 **Can you do it?** *I can say what one row of a grouped result means before I write it, group by one or two columns,
 choose `WHERE` or `HAVING`, and predict how many rows come back.*
-Test: Exercise sql-group-by-having-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-group-by-having-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **`WHERE` filters rows before the groups; `HAVING` filters groups after the count; the grain
 says what one result row is.** The next lesson, *Several metrics in one pass* (S9), puts several counts side by side in

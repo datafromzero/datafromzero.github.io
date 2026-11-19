@@ -44,6 +44,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 			items: [
 				{ label: 'Start here', link: '/start/' },
 				{ label: 'Career quiz', link: '/career-quiz/' },
+				{ label: 'SQL playground', link: '/sql/playground/' },
 			],
 		},
 		...stages,

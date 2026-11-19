@@ -1,0 +1,527 @@
+---
+id: sql-recursive-ctes-date-spine
+title: Complete time series and recursive CTEs
+description: Build a date spine so days with no orders still appear, and read a recursive CTE for a simple hierarchy.
+stage: sql
+order: 270
+level: advanced
+duration: 30
+objectives:
+  - Generate a continuous series of dates
+  - Join facts onto the spine with a left join so empty days show zero
+  - Read the anchor and recursive parts of a recursive CTE
+  - Explain when a series needs a spine
+prerequisites:
+  - sql-ctes
+  - sql-dates-and-time
+  - sql-left-join-anti-join
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: WITH clause (CTEs)'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/with
+  - title: 'DuckDB documentation: Date functions'
+    url: https://duckdb.org/docs/stable/sql/functions/date
+  - title: 'DuckDB documentation: Timestamp functions'
+    url: https://duckdb.org/docs/stable/sql/functions/timestamp
+  - title: 'DuckDB documentation: FROM and JOIN clauses'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from
+status: draft
+---
+
+TODO(owner): The rule in unit 2 that the rounds repeat until one returns no rows is not stated in these words on the DuckDB WITH page; it rests on the same unit's result (the spine ends at 181 days), so check that page again when you review. Run every block on this page after a fresh load and check each result against its Expected line. Time the lesson against its 30 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Someone told me cash averages 1.88 orders a day. But some days nobody paid cash at all. How many days is that, and
+> what is the real average cash day?
+
+The 1.88 comes from the CTE lesson (S13): it averages the days that have at least one completed cash order. The first
+rows of that grouped query:
+
+| order_day | cash_orders |
+|---|---:|
+| 2026-01-04 | 1 |
+| 2026-01-05 | 3 |
+| 2026-01-06 | 2 |
+
+January 1 to 3 are not there.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Working with dates and time* (S11) and *Readable queries with CTEs* (S13), write the expression that turns the
+   timestamp `ordered_at` into a date.
+
+   <details>
+   <summary>Answer</summary>
+
+   `CAST(ordered_at AS DATE)`. S13 used it to count orders per day.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), `COUNT(*)` gives 1,800 on `orders` and `COUNT(customer_id)` gives 1,799. Why?
+
+   <details>
+   <summary>Answer</summary>
+
+   `COUNT(column)` skips empty values, and the one walk-in order has no customer. You need this today.
+
+   </details>
+
+## The big idea
+
+A **recursive CTE** builds a table in rounds, each round starting from the rows the last one made. Here it builds a **date spine**, one row per day, so the days with no orders show up as zero.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="rc-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="rc" id="rc-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="rc" id="rc-r1" aria-label="Step 1 of 5: The anchor row is the start" />
+<input class="sa-r r2 o2" type="radio" name="rc" id="rc-r2" aria-label="Step 2 of 5: The anchor joins the result" />
+<input class="sa-r r3 o4" type="radio" name="rc" id="rc-r3" aria-label="Step 3 of 5: Round 1 finds two rows, they join" />
+<input class="sa-r r4 o6" type="radio" name="rc" id="rc-r4" aria-label="Step 4 of 5: Round 2 finds one row, it joins" />
+<input class="sa-r r5 o8" type="radio" name="rc" id="rc-r5" aria-label="Step 5 of 5: Round 3 finds nothing: stop" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 198" width="360" role="img" aria-labelledby="rc-t rc-d">
+<title id="rc-t">A recursive query repeats until a round adds nothing</title>
+<desc id="rc-d">A box of new rows holds the anchor row, which joins the result column on the right. Round 1 reads that row and finds two new rows, which join the result. Round 2 reads those and finds one new row, which joins the result. Round 3 finds nothing new, so a badge says it adds nothing and it stops. The result holds four rows.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · The anchor row is the start</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · The anchor joins the result</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">3 · Round 1 finds two rows, they join</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · Round 2 finds one row, it joins</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Round 3 finds nothing: stop</text>
+<text class="f11 b" x="10" y="14">Round after round, until nothing new</text>
+<g><rect class="s-src" x="10" y="44" width="110" height="92" rx="6" /><text class="f11 b" x="20" y="61">new rows</text></g>
+<text class="f10 b m" x="240" y="54">result</text>
+<rect class="bx dsh" x="220" y="62" width="80" height="24" />
+<rect class="bx dsh" x="220" y="92" width="80" height="24" />
+<rect class="bx dsh" x="220" y="122" width="80" height="24" />
+<rect class="bx dsh" x="220" y="152" width="80" height="24" />
+<path class="s-src dr p1 d3 tmp" pathLength="1" d="M216 74L124 86M130.64 88.2L124 86L129.86 82.17" />
+<path class="s-src dr p1 d5 tmp" pathLength="1" d="M216 104L124 90M129.77 93.96L124 90L130.69 87.94" />
+<g class="w8"><g class="mv m2 x20 yn1"><g><rect class="f-out k3" x="20" y="72" width="80" height="24" rx="6" /><text class="f11 m" x="60" y="88">anchor</text></g></g></g>
+<g class="w6 d3"><g class="mv m4 x20 y2"><g><rect class="f-out k3" x="20" y="72" width="80" height="24" rx="6" /><text class="f11 m" x="60" y="88">Row 2</text></g></g></g>
+<g class="w6 d3"><g class="mv m4 x20 y2"><g><rect class="f-out k3" x="20" y="102" width="80" height="24" rx="6" /><text class="f11 m" x="60" y="118">Row 3</text></g></g></g>
+<g class="w4 d5"><g class="mv m6 x20 y8"><g><rect class="f-out k3" x="20" y="72" width="80" height="24" rx="6" /><text class="f11 m" x="60" y="88">Row 4</text></g></g></g>
+<g class="w2 d7"><rect class="f-flt k2" x="10" y="150" width="136" height="18" rx="9" /><text class="f11 b m" x="78" y="163">adds nothing → stop</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="rc-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="rc-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="rc-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="rc-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="rc-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="rc-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="rc-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="rc-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="rc-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="rc-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="rc-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="rc-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="rc-r1">1</label><label class="sa-sb sb2" for="rc-r2">2</label><label class="sa-sb sb3" for="rc-r3">3</label><label class="sa-sb sb4" for="rc-r4">4</label><label class="sa-sb sb5" for="rc-r5">5</label></span>
+</div>
+<p class="ca-cap">A recursive CTE starts from an anchor row. Each round uses the rows the last round added to find more. It stops when a round adds no rows.</p>
+<ol class="sa-steps">
+<li>The anchor row is the start</li>
+<li>The anchor joins the result</li>
+<li>Round 1 finds two rows, they join</li>
+<li>Round 2 finds one row, it joins</li>
+<li>Round 3 finds nothing: stop</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Each gives you one idea, then you try it in the editor under it.
+
+### 1. A day with no orders has no row
+
+In a sheet you can type every date down a column and count the orders beside each one: a day with none shows 0. A query that only groups the orders cannot do that, because a group with no rows does not exist.
+
+A **date spine**, a table with one row per day, brings the empty days back. You need one when the answer must have a row for every period: a chart of every day, or `LAG` and moving averages (S16), which look at the previous row, not the previous day. A total for the period does not.
+
+**Try it**. Counts cover completed cash orders of all three stores, over the 181 days from January 1 to June 30. They count orders, not units, so the extra-zero line (order 2075) does not matter. Before you run it: the period has 181 days. How many rows will this query return?
+
+<RunSQL query={`SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS cash_orders
+FROM orders
+WHERE payment_method = 'cash' AND status = 'completed'
+GROUP BY CAST(ordered_at AS DATE)
+ORDER BY order_day;`} />
+
+Expected: 2 columns.
+
+<details>
+<summary>Check your prediction</summary>
+
+134 rows, not 181. The first row is January 4, so January 1 to 3 have no row.
+
+</details>
+
+### 2. Build the spine in rounds
+
+Typing 181 dates is slow, so let the query build them. A **recursive CTE** is written `WITH RECURSIVE name AS (anchor UNION ALL recursive part)`. The DuckDB documentation: "`WITH RECURSIVE` allows the definition of CTEs which can refer to themselves." It runs in rounds:
+
+1. The **anchor** runs once and gives the first row, January 1.
+2. The **recursive part** runs next. Inside it, the CTE's name stands for the rows the previous round produced. It returns the next rows, and they join the result.
+3. The rounds repeat until one returns no rows, and the CTE is then complete.
+
+*Excel:* a date is a number (E11, *Dates as numbers*), so `=A2+1` is the next day: the first date you type is the anchor, and `=A2+1` filled down is the recursive part.
+
+**Try it**.
+
+<RunSQL query={`WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+)
+SELECT COUNT(*) AS days, MIN(order_day) AS first_day, MAX(order_day) AS last_day
+FROM spine;`} />
+
+Expected: 1 row, 3 columns: `181`, `2026-01-01`, `2026-06-30`. *Why:* the anchor is the first day; the recursive part adds 1 to the previous day (the DuckDB documentation lists `date + integer` as "addition of days") and stops at June 30. `spine(order_day)` names the one column.
+
+Here are the rounds, one at a time.
+
+<figure>
+<svg viewBox="0 0 360 372" width="360" role="img" aria-labelledby="spine-rec-title spine-rec-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="spine-rec-title">How the recursive CTE builds the spine, round by round</title>
+<desc id="spine-rec-desc">The anchor runs once and produces 2026-01-01. Round 1 reads that row, finds 2026-01-01 is before 2026-06-30, and produces 2026-01-02. Round 2 produces 2026-01-03. Rounds continue one day at a time. Round 180 reads 2026-06-29 and produces 2026-06-30. Round 181 reads 2026-06-30, finds it is not before 2026-06-30, and produces nothing, so the recursion stops. The spine has 1 anchor row plus 180 rows from the rounds, 181 in all.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">The spine, one round at a time</text>
+<rect x="10" y="32" width="340" height="50" fill="none" stroke="currentColor" stroke-opacity="0.6" /><text x="18" y="48" font-size="11" font-weight="700">anchor (runs once)</text><text x="18" y="64" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT DATE '2026-01-01'</text><text x="18" y="79" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">→ 2026-01-01</text>
+<path d="M180 84 v14 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="10" y="100" width="340" height="50" fill="none" stroke="currentColor" stroke-opacity="0.6" /><text x="18" y="116" font-size="11" font-weight="700">round 1: reads 2026-01-01</text><text x="18" y="132" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">order_day + 1 WHERE order_day &lt; 2026-06-30</text><text x="18" y="147" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">→ 2026-01-02</text>
+<path d="M180 152 v14 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="10" y="168" width="340" height="50" fill="none" stroke="currentColor" stroke-opacity="0.6" /><text x="18" y="184" font-size="11" font-weight="700">round 2: reads 2026-01-02</text><text x="18" y="200" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">order_day + 1 WHERE order_day &lt; 2026-06-30</text><text x="18" y="215" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">→ 2026-01-03</text>
+<text x="180" y="238" text-anchor="middle" font-size="14" opacity="0.7">...</text>
+<rect x="10" y="246" width="340" height="50" fill="none" stroke="currentColor" stroke-opacity="0.6" /><text x="18" y="262" font-size="11" font-weight="700">round 180: reads 2026-06-29</text><text x="18" y="278" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">order_day + 1 WHERE order_day &lt; 2026-06-30</text><text x="18" y="293" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">→ 2026-06-30</text>
+<path d="M180 298 v14 m-4 -5 l4 5 l4 -5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="10" y="314" width="340" height="50" fill="none" stroke="currentColor" stroke-opacity="0.6" /><text x="18" y="330" font-size="11" font-weight="700">round 181: reads 2026-06-30</text><text x="18" y="346" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">2026-06-30 &lt; 2026-06-30 is false</text><text x="18" y="361" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">→ no row: stop. 1 + 180 = 181 rows</text>
+</svg>
+</figure>
+
+<details>
+<summary>Explain it in your own words: what would happen here without the WHERE?</summary>
+
+Every round reads a day and adds 1, so a next day always exists. Nothing else could make a round come back empty. With the `WHERE`, round 181 reads June 30, the test fails, and the rounds stop.
+
+</details>
+
+A recursive CTE must be written so that it ends. The documentation: "Note that the query must be formulated in a way that ensures termination, otherwise, it may run into an infinite loop." Here a `WHERE` in the recursive part does it.
+
+DuckDB also has a shorter way to the same spine.
+
+**Try it**.
+
+<RunSQL query={`SELECT COUNT(*) AS days,
+       MIN(CAST(generate_series AS DATE)) AS first_day,
+       MAX(CAST(generate_series AS DATE)) AS last_day
+FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-06-30', INTERVAL 1 DAY);`} />
+
+Expected: 1 row, 3 columns, the same as above. *Why:* the DuckDB documentation says `generate_series` makes "a table of timestamps in the closed range, stepping by the interval", so both ends are included; `range` leaves out the end. The column holds timestamps, hence the `CAST`.
+
+### 3. Join the facts onto the spine
+
+Put the spine on the left of a `LEFT JOIN`: it keeps every row of the left table, and the right table's columns are `NULL` for a row with no partner. Bring the facts to one row per day first, in a second CTE (`cash_daily`). A day with two fact rows would pair with both and appear twice (*Join fan-out*, S21).
+
+**Try it**. The daily counts become `cash_daily`, and the spine goes on the left.
+
+<RunSQL query={`WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+),
+cash_daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS cash_orders
+  FROM orders
+  WHERE payment_method = 'cash' AND status = 'completed'
+  GROUP BY CAST(ordered_at AS DATE)
+)
+SELECT s.order_day, c.cash_orders
+FROM spine AS s
+LEFT JOIN cash_daily AS c ON c.order_day = s.order_day
+ORDER BY s.order_day
+LIMIT 6;`} />
+
+Expected: 6 rows, 2 columns: January 1 to 3 show `NULL`, then 1, 3 and 2. *Why:* a LEFT JOIN keeps every spine day (S20).
+
+The first 14 days, before and after the join:
+
+<figure>
+<svg viewBox="0 0 360 204" width="360" role="img" aria-labelledby="spine-cal-title spine-cal-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="spine-cal-title">Cash orders per day, January 1 to 14, before and after the spine</title>
+<desc id="spine-cal-desc">Two strips of the first 14 days of 2026, each cell showing the day of the month and the number of completed cash orders. In the first strip, made by GROUP BY alone, days 1, 2, 3, 9 and 13 are shaded and empty: no row exists for them. The counts on the other days are 1, 3, 2, 1, 1, 2, 2, 1 and 2. In the second strip, made by joining the orders onto a date spine, the same five days are shaded and show 0.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Completed cash orders, January 1 to 14</text>
+<text x="10" y="44" font-size="11" font-weight="600">GROUP BY alone: 5 days have no row</text>
+<g fill="currentColor" fill-opacity="0.15" stroke="none"><rect x="12" y="54" width="24" height="36" /><rect x="36" y="54" width="24" height="36" /><rect x="60" y="54" width="24" height="36" /><rect x="204" y="54" width="24" height="36" /><rect x="300" y="54" width="24" height="36" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="12" y="54" width="24" height="36" /><rect x="36" y="54" width="24" height="36" /><rect x="60" y="54" width="24" height="36" /><rect x="84" y="54" width="24" height="36" /><rect x="108" y="54" width="24" height="36" /><rect x="132" y="54" width="24" height="36" /><rect x="156" y="54" width="24" height="36" /><rect x="180" y="54" width="24" height="36" /><rect x="204" y="54" width="24" height="36" /><rect x="228" y="54" width="24" height="36" /><rect x="252" y="54" width="24" height="36" /><rect x="276" y="54" width="24" height="36" /><rect x="300" y="54" width="24" height="36" /><rect x="324" y="54" width="24" height="36" /></g>
+<g><text x="24.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">1</text><text x="48.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">2</text><text x="72.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">3</text><text x="96.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">4</text><text x="96.0" y="82" text-anchor="middle">1</text><text x="120.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">5</text><text x="120.0" y="82" text-anchor="middle">3</text><text x="144.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">6</text><text x="144.0" y="82" text-anchor="middle">2</text><text x="168.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">7</text><text x="168.0" y="82" text-anchor="middle">1</text><text x="192.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">8</text><text x="192.0" y="82" text-anchor="middle">1</text><text x="216.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">9</text><text x="240.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">10</text><text x="240.0" y="82" text-anchor="middle">2</text><text x="264.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">11</text><text x="264.0" y="82" text-anchor="middle">2</text><text x="288.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">12</text><text x="288.0" y="82" text-anchor="middle">1</text><text x="312.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">13</text><text x="336.0" y="66" text-anchor="middle" font-size="9" opacity="0.7">14</text><text x="336.0" y="82" text-anchor="middle">2</text></g>
+<text x="10" y="118" font-size="11" font-weight="600">After the spine join: all 14 days, zeros shown</text>
+<g fill="currentColor" fill-opacity="0.15" stroke="none"><rect x="12" y="128" width="24" height="36" /><rect x="36" y="128" width="24" height="36" /><rect x="60" y="128" width="24" height="36" /><rect x="204" y="128" width="24" height="36" /><rect x="300" y="128" width="24" height="36" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="12" y="128" width="24" height="36" /><rect x="36" y="128" width="24" height="36" /><rect x="60" y="128" width="24" height="36" /><rect x="84" y="128" width="24" height="36" /><rect x="108" y="128" width="24" height="36" /><rect x="132" y="128" width="24" height="36" /><rect x="156" y="128" width="24" height="36" /><rect x="180" y="128" width="24" height="36" /><rect x="204" y="128" width="24" height="36" /><rect x="228" y="128" width="24" height="36" /><rect x="252" y="128" width="24" height="36" /><rect x="276" y="128" width="24" height="36" /><rect x="300" y="128" width="24" height="36" /><rect x="324" y="128" width="24" height="36" /></g>
+<g><text x="24.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">1</text><text x="24.0" y="156" text-anchor="middle" font-weight="700">0</text><text x="48.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">2</text><text x="48.0" y="156" text-anchor="middle" font-weight="700">0</text><text x="72.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">3</text><text x="72.0" y="156" text-anchor="middle" font-weight="700">0</text><text x="96.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">4</text><text x="96.0" y="156" text-anchor="middle">1</text><text x="120.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">5</text><text x="120.0" y="156" text-anchor="middle">3</text><text x="144.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">6</text><text x="144.0" y="156" text-anchor="middle">2</text><text x="168.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">7</text><text x="168.0" y="156" text-anchor="middle">1</text><text x="192.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">8</text><text x="192.0" y="156" text-anchor="middle">1</text><text x="216.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">9</text><text x="216.0" y="156" text-anchor="middle" font-weight="700">0</text><text x="240.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">10</text><text x="240.0" y="156" text-anchor="middle">2</text><text x="264.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">11</text><text x="264.0" y="156" text-anchor="middle">2</text><text x="288.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">12</text><text x="288.0" y="156" text-anchor="middle">1</text><text x="312.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">13</text><text x="312.0" y="156" text-anchor="middle" font-weight="700">0</text><text x="336.0" y="140" text-anchor="middle" font-size="9" opacity="0.7">14</text><text x="336.0" y="156" text-anchor="middle">2</text></g>
+<text x="10" y="196" font-size="11">Shaded: days with no completed cash order.</text>
+</svg>
+</figure>
+
+### 4. Turn NULL into 0
+
+An empty day is `NULL`, not 0. `COUNT(c.cash_orders)` skips the `NULL` days, so the difference from `COUNT(*)` is the number of empty days. `AVG` also skips `NULL`, so `COALESCE` must turn the empty days into 0 first.
+
+**Try it**.
+
+<RunSQL query={`WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+),
+cash_daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS cash_orders
+  FROM orders
+  WHERE payment_method = 'cash' AND status = 'completed'
+  GROUP BY CAST(ordered_at AS DATE)
+)
+SELECT COUNT(*) AS days,
+       COUNT(*) - COUNT(c.cash_orders) AS empty_days,
+       SUM(COALESCE(c.cash_orders, 0)) AS cash_orders,
+       ROUND(AVG(COALESCE(c.cash_orders, 0)), 2) AS avg_cash_day
+FROM spine AS s
+LEFT JOIN cash_daily AS c ON c.order_day = s.order_day;`} />
+
+Expected: 1 row, 4 columns: `181 | 47 | 252 | 1.39`. *Why:* without the `COALESCE`, the average would be 1.88 again.
+
+**Check**: count the same orders without the spine.
+
+<RunSQL query={`SELECT COUNT(*) AS cash_orders FROM orders WHERE payment_method = 'cash' AND status = 'completed';`} />
+
+Expected: 1 row, 1 column: `252`, the same as above. Also 134 days with orders plus 47 empty days make 181, and 252 ÷ 134 = 1.88 (the old figure) against 252 ÷ 181 = 1.39. Answer: **47 days had no completed cash order, and the average cash day is 1.39 orders.** The 1.88 was the average of the busy-enough days only.
+
+### 5. The same machine on a hierarchy
+
+Customers carry `referred_by`, the customer who brought them in. A recursive CTE can follow that chain. The anchor is one customer, and each round joins the customers whose `referred_by` is in the previous round's rows.
+
+**Try it**. Who did customer 24 bring in, and who did they bring in?
+
+<RunSQL query={`WITH RECURSIVE chain(customer_id, referred_by, depth) AS (
+  SELECT customer_id, referred_by, 0
+  FROM customers
+  WHERE customer_id = 24
+  UNION ALL
+  SELECT c.customer_id, c.referred_by, chain.depth + 1
+  FROM customers AS c
+  JOIN chain ON c.referred_by = chain.customer_id
+)
+SELECT * FROM chain
+ORDER BY depth, customer_id;`} />
+
+Expected: 4 rows, 3 columns: customer 24 at depth 0, customers 30 and 34 at depth 1, customer 80 at depth 2. *Why:* the rounds find 30 and 34, then 80, then nobody, which ends it. No `WHERE` is needed here, because the data runs out (a referral loop in the data would never end; there is none here).
+
+Check it another way:
+
+<RunSQL query={`SELECT customer_id, referred_by FROM customers WHERE referred_by IN (24, 30, 34, 80);`} />
+
+Expected: 3 rows, 2 columns: 30, 34 and 80.
+
+<Aside type="tip" title="Remember">
+
+- A group with no rows has no row: when the answer needs every day, build a date spine.
+- A recursive CTE is an anchor, then a recursive part that repeats until a round returns no rows. It must be written to end.
+- Spine on the left, facts joined on, one row per day, and `COALESCE` for 0.
+
+**Common trap: "inside the recursive part, the CTE's name means everything found so far."** In the form used here, it means only the rows the previous round produced. That is why the recursive part can add 1 to a single day: if the name meant every day found, each round would add a day to all of them.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-recursive-ctes-date-spine-1">
+
+**How many days had no completed mobile order, and what is the average mobile day?** Use the editor below. Expected:
+1 row, 4 columns (days, empty days, mobile orders, average per day).
+
+The first steps are done for you: the spine, and the daily counts.
+
+<RunSQL query={`WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+),
+mobile_daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS mobile_orders
+  FROM orders
+  WHERE payment_method = 'mobile' AND status = 'completed'
+  GROUP BY CAST(ordered_at AS DATE)
+)
+SELECT * FROM mobile_daily
+ORDER BY order_day
+LIMIT 5;`} />
+
+Now finish it: replace the last `SELECT` with the four columns of unit 4, for mobile.
+
+<details>
+<summary>Hint</summary>
+
+Copy the last query of unit 4 and swap `cash` for `mobile`. Which table goes on the left of the LEFT JOIN?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS days,
+       COUNT(*) - COUNT(m.mobile_orders) AS empty_days,
+       ...
+FROM spine AS s
+LEFT JOIN mobile_daily AS m ON ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+),
+mobile_daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS mobile_orders
+  FROM orders
+  WHERE payment_method = 'mobile' AND status = 'completed'
+  GROUP BY CAST(ordered_at AS DATE)
+)
+SELECT COUNT(*) AS days,
+       COUNT(*) - COUNT(m.mobile_orders) AS empty_days,
+       SUM(COALESCE(m.mobile_orders, 0)) AS mobile_orders,
+       ROUND(AVG(COALESCE(m.mobile_orders, 0)), 2) AS avg_mobile_day
+FROM spine AS s
+LEFT JOIN mobile_daily AS m ON m.order_day = s.order_day;
+```
+
+`181 | 9 | 546 | 3.02`. Mobile had no completed order on 9 days, and the average mobile day is 3.02 (the CTE lesson's
+3.17 is 546 ÷ 172 days).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-recursive-ctes-date-spine-2">
+
+**Harbor opened on April 1, 2026. Show its orders per day for the two weeks around the opening, March 25 to April 7.**
+Use the editor below.
+
+Before you run anything, write one sentence as a comment in the editor: how many of the 14 days will show 0, and what each 0
+will mean. Then build the spine for those 14 days and join Harbor's order counts (`store_id` 3, any status) onto it.
+
+Expected shape, to check your sentence against: 14 rows, 2 columns (the day and the orders).
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Count Harbor's orders per day first, as `cash_daily` did, then join them onto the spine. Show 0 instead of `NULL`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Fourteen days, Harbor's order count beside each, 0 where it has none."* Change the two dates of
+`spine`, and use `WHERE store_id = 3` in `harbor_daily`.
+
+</details>
+
+<Solution>
+
+```sql
+WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-03-25'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-04-07'
+),
+harbor_daily AS (
+  SELECT CAST(ordered_at AS DATE) AS order_day, COUNT(*) AS orders
+  FROM orders
+  WHERE store_id = 3
+  GROUP BY CAST(ordered_at AS DATE)
+)
+SELECT s.order_day, COALESCE(h.orders, 0) AS orders
+FROM spine AS s
+LEFT JOIN harbor_daily AS h ON h.order_day = s.order_day
+ORDER BY s.order_day;
+```
+
+The first 7 days, March 25 to 31, show 0, and April 1 to 7 show 2, 3, 5, 7, 3, 3 and 2. All 7 zeros are before the
+opening: Harbor was not open, so they are not quiet days. A spine cannot tell "closed" from "nobody came": start it at
+the date the store opened (`stores.opened_on`), or the zeros will drag an average down.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in a recursive CTE, what are the anchor and the recursive part, and what ends the recursion?
+
+   <details>
+   <summary>Answer</summary>
+
+   The anchor runs once and gives the first rows. The recursive part reads the previous round's rows and returns the
+   next ones. The recursion ends when a round returns no rows, so the recursive part needs a `WHERE` (or data that runs
+   out) to get there.
+
+   </details>
+
+<Exercise id="sql-recursive-ctes-date-spine-3">
+
+**Spot the flaw.** A colleague joins the spine straight to `orders` and counts with `COUNT(*)`:
+
+<RunSQL query={`WITH RECURSIVE spine(order_day) AS (
+  SELECT DATE '2026-01-01'
+  UNION ALL
+  SELECT order_day + 1 FROM spine WHERE order_day < DATE '2026-06-30'
+),
+daily AS (
+  SELECT s.order_day, COUNT(*) AS cash_orders
+  FROM spine AS s
+  LEFT JOIN orders AS o
+    ON CAST(o.ordered_at AS DATE) = s.order_day
+   AND o.payment_method = 'cash' AND o.status = 'completed'
+  GROUP BY s.order_day
+)
+SELECT COUNT(*) AS days, SUM(cash_orders) AS cash_orders FROM daily;`} />
+
+Expected: 1 row, 2 columns. Run it and compare the second number with the check of unit 4. What went wrong, and what is the fix?
+
+<Solution>
+
+The query returns `181 | 299`, but there are only 252 completed cash orders. On an empty day the LEFT JOIN keeps the
+spine day and pairs it with one all-`NULL` row, and `COUNT(*)` counts that row as 1. The 47 empty days add 47:
+252 + 47 = 299. The conditions are in `ON` on purpose (S20), so the spine days survive; the fault is the count.
+
+Count a column of the right table, which is `NULL` on an empty day:
+
+```sql
+SELECT s.order_day, COUNT(o.order_id) AS cash_orders
+```
+
+With that change the final query returns `181 | 252`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can build a date spine with `WITH RECURSIVE`, left join the facts onto it so empty days show 0, and read the anchor and the recursive part of a recursive CTE.*
+Test: Exercise sql-recursive-ctes-date-spine-2, done in an empty editor without opening the hints.
+
+The pattern to remember: **spine on the left, facts joined on, and 0 for NULL.** The next
+lesson, *Saving a query as a view* (S28), keeps a query like this under a name.

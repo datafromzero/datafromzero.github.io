@@ -16,7 +16,6 @@ prerequisites:
   - sql-where-filtering
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-text-functions.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Text functions'
@@ -25,6 +24,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/functions/pattern_matching
   - title: 'DuckDB documentation: Python API overview'
     url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'DuckDB documentation: SELECT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/select
   - title: 'Microsoft Support: TRIM function'
     url: https://support.microsoft.com/en-us/office/trim-function-410388fa-c5df-49c6-b16c-9e5630b479f9
   - title: 'Microsoft Support: LEFT, LEFTB functions'
@@ -34,19 +35,42 @@ sources:
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). Its one idea: SQL compares text letter by letter, so the same word typed three ways counts as three words until
-you clean it, in a **new column** next to the original.
+Its one idea: SQL compares text letter by letter, so the same word typed three ways counts as three words until you clean it, in a **new column** next to the original. Every query on this page runs in the page itself, on **cafe-sales**, the invented three-cafe chain we use from Excel to Python, plus two small typed lists that blocks on this page build.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, plus one small list, `typed_cities`, that a given
-cell builds for this lesson. Each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
-quotes is SQL. The notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, that the given cells build `typed_cities` and `typed_signups`, and that `.show()` prints tables as described. Time the lesson against its 25 minutes. When you have checked it, set
+TODO(owner): Run every block on the page and check that each result matches its Expected line. The DuckDB text page does not say which characters `TRIM` removes by default or that `REPLACE` is case-sensitive; units 2 and 3 state both from results run on DuckDB 2.0.0 (a tab survives `TRIM`, and `REPLACE('Aa', 'a', 'x')` gives `Ax`), so source them or keep that wording. The page builds `typed_cities` and `typed_signups` with a runnable block each (they belong to this lesson, not to cafe-sales). Time the lesson against its 25 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The Campus cafe keeps a paper sign-up sheet for its loyalty card. A barista typed eight sign-ups into a list, one city
+each, exactly as written. The owner asks:
+
+> How many different cities are on the list, and how many sign-ups does each one have?
+
+The list is `typed_cities`. It was made for this lesson and is not part of cafe-sales, whose `customers` table is clean.
+The quotes show the spaces:
+
+| signup_id | raw_city |
+|---:|---|
+| 1 | `'Berkeley'` |
+| 2 | `' berkeley'` |
+| 3 | `'BERKELEY '` |
+| 4 | `'berkeley'` |
+| 5 | `'Oakland, CA'` |
+| 6 | `'oakland '` |
+| 7 | `'OAKLAND'` |
+| 8 | `'Alameda'` |
+
+You can see three cities. SQL sees eight different texts. Press Run once to build this list on the page; the queries
+that need it come later.
+
+<RunSQL query={`CREATE OR REPLACE TABLE typed_cities (signup_id INTEGER, raw_city VARCHAR);
+INSERT INTO typed_cities VALUES
+  (1, 'Berkeley'), (2, ' berkeley'), (3, 'BERKELEY '), (4, 'berkeley'),
+  (5, 'Oakland, CA'), (6, 'oakland '), (7, 'OAKLAND'), (8, 'Alameda');
+SELECT * FROM typed_cities ORDER BY signup_id;`} />
+
+Expected: 8 rows, 2 columns.
 
 ## Warm-up
 
@@ -72,41 +96,181 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In *Computed columns and data types* (S5) you build a new column in the SELECT list. Write a query that shows each
-   product's name and its price in cents, in a column named `cents`.
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+A **text function** takes the text in a column and returns a cleaned copy of it, so rows typed three ways can finally
+match.
 
-   `SELECT product_name, unit_price_usd * 100 AS cents FROM products;`
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="tc-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="tc" id="tc-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="tc" id="tc-r1" aria-label="Step 1 of 4: Messy text, · is a space" />
+<input class="sa-r r2 o3" type="radio" name="tc" id="tc-r2" aria-label="Step 2 of 4: TRIM cuts the spaces at the ends" />
+<input class="sa-r r3 o5" type="radio" name="tc" id="tc-r3" aria-label="Step 3 of 4: REPLACE turns two spaces into one" />
+<input class="sa-r r4 o8" type="radio" name="tc" id="tc-r4" aria-label="Step 4 of 4: LOWER makes small letters" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 212" width="360" role="img" aria-labelledby="tc-t tc-d">
+<title id="tc-t">A chain of small clean-ups turns messy text into clean text</title>
+<desc id="tc-d">A chip holds the messy text with a middle dot for every space: two spaces, Iced, two spaces, Tea, one space. It slides down to TRIM, which cuts the spaces at both ends; down to REPLACE, which turns the double space in the middle into one; and down to LOWER, which makes every letter small. The text ends as iced, one space, tea. Each step leaves a dimmed copy of the text it had.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Messy text, · is a space</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · TRIM cuts the spaces at the ends</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · REPLACE turns two spaces into one</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · LOWER makes small letters</text>
+<text class="f11 b" x="10" y="14">A chain of small clean-ups</text>
+<rect class="bx dsh" x="10" y="58" width="100" height="26" rx="6" />
+<rect class="bx dsh" x="10" y="98" width="100" height="26" rx="6" />
+<rect class="bx dsh" x="10" y="138" width="100" height="26" rx="6" />
+<rect class="bx dsh" x="10" y="178" width="100" height="26" rx="6" />
+<text class="f11" x="126" y="75">raw text · is a space</text>
+<text class="f11 w6 d3" x="126" y="115">TRIM · cuts spaces at both ends</text>
+<text class="f11 w4 d5" x="126" y="155">REPLACE · two spaces become one</text>
+<text class="f11 w2 d7" x="126" y="195">LOWER · small letters only</text>
+<text class="f11 mo mu m w6 d3" x="60" y="75">··Iced··Tea·</text>
+<text class="f11 mo mu m w4 d5" x="60" y="115">Iced··Tea</text>
+<text class="f11 mo mu m w2 d7" x="60" y="155">Iced·Tea</text>
+<g class="w8"><g class="mv m2 x0 y4"><g class="w8"><g class="mv m4 x0 y4"><g class="w8"><g class="mv m6 x0 y4"><rect class="f-src k2" x="10" y="58" width="100" height="26" rx="6" /><text class="f11 mo m w2 tmp" x="60" y="75">··Iced··Tea·</text><text class="f11 mo m w2 d3 tmp" x="60" y="75">Iced··Tea</text><text class="f11 mo m w2 d5 tmp" x="60" y="75">Iced·Tea</text><text class="f11 mo m w2 d7" x="60" y="75">iced·tea</text></g></g></g></g></g></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="tc-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="tc-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="tc-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="tc-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="tc-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="tc-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="tc-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="tc-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="tc-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="tc-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="tc-r1">1</label><label class="sa-sb sb2" for="tc-r2">2</label><label class="sa-sb sb3" for="tc-r3">3</label><label class="sa-sb sb4" for="tc-r4">4</label></span>
+</div>
+<p class="ca-cap">Clean text in small steps, one function each: TRIM removes the spaces at the ends, REPLACE fixes the middle, LOWER makes the letters the same case.</p>
+<ol class="sa-steps">
+<li>Messy text, · is a space</li>
+<li>TRIM cuts the spaces at the ends</li>
+<li>REPLACE turns two spaces into one</li>
+<li>LOWER makes small letters</li>
+</ol>
+</figure>
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Press Run on each query as you meet it. Units 2, 4 and 5 use the
+`typed_cities` list that you built under The question.
 
-The Campus cafe keeps a paper sign-up sheet for its loyalty card. A barista typed eight sign-ups into a list, one city
-each, exactly as written. The owner asks:
+### 1. Change the case of a copy
 
-> How many different cities are on the list, and how many sign-ups does each one have?
+A text function returns a new value built from the text: more text, or a number about it. In the `SELECT` list it builds
+a new column. In `WHERE` it lets you compare on a changed version of a column. `LOWER` and `UPPER` convert letters to
+lower and upper case.
 
-The list is `typed_cities`. It was made for this lesson and is not part of cafe-sales, whose `customers` table is clean.
-The quotes show the spaces:
+**Try it**. Before you run it, predict the number: the `customers` table has Berkeley customers.
 
-| signup_id | raw_city |
-|---:|---|
-| 1 | `'Berkeley'` |
-| 2 | `' berkeley'` |
-| 3 | `'BERKELEY '` |
-| 4 | `'berkeley'` |
-| 5 | `'Oakland, CA'` |
-| 6 | `'oakland '` |
-| 7 | `'OAKLAND'` |
-| 8 | `'Alameda'` |
+<RunSQL query={`SELECT COUNT(*) AS berkeley_customers FROM customers WHERE city = 'berkeley';`} />
 
-You can see three cities. SQL sees eight different texts. By the end you will count **3 cities**, and `raw_city` will
-be exactly as typed.
+Expected: 1 row, 1 column. *Why:* the data says `Berkeley` with a capital B, so `'berkeley'` matches no row. The count
+is 0, with no error.
 
-## The picture
+**Try it**: compare on a lowercase copy instead.
+
+<RunSQL query={`SELECT COUNT(*) AS berkeley_customers FROM customers WHERE LOWER(city) = 'berkeley';`} />
+
+Expected: 1 row, 1 column: `46`. *Why:* `LOWER` makes a lowercase copy of `city` for each row, and the comparison uses the
+copy.
+
+<details>
+<summary>Explain it in your own words: step 2 matches 46 rows, yet the table still says <code>Berkeley</code>. How?</summary>
+
+A `SELECT` only reads. The changed text exists while the query runs and nothing writes it back, so `SELECT city FROM
+customers` still shows the capital B.
+
+</details>
+
+### 2. Trim the ends
+
+`TRIM` removes characters from the two ends of the text, and only spaces unless you name other characters. A space
+inside the text stays. To spot a stray space, `LENGTH(x)` counts the characters.
+
+**Try it**: the typed list.
+
+<RunSQL query={`SELECT raw_city, LENGTH(raw_city) AS chars, TRIM(raw_city) AS trimmed, LENGTH(TRIM(raw_city)) AS chars_after
+FROM typed_cities
+ORDER BY signup_id;`} />
+
+Expected: 8 rows, 4 columns; find which rows lose characters. *Excel:* `TRIM`, with one difference you meet in the trap
+below.
+
+*Why:* `LENGTH` shows which texts hide a stray space, and `raw_city` stays next to the new column.
+
+### 3. Cut a piece, swap a piece
+
+Positions count from 1. In `SUBSTRING(x, 1, 3)`, 1 is the first character and 3 is how many to take. `SPLIT_PART(x, ',', 1)`
+numbers the pieces from 1, and the separator itself is in no piece. `REPLACE(x, 'a', 'b')` swaps every `a` for `b`, and it
+matches exactly: a capital `A` is not an `a`.
+
+<figure>
+<svg viewBox="0 0 360 196" width="360" role="img" aria-labelledby="text-parts-title text-parts-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="text-parts-title">What SPLIT_PART and SUBSTRING keep from Oakland, CA</title>
+<desc id="text-parts-desc">The text Oakland, CA drawn one character per box: O, a, k, l, a, n, d, a comma, a space, C and A, 11 characters. SPLIT_PART with the comma as separator and index 1 keeps the first 7 characters, Oakland. Index 2 keeps the last 3, a space followed by CA. SUBSTRING from character 1, length 3, keeps the first 3 characters, Oak.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Which characters each function keeps</text>
+<rect x="10" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="22.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">O</text>
+<rect x="34" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="46.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">a</text>
+<rect x="58" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="70.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">k</text>
+<rect x="82" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="94.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">l</text>
+<rect x="106" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="118.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">a</text>
+<rect x="130" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="142.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">n</text>
+<rect x="154" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="166.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">d</text>
+<rect x="178" y="82" width="24" height="24" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-opacity="0.45" />
+<text x="190.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">,</text>
+<rect x="202" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="214.0" y="98.0" font-size="12" text-anchor="middle" opacity="0.6" font-family="ui-monospace, Menlo, Consolas, monospace">·</text>
+<rect x="226" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="238.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">C</text>
+<rect x="250" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="262.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">A</text>
+<text x="10" y="44" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SPLIT_PART(raw_city, ',', 1) = 'Oakland'</text>
+<path d="M10 76 v-5 h168 v5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="10" y="146" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SPLIT_PART(raw_city, ',', 2) = ' CA'</text>
+<path d="M202 112 v5 h72 v-5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="10" y="164" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SUBSTRING(raw_city, 1, 3) = 'Oak'</text>
+<path d="M10 112 v5 h72 v-5" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="10" y="190" font-size="10" opacity="0.8">The shaded box is the comma, the separator: it is in neither piece.</text>
+</svg>
+</figure>
+
+**Try it**: cut the first piece before a comma.
+
+<RunSQL query={`SELECT signup_id, raw_city, SPLIT_PART(raw_city, ',', 1) AS before_comma
+FROM typed_cities
+ORDER BY signup_id;`} />
+
+Expected: 8 rows, 3 columns; find which row changes. *Excel:* `TEXTSPLIT` splits text into cells, while `SPLIT_PART`
+returns only the one piece you ask for. *Why:* a text with no comma has one piece, so it comes back whole.
+
+**Try it**: cut and swap on real menu names.
+
+<RunSQL query={`SELECT product_name,
+       UPPER(SUBSTRING(product_name, 1, 3)) AS code,
+       REPLACE(product_name, ' ', '_') AS underscored
+FROM products
+ORDER BY product_id;`} />
+
+Expected: 16 rows, 3 columns; `Cold Brew` gives `COL` and `Cold_Brew`. *Excel:* `LEFT(A2, 3)` takes the same three
+characters. *Why:* `SUBSTRING(x, 1, 3)` starts at character 1 and takes 3.
+
+### 4. Build a key
+
+Functions nest from the inside out: in `f(g(x))`, `g` runs first. Chain them and you get a **key**, a cleaned copy you
+compare on. The source column is never overwritten: the key sits in a new column beside it.
+
+The picture shows row 2 and row 3 of the list ending as the same key.
 
 <figure>
 <svg viewBox="0 0 360 292" width="360" role="img" aria-labelledby="text-key-title text-key-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -187,176 +351,69 @@ be exactly as typed.
 <text x="175.0" y="225.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">y</text>
 <text x="10" y="258" font-size="11" font-weight="600">city_key = 'berkeley' in both rows, so they match</text>
 </svg>
-<svg viewBox="0 0 360 196" width="360" role="img" aria-labelledby="text-parts-title text-parts-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="text-parts-title">What SPLIT_PART and SUBSTRING keep from Oakland, CA</title>
-<desc id="text-parts-desc">The text Oakland, CA drawn one character per box: O, a, k, l, a, n, d, a comma, a space, C and A, 11 characters. SPLIT_PART with the comma as separator and index 1 keeps the first 7 characters, Oakland. Index 2 keeps the last 3, a space followed by CA. SUBSTRING from character 1, length 3, keeps the first 3 characters, Oak.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">Which characters each function keeps</text>
-<rect x="10" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="22.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">O</text>
-<rect x="34" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="46.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">a</text>
-<rect x="58" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="70.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">k</text>
-<rect x="82" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="94.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">l</text>
-<rect x="106" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="118.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">a</text>
-<rect x="130" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="142.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">n</text>
-<rect x="154" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="166.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">d</text>
-<rect x="178" y="82" width="24" height="24" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-opacity="0.45" />
-<text x="190.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">,</text>
-<rect x="202" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="214.0" y="98.0" font-size="12" text-anchor="middle" opacity="0.6" font-family="ui-monospace, Menlo, Consolas, monospace">·</text>
-<rect x="226" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="238.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">C</text>
-<rect x="250" y="82" width="24" height="24" fill="none" stroke="currentColor" stroke-opacity="0.45" />
-<text x="262.0" y="98.0" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">A</text>
-<text x="10" y="44" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SPLIT_PART(raw_city, ',', 1) = 'Oakland'</text>
-<path d="M10 76 v-5 h168 v5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="10" y="146" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SPLIT_PART(raw_city, ',', 2) = ' CA'</text>
-<path d="M202 112 v5 h72 v-5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="10" y="164" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">SUBSTRING(raw_city, 1, 3) = 'Oak'</text>
-<path d="M10 112 v5 h72 v-5" fill="none" stroke="currentColor" stroke-width="1.5" />
-<text x="10" y="190" font-size="10" opacity="0.8">The shaded box is the comma, the separator: it is in neither piece.</text>
-</svg>
 </figure>
 
-A text function returns a new piece of text and leaves the column alone. Nest them from the inside out:
-`LOWER(TRIM(raw_city))` trims first, then lowercases. The functions in this lesson:
+**Try it**: build the key.
 
-| Function | What it returns |
-|---|---|
-| `TRIM(x)` | `x` without spaces at the front and the end |
-| `LOWER(x)`, `UPPER(x)` | `x` in small or capital letters |
-| `REPLACE(x, 'a', 'b')` | `x` with every `a` swapped for `b` |
-| `SUBSTRING(x, start, length)` | `length` characters from position `start`; the first character is 1 |
-| `SPLIT_PART(x, ',', 2)` | the second piece of `x` between commas |
+<RunSQL query={`SELECT signup_id, raw_city, LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) AS city_key
+FROM typed_cities
+ORDER BY city_key, signup_id;`} />
 
-Two bridges from Excel (E10). `TRIM` has the same name, but Excel's "removes all spaces from text except for single
-spaces between words", so it also shrinks double spaces inside the text. DuckDB's `TRIM` removes characters only from
-the two ends, and by default only spaces, not tabs or line breaks. `LEFT(x, 3)` also exists in both. Excel's
-`TEXTSPLIT` spills every piece into cells; `SPLIT_PART` returns the one piece you ask for.
+Expected: 8 rows, 3 columns; count the different values in `city_key`.
 
-## Worked example
+**Try it**: match on the key.
 
-Question: **how many different cities are on the list, and how many sign-ups does each have?** Run the notebook's setup
-cell, the given cell that builds `typed_cities`, then one cell per step.
+<RunSQL query={`SELECT COUNT(*) AS berkeley_signups
+FROM typed_cities
+WHERE LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) = 'berkeley';`} />
 
-1. **Exact text, on real data.**
+Expected: 1 row, 1 column: `4`. *Why:* `WHERE raw_city = 'Berkeley'` finds only 1 of the 4 Berkeley sign-ups. A join matches
+rows with the same `=`, so a key typed several ways drops rows from the join, and the result comes up short with no
+error. The joins lessons, starting with *INNER JOIN: pairing rows on a key* (S19), return to this.
 
-   ```sql
-   SELECT COUNT(*) AS berkeley_customers FROM customers WHERE city = 'berkeley';
-   ```
+### 5. Check the cities
 
-   Expected: 1 row, 1 column. Predict the number before you run it: the `customers` table has Berkeley customers.
-   *Why:* the data says `Berkeley` with a capital B, so `'berkeley'` matches no row. The count is 0, with no error.
+**Try it**:
 
-2. **Change case on the column, not on the table.**
+<RunSQL query={`SELECT COUNT(*) AS matched
+FROM typed_cities
+WHERE LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) IN ('berkeley', 'oakland', 'alameda');`} />
 
-   ```sql
-   SELECT COUNT(*) AS berkeley_customers FROM customers WHERE LOWER(city) = 'berkeley';
-   ```
+Expected: 1 row, 1 column: `8`. Every row of the list lands in one of the three cities: 4 Berkeley, 3 Oakland,
+1 Alameda. Answer: **3 cities**.
 
-   Expected: 1 row, 1 column: `46`. *Why:* `LOWER` builds a lowercase copy of `city` for each row, and the
-   comparison uses the copy. The table is not changed.
+<Aside type="tip" title="Remember">
 
-3. **Trim the typed list.**
+- A text function returns a new value; the column it read is never changed.
+- `TRIM` cuts spaces from the two ends only. `LOWER` and `UPPER` change case. `REPLACE` swaps exactly.
+- Positions count from 1, and the separator is in no piece.
+- Nest from the inside out, clean into a new key column, and compare on the key.
 
-   ```sql
-   SELECT raw_city, LENGTH(raw_city) AS chars, TRIM(raw_city) AS trimmed, LENGTH(TRIM(raw_city)) AS chars_after
-   FROM typed_cities;
-   ```
+**Common trap: "`TRIM` removes every extra space, as in Excel."** Excel's `TRIM` also collapses runs of spaces between
+words to one. DuckDB's `TRIM` touches only the two ends: `TRIM('  iced  tea  ')` returns `iced  tea`, 9 characters, with
+both spaces in the middle still there. A repeated space inside the text needs another tool.
 
-   Expected: 8 rows, 4 columns; find which rows lose characters. *Excel:* `TRIM`. *Why:* `LENGTH` shows which texts hide
-   a stray space, and `raw_city` stays next to the new column.
-
-4. **Cut out a piece.**
-
-   ```sql
-   SELECT raw_city, SPLIT_PART(raw_city, ',', 1) AS before_comma
-   FROM typed_cities;
-   ```
-
-   Expected: 8 rows, 2 columns; find which row changes. *Excel:* `TEXTSPLIT`. *Why:* a text with no comma has one piece, so
-   it comes back whole.
-
-5. **Build the key.**
-
-   ```sql
-   SELECT signup_id, raw_city, LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) AS city_key
-   FROM typed_cities
-   ORDER BY city_key, signup_id;
-   ```
-
-   Expected: 8 rows, 3 columns; count the different values in `city_key`. *Why:* read it from the inside
-   out: cut at the comma, trim, lowercase. A **key** is a cleaned copy you compare on; the source column is never
-   overwritten.
-
-6. **Match on the key.**
-
-   ```sql
-   SELECT COUNT(*) AS berkeley_signups
-   FROM typed_cities
-   WHERE LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) = 'berkeley';
-   ```
-
-   Expected: 1 row, 1 column: `4`. *Why:* `WHERE raw_city = 'Berkeley'` finds only 1 of the 4 Berkeley sign-ups. A join
-   matches rows with the same `=`, so a key typed several ways drops rows from the join, and the result comes up short
-   with no error. The joins lessons, starting with *INNER JOIN: pairing rows on a key* (S19), return to this.
-
-7. **Cut and swap on real menu names.**
-
-   ```sql
-   SELECT product_name,
-          UPPER(SUBSTRING(product_name, 1, 3)) AS code,
-          REPLACE(product_name, ' ', '_') AS underscored
-   FROM products;
-   ```
-
-   Expected: 16 rows, 3 columns; `Cold Brew` gives `COL` and `Cold_Brew`. *Excel:* `LEFT(A2, 3)` takes the same three
-   characters. *Why:* `SUBSTRING(x, 1, 3)` starts at character 1 and takes 3.
-
-8. **Verify.**
-
-   ```sql
-   SELECT COUNT(*) AS matched
-   FROM typed_cities
-   WHERE LOWER(TRIM(SPLIT_PART(raw_city, ',', 1))) IN ('berkeley', 'oakland', 'alameda');
-   ```
-
-   Expected: 1 row, 1 column: `8`. Every row of the list lands in one of the three cities: 4 Berkeley, 3 Oakland,
-   1 Alameda. Answer: **3 cities**.
-
-<details>
-<summary>Explain it in your own words: step 2 matches 46 rows, yet the table still says `Berkeley`. How?</summary>
-
-`LOWER` works on a copy made while the query runs. The table, and the column in it, keep their original text.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-text-functions-1">
 
 **Make a web slug for each tea.** A slug is a menu name in lowercase with hyphens instead of spaces, such as
-`green-tea`. Use the Exercise 1 cell. Expected: 3 rows, 2 columns (the name and the slug).
+`green-tea`. Expected: 3 rows, 2 columns (the name and the slug).
 
-The first steps are done for you:
+The first steps are done for you: the query lists the teas, and the slug column is a stand-in that repeats the name:
 
-```sql
-SELECT product_name, ... AS slug
+<RunSQL query={`SELECT product_name, product_name AS slug
 FROM products
-WHERE category = 'tea'
-```
+WHERE category = 'tea';`} />
 
-Now finish it: replace `...` with an expression that uses `REPLACE` and `LOWER`.
+Now finish it: replace the second `product_name` with an expression that uses `REPLACE` and `LOWER`.
 
 <details>
 <summary>Hint</summary>
 
-Read step 5 again: functions nest from the inside out. Which character goes in, and which comes out?
+Read unit 4 again: functions nest from the inside out. Which character goes in, and which comes out?
 
 </details>
 
@@ -387,8 +444,15 @@ The result is `green-tea`, `chai-latte` and `iced-lemon-tea`. Lowercasing first 
 
 <Exercise id="sql-text-functions-2">
 
-**Clean a typed sign-up list.** Work in the Exercise 2 cells. The first cell builds `typed_signups`: six sign-ups with
-an email typed by hand, `raw_email`.
+**Clean a typed sign-up list.** This block builds `typed_signups`: six sign-ups with an
+email typed by hand, `raw_email`. Press Run once.
+
+<RunSQL query={`CREATE OR REPLACE TABLE typed_signups (signup_id INTEGER, raw_email VARCHAR);
+INSERT INTO typed_signups VALUES
+  (1, 'Mia@Example.com'), (2, ' mia@example.com'),
+  (3, 'NOAH@EXAMPLE.ORG'), (4, 'noah@example.org '),
+  (5, 'li@example.net'), (6, 'LI@Example.net ');
+SELECT * FROM typed_signups ORDER BY signup_id;`} />
 
 | signup_id | raw_email |
 |---:|---|
@@ -399,12 +463,14 @@ an email typed by hand, `raw_email`.
 | 5 | `'li@example.net'` |
 | 6 | `'LI@Example.net '` |
 
-Before you run anything, write one sentence in the first cell: what each query will return. Then write two queries.
+Before you run anything else, write one sentence: what each query will return. Then write two queries.
 The first shows each sign-up with `raw_email`, an `email_key` (trimmed, lowercase) and a `domain` (the part after the
 `@`). The second counts the sign-ups whose domain is `example.org`.
 
 Expected shape, to check your sentence against: the first query returns 6 rows, 4 columns; the second returns 1 row,
 1 column.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -427,7 +493,8 @@ Expected output: *"Six rows with four columns, where each person's two rows shar
 SELECT signup_id, raw_email,
        LOWER(TRIM(raw_email)) AS email_key,
        SPLIT_PART(LOWER(TRIM(raw_email)), '@', 2) AS domain
-FROM typed_signups;
+FROM typed_signups
+ORDER BY signup_id;
 
 SELECT COUNT(*) AS org_signups
 FROM typed_signups
@@ -459,11 +526,9 @@ The first query shows three different keys, each typed twice. The second returns
 **Spot the flaw.** A colleague counts the Berkeley sign-ups in `typed_cities` and says "two". The query runs without an
 error:
 
-```sql
-SELECT COUNT(*) AS berkeley_signups
+<RunSQL query={`SELECT COUNT(*) AS berkeley_signups
 FROM typed_cities
-WHERE LOWER(raw_city) = 'berkeley';
-```
+WHERE LOWER(raw_city) = 'berkeley';`} />
 
 Expected: 1 row, 1 column. The list shows four Berkeley sign-ups. Find the flaw and fix the query.
 
@@ -486,7 +551,7 @@ Expected: 1 row, 1 column: `4`. A wrong count with no error is the risk with tex
 
 **Can you do it?** *I can turn text that was typed several ways into one clean key in a new column, and say why the raw
 text would lose rows in a comparison.*
-Test: Exercise sql-text-functions-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-text-functions-2, done in the editor from an empty start without opening the hints.
 
 The pattern to remember: **clean into a new column, and compare on the key.** The next lesson, *Working with dates and
 time* (S11), does the same for timestamps.

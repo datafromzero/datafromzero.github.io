@@ -7,6 +7,40 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D43 (owner decision): the SQL stage has no notebooks or Colab; every query runs in the lesson page (D42), and Colab
+  is introduced in the Python stage. `scripts/refresh-concept-figures.mjs` re-pastes every concept figure into the lessons
+  from the generators (`--check` tests that they are current).
+- Concept animations, 29 more (D41 amended, owner decisions): one abstract, looping schematic per SQL idea, each with a plain-words
+  metaphor, a changing phase label, a Pause button and its own spec `scripts/animations/concept-*.mjs` (`node scripts/make-animation.mjs
+  concept-<key>`): query, select-order-limit, where, null, expression, case, aggregate, conditional-agg, text-clean, date truncation,
+  rank-ties, sliding-window, removing duplicates, keys, fanout, self-join, subquery, set-ops, funnel, cohort, recursive, view, star, ai-check,
+  constraints, transaction, normalize, index and shard. Facts shown were checked in DuckDB 2.0.0 (RANK skips after ties, a CHECK that
+  is NULL passes, ROLLBACK works only inside BEGIN, and so on). Every concept animation, the 10 earlier ones too, now also has step
+  buttons: Back, Next and 3 to 6 numbered steps (CSS only), each step saying in plain words what changes. A step stops the loop and
+  shows the settled frame of that step; the same words label the figure and are listed under it, and "Play" resumes. Reduced motion
+  shows step 1 and the buttons switch instantly; print shows the final frame and the captions.
+- SQL runner, next step (D42 amended, owner decisions): the block is now two separate boxes, the editor and the output, side by
+  side where there is room and stacked on phones, with an empty state in the output before the first run. The editor is CodeMirror
+  with SQL colors; a Tables button lists the five cafe-sales tables with columns, types and row counts and inserts or previews a
+  table; errors show the first line of the engine's message plus a tested tip for common beginner mistakes; an optional Auto-run
+  switch re-runs read-only queries 800 ms after typing stops. Nothing is set up by the learner: the editor and engine load in the
+  background after the page has painted once a block is within a screen of the viewport (not with Data Saver or 2G), a Run pressed
+  too early shows "Getting ready…" and then runs by itself, and the interface uses no loading jargon. New page `/sql/playground/`:
+  the same runner full height, with a "Try:" list of examples. Reading a lesson without nearing a block still costs about 3 KB.
+- SPEC D42 (owner decision): learners run SQL inside the lesson page. The new `<RunSQL query={...} />` component turns a "Try it"
+  query or an exercise starter into an editable box with Run, Reset query and Reset data (Ctrl or Cmd plus Enter runs it) and
+  shows the result table with its row and column count. The engine is DuckDB-Wasm, self-hosted, loaded only on the first Run
+  click, with the five cafe-sales tables created from our own CSV files; nothing is stored and nothing is sent anywhere. One database
+  per page, so a table made in one block is seen by the next. Without JavaScript the block is the plain code. Piloted in GROUP BY and
+  HAVING, window functions and INNER JOIN; the Colab button stays as a second route. Amends D4, the "no in-browser code" line of §15
+  and the zero-JS rule for lessons.
+- SPEC D41 (owner decisions): lesson figures may be CSS-only steppers the learner controls. Back, numbered step buttons and Next
+  (a native radio group, no JavaScript) move through at most 6 steps, one change per step with a short fade; all step captions stay
+  on the page as a numbered list with a clause badge and "Predict:" prompts. Each SQL clause has one fixed color inside figures.
+  Print and reduced motion show the final frame with all captions. Built by `scripts/make-animation.mjs` from our own cafe-sales
+  rows; pilots in GROUP BY and HAVING, window functions and INNER JOIN. The same decision adds concept animations (owner request):
+  abstract, autoplay, looping CSS-only schematics with no real data (aggregate against window function, kinds of CTE, join types,
+  the logical order of a query), a 44 px Pause / Play button for WCAG 2.2.2, and a static final frame for reduced motion and print.
 - SPEC D40 (owner decisions, research issue #52): the SQL stage has 35 lessons in three parts (analysis on one table, then keys and
   joins, then the database itself), starting with an Excel-side first lesson
   ("From a spreadsheet to SQL: your first queries") and adding query execution order, views, star schema, and scale and
@@ -124,6 +158,11 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
+  so the plan boxes line up.
+- Print: the Back, Next and step buttons of the lesson steppers are hidden, as those of the concept animations already were;
+  the final frame and the step captions print.
+- SQL S19: the ambiguous-column error is quoted the way the page shows it.
 - Lesson tables on phones: a long formula in a cell now wraps, so the other columns no longer shrink to one letter
   per line (Excel E4, E5, E7, E13, E21).
 
@@ -237,6 +276,9 @@ All notable changes to datafromzero are recorded here. The format follows
   style, layout and paint cost on the built site with a 4× CPU throttle at 390 and 1280 px.
 
 ### Removed
+- The 35 SQL notebooks (`notebooks/sql/`) and the two scripts that only served them (`pin-notebook-duckdb.py`,
+  `wrap-notebook-error-cells.py`), and the Colab button, setup paragraph and `notebook` field from SQL lessons S8, S14 and S19
+  (D43). The `v0.1.0` data tag, the optional `notebook` field, `<OpenInColab />` and the notebook output check stay for the Python stage.
 - Homepage: the marquee (and its pause control) and the "05 Begin" section, replaced by "05 Pick a direction".
 - The hero caption ("Excel → SQL → Python → DA · DE · DS") and its ScrambleText decode, and the separate
   "From A1 / to AI." headline (the lockup wordmark replaces it).

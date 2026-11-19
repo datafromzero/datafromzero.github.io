@@ -15,7 +15,6 @@ prerequisites:
   - sql-from-spreadsheet-to-sql
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-select-sort-limit.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: SELECT clause'
@@ -26,25 +25,38 @@ sources:
     url: https://duckdb.org/docs/stable/sql/query_syntax/limit
   - title: 'DuckDB documentation: FROM and JOIN clauses'
     url: https://duckdb.org/docs/stable/sql/query_syntax/from
+  - title: 'DuckDB documentation: SELECT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/select
+  - title: 'Microsoft Support: Sort data in a range or table'
+    url: https://support.microsoft.com/en-us/office/sort-data-in-a-range-or-table-62d0b95d-2a90-4610-a6ae-2e545c4a4654
 status: draft
 ---
 
-This lesson builds on *From a spreadsheet to SQL* (S1) and runs in the same Google Colab notebook setup, so there is
-nothing to install. In S1 you ran `SELECT *`, picked columns, sorted with `DESC` and cut a result with `LIMIT`. Here you
-learn to control the result: name the columns you want, rename them, sort with a tie-breaker, and cut the list to the
-top few.
+This lesson builds on *From a spreadsheet to SQL* (S1), where you picked columns, sorted with `DESC` and cut a result
+with `LIMIT`. Here you control all three. Press **Run** under any query on this page; the tables are **cafe-sales**
+again.
 
-**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
-`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
-table. The notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. The tie
-order in step 3 and in the exercise 3 query is not defined by the query, so Colab may list tied rows in a different
-order than the one a local run gave. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to
+TODO(owner): run every block on this page and compare each result with its Expected line. The tie order in unit 3 and in the exercise 3 query is not defined by the query, so tied rows can come in a different order than the one a local run gave. No DuckDB page opened for this lesson says how tied rows are ordered, so the rule in unit 3 that rows tied on every sort column have no promised order rests on that reading: source it or cut it. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to
 that day and `status: published`.
+
+## The question
+
+The owner is redoing the menu board and asks:
+
+> Which five items cost the most? Show the item, its category and its price, most expensive first. Where two items cost
+> the same, list them in alphabetical order.
+
+In E5 you would sort the price list and read off the top rows. Here you do the same in SQL, and you decide in the query
+what happens when two prices are equal. Four of the 16 rows of the `products` table, in table order:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 3 | Latte | coffee | 4.50 |
+| 4 | Cappuccino | coffee | 4.50 |
+| 6 | Cold Brew | coffee | 4.75 |
+| 8 | Chai Latte | tea | 4.75 |
+
+Two pairs share a price. Keep an eye on them.
 
 ## Warm-up
 
@@ -65,16 +77,7 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-2. What does `AS orders` do in `SELECT COUNT(*) AS orders FROM orders`?
-
-   <details>
-   <summary>Answer</summary>
-
-   It names the result column `orders`. The table is not changed.
-
-   </details>
-
-3. In Excel or Google Sheets (*Tables, sorting and filtering*, E5), how do you sort a list by `category` and then, inside
+2. In Excel or Google Sheets (*Tables, sorting and filtering*, E5), how do you sort a list by `category` and then, inside
    each category, by price?
 
    <details>
@@ -85,27 +88,159 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner is redoing the menu board and asks:
+`SELECT` chooses and names the columns, `ORDER BY` puts the rows in order, and `LIMIT` keeps only the first rows of that
+order, so together they turn a stored table into a short, sorted **result table**.
 
-> Which five items cost the most? Show the item, its category and its price, most expensive first. Where two items cost
-> the same, list them in alphabetical order.
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="sol-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="sol" id="sol-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="sol" id="sol-r1" aria-label="Step 1 of 5: A table with columns A, B and C" />
+<input class="sa-r r2 o2" type="radio" name="sol" id="sol-r2" aria-label="Step 2 of 5: SELECT keeps columns A and B" />
+<input class="sa-r r3 o6" type="radio" name="sol" id="sol-r3" aria-label="Step 3 of 5: ORDER BY deals the smallest key first" />
+<input class="sa-r r4 o7" type="radio" name="sol" id="sol-r4" aria-label="Step 4 of 5: LIMIT 2 draws a cut line" />
+<input class="sa-r r5 o8" type="radio" name="sol" id="sol-r5" aria-label="Step 5 of 5: The rows below the line are gone" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 184" width="360" role="img" aria-labelledby="sol-t sol-d">
+<title id="sol-t">SELECT picks columns, ORDER BY deals rows in order, LIMIT keeps the top</title>
+<desc id="sol-d">A table of four rows r1 to r4 with columns A, B and C; B holds a sort key. SELECT keeps columns A and B, and column C fades away. ORDER BY then deals the rows one by one into a new table on the right, the smallest key first: r2, r4, r1, r3. LIMIT 2 draws a cut line under the second row; the two rows below it fade, and the top 2 rows stay.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A table with columns A, B and C</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · SELECT keeps columns A and B</text>
+<text class="f10 b w4 d3 tmp" x="10" y="29">3 · ORDER BY deals the smallest key first</text>
+<text class="f10 b w1 d7 tmp" x="10" y="29">4 · LIMIT 2 draws a cut line</text>
+<text class="f10 b w1 d8" x="10" y="29">5 · The rows below the line are gone</text>
+<text class="f11 b" x="10" y="14">Pick, put in order, keep the top</text>
+<text class="f10 b m" x="24" y="50">A</text>
+<text class="f10 b m" x="54" y="50">B</text>
+<text class="f10 b m" x="204" y="50">A</text>
+<text class="f10 b m" x="234" y="50">B</text>
+<text class="f10 b m w2 tmp" x="84" y="50">C</text>
+<rect class="bx dsh" x="10" y="58" width="88" height="24" rx="5" />
+<rect class="bx dsh" x="190" y="58" width="58" height="24" rx="5" />
+<rect class="bx dsh" x="10" y="88" width="88" height="24" rx="5" />
+<rect class="bx dsh" x="190" y="88" width="58" height="24" rx="5" />
+<rect class="bx dsh" x="10" y="118" width="88" height="24" rx="5" />
+<rect class="bx dsh" x="190" y="118" width="58" height="24" rx="5" />
+<rect class="bx dsh" x="10" y="148" width="88" height="24" rx="5" />
+<rect class="bx dsh" x="190" y="148" width="58" height="24" rx="5" />
+<rect class="s-out u1 d2 tmp" x="7" y="42" width="64" height="132" rx="6" />
+<g class="w7 tmp"><g class="mv m5 x18 y6"><rect class="f-src k2" x="10" y="58" width="28" height="24" rx="5" /><text class="f11 m" x="24" y="74">r1</text><rect class="f-src k2" x="40" y="58" width="28" height="24" rx="5" /><text class="f11 m" x="54" y="74">3</text><rect class="f-src k1 w2 tmp" x="70" y="58" width="28" height="24" rx="5" /><text class="f11 m w2 tmp" x="84" y="74">c1</text></g></g>
+<g class="w8"><g class="mv m3 x18 yn3"><rect class="f-src k2" x="10" y="88" width="28" height="24" rx="5" /><text class="f11 m" x="24" y="104">r2</text><rect class="f-src k2" x="40" y="88" width="28" height="24" rx="5" /><text class="f11 m" x="54" y="104">1</text><rect class="f-src k1 w2 tmp" x="70" y="88" width="28" height="24" rx="5" /><text class="f11 m w2 tmp" x="84" y="104">c2</text></g></g>
+<g class="w7 tmp"><g class="mv m6 x18 y3"><rect class="f-src k2" x="10" y="118" width="28" height="24" rx="5" /><text class="f11 m" x="24" y="134">r3</text><rect class="f-src k2" x="40" y="118" width="28" height="24" rx="5" /><text class="f11 m" x="54" y="134">4</text><rect class="f-src k1 w2 tmp" x="70" y="118" width="28" height="24" rx="5" /><text class="f11 m w2 tmp" x="84" y="134">c3</text></g></g>
+<g class="w8"><g class="mv m4 x18 yn6"><rect class="f-src k2" x="10" y="148" width="28" height="24" rx="5" /><text class="f11 m" x="24" y="164">r4</text><rect class="f-src k2" x="40" y="148" width="28" height="24" rx="5" /><text class="f11 m" x="54" y="164">2</text><rect class="f-src k1 w2 tmp" x="70" y="148" width="28" height="24" rx="5" /><text class="f11 m w2 tmp" x="84" y="164">c4</text></g></g>
+<path class="s-flt dsh w2 d7" d="M184 118h70" />
+<text class="f10 b w2 d7" x="262" y="122">LIMIT 2</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="sol-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="sol-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="sol-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="sol-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="sol-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="sol-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="sol-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="sol-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="sol-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="sol-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="sol-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="sol-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="sol-r1">1</label><label class="sa-sb sb2" for="sol-r2">2</label><label class="sa-sb sb3" for="sol-r3">3</label><label class="sa-sb sb4" for="sol-r4">4</label><label class="sa-sb sb5" for="sol-r5">5</label></span>
+</div>
+<p class="ca-cap">SELECT chooses the columns, ORDER BY puts the rows in order, and LIMIT keeps only the first rows of that order.</p>
+<ol class="sa-steps">
+<li>A table with columns A, B and C</li>
+<li>SELECT keeps columns A and B</li>
+<li>ORDER BY deals the smallest key first</li>
+<li>LIMIT 2 draws a cut line</li>
+<li>The rows below the line are gone</li>
+</ol>
+</figure>
 
-In E5 you would sort the price list and read off the top rows. Here you do the same in SQL, and you decide in the query
-what happens when two prices are equal. Four of the 16 rows of the `products` table, in table order:
+## Learn by doing
 
-| product_id | product_name | category | unit_price_usd |
-|---:|---|---|---:|
-| 3 | Latte | coffee | 4.50 |
-| 4 | Cappuccino | coffee | 4.50 |
-| 6 | Cold Brew | coffee | 4.75 |
-| 8 | Chai Latte | tea | 4.75 |
+Five small steps. Press Run under each query. Each one works on its own, so you can come back to any step.
 
-Two pairs share a price. By the end you will have put the five most expensive items on the board, with no doubt about
-which item takes the fifth place.
+### 1. Name things with AS
 
-## The picture
+`AS` gives something a new name. `product_name AS item` calls the result column `item`, and `FROM products AS p` calls
+the table `p`, for this query only. The names belong to the result: the stored table keeps its own column names, so the
+next query starts from those.
+
+**Try it**:
+
+<RunSQL query={`SELECT product_name AS item, category, unit_price_usd AS price_usd
+FROM products;`} />
+
+Read it: *show the name as `item`, the category, and the price as `price_usd`, from products*. Expected: 16 rows,
+3 columns, headed `item`, `category` and `price_usd`. *Excel:* type new headers.
+
+*Why:* `SELECT *` shows whatever the table holds today, so if someone adds a column, your result changes. Naming the
+columns pins it. A new name with spaces goes in double quotes (`AS "Price USD"`); single quotes are for text values, as in S1.
+
+**Try it.** Now the table gets a short name:
+
+<RunSQL query={`SELECT p.product_name, p.unit_price_usd
+FROM products AS p;`} />
+
+Read it: *call the products table `p`, and take its name and price*. Expected: 16 rows, 2 columns.
+
+*Why:* `p.product_name` says which table a column comes from. With one table you never need it. In later lessons a query
+reads two tables, and the short names tell their columns apart. DuckDB's documentation says a table joined to itself must
+be aliased.
+
+### 2. Sort with ORDER BY
+
+`ORDER BY` sorts the rows of the result. `DESC` after a column means highest first. With neither `ASC` nor `DESC`, the
+default is ascending, lowest first.
+
+**Try it**:
+
+<RunSQL query={`SELECT product_name AS item, unit_price_usd AS price_usd
+FROM products
+ORDER BY price_usd DESC;`} />
+
+Expected: 16 rows, 2 columns, highest price first. *Excel:* sort largest to smallest.
+
+*Why:* `ORDER BY` accepts the new name `price_usd`. Look at the rows: two pairs of items share a price, and this query does
+not say which item of a pair comes first. Nothing in it decides.
+
+### 3. Settle ties with a second column
+
+Rows that **tie** have equal values in the sort column. Add a second sort column, a **tie-breaker**, and SQL compares the
+tied rows on it, then on a third, and so on. Each sort column carries its own direction: `DESC` belongs to the one column it follows.
+If rows tie on every sort column, your query does not say their order.
+
+**Try it.** Before you run it: at 4.75, which item comes first?
+
+<RunSQL query={`SELECT product_name AS item, unit_price_usd AS price_usd
+FROM products
+ORDER BY price_usd DESC, item;`} />
+
+Expected: 16 rows, 2 columns. *Excel:* a second sort level. Microsoft Support calls **Add Level** "another column to sort
+by".
+
+*Why:* `item` has no direction, so it sorts ascending, A to Z. Now the order is the same on every run.
+
+### 4. Cut with LIMIT
+
+`LIMIT 5` keeps the first five rows of the sorted list and drops the rest. DuckDB's SELECT page calls `ORDER BY` and
+`LIMIT` output modifiers and says they apply "at the very end of the query", so `LIMIT` cuts the sorted list, never the
+table. A `LIMIT` with no `ORDER BY` has no promised answer: DuckDB's page says the results "might not be deterministic".
+
+**Try it**:
+
+<RunSQL query={`SELECT product_name AS item, category, unit_price_usd AS price_usd
+FROM products
+ORDER BY price_usd DESC, item
+LIMIT 5;`} />
+
+Expected: 5 rows, 3 columns: Turkey Sandwich, Avocado Toast, Pumpkin Spice Latte, Mocha and Chai Latte. *Excel:* sort,
+then read the top five rows. That answers the owner's question: **Turkey Sandwich, Avocado Toast, Pumpkin Spice Latte,
+Mocha and Chai Latte**.
+
+*Why:* Chai Latte comes before Cold Brew, A to Z. The dashed line in the first picture is where the cut falls.
 
 <figure>
 <svg viewBox="0 0 360 276" width="360" role="img" aria-labelledby="menu-title menu-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -150,6 +285,12 @@ which item takes the fifth place.
 <text x="10" y="252" font-size="11">Rows 5 and 6 tie at 4.75. The second sort column,</text>
 <text x="10" y="268" font-size="11">product_name, puts Chai Latte first, so it takes place 5.</text>
 </svg>
+</figure>
+
+Logically the engine runs your query in this order, and the second picture follows it from top to bottom: `FROM`
+starts with every row, `SELECT` builds the result's columns, `ORDER BY` sorts the rows, and `LIMIT` keeps the first five.
+
+<figure>
 <svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="flow-title flow-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="flow-title">What each clause hands to the next</title>
 <desc id="flow-desc">Four boxes joined by arrows. FROM products: 16 rows, 4 columns. SELECT with three named columns: 16 rows, 3 columns. ORDER BY price_usd DESC, item: 16 rows, 3 columns, sorted. LIMIT 5: 5 rows, 3 columns.</desc>
@@ -175,135 +316,70 @@ which item takes the fifth place.
 </svg>
 </figure>
 
-Read the second picture from top to bottom: a query hands its rows from one clause to the next, and `LIMIT` cuts last, so
-it cuts the sorted list. The new pieces map to what you do in a sheet:
-
-| SQL | Reads as | In Excel |
-|---|---|---|
-| `column AS name` | call this result column `name` | type a new header over the old one |
-| `FROM products AS p` | call this table `p`, in this query only | no equivalent |
-| `ORDER BY a DESC, b` | sort by `a`, then by `b` inside equal `a` | **Data > Sort**, then **Add Level** (E5) |
-| `LIMIT 5` | keep only the first five rows of the result | read the top five rows after sorting |
-
-## Worked example
-
-Question: **which five items cost the most, most expensive first, with ties in alphabetical order?** Run the notebook's
-setup cell, then one cell per step. Each step names the shape of the result to expect.
-
-1. **Name the columns you want, and rename them.**
-
-   ```sql
-   SELECT product_name AS item, category, unit_price_usd AS price_usd
-   FROM products;
-   ```
-
-   Read it: *show the name as `item`, the category, and the price as `price_usd`, from products*. Expected: 16 rows,
-   3 columns, headed `item`, `category` and `price_usd`. *Excel:* type new headers. *Why:* a name after `AS` is a label on the
-   result column; the table keeps its own column names. `SELECT *` shows whatever the table holds today, so if someone adds
-   a column, your result changes. Naming the columns pins it. A new name with spaces goes in double quotes
-   (`AS "Price USD"`); single quotes are for text values, as in S1.
-
-2. **Give the table a short name.**
-
-   ```sql
-   SELECT p.product_name, p.unit_price_usd
-   FROM products AS p;
-   ```
-
-   Read it: *call the products table `p`, and take its name and price*. Expected: 16 rows, 2 columns. *Why:* `p.product_name`
-   says which table a column comes from. With one table you never need it. In later lessons a query reads two
-   tables, and the short names tell their columns apart. DuckDB's documentation says a table joined to itself must be
-   aliased.
-
-3. **Sort by one column.**
-
-   ```sql
-   SELECT product_name AS item, unit_price_usd AS price_usd
-   FROM products
-   ORDER BY price_usd DESC;
-   ```
-
-   Expected: 16 rows, 2 columns, highest price first. *Excel:* sort largest to smallest. *Why:* `ORDER BY` accepts the new name
-   `price_usd`. Look at the rows: two pairs of items share a price, and this query does not say which item of a pair comes
-   first. Nothing in it decides.
-
-4. **Add a tie-breaker.**
-
-   ```sql
-   SELECT product_name AS item, unit_price_usd AS price_usd
-   FROM products
-   ORDER BY price_usd DESC, item;
-   ```
-
-   Expected: 16 rows, 2 columns. *Excel:* a second sort level. *Why:* the second sort column only works inside rows
-   that tie on the first. Each column gets its own direction: `DESC` belongs to `price_usd`, and `item` has none, so it
-   sorts ascending, A to Z. Now the order is the same on every run.
-
-5. **Cut the list.**
-
-   ```sql
-   SELECT product_name AS item, category, unit_price_usd AS price_usd
-   FROM products
-   ORDER BY price_usd DESC, item
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 3 columns: Turkey Sandwich, Avocado Toast, Pumpkin Spice Latte, Mocha and Chai Latte. *Excel:* sort,
-   then read the top five rows. *Why:* `LIMIT` cuts after the sort. Place 5 is a tie at 4.75, and the tie-breaker
-   gives it to Chai Latte, not Cold Brew. Without `ORDER BY`, the DuckDB documentation warns that `LIMIT` results might
-   not be deterministic; that is fine for a quick look, as in S1, and wrong for an answer. That answers the owner's
-   question: **Turkey Sandwich, Avocado Toast, Pumpkin Spice Latte, Mocha and Chai Latte**.
-
-6. **Use the same pattern on another table: the latest five orders.**
-
-   ```sql
-   SELECT order_id, ordered_at
-   FROM orders
-   ORDER BY ordered_at DESC, order_id DESC
-   LIMIT 5;
-   ```
-
-   Expected: 5 rows, 2 columns, the newest order first. *Excel:* sort the order list newest first. *Why:* the
-   pattern is the same: sort, tie-breaker, cut. The tie-breaker matters here too: the 1,800 orders carry only 1,788
-   different timestamps, so a few orders share a minute, and `order_id` settles them.
-
-7. **Verify.** Compare the five rows of step 5 with the first five rows you get when you rerun step 4: they must be the
-   same. Then check that `LIMIT` cut the result and not the table:
-
-   ```sql
-   SELECT COUNT(*) AS items FROM products;
-   ```
-
-   Expected: 1 row, 1 column: `16`. Two checks, one answer.
-
 <details>
-<summary>Explain it in your own words: why does step 5 still need the tie-breaker when step 3 already sorted by price?</summary>
+<summary>Explain it in your own words: why does unit 4 still need the tie-breaker when unit 2 already sorted by price?</summary>
 
-Sorting by price leaves the order of equal prices undecided, and place 5 is a tie. Without a second sort column, either
-Chai Latte or Cold Brew could take it. The tie-breaker makes the result the same every time.
+Place 5 is a tie: Chai Latte and Cold Brew both cost 4.75. Without the second column, the cut could fall on either one,
+and the answer could change from one run to the next.
 
 </details>
+
+### 5. The same pattern, and a check
+
+The pattern works on any table: sort, tie-breaker, cut. Here are the latest five orders.
+
+**Try it**:
+
+<RunSQL query={`SELECT order_id, ordered_at
+FROM orders
+ORDER BY ordered_at DESC, order_id DESC
+LIMIT 5;`} />
+
+Expected: 5 rows, 2 columns, the newest order first. *Excel:* sort the order list newest first.
+
+*Why:* the tie-breaker matters here too: the 1,800 orders carry only 1,788 different timestamps, so a few orders share a
+minute, and `order_id` settles them.
+
+Now check the menu answer two ways. Run the unit 3 query again: its first five items must be the same as the five items of
+unit 4. Then check that `LIMIT` cut the result and not the table:
+
+<RunSQL query={`SELECT COUNT(*) AS items FROM products;`} />
+
+Expected: 1 row, 1 column: `16`. Two checks, one answer.
+
+<Aside type="tip" title="Remember">
+
+- `SELECT` names the columns (`AS` renames them), `ORDER BY` sorts, and `LIMIT` cuts last.
+- Each sort column has its own direction, and ascending is the default.
+- Add a second sort column so tied rows have a fixed order.
+- `LIMIT` cuts the sorted list, never the table; with no `ORDER BY` it has no promised answer.
+- A name made with `AS` belongs to the result only.
+
+**Common trap: "`LIMIT 2` takes the first two rows of the table, and `ORDER BY` then sorts those."**
+`SELECT product_name FROM products ORDER BY product_name LIMIT 2` returns Americano and Avocado Toast, the first two names
+of the whole menu in alphabetical order. A cut made before the sort would return Americano and Espresso, the first two rows
+as stored. `LIMIT` runs last, so the sort sees every row.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-select-sort-limit-1">
 
-**List the five cheapest items, cheapest first, with equal prices in alphabetical order.** Use the Exercise 1 cell.
-Expected: 5 rows, 2 columns, named `item` and `price_usd`.
+**List the five cheapest items, cheapest first, with equal prices in alphabetical order.** Expected: 5 rows, 2 columns,
+named `item` and `price_usd`.
 
 The first steps are done for you: the table and the two named columns are
 
-```sql
-SELECT product_name AS item, unit_price_usd AS price_usd
-FROM products
-```
+<RunSQL query={`SELECT product_name AS item, unit_price_usd AS price_usd
+FROM products`} />
 
 Now finish it: add the line that sorts, and the line that keeps five rows.
 
 <details>
 <summary>Hint</summary>
 
-Copy the two lines you added in steps 4 and 5. Which direction is the default when you write no `DESC`?
+Copy the two lines from units 3 and 4. Which direction is the default when you write no `DESC`?
 
 </details>
 
@@ -340,13 +416,16 @@ inside the list: Croissant before Green Tea, and Americano before Blueberry Muff
 
 <Exercise id="sql-select-sort-limit-2">
 
-**Show Harbor's first three orders.** Harbor is the store with `store_id` 3. Work in the Exercise 2 cells. Name the
-columns `order_number` and `placed_at`, put the earliest order first, and break ties with the order number.
+**Show Harbor's first three orders.** Harbor is the store with `store_id` 3. Name the columns `order_number` and
+`placed_at`, put the earliest order first, and break ties with the order number.
 
-Before you run anything, write one sentence in the first cell: what will the query return? Then write the query.
+Before you run anything, write one sentence (a line that starts with `--` works in the editor): what will the query
+return? Then write the query.
 
 Expected shape, to check your sentence against: 3 rows, 2 columns. The count and the order matter, not just the rows:
 the first row is Harbor's earliest order, not the earliest order of the whole chain.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -407,19 +486,17 @@ opened on April 1, so nothing comes earlier. Without the `WHERE`, the same query
 
 **Spot the flaw.** A colleague wants the three most expensive items and runs this query. It gives a table with no error:
 
-```sql
-SELECT product_name, unit_price_usd
+<RunSQL query={`SELECT product_name, unit_price_usd
 FROM products
 ORDER BY unit_price_usd
-LIMIT 3;
-```
+LIMIT 3;`} />
 
 Expected: 3 rows, 2 columns. Check the first row against the price list: is it the most expensive item? Then fix the query.
 
 <Solution>
 
 `ORDER BY` with no direction sorts ascending, lowest first, so the query returns the three cheapest items: Espresso 3.00, and Green Tea and
-Croissant at 3.25 (the order of those two is not defined). Add `DESC`:
+Croissant at 3.25 (those two may come either way). Add `DESC`:
 
 ```sql
 SELECT product_name, unit_price_usd
@@ -437,7 +514,7 @@ Expected: 3 rows, 2 columns: Turkey Sandwich 9.25, Avocado Toast 8.50 and Pumpki
 
 **Can you do it?** *I can name the columns I want, rename them with `AS`, sort by two columns, and cut a sorted result with
 `LIMIT`, so that the same query always gives the same rows.*
-Test: Exercise sql-select-sort-limit-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-select-sort-limit-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **sort first with a tie-breaker, then cut.** The next lesson, *Filtering rows with WHERE*, goes
 deeper into the filter you used in the last exercise.

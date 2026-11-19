@@ -5,7 +5,7 @@ description: Calculate new columns, cast between types and avoid integer-divisio
 stage: sql
 order: 50
 level: beginner
-duration: 25
+duration: 30
 objectives:
   - Write arithmetic expressions with correct precedence
   - Cast text to a number or date and back
@@ -16,7 +16,6 @@ prerequisites:
   - sql-where-filtering
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-expressions-and-types.ipynb
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Numeric types'
@@ -27,59 +26,18 @@ sources:
     url: https://duckdb.org/docs/stable/sql/expressions/cast
   - title: 'DuckDB documentation: Date types'
     url: https://duckdb.org/docs/stable/sql/data_types/date
-  - title: 'DuckDB documentation: Utility functions (typeof)'
-    url: https://duckdb.org/docs/stable/sql/functions/utility
   - title: 'DuckDB documentation: Describe a table or a query'
     url: https://duckdb.org/docs/stable/guides/meta/describe
+  - title: 'Microsoft Learn: Floating-point arithmetic may give inaccurate result in Excel'
+    url: https://learn.microsoft.com/en-us/troubleshoot/microsoft-365-apps/excel/floating-point-arithmetic-inaccurate-result
 status: draft
 ---
 
-This lesson builds on *Filtering rows with WHERE* (S3) and runs in the same Google Colab notebook setup. So far you have
-shown stored columns. A query can also calculate new ones, and every value it works with has a **type**: whole number,
-decimal, text, date. The type decides what a calculation gives back, and a wrong type gives wrong cents without an error.
+This lesson builds on *Filtering rows with WHERE* (S3). So far you have shown stored columns. A query can also calculate
+new ones, and every value it works with has a **type**: whole number, decimal, text or date. Press **Run** under any query
+on this page.
 
-**Your practice notebook** loads the five tables of **cafe-sales** again. In the notebook, each query sits between
-`con.sql("""` and `""").show()`: only the text inside the triple quotes is SQL, and `.show()` prints the result as a
-table. The notebook cells leave out the closing `;` that this page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, and that `.show()` prints the tables with the shapes this page gives. The results here come from DuckDB 2.0.0: an older version in Colab can show other types for a calculation (for example the decimal width in step 3) or other error text. The operator-precedence rule (step 2) is shown by the results in the step and called standard SQL; no DuckDB page was found that states it, so check whether you want one cited. The rule that an expression with a text column and a number needs a cast comes from the `Binder Error` text in exercise 2, not from a documentation page. Time the lesson against its 25 minutes. When you have checked it, set `reviewed` to that day and `status: published`.
-
-## Warm-up
-
-Answer from memory before you open anything. Then click to check.
-
-1. In Excel or Google Sheets (*Numbers are not numbers until you check*, E4), a cell shows `14` and the formula bar shows
-   `14.25`. Which value does a formula use?
-
-   <details>
-   <summary>Answer</summary>
-
-   The stored value, `14.25`. A cell has two values: the one it shows and the one it stores, and the formula bar shows
-   what is stored.
-
-   </details>
-
-2. In *Filtering rows with WHERE* (S3), write the condition that keeps prices from 3.50 to 4.50, both included, in two
-   ways.
-
-   <details>
-   <summary>Answer</summary>
-
-   `unit_price_usd BETWEEN 3.50 AND 4.50`, or `unit_price_usd >= 3.50 AND unit_price_usd <= 4.50`.
-
-   </details>
-
-3. In *Your first formulas* (E2), how do you copy a formula such as `=C2*0.8` down a whole column?
-
-   <details>
-   <summary>Answer</summary>
-
-   Fill it down the column. In SQL there is nothing to copy: an expression in `SELECT` is calculated for every row.
-
-   </details>
+TODO(owner): run every block on this page and compare each result with its Expected line. The numbers here come from DuckDB 2.0.0, and the page runs an older DuckDB, so check the decimal width in unit 2 and the stray digits in unit 3 on the page, and the error text of exercise 2. The operator-precedence rule (unit 1) is shown by results (here, and in a local DuckDB 2.0.0 run that also ranks `//` and `%` with `*`); no DuckDB page was found that states it, so check whether you want one cited. The rule that an expression with a text column and a number needs a cast comes from the error text in exercise 2, not from a documentation page. Time the lesson against its 30 minutes. When you have checked it, set `reviewed` to that day and `status: published`.
 
 ## The question
 
@@ -98,10 +56,179 @@ ten coffee and tea rows of `products`:
 | 7 | Green Tea | tea | 3.25 |
 | 8 | Chai Latte | tea | 4.75 |
 
-By the end you will have the ten happy-hour prices as exact cents, and you will have seen why the type of a number
-matters.
+## Warm-up
 
-## The picture
+Answer from memory before you open anything. Then click to check.
+
+1. In Excel or Google Sheets (*Numbers are not numbers until you check*, E4), a cell shows `14` and the formula bar shows
+   `14.25`. Which value does a formula use?
+
+   <details>
+   <summary>Answer</summary>
+
+   The stored value, `14.25`. A cell has two values: the one it shows and the one it stores, and the formula bar shows
+   what is stored.
+
+   </details>
+
+2. In *Filtering rows with WHERE* (S3), write the test that keeps prices from 3.50 to 4.50, both included, in two
+   ways.
+
+   <details>
+   <summary>Answer</summary>
+
+   `unit_price_usd BETWEEN 3.50 AND 4.50`, or `unit_price_usd >= 3.50 AND unit_price_usd <= 4.50`.
+
+   </details>
+
+## The big idea
+
+An **expression** is a calculation in the `SELECT` list: SQL works it out once for every row and shows the answer as a
+new column, and the **type** of the numbers decides what the answer looks like.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ex-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="ex" id="ex-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="ex" id="ex-r1" aria-label="Step 1 of 4: Two columns, A and B" />
+<input class="sa-r r2 o3" type="radio" name="ex" id="ex-r2" aria-label="Step 2 of 4: The formula runs on row 1" />
+<input class="sa-r r3 o4" type="radio" name="ex" id="ex-r3" aria-label="Step 3 of 4: And on rows 2 and 3" />
+<input class="sa-r r4 o8" type="radio" name="ex" id="ex-r4" aria-label="Step 4 of 4: Every row has a new value" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 168" width="360" role="img" aria-labelledby="ex-t ex-d">
+<title id="ex-t">An expression builds a new column from old ones, row by row</title>
+<desc id="ex-d">A table with columns A and B and three rows, a1 b1 to a3 b3. For each row in turn, copies of its A and B cells slide to the right, and a new cell in a new column called A times B appears: a1 times b1, a2 times b2, a3 times b3. The original columns stay unchanged.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Two columns, A and B</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · The formula runs on row 1</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · And on rows 2 and 3</text>
+<text class="f10 b w4 d5" x="10" y="29">4 · Every row has a new value</text>
+<text class="f11 b" x="10" y="14">Two cells in, a new cell out</text>
+<text class="f10 b m" x="34" y="54">A</text>
+<text class="f10 b m" x="94" y="54">B</text>
+<text class="f10 b m w7 d2" x="268" y="54">A × B</text>
+<g><rect class="f-src k2" x="10" y="62" width="48" height="24" rx="6" /><text class="f11 m" x="34" y="78">a1</text></g>
+<g><rect class="f-src k2" x="70" y="62" width="48" height="24" rx="6" /><text class="f11 m" x="94" y="78">b1</text></g>
+<rect class="bx dsh" x="210" y="62" width="116" height="24" />
+<g class="w1 d2 tmp"><g class="mv m2 x20 y0"><rect class="f-out k3" x="10" y="62" width="48" height="24" rx="6" /><rect class="f-out k3" x="70" y="62" width="48" height="24" rx="6" /></g></g>
+<g class="w6 d3"><rect class="f-out k3" x="210" y="62" width="116" height="24" rx="6" /><text class="f11 m" x="268" y="78">a1 × b1</text></g>
+<g><rect class="f-src k2" x="10" y="94" width="48" height="24" rx="6" /><text class="f11 m" x="34" y="110">a2</text></g>
+<g><rect class="f-src k2" x="70" y="94" width="48" height="24" rx="6" /><text class="f11 m" x="94" y="110">b2</text></g>
+<rect class="bx dsh" x="210" y="94" width="116" height="24" />
+<g class="w1 d3 tmp"><g class="mv m3 x20 y0"><rect class="f-out k3" x="10" y="94" width="48" height="24" rx="6" /><rect class="f-out k3" x="70" y="94" width="48" height="24" rx="6" /></g></g>
+<g class="w5 d4"><rect class="f-out k3" x="210" y="94" width="116" height="24" rx="6" /><text class="f11 m" x="268" y="110">a2 × b2</text></g>
+<g><rect class="f-src k2" x="10" y="126" width="48" height="24" rx="6" /><text class="f11 m" x="34" y="142">a3</text></g>
+<g><rect class="f-src k2" x="70" y="126" width="48" height="24" rx="6" /><text class="f11 m" x="94" y="142">b3</text></g>
+<rect class="bx dsh" x="210" y="126" width="116" height="24" />
+<g class="w1 d4 tmp"><g class="mv m4 x20 y0"><rect class="f-out k3" x="10" y="126" width="48" height="24" rx="6" /><rect class="f-out k3" x="70" y="126" width="48" height="24" rx="6" /></g></g>
+<g class="w4 d5"><rect class="f-out k3" x="210" y="126" width="116" height="24" rx="6" /><text class="f11 m" x="268" y="142">a3 × b3</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ex-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ex-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ex-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ex-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ex-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ex-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ex-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ex-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ex-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ex-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ex-r1">1</label><label class="sa-sb sb2" for="ex-r2">2</label><label class="sa-sb sb3" for="ex-r3">3</label><label class="sa-sb sb4" for="ex-r4">4</label></span>
+</div>
+<p class="ca-cap">An expression such as A × B is worked out separately on every row and shows up as a new column. The columns it used stay as they were.</p>
+<ol class="sa-steps">
+<li>Two columns, A and B</li>
+<li>The formula runs on row 1</li>
+<li>And on rows 2 and 3</li>
+<li>Every row has a new value</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Press Run under each query. Each one works on its own, so you can come back to any step.
+
+### 1. Calculate a column, and mind the order
+
+An expression combines columns, numbers and operators, and `AS` names the result. The table itself is not changed. When
+an expression has several operators, brackets come first, then `*`, `/`, `//` and `%`, then `+` and `-`: in DuckDB,
+`2 + 3 * 4` is 14.
+
+**Try it**:
+
+<RunSQL query={`SELECT product_name, unit_price_usd, unit_price_usd * 0.80 AS happy_price_usd
+FROM products
+WHERE category IN ('coffee', 'tea');`} />
+
+Read it: *take the price times 0.80, for the coffees and teas*. Expected: 10 rows, 3 columns. *Excel:* a new column with
+`=C2*0.8`, filled down as in E2: SQL needs no filling, the expression runs for every row. Look at the new column: it shows
+four decimals. Unit 2 explains.
+
+**Try it.** The pair price of two items with a 0.50 coupon, and the same calculation with the brackets in the wrong place:
+
+<RunSQL query={`SELECT product_name,
+       unit_price_usd * 2 - 0.50 AS pair_price_usd,
+       unit_price_usd * (2 - 0.50) AS wrong_pair_usd
+FROM products
+WHERE product_id <= 3;`} />
+
+Expected: 3 rows, 3 columns.
+
+*Why:* brackets come first, so the second column multiplies the price by 1.5, not by 2. Write the brackets whenever you
+are unsure.
+
+### 2. Read the types, and cast to exact cents
+
+Every value has a type, and the types of the inputs decide the type of the answer. `DESCRIBE` shows the type of each
+column. A price is a `DECIMAL(6,2)`: exact, up to 6 digits, 2 after the point. Other common types are `INTEGER` (whole
+numbers, like `quantity`), `VARCHAR` (text) and `DATE` and `TIMESTAMP` (`ordered_at` is a `TIMESTAMP`). DuckDB's numeric
+types page says adding, subtracting or multiplying two decimals gives another decimal, wide enough to hold the exact
+answer.
+
+**Try it.** The types of a table, then of a query's result:
+
+<RunSQL query={`DESCRIBE products;`} />
+
+<RunSQL query={`DESCRIBE SELECT product_name, unit_price_usd, unit_price_usd * 0.80 AS happy_price_usd
+FROM products
+WHERE category IN ('coffee', 'tea');`} />
+
+Expected: 4 rows, 6 columns, and then 3 rows, 6 columns. Read the `column_name` and `column_type` columns. *Excel:* the
+formula bar and the format of a cell (E4).
+
+*Why:* the two decimals of 0.80 and the two of the price make four in the exact answer, so the result type has four.
+
+To get cents, change a type on purpose with `CAST(x AS type)` (or `x::type`).
+
+**Try it**:
+
+<RunSQL query={`SELECT product_name, unit_price_usd,
+       CAST(unit_price_usd * 0.80 AS DECIMAL(6,2)) AS happy_price_usd
+FROM products
+WHERE category IN ('coffee', 'tea');`} />
+
+Expected: 10 rows, 3 columns, with two decimals.
+
+*Why:* here every result is already whole cents, so the cast loses nothing. When a result has more decimals than the type
+allows, a cast rounds, so look at the numbers before you cast money.
+
+### 3. Why money is not DOUBLE
+
+`DOUBLE` is a **floating-point** type, a second number format next to `DECIMAL`. Unit 2 kept the price a `DECIMAL`; here
+the same price goes through `DOUBLE` first.
+
+**Try it.** Before you run it: will every result show clean cents?
+
+<RunSQL query={`SELECT product_name, CAST(unit_price_usd AS DOUBLE) * 0.80 AS happy_price_double
+FROM products
+WHERE category IN ('coffee', 'tea');`} />
+
+Expected: 10 rows, 2 columns. *Excel:* Microsoft's page says "Excel stores numbers using double-precision": a
+floating-point format, as approximate as `DOUBLE`. In SQL you choose the type per column; for money, `DECIMAL`.
+
+*Why:* `DOUBLE` stores an approximation: DuckDB's numeric types page says such calculations are "only approximate", and
+that exact money amounts need `DECIMAL`. 4 of the 10 results show stray digits: Cold Brew gives 3.8000000000000003 instead
+of 3.80. The picture lines up the same calculation in three types; only the decimal keeps the cents exact.
 
 <figure>
 <svg viewBox="0 0 360 240" width="360" role="img" aria-labelledby="type-title type-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -136,6 +263,38 @@ matters.
 <text x="10" y="212" font-size="11">Only the decimal keeps the cents exact: use DECIMAL for money.</text>
 <text x="10" y="228" font-size="11">The shaded box is the exact result.</text>
 </svg>
+</figure>
+
+<details>
+<summary>Explain it in your own words: a report adds up the happy-hour prices of 1,000 items as `DOUBLE` and compares the total with the till total, to the cent. Why can the two disagree although no single price is wrong?</summary>
+
+Each `DOUBLE` price is the nearest number the format can hold, so each addition can leave a tiny stray digit, and an
+equality test sees all of them. A `DECIMAL` total keeps the cents exact, so it can match the till.
+
+</details>
+
+### 4. Division: `/`, `//` and `%`
+
+`/` keeps the fraction, `//` drops it (integer division), and `%` is the remainder: `9 / 4` is 2.25, `9 // 4` is 2 and
+`9 % 4` is 1 (DuckDB's numeric functions page). Dividing a decimal gives a floating-point number, not a decimal (the
+numeric types page).
+
+**Try it.** The three lines of order 1001. Before you run it: what will each of the three new columns show for a line
+with quantity 1?
+
+<RunSQL query={`SELECT order_item_id, quantity,
+       quantity / 2 AS halved,
+       quantity // 2 AS pairs,
+       quantity % 2 AS single
+FROM order_items
+WHERE order_id = 1001;`} />
+
+Expected: 3 rows, 5 columns. Order 1001 does not contain the extra-zero line (order 2075).
+
+*Why:* each operator treats the leftover differently, as the picture shows. `quantity / 2.0` avoids integer division
+anywhere.
+
+<figure>
 <svg viewBox="0 0 360 176" width="360" role="img" aria-labelledby="div-title div-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="div-title">Three division results for the three lines of order 1001</title>
 <desc id="div-desc">A table with the lines 5001, 5002 and 5003 of order 1001, which have quantities 1, 1 and 2. The column quantity / 2, type DOUBLE, shows 0.5, 0.5 and 1.0. The column quantity // 2, type INTEGER, shows 0, 0 and 1. The column quantity % 2, type INTEGER, shows 1, 1 and 0.</desc>
@@ -163,153 +322,64 @@ matters.
 </svg>
 </figure>
 
-An **expression** is a calculation in the `SELECT`: it takes columns and numbers and returns a value for every row, and
-`AS` names the result (S2). The operators are `+`, `-`, `*`, `/` and `%`; the second picture adds `//`. A type name
-comes after `CAST(x AS ...)`:
+### 5. Cast text, and check
 
-| Type | Holds | Example |
-|---|---|---|
-| `INTEGER` | whole numbers | `quantity`: 1, 2, 3 |
-| `DECIMAL(6,2)` | exact decimals, up to 6 digits, 2 after the point | `unit_price_usd`: 4.75 |
-| `DOUBLE` | approximate decimals | `4.75` stored as a float |
-| `VARCHAR` | text | `product_name`: Latte |
-| `DATE` and `TIMESTAMP` | a day, a day and time | `ordered_at` is a `TIMESTAMP` |
+A cast turns text into a number or a date, and a number into text. Dates are written year-month-day, as in DuckDB's date
+documentation. When the value does not fit the type, the query stops with an error. `TRY_CAST` is the gentler version: it returns NULL, a
+missing value, instead.
 
-## Worked example
+**Try it**:
 
-Question: **what is each coffee and tea item's happy-hour price, to the cent?** Run the notebook's setup cell, then one
-cell per step. Each step gives the shape of the result to expect.
+<RunSQL query={`SELECT CAST('4.50' AS DECIMAL(6,2)) AS price,
+       CAST('2026-03-31' AS DATE) AS day,
+       CAST(1001 AS VARCHAR) AS order_text;`} />
 
-1. **Calculate a column.**
+Expected: 1 row, 3 columns. *Excel:* a number stored as text (E4).
 
-   ```sql
-   SELECT product_name, unit_price_usd, unit_price_usd * 0.80 AS happy_price_usd
-   FROM products
-   WHERE category IN ('coffee', 'tea');
-   ```
+**Try it.** `TRY_CAST` on text that is not a number:
 
-   Read it: *take the price times 0.80, for the coffees and teas*. Expected: 10 rows, 3 columns. *Excel:* a new column
-   with `=C2*0.8`. *Why:* the expression runs once per row, and `AS` names the result. The table is not changed. Look at
-   the new column: it shows four decimals. Step 3 explains.
+<RunSQL query={`SELECT TRY_CAST('abc' AS INTEGER) AS result;`} />
 
-2. **Mind the order of operations.** The pair price of two items with a 0.50 coupon, and the same calculation with the
-   brackets in the wrong place:
+Expected: 1 row, 1 column, holding NULL.
 
-   ```sql
-   SELECT product_name,
-          unit_price_usd * 2 - 0.50 AS pair_price_usd,
-          unit_price_usd * (2 - 0.50) AS wrong_pair_usd
-   FROM products
-   WHERE product_id <= 3;
-   ```
+Now check the happy-hour prices. Take the 20 percent off the price and compare with the cents you cast. A mismatch would
+show up as a row:
 
-   Expected: 3 rows, 3 columns. *Why:* multiplication and division come before addition and subtraction, as in a
-   sheet formula, and brackets come first. This is standard SQL, and the results show it: the second column
-   multiplies the price by 1.5, not by 2. Write the brackets whenever you are unsure.
+<RunSQL query={`SELECT product_name
+FROM products
+WHERE category IN ('coffee', 'tea')
+  AND unit_price_usd - CAST(unit_price_usd * 0.80 AS DECIMAL(6,2)) <> unit_price_usd * 0.20;`} />
 
-3. **Read the types.** The schema of a table, then the types of a query's result:
+Expected: 0 rows, 1 column: for all 10 items, the price minus the happy-hour price equals 20 percent of the price. Check
+one by hand: 3.00 times 0.80 is 2.40.
 
-   ```sql
-   DESCRIBE products;
-   ```
+<Aside type="tip" title="Remember">
 
-   ```sql
-   DESCRIBE SELECT product_name, unit_price_usd, unit_price_usd * 0.80 AS happy_price_usd
-   FROM products
-   WHERE category IN ('coffee', 'tea');
-   ```
+- An expression runs once for every row: brackets first, then `*`, `/`, `//` and `%`, then `+` and `-`.
+- The types of the inputs decide the type of the answer; `DESCRIBE` shows them.
+- Money is `DECIMAL`, which is exact; `DOUBLE` is only approximate.
+- `/` keeps the fraction, `//` drops it, `%` is the remainder.
+- `CAST` changes a type on purpose, and fails when the value does not fit.
 
-   Expected: 4 rows, 6 columns, and then 3 rows, 6 columns. Read the `column_name` and `column_type` columns: `unit_price_usd`
-   is `DECIMAL(6,2)`, and `happy_price_usd` is `DECIMAL(9,4)`. *Excel:* the formula bar and the format of a cell (E4).
-   *Why:* `DECIMAL` stores exact decimals; multiplying two of them gives a decimal with as many digits as the exact answer
-   needs, according to DuckDB's documentation, so the two decimals of 0.80 and the two of the price become four.
+**Common trap: "a stray digit far to the right of the decimal point is harmless, so `DOUBLE` is fine for money."** On
+screen it may be, but a comparison sees it. `0.1::DOUBLE + 0.2::DOUBLE = 0.3::DOUBLE` is false (the sum is
+0.30000000000000004), while the plain `0.1 + 0.2 = 0.3` is true, because DuckDB reads plain decimal literals as
+`DECIMAL`.
 
-4. **Cast to exact cents.**
-
-   ```sql
-   SELECT product_name, unit_price_usd,
-          CAST(unit_price_usd * 0.80 AS DECIMAL(6,2)) AS happy_price_usd
-   FROM products
-   WHERE category IN ('coffee', 'tea');
-   ```
-
-   Expected: 10 rows, 3 columns, with two decimals. *Why:* `CAST(x AS type)` converts a value to another type (the short form is `x::type`),
-   and `DECIMAL(6,2)` is the type of a price. Here every result is already whole cents, so the cast loses nothing. When a result has
-   more decimals than the type allows, a cast rounds, so look at the numbers before you cast money.
-
-5. **See why money is not DOUBLE.**
-
-   ```sql
-   SELECT product_name, CAST(unit_price_usd AS DOUBLE) * 0.80 AS happy_price_double
-   FROM products
-   WHERE category IN ('coffee', 'tea');
-   ```
-
-   Expected: 10 rows, 2 columns. *Why:* `DOUBLE` stores an approximation, and 4 of the 10 results show stray digits: Cold Brew gives
-   3.8000000000000003 instead of 3.80. DuckDB's documentation says that adding, subtracting and multiplying `DOUBLE` values is only
-   approximate, and to use `DECIMAL` for monetary amounts. One detail to remember: dividing a decimal gives a `DOUBLE`.
-
-6. **Meet integer division.**
-
-   ```sql
-   SELECT order_item_id, quantity,
-          quantity / 2 AS halved,
-          quantity // 2 AS pairs,
-          quantity % 2 AS single
-   FROM order_items
-   WHERE order_id = 1001;
-   ```
-
-   Expected: 3 rows, 5 columns (the second picture). *Why:* in DuckDB, `/` keeps the fraction (`1 / 2` is 0.5) and `//` is integer
-   division, which drops it (`1 // 2` is 0). `%` is the remainder. Order 1001 does not contain the extra-zero line (order 2075).
-   `quantity / 2.0` avoids integer division anywhere.
-
-7. **Cast text to a number or a date, and back.**
-
-   ```sql
-   SELECT CAST('4.50' AS DECIMAL(6,2)) AS price,
-          CAST('2026-03-31' AS DATE) AS day,
-          CAST(1001 AS VARCHAR) AS order_text;
-   ```
-
-   Expected: 1 row, 3 columns. *Excel:* a number stored as text (E4). *Why:* text can be turned into a number or a date,
-   and a number into text. Dates are written year-month-day, as in DuckDB's date documentation. Text that does not fit stops the query
-   with an error, which is better than a wrong number.
-
-8. **Verify.** Take the 20 percent off the price and compare with the cents you cast. A mismatch would show up as a row:
-
-   ```sql
-   SELECT product_name
-   FROM products
-   WHERE category IN ('coffee', 'tea')
-     AND unit_price_usd - CAST(unit_price_usd * 0.80 AS DECIMAL(6,2)) <> unit_price_usd * 0.20;
-   ```
-
-   Expected: 0 rows, 1 column: for all 10 items, the price minus the happy-hour price equals 20 percent of the price. Check one by hand: 3.00
-   times 0.80 is 2.40.
-
-<details>
-<summary>Explain it in your own words: why is `DECIMAL(6,2)` a better type for a price than `DOUBLE`?</summary>
-
-`DECIMAL(6,2)` stores the price exactly, to the cent, and adding, subtracting and multiplying decimals stays exact.
-`DOUBLE` stores an approximation, so a price like 3.80 can come back as 3.8000000000000003.
-
-</details>
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-expressions-and-types-1">
 
-**Give the bakery items a happy-hour price, as exact cents.** Use the Exercise 1 cell. Expected: 3 rows, 3 columns, with
-the happy-hour price as a `DECIMAL(6,2)`.
+**Give the bakery items a happy-hour price, as exact cents.** Expected: 3 rows, 3 columns, with the happy-hour price as
+a `DECIMAL(6,2)`.
 
 The first steps are done for you: the table, the filter and the first two columns are
 
-```sql
-SELECT product_name, unit_price_usd,
+<RunSQL query={`SELECT product_name, unit_price_usd,
 FROM products
-WHERE category = 'bakery'
-```
+WHERE category = 'bakery'`} />
 
 Now finish it: after the comma at the end of the `SELECT` line, add the third column: 20 percent off, cast to
 `DECIMAL(6,2)`, named `happy_price_usd`. DuckDB accepts a trailing comma there, while other databases may not.
@@ -317,7 +387,7 @@ Now finish it: after the comma at the end of the `SELECT` line, add the third co
 <details>
 <summary>Hint</summary>
 
-Copy the third column of step 4. The category is already filtered, so nothing else changes.
+Copy the third column of unit 2. The category is already filtered, so nothing else changes.
 
 </details>
 
@@ -352,30 +422,37 @@ The result is Croissant 2.60, Blueberry Muffin 2.80 and Banana Bread 3.00, all w
 
 <Exercise id="sql-expressions-and-types-2">
 
-**Price a pair from a text price list.** A supplier sent a price list in which every column is text. In the notebook,
-the first Exercise 2 cell creates it as the table `price_list_text`; this is what it holds:
+**Price a pair from a text price list.** A supplier sent a price list in which every column is text. Run this block
+first: it creates the table `price_list_text` and shows it.
 
-| item | price_text | valid_from_text |
-|---|---|---|
-| Espresso | 3.00 | 2026-07-01 |
-| Latte | 4.50 | 2026-07-01 |
-| Chai Latte | 4.75 | 2026-07-15 |
-| Croissant | 3.25 | 2026-07-15 |
+<RunSQL query={`CREATE OR REPLACE TABLE price_list_text (
+  item VARCHAR,
+  price_text VARCHAR,
+  valid_from_text VARCHAR
+);
+INSERT INTO price_list_text VALUES
+  ('Espresso', '3.00', '2026-07-01'),
+  ('Latte', '4.50', '2026-07-01'),
+  ('Chai Latte', '4.75', '2026-07-15'),
+  ('Croissant', '3.25', '2026-07-15');
+SELECT * FROM price_list_text;`} />
 
-Work in the Exercise 2 cells. The pair price of an item is two items minus a 0.50 coupon. Show the item, its pair price
-as an exact decimal named `pair_price_usd`, and the day the price starts as a date named `valid_from`.
+The pair price of an item is two items minus a 0.50 coupon. Show the item, its pair price as an exact decimal named
+`pair_price_usd`, and the day the price starts as a date named `valid_from`.
 
-Before you run anything, write one sentence in the first cell: what will the query return, and what type is each column?
-Then check the types of `price_list_text` with `DESCRIBE`, and write the query.
+Before you run anything, write one sentence (a line that starts with `--` works in the editor): what will the query
+return, and what type is each column? Then check the types of `price_list_text` with `DESCRIBE`, and write the query.
 
 Expected shape, to check your sentence against: 4 rows, 3 columns. A first try that multiplies `price_text` directly
-stops with a `Binder Error`; read it before you fix it.
+stops with an error; read it before you fix it.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
 
 `DESCRIBE price_list_text` tells you the type of every column. Cast `price_text` to a decimal and `valid_from_text` to a
-date, as in step 7, then use the pair calculation of step 2.
+date, as in unit 5, then use the pair calculation of unit 1.
 
 </details>
 
@@ -396,9 +473,8 @@ FROM price_list_text;
 ```
 
 The result is Espresso 5.50 (July 1), Latte 8.50 (July 1), Chai Latte 9.00 (July 15) and Croissant 6.00 (July 15). `DESCRIBE`
-shows `VARCHAR` for all three source columns. That is why multiplying `price_text` directly stops with a `Binder Error`
-that asks for explicit type casts: cast first, then calculate. The result column `pair_price_usd` is a decimal with
-two decimals, so the cents survive.
+shows `VARCHAR` for all three source columns. That is why multiplying `price_text` directly stops with an error that asks for explicit type casts: cast first, then calculate. The result column
+`pair_price_usd` is a decimal with two decimals, so the cents survive.
 
 </Solution>
 
@@ -431,11 +507,9 @@ two decimals, so the cents survive.
 **Spot the flaw.** A colleague wants half of each line's quantity in order 1001, with decimals such as 0.5, and runs this
 query. It gives a table with no error:
 
-```sql
-SELECT order_item_id, quantity, quantity // 2 AS half_the_quantity
+<RunSQL query={`SELECT order_item_id, quantity, quantity // 2 AS half_the_quantity
 FROM order_items
-WHERE order_id = 1001;
-```
+WHERE order_id = 1001;`} />
 
 Expected: 3 rows, 3 columns. Compare the result with the quantities: is `half_the_quantity` really half? Then fix the query.
 
@@ -458,7 +532,7 @@ to get the same result.
 
 **Can you do it?** *I can calculate a new column with the right order of operations, read a column's type with `DESCRIBE`, cast text to a number or a
 date, tell `/` from `//`, and keep money in `DECIMAL`.*
-Test: Exercise sql-expressions-and-types-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-expressions-and-types-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **know the type before you calculate: `DECIMAL` for money, `/` for fractions, and `CAST` on purpose.**
 The next lesson, *Labels and buckets with CASE*, uses these calculations to put rows into groups.

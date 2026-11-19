@@ -1,0 +1,581 @@
+---
+id: sql-create-table-constraints
+title: Creating tables and constraints
+description: Define your own table with CREATE TABLE, choose types, and let keys and constraints protect the data.
+stage: sql
+order: 310
+level: intermediate
+duration: 30
+objectives:
+  - Write a CREATE TABLE with types and a primary key
+  - Add a foreign key and a NOT NULL, UNIQUE and CHECK constraint
+  - Choose a DEFAULT value where one makes sense
+  - Predict which insert a constraint will reject
+prerequisites:
+  - sql-relational-model
+  - sql-expressions-and-types
+  - sql-where-filtering
+  - sql-null-handling
+  - sql-aggregate-functions
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: CREATE TABLE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_table
+  - title: 'DuckDB documentation: Constraints'
+    url: https://duckdb.org/docs/stable/sql/constraints
+  - title: 'DuckDB documentation: Foreign keys'
+    url: https://duckdb.org/docs/stable/sql/constraints#foreign-keys
+  - title: 'DuckDB documentation: INSERT statement'
+    url: https://duckdb.org/docs/stable/sql/statements/insert
+status: draft
+---
+
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
+So far you read tables that someone else built. Here you build two of your own and teach the database to refuse bad rows.
+The tables you create stay until you leave the page, so run the blocks in order. Run a block that makes a table twice and
+DuckDB says the table already exists: press **Reset data**, then run the blocks again from the top.
+
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 30 minutes. The `UNIQUE` rule in unit 1 (several rows may hold `NULL`) rests on the DuckDB Constraints page saying that primary key and unique constraints are identical except for two points, one being that a primary key also enforces not `NULL`; DuckDB 2.0.0 stored two `NULL`s in a `UNIQUE` column in a test run. That a `CHECK` whose expression comes out `NULL` passes is a run result, not a docs sentence, and is not taught here. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> I want a stock sheet: how many units of each product each cafe has on the shelf. Last time someone typed a price of
+> 0, a category called "dessert" that we do not have, and the same product twice. Can the database stop that?
+
+The `products` table is plain, as *Tables, keys and grain* said: it states no rules, so it accepts anything. Its top
+rows, and the first rows of the stock sheet we want (store, product, units):
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+
+| store_id | product_id | units_on_hand |
+|---:|---:|---:|
+| 1 | 1 | 40 |
+| 1 | 10 | 25 |
+| 1 | 6 | 12 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Tables, keys and grain* (S18), write one query that shows `product_id` can be the primary key of `products`.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS row_count, COUNT(DISTINCT product_id) AS distinct_ids FROM products;
+   ```
+
+   Two equal numbers (`16 | 16`) prove the values are never repeated and never empty.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), order 1335 has no customer. What does its `customer_id` hold, and what does
+   `COUNT(customer_id)` do with it?
+
+   <details>
+   <summary>Answer</summary>
+
+   It holds `NULL`, an unknown value, and `COUNT(customer_id)` skips it. A column that may be empty is exactly what a rule
+   can forbid.
+
+   </details>
+
+## The big idea
+
+A **constraint** is a rule you write into a table's definition: the database tests every new row against it and refuses
+the row that breaks it.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="cn-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="cn" id="cn-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="cn" id="cn-r1" aria-label="Step 1 of 5: A table with three rules" />
+<input class="sa-r r2 o3" type="radio" name="cn" id="cn-r2" aria-label="Step 2 of 5: Rows 1 and 2 follow the rules: in" />
+<input class="sa-r r3 o4" type="radio" name="cn" id="cn-r3" aria-label="Step 3 of 5: Row 3 has no name: NOT NULL says no" />
+<input class="sa-r r4 o5" type="radio" name="cn" id="cn-r4" aria-label="Step 4 of 5: Row 4 repeats a key: UNIQUE says no" />
+<input class="sa-r r5 o8" type="radio" name="cn" id="cn-r5" aria-label="Step 5 of 5: Row 5 has a bad age: CHECK says no" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 256" width="360" role="img" aria-labelledby="cn-t cn-d">
+<title id="cn-t">Constraints are rules a table enforces: rows that break them bounce off</title>
+<desc id="cn-d">A table with three rules, NOT NULL, UNIQUE and CHECK, and five rows waiting. Row 1 follows the rules and goes in. Row 2 has a question mark as its age, which passes CHECK, so it goes in. Row 3 has no name and bounces off NOT NULL. Row 4 repeats a key and bounces off UNIQUE. Row 5 has a bad age and bounces off CHECK. Two rows end up stored.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A table with three rules</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Rows 1 and 2 follow the rules: in</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · Row 3 has no name: NOT NULL says no</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">4 · Row 4 repeats a key: UNIQUE says no</text>
+<text class="f10 b w3 d6" x="10" y="29">5 · Row 5 has a bad age: CHECK says no</text>
+<text class="f11 b" x="10" y="14">Rows that break a rule bounce off</text>
+<g><rect class="s-out" x="150" y="44" width="200" height="208" rx="6" /><text class="f11 b" x="160" y="61">table with rules</text></g>
+<text class="f10 b mo" x="268" y="84">NOT NULL</text>
+<text class="f10 b mo" x="268" y="124">UNIQUE</text>
+<text class="f10 b mo" x="268" y="164">CHECK</text>
+<rect class="bx dsh" x="160" y="70" width="100" height="24" />
+<rect class="bx dsh" x="160" y="106" width="100" height="24" />
+<g class="w8"><g class="mv m2 x15 y0"><g><rect class="f-src k2" x="10" y="70" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="86">Row 1</text></g></g></g>
+<g class="w8"><g class="mv m3 x15 y0"><g><rect class="f-src k2" x="10" y="106" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="122">Row 2 · age ?</text></g></g></g>
+<g class="w8"><g class="mv m4a x5 y0"><g class="w8"><g class="mv m4b xn5 y0"><g><rect class="f-src k2" x="10" y="142" width="100" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="10" y="142" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="158">Row 3 · no name</text></g></g></g></g></g>
+<rect class="s-flt u1 d4 tmp" x="264" y="70" width="78" height="20" rx="6" />
+<g class="w8"><g class="mv m5a x5 y0"><g class="w8"><g class="mv m5b xn5 y0"><g><rect class="f-src k2" x="10" y="178" width="100" height="24" rx="6" /><rect class="f-flt k3 w4 d5" x="10" y="178" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="194">Row 4 · repeat</text></g></g></g></g></g>
+<rect class="s-flt u1 d5 tmp" x="264" y="110" width="78" height="20" rx="6" />
+<g class="w8"><g class="mv m6a x5 y0"><g class="w8"><g class="mv m6b xn5 y0"><g><rect class="f-src k2" x="10" y="214" width="100" height="24" rx="6" /><rect class="f-flt k3 w3 d6" x="10" y="214" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="230">Row 5 · bad age</text></g></g></g></g></g>
+<rect class="s-flt u1 d6 tmp" x="264" y="150" width="78" height="20" rx="6" />
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="cn-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="cn-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="cn-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="cn-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="cn-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="cn-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="cn-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="cn-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="cn-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="cn-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="cn-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="cn-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="cn-r1">1</label><label class="sa-sb sb2" for="cn-r2">2</label><label class="sa-sb sb3" for="cn-r3">3</label><label class="sa-sb sb4" for="cn-r4">4</label><label class="sa-sb sb5" for="cn-r5">5</label></span>
+</div>
+<p class="ca-cap">A constraint is a rule the table checks on every new row. A row that breaks a rule is refused and nothing is stored. A ? (NULL) passes a CHECK, so add NOT NULL when it matters.</p>
+<ol class="sa-steps">
+<li>A table with three rules</li>
+<li>Rows 1 and 2 follow the rules: in</li>
+<li>Row 3 has no name: NOT NULL says no</li>
+<li>Row 4 repeats a key: UNIQUE says no</li>
+<li>Row 5 has a bad age: CHECK says no</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps.
+
+### 1. Write the rules into the table
+
+A table is written `CREATE TABLE name (column type rules, ...)`: each column gets a type and, beside it, its rules.
+Four rules sit beside a column:
+
+- `PRIMARY KEY` refuses a repeated or empty value. A table has at most one, and it may span several columns.
+- `UNIQUE` refuses a repeated value. A table may have several, and several rows may hold `NULL`.
+- `NOT NULL` refuses an empty value. Without it, a column accepts `NULL`.
+- `CHECK` refuses a row that makes your true-or-false expression false.
+
+*Excel:* data validation (E18, *Highlight and validate with rules*) limits what a user may type into a cell, for example
+to a dropdown list. A `CHECK ... IN (...)` is the same idea written into the table.
+
+**Try it.** `DECIMAL(6, 2)` is money: up to six digits, two after the point (S5). `is_active` is new: a
+row that does not mention it counts as active.
+
+<RunSQL query={`CREATE TABLE menu (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL UNIQUE,
+  category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
+  unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
+  is_active BOOLEAN DEFAULT true
+);`} />
+
+Expected: no result rows, just a note that the statement ran. *Why:* the four categories are the ones `products` uses.
+
+**Try it.** Fill it from `products`.
+
+<RunSQL query={`INSERT INTO menu (product_id, product_name, category, unit_price_usd)
+SELECT * FROM products;`} />
+
+Expected: 1 row, 1 column: the 16 rows stored. *Why:* naming four columns leaves `is_active` to its default. If one row of
+`products` broke a rule, the whole statement would fail. Run it again to see: the rows are already there, so the primary
+key refuses them.
+
+**Try it.** Read the rules back.
+
+<RunSQL query={`DESCRIBE menu;`} />
+
+Expected: 5 rows, 6 columns: `key` shows `PRI` for `product_id` and `UNI` for `product_name`, and `null` shows `NO` on
+four of the five columns.
+
+### 2. Point one table at another
+
+A **foreign key** refuses a value that has no match in another table's key. That key must be a primary key or a `UNIQUE`
+column. The cafe-sales tables declare neither, so `stock` points at `menu`, the copy you just built with its rules.
+
+`stock` also has a key of two columns: one row is one product at one store, so the pair is the key.
+
+**Try it.**
+
+<RunSQL query={`CREATE TABLE stock (
+  store_id INTEGER NOT NULL CHECK (store_id IN (1, 2, 3)),
+  product_id INTEGER NOT NULL REFERENCES menu (product_id),
+  units_on_hand INTEGER NOT NULL DEFAULT 0 CHECK (units_on_hand >= 0),
+  PRIMARY KEY (store_id, product_id)
+);`} />
+
+Expected: no result rows. *Why:* `store_id` has no foreign key because `stores` has no primary key to point at, so a `CHECK`
+on the three store ids stands in.
+
+Here is `stock` as a form: each column with its type and its rules.
+
+<figure>
+<svg viewBox="0 0 360 236" width="360" role="img" aria-labelledby="form-title form-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="form-title">The stock table written as a form</title>
+<desc id="form-desc">The table stock has three columns. store_id is an INTEGER, is part of the primary key, cannot be empty and must be 1, 2 or 3. product_id is an INTEGER, is the other part of the primary key, cannot be empty and must exist in menu. units_on_hand is an INTEGER, cannot be empty, defaults to 0 and must be at least 0. Below the columns: PRIMARY KEY (store_id, product_id), so the pair of values is the key.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">stock: a table written as a form</text>
+<rect x="10" y="34" width="100" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="34" width="100" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="49" font-size="11" font-weight="600">column</text>
+<rect x="110" y="34" width="54" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="110" y="34" width="54" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="115" y="49" font-size="11" font-weight="600">type</text>
+<rect x="164" y="34" width="190" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="164" y="34" width="190" height="22" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="169" y="49" font-size="11" font-weight="600">rules written next to it</text>
+<rect x="10" y="56" width="100" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="110" y="56" width="54" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="164" y="56" width="190" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="83"><tspan font-weight="700">PK</tspan> store_id</text>
+<text x="115" y="83" font-size="10">INTEGER</text>
+<text x="169" y="75" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">NOT NULL</text>
+<text x="169" y="91" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">CHECK (store_id IN (1, 2, 3))</text>
+<rect x="10" y="100" width="100" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="110" y="100" width="54" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="164" y="100" width="190" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="127"><tspan font-weight="700">PK</tspan> product_id</text>
+<text x="115" y="127" font-size="10">INTEGER</text>
+<text x="169" y="119" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">NOT NULL</text>
+<text x="169" y="135" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">REFERENCES menu (product_id)</text>
+<rect x="10" y="144" width="100" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="110" y="144" width="54" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="164" y="144" width="190" height="44" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="15" y="171">units_on_hand</text>
+<text x="115" y="171" font-size="10">INTEGER</text>
+<text x="169" y="163" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">NOT NULL, DEFAULT 0</text>
+<text x="169" y="179" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">CHECK (units_on_hand &gt;= 0)</text>
+<text x="10" y="208" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">PRIMARY KEY (store_id, product_id)</text>
+<text x="10" y="224" font-size="11" opacity="0.8">The pair is the key: one row per store and product.</text>
+</svg>
+</figure>
+
+### 3. Rows that obey the rules
+
+A `DEFAULT` sets the value of a column that an `INSERT` leaves out. It refuses nothing: it only fills in a value.
+
+**Try it.** Before you run it: the second insert names only two columns. What will the Green Tea row
+show for `units_on_hand`?
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 1, 40), (1, 10, 25), (1, 6, 12);
+INSERT INTO stock (store_id, product_id) VALUES (1, 7);
+SELECT * FROM stock ORDER BY product_id;`} />
+
+Expected: 4 rows, 3 columns (the page shows the last result). *Why:* the Green Tea row shows **0**, its `DEFAULT`; a column with no `DEFAULT` would get `NULL`. A
+second run of the block meets the primary key: the first row is already there.
+
+### 4. Rows that break the rules
+
+Each new row is tested against the rules of the table, and a row that breaks one is refused with a `Constraint Error` and
+not stored. A row that breaks several is refused once, and DuckDB names one of them.
+
+**Try it.** Before you run them: which rule do you expect to refuse each of these four
+rows? Run them one at a time.
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 99, 10);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (2, 1, -5);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (1, 1, 20);`} />
+
+<RunSQL query={`INSERT INTO stock VALUES (NULL, 2, 20);`} />
+
+Expected: every block shows an error instead of a table, and its message names the rule (the page shows the message without
+DuckDB's `Constraint Error:` label):
+
+| Insert | Message | Rule |
+|---|---|---|
+| `(1, 99, 10)` | `Violates foreign key constraint because key "product_id: 99" does not exist in the referenced table` | `FOREIGN KEY` |
+| `(2, 1, -5)` | `CHECK constraint failed on table ... with expression CHECK((units_on_hand >= 0))` | `CHECK` |
+| `(1, 1, 20)` | `Duplicate key "store_id: 1, product_id: 1" violates primary key constraint.` | `PRIMARY KEY` |
+| `(NULL, 2, 20)` | `NOT NULL constraint failed: stock.store_id` | `NOT NULL` |
+
+<figure>
+<svg viewBox="0 0 360 284" width="360" role="img" aria-labelledby="gates-title gates-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="gates-title">Four rows that stock refuses, and the rule that refuses each</title>
+<desc id="gates-desc">The table already holds four rows: store 1 with products 1, 10, 6 and 7, with 40, 25, 12 and 0 units. Four candidate rows are tried. Store 1, product 99, 10 units is refused by the foreign key, because there is no product 99 on the menu. Store 2, product 1, minus 5 units is refused by the CHECK on units_on_hand. Store 1, product 1, 20 units is refused by the primary key, because the pair 1 and 1 is already stored. An empty store with product 2 and 20 units is refused by NOT NULL on store_id.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Four rows the gates refuse</text>
+<rect x="10" y="32" width="340" height="46" fill="currentColor" fill-opacity="0.06" stroke="none" />
+<rect x="10" y="32" width="340" height="46" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="51" font-size="12" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">(1, 99, 10)</text>
+<text x="138" y="51" font-size="12" font-weight="600">gate: FOREIGN KEY</text>
+<text x="18" y="69" font-size="11">refused: there is no product 99 on the menu</text>
+<rect x="10" y="86" width="340" height="46" fill="currentColor" fill-opacity="0.06" stroke="none" />
+<rect x="10" y="86" width="340" height="46" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="105" font-size="12" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">(2, 1, -5)</text>
+<text x="138" y="105" font-size="12" font-weight="600">gate: CHECK</text>
+<text x="18" y="123" font-size="11">refused: units_on_hand must be 0 or more</text>
+<rect x="10" y="140" width="340" height="46" fill="currentColor" fill-opacity="0.06" stroke="none" />
+<rect x="10" y="140" width="340" height="46" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="159" font-size="12" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">(1, 1, 20)</text>
+<text x="138" y="159" font-size="12" font-weight="600">gate: PRIMARY KEY</text>
+<text x="18" y="177" font-size="11">refused: store 1 and product 1 are already stored</text>
+<rect x="10" y="194" width="340" height="46" fill="currentColor" fill-opacity="0.06" stroke="none" />
+<rect x="10" y="194" width="340" height="46" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="213" font-size="12" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">(NULL, 2, 20)</text>
+<text x="138" y="213" font-size="12" font-weight="600">gate: NOT NULL</text>
+<text x="18" y="231" font-size="11">refused: store_id may not be empty</text>
+<text x="10" y="256" font-size="11" opacity="0.8">Each tuple is (store_id, product_id, units_on_hand).</text>
+<text x="10" y="272" font-size="11" opacity="0.8">Already stored: (1, 1, 40), (1, 10, 25), (1, 6, 12), (1, 7, 0).</text>
+</svg>
+</figure>
+
+*Why:* each row breaks exactly one rule. `(1, 1, -5)` would break two, and name the key, not the `CHECK`.
+
+### 5. Check that nothing slipped in
+
+A refused row leaves nothing behind. Count to see.
+
+**Try it.**
+
+<RunSQL query={`SELECT 'menu' AS table_name, COUNT(*) AS row_count, SUM(unit_price_usd) AS total FROM menu
+UNION ALL
+SELECT 'products', COUNT(*), SUM(unit_price_usd) FROM products
+UNION ALL
+SELECT 'stock', COUNT(*), NULL FROM stock
+ORDER BY table_name;`} />
+
+Expected: 3 rows, 3 columns. *Why:* `stock` still has the 4 rows of unit 3, so the four refused inserts left nothing behind.
+`menu` matches `products`: 16 items and a price total of 75.00 in both.
+
+<details>
+<summary>Explain it in your own words: to refuse product 99, what must DuckDB look in, and what does that say about the order you create the tables?</summary>
+
+It must look in `menu` for a `product_id` of 99 and find none. So `menu` has to exist, and be filled, before `stock` can refer
+to it.
+
+</details>
+
+<Aside type="tip" title="Remember">
+
+- A constraint is a rule in the table's definition. A row that breaks one is refused and not stored.
+- `PRIMARY KEY` and `UNIQUE` refuse repeats, `NOT NULL` refuses empties, `CHECK` refuses a false expression, `FOREIGN KEY`
+  refuses a value with no match in another table.
+- `DEFAULT` refuses nothing: it fills in a missing value.
+
+**Common trap: "a constraint guarantees the data is right."** It guarantees only the rule you wrote: `CHECK (unit_price_usd
+> 0)` accepts 450.00 for a Latte that costs 4.50, because the expression is true for it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-create-table-constraints-1">
+
+**Make a table of loyalty perks that accepts only the three real tiers.** Expected: 1 row, 3 columns.
+
+Done for you: `customers` uses three tiers, `bronze`, `silver` and `gold`. This block makes a table with no rules yet,
+inserts `'bronze'` with the perk `'free refill'` and no discount, and selects the table. (`CREATE OR REPLACE` lets you run
+it again.) Run it and look at `discount_pct`.
+
+<RunSQL query={`CREATE OR REPLACE TABLE tier_perk (
+  loyalty_tier VARCHAR,
+  perk VARCHAR NOT NULL,
+  discount_pct INTEGER
+);
+INSERT INTO tier_perk (loyalty_tier, perk) VALUES ('bronze', 'free refill');
+SELECT * FROM tier_perk;`} />
+
+Now finish it: make `loyalty_tier` the primary key and accept only the three tiers; let `discount_pct` default to 0 and
+accept only 0 to 50.
+
+<details>
+<summary>Hint</summary>
+
+Copy the `CHECK ... IN (...)` of `category` in unit 1. For a range, `BETWEEN 0 AND 50` works inside a `CHECK`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE OR REPLACE TABLE tier_perk (
+  loyalty_tier VARCHAR PRIMARY KEY CHECK (loyalty_tier IN (...)),
+  perk VARCHAR NOT NULL,
+  discount_pct INTEGER DEFAULT ... CHECK (discount_pct BETWEEN ... AND ...)
+);
+```
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE TABLE tier_perk (
+  loyalty_tier VARCHAR PRIMARY KEY CHECK (loyalty_tier IN ('bronze', 'silver', 'gold')),
+  perk VARCHAR NOT NULL,
+  discount_pct INTEGER DEFAULT 0 CHECK (discount_pct BETWEEN 0 AND 50)
+);
+INSERT INTO tier_perk (loyalty_tier, perk) VALUES ('bronze', 'free refill');
+SELECT * FROM tier_perk;
+```
+
+The result is `bronze | free refill | 0`: `DEFAULT 0` filled in the missing discount. The table now refuses
+`('platinum', 'lounge', 10)`, a tier not in the list, and `('gold', 'free pastry', 60)`, outside 0 to 50.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-create-table-constraints-2">
+
+**Which of six new menu items will `menu_ex2` accept?** The owner's assistant typed these candidates:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 17 | Oat Latte | coffee | 5.25 |
+| 18 | Espresso | coffee | 3.00 |
+| 19 | Brownie | dessert | 3.50 |
+| 20 | Free Water | food | 0.00 |
+| 1 | Cortado | coffee | 4.00 |
+| 21 | (empty) | tea | 3.00 |
+
+Run this first. It builds `menu_ex2` (the rules of `menu`, the 16 items of `products`) and `new_items` (these six rows).
+Run it again for a fresh `menu_ex2`.
+
+<RunSQL query={`CREATE OR REPLACE TABLE menu_ex2 (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL UNIQUE,
+  category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
+  unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
+  is_active BOOLEAN DEFAULT true
+);
+INSERT INTO menu_ex2 (product_id, product_name, category, unit_price_usd)
+SELECT * FROM products;
+CREATE OR REPLACE TABLE new_items AS
+SELECT * FROM (VALUES
+  (17, 'Oat Latte', 'coffee', 5.25),
+  (18, 'Espresso', 'coffee', 3.00),
+  (19, 'Brownie', 'dessert', 3.50),
+  (20, 'Free Water', 'food', 0.00),
+  (1, 'Cortado', 'coffee', 4.00),
+  (21, NULL, 'tea', 3.00)
+) AS t (product_id, product_name, category, unit_price_usd);`} />
+
+Before you run any insert, write one line per candidate: accepted or refused, and by which rule. Then insert them one at a
+time with the block below, changing the number for the other rows (the empty name is product 21).
+
+<RunSQL query={`INSERT INTO menu_ex2 (product_id, product_name, category, unit_price_usd)
+SELECT * FROM new_items WHERE product_id = 17;`} />
+
+Expected shape, to check your lines against: each insert shows a 1-row result or an error. Each candidate breaks at most one
+rule.
+
+<details>
+<summary>Hint</summary>
+
+Check each row against the five rules of `menu`: key, name, category list, price above 0, name filled in. Which value
+is already on the menu, or outside a list?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "Row 17: accepted, nothing wrong. Row 18: refused by `UNIQUE`, the name Espresso is taken. Row 19: refused by ..., and so on for 20, 1 and 21."
+
+</details>
+
+<Solution>
+
+Only product 17 is accepted. The others fail like this:
+
+| Row | Refused by | Why |
+|---|---|---|
+| 18 Espresso | `UNIQUE` on `product_name` | the name is already on the menu |
+| 19 Brownie | `CHECK` on `category` | `dessert` is not in the list |
+| 20 Free Water | `CHECK` on `unit_price_usd` | the price is 0, not above 0 |
+| 1 Cortado | `PRIMARY KEY` | `product_id` 1 is Espresso's |
+| 21 (empty) | `NOT NULL` on `product_name` | the name is empty |
+
+Row 17 is stored with `is_active` set to its default, `true`; inserted twice, it is refused the second time.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the five rules that can refuse a row and the one that never does. Which rule needs a key
+in another table?
+
+<details>
+<summary>Answer</summary>
+
+`PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `CHECK` and `FOREIGN KEY` can refuse a row. `DEFAULT` never does: it fills in a
+missing value. The foreign key needs a primary key (or `UNIQUE` column) in the other table.
+
+</details>
+
+<Exercise id="sql-create-table-constraints-3">
+
+**Spot the flaw.** A colleague copies the menu for a trial with the first statement below and says "it keeps the primary
+key, so nothing can be entered twice". To prove it, they run the insert. It works, with no error, and puzzles them. (It
+copies `menu` from units 1 and 2.)
+
+<RunSQL query={`CREATE OR REPLACE TABLE menu_copy AS SELECT * FROM menu;
+INSERT INTO menu_copy VALUES (1, 'Espresso', 'coffee', 3.00, true);`} />
+
+Expected: 1 row, 1 column (the one row stored). What went wrong, what does `DESCRIBE menu_copy;` show, and what is the fix?
+
+<details>
+<summary>Hint</summary>
+
+Run `DESCRIBE menu_copy;` and compare its `key` and `null` columns with `DESCRIBE menu;`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "`menu_copy` has none of the rules of `menu`, because ... The fix is to create the table with its rules first and then fill it with ..."
+
+</details>
+
+<Solution>
+
+A table made with `CREATE TABLE ... AS SELECT` copies the columns and the rows but not the rules, as the DuckDB
+documentation says. `DESCRIBE menu_copy;` shows `YES` in the `null` column everywhere and nothing in `key`, so the second
+Espresso went in: `SELECT COUNT(*) FROM menu_copy WHERE product_name = 'Espresso';` returns 2.
+
+Write the table with its rules, then fill it:
+
+```sql
+CREATE OR REPLACE TABLE menu_copy2 (
+  product_id INTEGER PRIMARY KEY,
+  product_name VARCHAR NOT NULL UNIQUE,
+  category VARCHAR NOT NULL CHECK (category IN ('coffee', 'tea', 'bakery', 'food')),
+  unit_price_usd DECIMAL(6, 2) NOT NULL CHECK (unit_price_usd > 0),
+  is_active BOOLEAN DEFAULT true
+);
+INSERT INTO menu_copy2 SELECT * FROM menu;
+```
+
+Now the same Espresso insert, into `menu_copy2`, is refused: `Duplicate key "product_id: 1" violates primary key constraint.`
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a `CREATE TABLE` with types, a key, `NOT NULL`, `UNIQUE`, `CHECK`, a foreign key and a
+`DEFAULT`, and say which rule will refuse a given row.*
+Test: Exercise sql-create-table-constraints-2, done from an empty editor without opening the hints.
+
+The pattern to remember: **write the rules into the table, then try to break them.** The next lesson, *Inserting,
+updating and deleting safely*, changes the rows you stored.

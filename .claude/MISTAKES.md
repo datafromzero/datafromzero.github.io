@@ -88,6 +88,64 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   (E4, E5, E7, E13, E21; reported by the owner). Fixed in `tokens.css`. → **Load every page with a table at 390 px
   before publishing; nothing in a cell may be narrower than a word.**
 
+- 2026-11-18 — Owner rule for pictures and animations: they are original work. → **Draw them from our own cafe-sales rows
+  and design tokens with our generator; look at other sites' visuals for the concept at most, never copy, trace or recreate
+  one (layout, colors, characters, captions, sample tables).**
+
+- 2026-11-18 — A step animation slid rows through each other, and their text piled up mid-run; the pair counts of a
+  join sat in the gap beside the wrong table. → **Check text overlap at every 0.2 s of a run, fade rows in at their slot
+  instead of crossing other rows, and put a value in a column of the table it describes.**
+
+- 2026-11-18 — Autoplay step animations took control from the learner, and a caption list that already showed every step
+  gave away the results a "Predict:" prompt asked for. → **Figures are steppers the learner advances; captions state the
+  operation and never the numbers or names a later step reveals; the figure shows them at that step.**
+- 2026-11-18 — A tint rectangle drawn after a row's text dimmed the numbers beneath it. → **Draw tints before text (the
+  generator's `row` does); text is never under a shade.**
+
+- 2026-11-18 — The hidden radios of a stepper were absolutely positioned at the top of the figure, so tapping a step button
+  scrolled the page up 400 to 500 px to focus them. → **A visually hidden form control sits in the flow next to the control
+  that drives it (zero height, reordered with flex), never absolutely positioned elsewhere; after any control change, click
+  every control in Playwright and assert scrollY moves by at most 2 px.**
+
+- 2026-11-18 — Asked for "concept figures" in the stepper system, six data-driven steppers with real counts were built; the
+  owner wanted abstract, autoplay, looping schematics with no data (the data steppers stay for the exercises). → **A figure
+  that teaches an idea is abstract (labels such as Row 1, t1, Σ); real cafe-sales numbers belong to the data steppers of
+  "The picture". When a brief says "like a GIF" or "concept", ask which of the two it means before drawing.**
+- 2026-11-18 — A print of the data steppers showed every one-step frame at once, because only the screen rules knew `hide`. →
+  **Whatever a state rule hides must also be hidden in the print/no-radio rule; print a figure and look at it.**
+- 2026-11-18 — A contact sheet sampled only at whole seconds showed empty highlights: a part is invisible at the instant its
+  phase starts. → **Sample loops every 0.25 s and also inside each phase, and read the sheet before concluding a part is missing.**
+
+- 2026-11-18 — Sliding chips crossed a bucket label and, in the logical-order animation, a dropped row's text was still over the
+  row that rose into its place. → **Draw labels where nothing passes or show them after the part has arrived, and let one part
+  leave before the next follows (`half: 'a'` then `'b'`); check text overlap every 0.1 s, counting only what is inside the picture.**
+
+- 2026-11-18 — The Run button of the first `<RunSQL>` did nothing: its script took "the first button in the block", which
+  was the copy button of the highlighted code block. → **A script queries only its own markup (a class or a container);
+  Starlight and Expressive Code add buttons, links and ids inside content blocks.**
+- 2026-11-18 — Every SQL lesson is a draft, so the production build never rendered a lesson component and a broken one would
+  have passed `npm run build`. → **A new authoring component goes into `tests/fixtures/valid` (one correct use) and gets an
+  invalid fixture for its build-time rules; measure speed on the fixture lesson, not on a draft.**
+- 2026-11-18 — A newer npm on the sandbox rewrote 28 unrelated lines of `package-lock.json` when a dependency was added. →
+  **After `npm i`, `git diff package-lock.json` must show additions for the new package only; restore the old lock and
+  merge in just the new entries when it does not.**
+
+- 2026-11-18 — The first runner version loaded its engine on the first Run click and said "Loading DuckDB, about 8 MB"; the
+  owner wants learners never to notice setup. → **Anything a learner must wait for loads in the background before they
+  need it (after the load event, at idle, near the block; never on Data Saver or 2G), and the interface never names the
+  engine, a size or a download. Only a Run pressed too early shows "Getting ready…".**
+- 2026-11-18 — A side-by-side layout was sized from the "50 rem" in the brief, but the lesson column is 42 rem (628 px at
+  1280 px) with the sidebars on both sides, so it never fit; a first breakout overlapped the table of contents. → **Measure
+  the real column in Playwright at 1280 and 1440 px before choosing a breakpoint; a block that breaks out of the column
+  may use only the room measured beside it.**
+- 2026-11-18 — A new Starlight page under `/sql/` (the playground) was classified as a lesson by its folder and crashed the
+  lesson footer. → **A page whose URL sits inside a stage folder is listed in `classify()` as not a lesson; load it in dev
+  before building.**
+- 2026-11-18 — An auto-run feature would have repeated every `CREATE`, `INSERT` or `DROP` on each pause in typing. → **Auto-run
+  runs only statements that read (`SELECT`, `WITH`, `VALUES`, `FROM`, `DESCRIBE`, `SHOW`, `EXPLAIN`).**
+- 2026-11-18 — Error tips were drafted before checking the engine's real wording. → **Every tip is written from a captured
+  engine message (`tests/sql-errors.test.ts`); no message, no tip.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
@@ -146,8 +204,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — SVG row highlights drifted two rows, and an Expected line gave away the count the learner was asked to
   predict. → **Check each highlight's y against the row grid; after "Before you run it: how many…", Expected gives
   only the columns.**
-- 2026-11-18 — Results like `-nan` and `inf` depend on the DuckDB version Colab installs. → **SQL notebooks pin
-  `duckdb==2.0.0` (`scripts/pin-notebook-duckdb.py`).**
+- 2026-11-18 — Results like `-nan` and `inf` depend on how the tool prints them: DuckDB 2.0.0 and 1.4.3 give the same
+  value for 0/0, but the CLI or `.show()` may print `-nan` where the browser runner prints `nan`. → **Text that says what a RunSQL block prints must follow the browser
+  formatter in `src/scripts/sql-runtime.ts` (`nan`, `inf`, a trailing `.0` on whole floats).**
 - 2026-11-18 — A planned objective said a SELECT alias "cannot be used in WHERE", but DuckDB 2.0.0 accepts it for plain
   expressions (its Friendly SQL page lists it). → **Run every behavior claim in a stub's objectives on the engine the
   lesson uses before teaching it; teach the running order, name what other databases do from their docs, and report the
@@ -156,8 +215,119 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — One quantity was counted two ways in sibling lessons (Harbor open 90 vs 91 days). → **Keep one counting
   convention per quantity across lessons, or name both.**
 
+- 2026-11-18 — A "How it works" draft cut the claim that DuckDB skips row groups by min-max range as unsourced, though the
+  Indexing performance guide, already in `sources`, states it. → **Before cutting a claim for lack of a source, search
+  every page already in `sources` for it, following the `/stable/` to `/docs/2.0/` redirect.**
+- 2026-11-18 — A self-explanation answer restated a "How it works" bullet and the misconception. → **A self-explanation
+  prompt asks something the section does not answer; its answer must not restate a How it works bullet.**
+- 2026-11-18 — A section said ART indexes serve queries "under 0.1%" of the rows, but the lesson's own exercises showed
+  Index Scans on 0.9% and 20% of the rows (the engine's rule is 2,048 rows or 0.1%, whichever is larger). → **Check any
+  threshold or limit a section states against the row counts in the lesson's own exercises and steps.**
+- 2026-11-18 — A lesson listed the DuckDB Subqueries page as a source for a claim about anti joins, which sits on the
+  FROM page; the page had not been opened. → **Every `sources` URL must be the page where one of the lesson's claims
+  sits: open it and find the sentence (and quote or paraphrase that sentence); drop any source you cannot tie to a claim.**
+
+- 2026-11-18 — Notebook cells that error on purpose (fix-the-query exercises, error demos) would stop Colab's Run all.
+  → **(Obsolete since D43: the SQL stage has no notebooks.)**
+- 2026-11-18 — Parallel writers used the same file names in the shared scratchpad and overwrote each other's test
+  scripts. → **Each agent works only in its own scratchpad subfolder (`scratchpad/batchX/`, `scratchpad/revX/`).**
+- 2026-11-18 — A predict-first exercise named the surprise in its own question ("why is January so large?"). → **The
+  title and lead sentence of a predict-first task never name the result; every bound in a definition is in the SQL.**
+- 2026-11-18 — The normalization lesson called a split "2NF" while naming a one-column key, which cannot have a 2NF
+  violation. → **Label each normalization step by the dependency it removes, checked against the key the lesson names
+  (2NF: a column depends on part of the key; 3NF: a column depends on another non-key column).**
+- 2026-11-18 — An index lesson explained a plan with a docs figure (0.1%) as if it were a hard rule; the engine's
+  threshold has a 2,048-row floor, and a 355-row filter on a single-column index did use the index. → **Run the
+  counter-case before explaining why an engine did or did not use a feature; quote a guideline as guidance.**
+
+- 2026-11-18 — Owner rule, given while the "How it works" pilot was written: everything published is our own work. →
+  **Write theory in our own words with our own cafe-sales examples; do not copy or closely paraphrase text, examples or
+  diagrams from other teaching sites; an engine's docs are a source for facts only, restated in our words, with at most
+  a short phrase quoted.**
+- 2026-11-18 — A draft Excel sentence said a PivotTable's Filters field acts as `WHERE`, but the Microsoft page opened
+  for it lists only the Rows, Columns and Values areas; another rule ("a missing key forms its own group") is on no
+  DuckDB page and would also have given away the exercise 2 prediction. → **Before a theory sentence stays, find its
+  sentence on an opened page; if none exists, cut it or show it by a result, and never state in theory the answer to a
+  count the exercises ask the learner to predict.**
+- 2026-11-18 — Expected lines said "an error that starts with `Binder Error`" (and "Parser Error", "Catalog Error"), but the
+  in-page runner strips such labels (`src/scripts/sql-errors.ts`), so learners never see them. → **An Expected line for an
+  error describes the visible text (for example "an error saying set operations need the same number of result columns");
+  check each one against `sql-errors.ts`, and quote an engine message only without its label.**
+- 2026-11-18 — The first "How it works" drafts stated the answers of two predict steps (3,287 rows) and reused the
+  spot-the-flaw query of Exercise 3 as the misconception example; one lesson also ran 43 words over its duration. →
+  **Before finalizing a theory section, list every predict and spot-the-flaw prompt in the lesson. No sentence of the
+  section may state a prompt's answer or reuse its query. Then recount body words against `duration`.**
+- 2026-11-18 — A theory sentence said what an `EXISTS` subquery "selects" makes no difference, but
+  `EXISTS (SELECT COUNT(*) … WHERE false)` is true, because an aggregate always returns one row; another stated a join
+  rule more widely than the doc sentence it rested on. → **State each rule at exactly the scope of its doc sentence
+  (name the join type, say "lists columns" not "selects"), and run one counter-case before writing "always", "never" or
+  "makes no difference".**
+- 2026-11-18 — "How it works" sentences used "always", "each" and "either… or" about a whole function family ("a date
+  function either takes a part or cuts"; "a query of aggregates returns one row", true only without `GROUP BY`), and
+  the lesson's own later steps contradicted them. → **Never write an "always / each / every / either… or" sentence about
+  a function family or clause without checking it against the whole lesson and its neighbors; say "two common kinds" or
+  name the condition.**
+- 2026-11-18 — A "How it works" list ordered the constraint checks (row alone, then stored rows, then other table), but
+  DuckDB 2.0.0 names the key for a row that also breaks a `CHECK`, and the foreign key for another row that also breaks
+  one; a step of the same lesson already said so. → **A "logical order" list of engine checks must match what the
+  lesson's own runs report; run a row that breaks two rules before ordering them, or say only that the row is refused
+  once.**
+- 2026-11-18 — Rule bullets in "How it works" carried the reason that an Explain-it asks for (a table is built first
+  because a foreign key needs its key) and the fix of a Spot-the-flaw. → **A rule bullet states the rule, never the reason
+  that an Explain-it asks for; read each Explain-it and Spot-the-flaw answer against the section before finishing.**
+
+- 2026-11-18 — A "How it works" bullet said "every" is not a set operation, but `INTERSECT` of the three store sets
+  returns the same customers as the coverage count. → **A rule stated more broadly than the docs or a result support
+  must be tested with the counter-case before it is written (for "every", try `INTERSECT`); state only what the test
+  shows, or narrow the claim.**
+- 2026-11-18 — Review of the S1 to S5 "How it works" sections: rules were stricter than DuckDB ("another sort column is the
+  only thing that settles a tie", "each side of OR must be a complete test"), and one section said "second picture" for
+  the first. → **A section's rules must not be stricter than DuckDB's behavior: "X can only do Y" needs a result you ran,
+  or a softer word. Check every "in the first/second picture" against the figure order.**
+- 2026-11-18 — A section quoted the DuckDB phrase "to handle any missing days" and then gave our own `RANGE ... INTERVAL 6
+  DAYS` query as if the docs page showed it; another sentence called a DuckDB result "the only way". → **When a docs page
+  shows a phrase with its own example, quote the phrase but do not attribute our example to the page ("the documentation
+  uses X; ours is Y"). Never write "the only way" without a source.**
+- 2026-11-18 — Figures placed before a Predict printed the answers (per-order and per-line averages, a completed total, a
+  note about the customer-less order), and an Idea gave away the next Predict (a default value, the effect of a `DELETE`
+  with no `WHERE`, "two versions"). → **A figure placed before a Predict shows only inputs; its text and `<desc>` carry no
+  totals or answers. An Idea states the rule, never the result of the next Predict; move the outcome into the Why.**
+- 2026-11-18 — Converting an exercise's "Use the Exercise 1 cell" sentence left dangling fragments (`** . It needs`, `** which
+  holds`, `. . Expected`). → **After converting exercises, grep every lesson for `\*\* \.`, `\*\* [a-z]` and `\. \.`, and read
+  each exercise's first paragraph.**
+- 2026-11-18 — Expected lines quoted `Constraint Error:` and `TransactionContext Error:`, but the runner strips the label
+  (`src/scripts/sql-errors.ts`), so the learner sees only the rest of the message. → **An error Expected line describes
+  the visible text: the message after the label, exactly as the page prints it. Run the block in the page and copy it.**
+- 2026-11-18 — A plan figure and a sentence ("a newer version prints more lines") were drawn from DuckDB 2.0.0, while the
+  page's engine (1.4.3) prints other box titles and no `Row Groups Scanned` line. → **A figure or sentence about engine
+  output shows only the lines that read the same in the page's engine and in the lesson's engine, and says so plainly.**
+
+- 2026-11-18 — The S18 and S20 to S23 rollout left stale "step N" references after the steps became units, and two unit
+  Ideas stated the result of the Predict under them (the finer grain of a join, a join of one row with one row). →
+  **After restructuring into units, grep every lesson for "step N" and "the picture" and fix them; then read each unit's
+  Idea against the Predict under it, and move any sentence that states the result into the Why.**
+- 2026-11-18 — In the S12 to S17 rollout, exercise starters (`-- add your GROUP BY and HAVING lines here`) were not
+  valid SQL, so the runner showed an error before the learner typed anything. → **A `<RunSQL>` starter runs as given:
+  it returns a result or a deliberate error the exercise is about; the learner adds only the missing clause.**
+- 2026-11-18 — Unit Result and Why lines gave away an Explain-it answer (the 3, 5 and 5 rows per cafe), a Remember
+  trap named the numbers of Exercise 3 (13 against 9), and a Why described the grain the Explain-it asks about. →
+  **Before finishing, grep every unit's Expected, Why and Remember against every Explain-it and Exercise 3 answer in the
+  lesson; no sentence outside the answer may state its numbers or its reason.**
+- 2026-11-18 — A spot-the-flaw query broke on an unordered tie (`ORDER BY updated_at DESC` alone), so the wrong row
+  could change between engine versions and hide the flaw. → **A spot-the-flaw bug is a deterministic wrong rule (a
+  tie-breaker in the wrong direction, a wrong function), never an unspecified tie; run it on DuckDB 2.0.0 and 1.4.3 and
+  expect the same rows.**
+- 2026-11-18 — In the S1 to S5 rollout, several units stated in their Idea the very fact their Predict asked for (a NULL
+  test drops the row; DOUBLE stores an approximation; NULL is not 0), and the Explain-it answers repeated the unit text.
+  → **An Idea must not state the fact its Predict asks for; that fact goes in the Why after the Result. An Explain-it asks
+  a new question or uses a new example, never the unit's own sentence.**
+
 ## Agents and reviews
 
+- 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
+  hit another batch's server, whose pages also answered 200. Batches also overwrote each other's scratch scripts of the
+  same name. → **Read the port the dev server prints, and check page content (a lesson-specific string), not only the
+  status; keep scratch files in your own `scratchpad/batch{X}/` folder.**
 - 2026-11-17 — A reviewer hit its turn limit before writing a report. → **Every reviewer brief has a call budget
   (about 25) and says "then report".**
 - 2026-11-17 — Fresh agents cost about 150 tool calls; a warm fix pass by the same agent cost 10–30. → **Send review

@@ -1,0 +1,705 @@
+/*
+ * Learner-controlled step-by-step figures in lessons (SPEC D41). Markup comes from scripts/make-animation.mjs:
+ *   <figure class="sa"> radios (.sa-r r1..rN) · <svg class="sa-svg"> · <div class="sa-ctl"> · <ol class="sa-steps"> </figure>
+ * The state is the checked radio: every rule below is `.rK:checked ~ …`, the general sibling combinator, so there is no
+ * script and no :has(). A part that appears from step n has class `i{n}`, one that ends dimmed has `o{n}`, one that goes
+ * away has `h{n}`. Outside @media screen (print, or a reader that ignores the radios) none of those rules apply: the
+ * figure is the final frame and all captions are listed, which is the printed storyboard. Changing step runs a short
+ * opacity transition (none for reduced motion; the steps still switch).
+ *
+ * Clause colors (one hue per SQL role, the same in every lesson, only inside figures). Each hue is between 3:1 and
+ * 4.0:1 or better against both pure black and pure white, so one value serves both themes; the pairs that share a
+ * figure stay apart under protan, deutan and tritan simulation. Color is never the only cue: every part also carries
+ * its label, number or shade step. Table in .claude/agents/LESSON-STANDARD.md.
+ */
+
+.sa,
+.ca {
+	--c-src: #0072b2; /* FROM, JOIN: where the rows come from */
+	--c-mat: #9a6be0; /* ON: the match between two tables */
+	--c-flt: #c0392b; /* WHERE, HAVING: rows that are kept or dropped */
+	--c-grp: #00a07a; /* GROUP BY: the group keys */
+	--c-out: #ad9100; /* SELECT, aggregates: the output */
+	--c-win: #d6479a; /* OVER, PARTITION BY: the window */
+	--c-ord: #808080; /* ORDER BY: sorting */
+	/* shade steps k1..k4 inside one role (groups of one GROUP BY, keys of one join); stronger on black */
+	--sa-k1: 0.2;
+	--sa-k2: 0.42;
+	--sa-k3: 0.62;
+	--sa-k4: 0.8;
+	--sa-dim: 0.55;
+	/* flex only to reorder: the radios come first in the markup (the state selectors need them before everything they
+	   style) but sit in the flow right above the controls, so focusing one never scrolls the page */
+	display: flex;
+	flex-direction: column;
+	margin: 1.5rem 0;
+}
+.sa > *,
+.ca > * {
+	flex: none;
+	order: 3;
+}
+.sa > .sa-svg {
+	order: 1;
+}
+.sa > .sa-r {
+	order: 2;
+}
+.sa > .sa-ctl {
+	order: 4;
+}
+.sa > .sa-steps {
+	order: 5;
+}
+:root[data-theme='light'] .sa,
+:root[data-theme='light'] .ca {
+	--sa-k1: 0.12;
+	--sa-k2: 0.3;
+	--sa-k3: 0.48;
+	--sa-k4: 0.66;
+}
+.c-src { --c: var(--c-src); }
+.c-mat { --c: var(--c-mat); }
+.c-flt { --c: var(--c-flt); }
+.c-grp { --c: var(--c-grp); }
+.c-out { --c: var(--c-out); }
+.c-win { --c: var(--c-win); }
+.c-ord { --c: var(--c-ord); }
+
+.sa-svg,
+.ca-svg {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	fill: currentColor;
+	font-family: inherit;
+	font-size: 12px;
+}
+.sa-svg .bx {
+	fill: none;
+	stroke: currentColor;
+	stroke-opacity: 0.45;
+}
+.sa-svg .ln {
+	fill: none;
+	stroke: currentColor;
+	stroke-opacity: 0.6;
+}
+.sa-svg .dsh {
+	stroke-dasharray: 3 3;
+	stroke-opacity: 0.6;
+}
+.sa-svg .f-src { fill: var(--c-src); }
+.sa-svg .f-mat { fill: var(--c-mat); }
+.sa-svg .f-flt { fill: var(--c-flt); }
+.sa-svg .f-grp { fill: var(--c-grp); }
+.sa-svg .f-out { fill: var(--c-out); }
+.sa-svg .f-win { fill: var(--c-win); }
+.sa-svg .f-ord { fill: var(--c-ord); }
+.sa-svg .k1 { fill-opacity: var(--sa-k1); }
+.sa-svg .k2 { fill-opacity: var(--sa-k2); }
+.sa-svg .k3 { fill-opacity: var(--sa-k3); }
+.sa-svg .k4 { fill-opacity: var(--sa-k4); }
+.sa-svg [class^='s-'] {
+	fill: none;
+	stroke-width: 2;
+}
+.sa-svg .s-src { stroke: var(--c-src); }
+.sa-svg .s-mat { stroke: var(--c-mat); }
+.sa-svg .s-flt { stroke: var(--c-flt); }
+.sa-svg .s-grp { stroke: var(--c-grp); }
+.sa-svg .s-out { stroke: var(--c-out); }
+.sa-svg .s-win { stroke: var(--c-win); }
+.sa-svg .s-ord { stroke: var(--c-ord); }
+.sa-svg .f10 { font-size: 10px; }
+.sa-svg .f11 { font-size: 11px; }
+.sa-svg .f14 { font-size: 14px; }
+.sa-svg .b { font-weight: 600; }
+.sa-svg .mo { font-family: var(--font-mono); }
+.sa-svg .mu { opacity: 0.8; }
+.sa-svg .e { text-anchor: end; }
+.sa-svg .m { text-anchor: middle; }
+/* the final frame (print, no radios): what ends dimmed is dimmed */
+.sa-svg .od { opacity: var(--sa-dim); }
+
+/* The radios stay focusable and keyboard-operable; only their drawing is hidden, the labels are the buttons. */
+.sa-r {
+	width: 1px;
+	height: 0;
+	margin: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Controls: Back, one button per step (its underline is the clause color), Next. */
+.sa-ctl {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	margin-top: 0.75rem;
+	font-size: var(--sl-text-sm);
+}
+.sa-sbs {
+	display: flex;
+	flex: 1;
+	gap: 0.25rem;
+}
+.sa-sb,
+.sa-nav {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	border: 1px solid var(--dim);
+	border-radius: 6px;
+	color: var(--fg);
+	cursor: pointer;
+	font-weight: 600;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.sa-sb {
+	flex: 1 1 0;
+	min-width: 2.25rem;
+	border-bottom: 4px solid var(--c);
+}
+.sa-nav {
+	display: none;
+	width: 44px;
+	flex: none;
+}
+.sa-nav.nx {
+	border-color: var(--fg);
+}
+.sa-nav:is(.bk0, .bk1) {
+	color: var(--mute);
+	cursor: default;
+}
+.sa-sb:hover,
+.sa-nav:not(.bk0, .bk1):hover {
+	border-color: var(--fg);
+}
+.sa .r0:checked ~ .sa-ctl :is(.bk0, .nx0),
+	.sa .r1:checked ~ .sa-ctl :is(.bk1, .nx1),
+	.sa .r2:checked ~ .sa-ctl :is(.bk2, .nx2),
+	.sa .r3:checked ~ .sa-ctl :is(.bk3, .nx3),
+	.sa .r4:checked ~ .sa-ctl :is(.bk4, .nx4),
+	.sa .r5:checked ~ .sa-ctl :is(.bk5, .nx5),
+	.sa .r6:checked ~ .sa-ctl :is(.bk6, .nx6),
+	.sa .r7:checked ~ .sa-ctl :is(.bk7, .nx7),
+	.sa .r8:checked ~ .sa-ctl :is(.bk8, .nx8)
+{
+	display: flex;
+}
+.sa .r1:checked ~ .sa-ctl .sb1,
+	.sa .r2:checked ~ .sa-ctl .sb2,
+	.sa .r3:checked ~ .sa-ctl .sb3,
+	.sa .r4:checked ~ .sa-ctl .sb4,
+	.sa .r5:checked ~ .sa-ctl .sb5,
+	.sa .r6:checked ~ .sa-ctl .sb6,
+	.sa .r7:checked ~ .sa-ctl .sb7,
+	.sa .r8:checked ~ .sa-ctl .sb8
+{
+	background: var(--fg);
+	color: var(--bg);
+	border-color: var(--fg);
+	border-bottom-color: var(--c);
+}
+.sa .r1:checked:focus-visible ~ .sa-ctl .sb1,
+	.sa .r2:checked:focus-visible ~ .sa-ctl .sb2,
+	.sa .r3:checked:focus-visible ~ .sa-ctl .sb3,
+	.sa .r4:checked:focus-visible ~ .sa-ctl .sb4,
+	.sa .r5:checked:focus-visible ~ .sa-ctl .sb5,
+	.sa .r6:checked:focus-visible ~ .sa-ctl .sb6,
+	.sa .r7:checked:focus-visible ~ .sa-ctl .sb7,
+	.sa .r8:checked:focus-visible ~ .sa-ctl .sb8,
+	.sa .r0:focus-visible ~ .sa-ctl .sa-sbs
+{
+	outline: 2px solid var(--fg);
+	outline-offset: 2px;
+}
+
+/* Captions: all of them stay on the page; the current one is marked. */
+.sa-steps {
+	margin: 0.75rem 0 0;
+	padding-inline-start: 1.6rem;
+	font-size: var(--sl-text-sm);
+}
+.sa-steps li {
+	margin: 0.3rem 0 0;
+	padding: 0.4rem 0.6rem;
+	border-inline-start: 3px solid transparent;
+	border-radius: 4px;
+}
+.sa-cl {
+	display: inline-block;
+	margin-inline-end: 0.25rem;
+	padding: 0 0.45rem;
+	border: 1px solid var(--dim);
+	border-inline-start: 6px solid var(--c);
+	border-radius: 4px;
+	font-family: var(--font-mono);
+	font-size: 0.8em;
+	font-weight: 700;
+	line-height: 1.5;
+	white-space: nowrap;
+}
+.sa-pr {
+	font-weight: 700;
+}
+
+/* The state machine: screen only. */
+@media screen {
+	.sa-svg .od {
+		opacity: 1;
+	}
+	.sa .r1:checked ~ .sa-svg :is(.i2,.i3,.i4,.i5,.i6) {
+		opacity: 0;
+	}
+	.sa .r2:checked ~ .sa-svg :is(.i3,.i4,.i5,.i6) {
+		opacity: 0;
+	}
+	.sa .r3:checked ~ .sa-svg :is(.i4,.i5,.i6) {
+		opacity: 0;
+	}
+	.sa .r4:checked ~ .sa-svg :is(.i5,.i6) {
+		opacity: 0;
+	}
+	.sa .r5:checked ~ .sa-svg :is(.i6) {
+		opacity: 0;
+	}
+	.sa .r2:checked ~ .sa-svg :is(.o2) {
+		opacity: var(--sa-dim);
+	}
+	.sa .r3:checked ~ .sa-svg :is(.o2,.o3) {
+		opacity: var(--sa-dim);
+	}
+	.sa .r4:checked ~ .sa-svg :is(.o2,.o3,.o4) {
+		opacity: var(--sa-dim);
+	}
+	.sa .r5:checked ~ .sa-svg :is(.o2,.o3,.o4,.o5) {
+		opacity: var(--sa-dim);
+	}
+	.sa .r6:checked ~ .sa-svg :is(.o2,.o3,.o4,.o5,.o6) {
+		opacity: var(--sa-dim);
+	}
+	.sa .r2:checked ~ .sa-svg :is(.h2) {
+		opacity: 0;
+	}
+	.sa .r3:checked ~ .sa-svg :is(.h2,.h3) {
+		opacity: 0;
+	}
+	.sa .r4:checked ~ .sa-svg :is(.h2,.h3,.h4) {
+		opacity: 0;
+	}
+	.sa .r5:checked ~ .sa-svg :is(.h2,.h3,.h4,.h5) {
+		opacity: 0;
+	}
+	.sa .r6:checked ~ .sa-svg :is(.h2,.h3,.h4,.h5,.h6) {
+		opacity: 0;
+	}
+	.sa .r1:checked ~ .sa-steps li:nth-child(1),
+	.sa .r2:checked ~ .sa-steps li:nth-child(2),
+	.sa .r3:checked ~ .sa-steps li:nth-child(3),
+	.sa .r4:checked ~ .sa-steps li:nth-child(4),
+	.sa .r5:checked ~ .sa-steps li:nth-child(5),
+	.sa .r6:checked ~ .sa-steps li:nth-child(6),
+	.sa .r7:checked ~ .sa-steps li:nth-child(7),
+	.sa .r8:checked ~ .sa-steps li:nth-child(8)
+	{
+		background: color-mix(in srgb, var(--fg) 9%, transparent);
+		border-inline-start-color: var(--fg);
+	}
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+	.sa-svg .fx {
+		transition: opacity 0.45s ease;
+	}
+	.sa-sb {
+		transition: background-color 0.2s ease, color 0.2s ease;
+	}
+}
+
+/* ---- Concept animations (SPEC D41): looping, CSS-only schematics with Pause and step controls ----
+ * Markup from scripts/make-animation.mjs (specs scripts/animations/concept-*.mjs):
+ *   <figure class="ca sa t8"> pause checkbox (.ca-pp) · radios r0 (auto) and r1..rN (.sa-r) · <svg class="sa-svg ca-svg"> ·
+ *   <div class="sa-ctl"> Pause/Play (.ca-btn), Play (.ca-au, steps only), Back, Next, step buttons (.sa-sb) · <p class="ca-cap"> · <ol class="sa-steps"> </figure>
+ * The loop is 8 equal phases of --T / 8 seconds (class t4..t8 sets --T). A part that appears at phase k and goes away at
+ * phase k + L has classes `wL dk` (fade) or `pL dk` (an arrow that draws itself): wL is one keyframe set whose visible
+ * window is L phases long, dk sets its delay --d to phase k, and the animation repeats every --T so the window ends at
+ * the end of the loop when it is meant to stay. Pausing is the checked box (WCAG 2.2.2): the sibling selector stops every
+ * animation in the figure.
+ * Steps: choosing a step radio (r1..rN, N = 3 to 6) pauses every animation at the END of the last phase p of that step (--off, just before the next phase
+ * fades things out; moves finish 2 % of the loop before the phase ends, so they are complete there), which draws that
+ * phase's frame with the same markup. A running animation keeps its clock when paused, so step mode lists every name twice:
+ * the old animation (index 0) is parked 1e5 s in the future with no fill, the new one (index 1) starts at 0, paused.
+ * Reduced motion: always paused, step 1 by default, steps switch instantly. Print: no animation, the final state (parts
+ * with `tmp` are hidden), no controls, all captions.
+ */
+.ca {
+	--T: 6s;
+}
+.ca.t4 { --T: 4s; }
+.ca.t5 { --T: 5s; }
+.ca.t7 { --T: 7s; }
+.ca.t8 { --T: 8s; }
+.ca > .ca-svg { order: 1; }
+.ca > .ca-pp { order: 2; }
+.ca > .ca-ctl { order: 3; }
+.ca > .ca-cap { order: 4; }
+.ca-pp {
+	width: 1px;
+	height: 0;
+	margin: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+.ca-ctl {
+	margin-top: 0.5rem;
+}
+.ca-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 44px;
+	min-height: 44px;
+	padding: 0 1rem;
+	border: 1px solid var(--fg);
+	border-radius: 6px;
+	color: var(--fg);
+	cursor: pointer;
+	font-size: var(--sl-text-sm);
+	font-weight: 600;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.ca-pa,
+.ca-pl {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.ca-pl,
+.ca-pp:checked ~ :is(.ca-ctl, .sa-ctl) .ca-pa {
+	display: none;
+}
+.ca-pp:checked ~ :is(.ca-ctl, .sa-ctl) .ca-pl {
+	display: inline-flex;
+}
+.ca-pp:focus-visible ~ :is(.ca-ctl, .sa-ctl) .ca-btn {
+	outline: 2px solid var(--fg);
+	outline-offset: 2px;
+}
+.ca-cap {
+	margin: 0.5rem 0 0;
+	font-size: var(--sl-text-sm);
+}
+/* controls of the new markup: Pause, Back, Next on one line, the step buttons as one segmented row (wrapping under them on a phone) */
+.ca .sa-ctl { flex-wrap: wrap; }
+.ca .sa-sbs { order: 3; flex: 1 1 20rem; gap: 0; }
+.ca .sa-sb { border-radius: 0; margin-inline-start: -1px; }
+.ca .sa-sb:first-child { margin-inline-start: 0; }
+.ca .sa-nav.bk::before { content: '\25C0'; }
+.ca .sa-nav.nx::before { content: '\25B6'; }
+.ca .sa-nav.rs::before { content: '\21BA'; }
+.ca .ca-au { display: none; }
+.ca .r0:not(:checked) ~ .sa-ctl .ca-au { display: inline-flex; }
+.ca .r0:not(:checked) ~ .sa-ctl .ca-btn:not(.ca-au) { display: none; }
+.ca-svg { --off: 0s; }
+.ca-svg .dr {
+	stroke-dasharray: 1;
+}
+/* a moving part (class mv) ends at (--dx, --dy), in multiples of 10 px: x3 is 30 px, xn3 is -30 px; the static view draws it there */
+.ca-svg .mv {
+	--dx: 0px;
+	--dy: 0px;
+	translate: var(--dx) var(--dy);
+}
+.ca-svg .x0 { --dx: 0px; }
+.ca-svg .x1 { --dx: 10px; }
+.ca-svg .x2 { --dx: 20px; }
+.ca-svg .x3 { --dx: 30px; }
+.ca-svg .x4 { --dx: 40px; }
+.ca-svg .x5 { --dx: 50px; }
+.ca-svg .x6 { --dx: 60px; }
+.ca-svg .x7 { --dx: 70px; }
+.ca-svg .x8 { --dx: 80px; }
+.ca-svg .x9 { --dx: 90px; }
+.ca-svg .x10 { --dx: 100px; }
+.ca-svg .x11 { --dx: 110px; }
+.ca-svg .x12 { --dx: 120px; }
+.ca-svg .x13 { --dx: 130px; }
+.ca-svg .x14 { --dx: 140px; }
+.ca-svg .x15 { --dx: 150px; }
+.ca-svg .x16 { --dx: 160px; }
+.ca-svg .x17 { --dx: 170px; }
+.ca-svg .x18 { --dx: 180px; }
+.ca-svg .x19 { --dx: 190px; }
+.ca-svg .x20 { --dx: 200px; }
+.ca-svg .x21 { --dx: 210px; }
+.ca-svg .x22 { --dx: 220px; }
+.ca-svg .x23 { --dx: 230px; }
+.ca-svg .x24 { --dx: 240px; }
+.ca-svg .x25 { --dx: 250px; }
+.ca-svg .x26 { --dx: 260px; }
+.ca-svg .x27 { --dx: 270px; }
+.ca-svg .x28 { --dx: 280px; }
+.ca-svg .x29 { --dx: 290px; }
+.ca-svg .x30 { --dx: 300px; }
+.ca-svg .x31 { --dx: 310px; }
+.ca-svg .x32 { --dx: 320px; }
+.ca-svg .x33 { --dx: 330px; }
+.ca-svg .x34 { --dx: 340px; }
+.ca-svg .x35 { --dx: 350px; }
+.ca-svg .xn1 { --dx: -10px; }
+.ca-svg .xn2 { --dx: -20px; }
+.ca-svg .xn3 { --dx: -30px; }
+.ca-svg .xn4 { --dx: -40px; }
+.ca-svg .xn5 { --dx: -50px; }
+.ca-svg .xn6 { --dx: -60px; }
+.ca-svg .xn7 { --dx: -70px; }
+.ca-svg .xn8 { --dx: -80px; }
+.ca-svg .xn9 { --dx: -90px; }
+.ca-svg .xn10 { --dx: -100px; }
+.ca-svg .xn11 { --dx: -110px; }
+.ca-svg .xn12 { --dx: -120px; }
+.ca-svg .xn13 { --dx: -130px; }
+.ca-svg .xn14 { --dx: -140px; }
+.ca-svg .xn15 { --dx: -150px; }
+.ca-svg .xn16 { --dx: -160px; }
+.ca-svg .xn17 { --dx: -170px; }
+.ca-svg .xn18 { --dx: -180px; }
+.ca-svg .xn19 { --dx: -190px; }
+.ca-svg .xn20 { --dx: -200px; }
+.ca-svg .xn21 { --dx: -210px; }
+.ca-svg .xn22 { --dx: -220px; }
+.ca-svg .xn23 { --dx: -230px; }
+.ca-svg .xn24 { --dx: -240px; }
+.ca-svg .xn25 { --dx: -250px; }
+.ca-svg .xn26 { --dx: -260px; }
+.ca-svg .xn27 { --dx: -270px; }
+.ca-svg .xn28 { --dx: -280px; }
+.ca-svg .xn29 { --dx: -290px; }
+.ca-svg .xn30 { --dx: -300px; }
+.ca-svg .xn31 { --dx: -310px; }
+.ca-svg .xn32 { --dx: -320px; }
+.ca-svg .xn33 { --dx: -330px; }
+.ca-svg .xn34 { --dx: -340px; }
+.ca-svg .xn35 { --dx: -350px; }
+.ca-svg .y0 { --dy: 0px; }
+.ca-svg .y1 { --dy: 10px; }
+.ca-svg .y2 { --dy: 20px; }
+.ca-svg .y3 { --dy: 30px; }
+.ca-svg .y4 { --dy: 40px; }
+.ca-svg .y5 { --dy: 50px; }
+.ca-svg .y6 { --dy: 60px; }
+.ca-svg .y7 { --dy: 70px; }
+.ca-svg .y8 { --dy: 80px; }
+.ca-svg .y9 { --dy: 90px; }
+.ca-svg .y10 { --dy: 100px; }
+.ca-svg .y11 { --dy: 110px; }
+.ca-svg .y12 { --dy: 120px; }
+.ca-svg .y13 { --dy: 130px; }
+.ca-svg .y14 { --dy: 140px; }
+.ca-svg .y15 { --dy: 150px; }
+.ca-svg .y16 { --dy: 160px; }
+.ca-svg .y17 { --dy: 170px; }
+.ca-svg .y18 { --dy: 180px; }
+.ca-svg .y19 { --dy: 190px; }
+.ca-svg .y20 { --dy: 200px; }
+.ca-svg .y21 { --dy: 210px; }
+.ca-svg .y22 { --dy: 220px; }
+.ca-svg .y23 { --dy: 230px; }
+.ca-svg .y24 { --dy: 240px; }
+.ca-svg .y25 { --dy: 250px; }
+.ca-svg .y26 { --dy: 260px; }
+.ca-svg .y27 { --dy: 270px; }
+.ca-svg .y28 { --dy: 280px; }
+.ca-svg .y29 { --dy: 290px; }
+.ca-svg .y30 { --dy: 300px; }
+.ca-svg .yn1 { --dy: -10px; }
+.ca-svg .yn2 { --dy: -20px; }
+.ca-svg .yn3 { --dy: -30px; }
+.ca-svg .yn4 { --dy: -40px; }
+.ca-svg .yn5 { --dy: -50px; }
+.ca-svg .yn6 { --dy: -60px; }
+.ca-svg .yn7 { --dy: -70px; }
+.ca-svg .yn8 { --dy: -80px; }
+.ca-svg .yn9 { --dy: -90px; }
+.ca-svg .yn10 { --dy: -100px; }
+.ca-svg .yn11 { --dy: -110px; }
+.ca-svg .yn12 { --dy: -120px; }
+.ca-svg .yn13 { --dy: -130px; }
+.ca-svg .yn14 { --dy: -140px; }
+.ca-svg .yn15 { --dy: -150px; }
+.ca-svg .yn16 { --dy: -160px; }
+.ca-svg .yn17 { --dy: -170px; }
+.ca-svg .yn18 { --dy: -180px; }
+.ca-svg .yn19 { --dy: -190px; }
+.ca-svg .yn20 { --dy: -200px; }
+.ca-svg .yn21 { --dy: -210px; }
+.ca-svg .yn22 { --dy: -220px; }
+.ca-svg .yn23 { --dy: -230px; }
+.ca-svg .yn24 { --dy: -240px; }
+.ca-svg .yn25 { --dy: -250px; }
+.ca-svg .yn26 { --dy: -260px; }
+.ca-svg .yn27 { --dy: -270px; }
+.ca-svg .yn28 { --dy: -280px; }
+.ca-svg .yn29 { --dy: -290px; }
+.ca-svg .yn30 { --dy: -300px; }
+.ca-pp:checked ~ .ca-svg * {
+	animation-play-state: paused;
+}
+@media screen {
+	.ca-svg :is(.w1,.w2,.w3,.w4,.w5,.w6,.w7,.w8,.u1,.u2,.u3,.u4,.u5,.u6,.u7,.p1,.p2,.p3,.p4,.p5,.p6,.p7,.p8,.m1,.m2,.m3,.m4,.m5,.m6,.m7,.m1a,.m1b,.m2a,.m2b,.m3a,.m3b,.m4a,.m4b,.m5a,.m5b,.m6a,.m6b,.m7a,.m7b) {
+		--d: 0s;
+		animation-name: var(--n);
+		animation-duration: var(--T);
+		animation-timing-function: linear;
+		animation-iteration-count: infinite;
+		animation-fill-mode: both;
+		animation-delay: calc(var(--d, 0s) - var(--off));
+	}
+	.ca-svg .w1 { --n: w1; }
+	.ca-svg .w2 { --n: w2; }
+	.ca-svg .w3 { --n: w3; }
+	.ca-svg .w4 { --n: w4; }
+	.ca-svg .w5 { --n: w5; }
+	.ca-svg .w6 { --n: w6; }
+	.ca-svg .w7 { --n: w7; }
+	.ca-svg .w8 { --n: w8; }
+	.ca-svg .u1 { --n: u1; }
+	.ca-svg .u2 { --n: u2; }
+	.ca-svg .u3 { --n: u3; }
+	.ca-svg .u4 { --n: u4; }
+	.ca-svg .u5 { --n: u5; }
+	.ca-svg .u6 { --n: u6; }
+	.ca-svg .u7 { --n: u7; }
+	.ca-svg .m1 { --n: m1; }
+	.ca-svg .m2 { --n: m2; }
+	.ca-svg .m3 { --n: m3; }
+	.ca-svg .m4 { --n: m4; }
+	.ca-svg .m5 { --n: m5; }
+	.ca-svg .m6 { --n: m6; }
+	.ca-svg .m7 { --n: m7; }
+	.ca-svg .m1a { --n: m1a; }
+	.ca-svg .m1b { --n: m1b; }
+	.ca-svg .m2a { --n: m2a; }
+	.ca-svg .m2b { --n: m2b; }
+	.ca-svg .m3a { --n: m3a; }
+	.ca-svg .m3b { --n: m3b; }
+	.ca-svg .m4a { --n: m4a; }
+	.ca-svg .m4b { --n: m4b; }
+	.ca-svg .m5a { --n: m5a; }
+	.ca-svg .m5b { --n: m5b; }
+	.ca-svg .m6a { --n: m6a; }
+	.ca-svg .m6b { --n: m6b; }
+	.ca-svg .m7a { --n: m7a; }
+	.ca-svg .m7b { --n: m7b; }
+	.ca-svg .p1 { --n: p1; }
+	.ca-svg .p2 { --n: p2; }
+	.ca-svg .p3 { --n: p3; }
+	.ca-svg .p4 { --n: p4; }
+	.ca-svg .p5 { --n: p5; }
+	.ca-svg .p6 { --n: p6; }
+	.ca-svg .p7 { --n: p7; }
+	.ca-svg .p8 { --n: p8; }
+	.ca-svg .d2 { --d: calc(var(--T) * 1 / 8); }
+	.ca-svg .d3 { --d: calc(var(--T) * 2 / 8); }
+	.ca-svg .d4 { --d: calc(var(--T) * 3 / 8); }
+	.ca-svg .d5 { --d: calc(var(--T) * 4 / 8); }
+	.ca-svg .d6 { --d: calc(var(--T) * 5 / 8); }
+	.ca-svg .d7 { --d: calc(var(--T) * 6 / 8); }
+	.ca-svg .d8 { --d: calc(var(--T) * 7 / 8); }
+	@keyframes w8 { 0% { opacity: 0; } 2% { opacity: 1; } 98% { opacity: 1; } 100% { opacity: 0; } }
+	@keyframes u1 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 6.25% { opacity: 1; animation-timing-function: ease-in-out; } 12.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u2 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 12.5% { opacity: 1; animation-timing-function: ease-in-out; } 25% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u3 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 18.75% { opacity: 1; animation-timing-function: ease-in-out; } 37.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u4 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 25% { opacity: 1; animation-timing-function: ease-in-out; } 50% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u5 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 31.25% { opacity: 1; animation-timing-function: ease-in-out; } 62.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u6 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 37.5% { opacity: 1; animation-timing-function: ease-in-out; } 75% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes u7 { 0% { opacity: 0; animation-timing-function: ease-in-out; } 43.75% { opacity: 1; animation-timing-function: ease-in-out; } 87.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes m1 { 0%, 0% { translate: 0 0; animation-timing-function: ease-in-out; } 10.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m2 { 0%, 12.5% { translate: 0 0; animation-timing-function: ease-in-out; } 23%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m3 { 0%, 25% { translate: 0 0; animation-timing-function: ease-in-out; } 35.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m4 { 0%, 37.5% { translate: 0 0; animation-timing-function: ease-in-out; } 48%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m5 { 0%, 50% { translate: 0 0; animation-timing-function: ease-in-out; } 60.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m6 { 0%, 62.5% { translate: 0 0; animation-timing-function: ease-in-out; } 73%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m7 { 0%, 75% { translate: 0 0; animation-timing-function: ease-in-out; } 85.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m1a { 0%, 0% { translate: 0 0; animation-timing-function: ease-in-out; } 6.25%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m1b { 0%, 6.25% { translate: 0 0; animation-timing-function: ease-in-out; } 10.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m2a { 0%, 12.5% { translate: 0 0; animation-timing-function: ease-in-out; } 18.75%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m2b { 0%, 18.75% { translate: 0 0; animation-timing-function: ease-in-out; } 23%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m3a { 0%, 25% { translate: 0 0; animation-timing-function: ease-in-out; } 31.25%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m3b { 0%, 31.25% { translate: 0 0; animation-timing-function: ease-in-out; } 35.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m4a { 0%, 37.5% { translate: 0 0; animation-timing-function: ease-in-out; } 43.75%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m4b { 0%, 43.75% { translate: 0 0; animation-timing-function: ease-in-out; } 48%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m5a { 0%, 50% { translate: 0 0; animation-timing-function: ease-in-out; } 56.25%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m5b { 0%, 56.25% { translate: 0 0; animation-timing-function: ease-in-out; } 60.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m6a { 0%, 62.5% { translate: 0 0; animation-timing-function: ease-in-out; } 68.75%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m6b { 0%, 68.75% { translate: 0 0; animation-timing-function: ease-in-out; } 73%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m7a { 0%, 75% { translate: 0 0; animation-timing-function: ease-in-out; } 81.25%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes m7b { 0%, 81.25% { translate: 0 0; animation-timing-function: ease-in-out; } 85.5%, 100% { translate: var(--dx) var(--dy); } }
+	@keyframes w1 { 0% { opacity: 0; } 2% { opacity: 1; } 10.5% { opacity: 1; } 12.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w2 { 0% { opacity: 0; } 2% { opacity: 1; } 23% { opacity: 1; } 25% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w3 { 0% { opacity: 0; } 2% { opacity: 1; } 35.5% { opacity: 1; } 37.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w4 { 0% { opacity: 0; } 2% { opacity: 1; } 48% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w5 { 0% { opacity: 0; } 2% { opacity: 1; } 60.5% { opacity: 1; } 62.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w6 { 0% { opacity: 0; } 2% { opacity: 1; } 73% { opacity: 1; } 75% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes w7 { 0% { opacity: 0; } 2% { opacity: 1; } 85.5% { opacity: 1; } 87.5% { opacity: 0; } 100% { opacity: 0; } }
+	@keyframes p1 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 10.5% { opacity: 1; stroke-dashoffset: 0; } 12.5% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p2 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 23% { opacity: 1; stroke-dashoffset: 0; } 25% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p3 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 35.5% { opacity: 1; stroke-dashoffset: 0; } 37.5% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p4 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 48% { opacity: 1; stroke-dashoffset: 0; } 50% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p5 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 60.5% { opacity: 1; stroke-dashoffset: 0; } 62.5% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p6 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 73% { opacity: 1; stroke-dashoffset: 0; } 75% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p7 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 85.5% { opacity: 1; stroke-dashoffset: 0; } 87.5% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+	@keyframes p8 { 0% { opacity: 0; stroke-dashoffset: 1; } 0.5% { opacity: 1; stroke-dashoffset: 1; } 6% { opacity: 1; stroke-dashoffset: 0; } 98% { opacity: 1; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+	.ca .r0:not(:checked) ~ .ca-svg :is(.w1,.w2,.w3,.w4,.w5,.w6,.w7,.w8,.u1,.u2,.u3,.u4,.u5,.u6,.u7,.p1,.p2,.p3,.p4,.p5,.p6,.p7,.p8,.m1,.m2,.m3,.m4,.m5,.m6,.m7,.m1a,.m1b,.m2a,.m2b,.m3a,.m3b,.m4a,.m4b,.m5a,.m5b,.m6a,.m6b,.m7a,.m7b) {
+		animation-name: var(--n), var(--n);
+		animation-delay: 1e5s, calc(var(--d, 0s) - var(--off));
+		animation-fill-mode: none, both;
+		animation-play-state: paused;
+	}
+}
+/* a step shows the loop paused just before the end of its last phase p (radio class o<p>; r0 carries the o-class of step 1, which is what reduced motion shows) */
+.ca .o1:checked ~ .ca-svg { --off: calc(var(--T) * 0.1045); }
+.ca .o2:checked ~ .ca-svg { --off: calc(var(--T) * 0.2295); }
+.ca .o3:checked ~ .ca-svg { --off: calc(var(--T) * 0.3545); }
+.ca .o4:checked ~ .ca-svg { --off: calc(var(--T) * 0.4795); }
+.ca .o5:checked ~ .ca-svg { --off: calc(var(--T) * 0.6045); }
+.ca .o6:checked ~ .ca-svg { --off: calc(var(--T) * 0.7295); }
+.ca .o7:checked ~ .ca-svg { --off: calc(var(--T) * 0.8545); }
+.ca .o8:checked ~ .ca-svg { --off: calc(var(--T) * 0.9795); }
+@media screen and (prefers-reduced-motion: no-preference) {
+	.ca .r0:checked ~ .ca-svg { --off: 0s; }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+	.ca-svg { --off: calc(var(--T) * 0.1045); }
+	.ca-svg * { animation-play-state: paused; }
+	.ca-ctl,
+	.ca .ca-btn,
+	.ca .r0 ~ .sa-ctl .ca-btn,
+	.ca .r0:not(:checked) ~ .sa-ctl .ca-btn { display: none; }
+	.sa .r0:checked ~ .sa-ctl :is(.bk0, .nx0) { display: none; }
+	.sa .r0:checked ~ .sa-ctl :is(.bk1, .nx1) { display: flex; }
+	.sa .r0:checked ~ .sa-ctl .sb1 { background: var(--fg); color: var(--bg); border-color: var(--fg); border-bottom-color: var(--c); }
+	.sa .r0:checked ~ .sa-steps li:nth-child(1) { background: color-mix(in srgb, var(--fg) 9%, transparent); border-inline-start-color: var(--fg); }
+}
+@media not screen {
+	.ca-svg .tmp,
+	.ca-ctl,
+	.sa-ctl {
+		display: none;
+	}
+}

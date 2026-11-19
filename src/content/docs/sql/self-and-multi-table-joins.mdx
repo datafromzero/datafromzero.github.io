@@ -1,0 +1,489 @@
+---
+id: sql-self-and-multi-table-joins
+title: Joining three tables and a table to itself
+description: Chain several joins in one query, join a table to itself, and keep the grain correct through every step.
+stage: sql
+order: 220
+level: intermediate
+duration: 30
+objectives:
+  - Join three or more tables in one query
+  - Write a self-join with two aliases
+  - Track the grain after each join
+  - Verify the result against a hand-computed total for one customer
+prerequisites:
+  - sql-join-fanout
+  - sql-left-join-anti-join
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+status: draft
+---
+
+Real questions need more than two tables, and sometimes the same table twice. Every query on this page runs in the editor
+under it: press Run.
+
+TODO(owner): run every block on the page and check each result against its Expected line. Time the lesson against its 30 minutes. The DuckDB page opened for this lesson does not say that an empty value never pairs in `ON`, or that an `ON` may name any table already in the chain; the lesson shows both by results (unit 3 and unit 1). Its Self-Joins section does give the error for a repeated table name without aliases, and says a self-join works with every join type. Run on DuckDB 2.0.0, a column that exists in both aliases and is written without one, such as `referred_by` in the self-join, gives `Binder Error: Ambiguous reference to column name "referred_by"` (the full message continues `(use: 'c.referred_by' or 'r.referred_by')`). When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Excel said Campus sold 112 lines of coffee in March, worth \$706.25, completed orders only. Can SQL rebuild that from
+> the five tables? And some customers were referred by other customers: who referred customer 144?
+
+The Campus coffee of *Conditional totals with SUMIFS and COUNTIFS* (E7) needs four tables. The referrals need one table
+twice: customers 6 and 144 point at the customers 3 and 86 through `referred_by`, and 86 points at nobody:
+
+| customer_id | loyalty_tier | referred_by |
+|---:|---|---:|
+| 3 | gold | NULL |
+| 6 | bronze | 3 |
+| 86 | bronze | NULL |
+| 144 | bronze | 86 |
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *Join fan-out: aggregate before you join* (S21), what do you do before a join that would copy a per-order figure
+   onto many lines?
+
+   <details>
+   <summary>Answer</summary>
+
+   Aggregate the repeating side first, with `GROUP BY` on the join key in a CTE, so that both sides have one row per key.
+
+   </details>
+
+2. In E7, four conditions picked the lines: Campus, coffee, completed and March. Which table of the database holds each
+   one?
+
+   <details>
+   <summary>Answer</summary>
+
+   The store name is in `stores`, reached through `orders.store_id`. The category is in `products`. The status and the
+   time, `status` and `ordered_at`, are in `orders`. The lines themselves are in `order_items`: four tables.
+
+   </details>
+
+## The big idea
+
+Each `JOIN` adds the next table's columns beside the rows you already have, and a table can even join itself, playing two roles at once.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="sj-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="sj" id="sj-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="sj" id="sj-r1" aria-label="Step 1 of 5: One table T; rows name a boss row" />
+<input class="sa-r r2 o2" type="radio" name="sj" id="sj-r2" aria-label="Step 2 of 5: A copy of T slides over" />
+<input class="sa-r r3 o3" type="radio" name="sj" id="sj-r3" aria-label="Step 3 of 5: Two names for one table: e and b" />
+<input class="sa-r r4 o6" type="radio" name="sj" id="sj-r4" aria-label="Step 4 of 5: Rows pair with their boss row" />
+<input class="sa-r r5 o8" type="radio" name="sj" id="sj-r5" aria-label="Step 5 of 5: Row 1 has no boss, so no pair" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 206" width="360" role="img" aria-labelledby="sj-t sj-d">
+<title id="sj-t">A self join uses one table twice, under two names</title>
+<desc id="sj-d">A table T has four rows; each row notes the number of its boss row in the same table: Row 1 has none, Rows 2 and 3 have boss 1, and Row 4 has boss 2. A copy of the rows slides to the right, and the two copies are named T AS e and T AS b. Arrows then pair each row of e with its boss in b: Row 2 and Row 3 with Row 1, and Row 4 with Row 2. Row 1 has no boss, so it has no pair.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · One table T; rows name a boss row</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · A copy of T slides over</text>
+<text class="f10 b w1 d3 tmp" x="10" y="29">3 · Two names for one table: e and b</text>
+<text class="f10 b w3 d4 tmp" x="10" y="29">4 · Rows pair with their boss row</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Row 1 has no boss, so no pair</text>
+<text class="f11 b" x="10" y="14">One table, used twice</text>
+<text class="f10 b mo w2 tmp" x="10" y="52">T</text>
+<text class="f10 b mo w6 d3" x="10" y="52">T AS e</text>
+<text class="f10 b mo w6 d3" x="240" y="52">T AS b</text>
+<g><rect class="f-src k2" x="10" y="62" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="78">Row 1 · boss –</text></g>
+<rect class="bx dsh" x="240" y="62" width="70" height="24" />
+<g class="w6 d3"><rect class="f-src k2" x="240" y="62" width="70" height="24" rx="6" /><text class="f11 m" x="275" y="78">Row 1</text></g>
+<g><rect class="f-src k2" x="10" y="92" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="108">Row 2 · boss 1</text></g>
+<rect class="bx dsh" x="240" y="92" width="70" height="24" />
+<g class="w6 d3"><rect class="f-src k2" x="240" y="92" width="70" height="24" rx="6" /><text class="f11 m" x="275" y="108">Row 2</text></g>
+<g><rect class="f-src k2" x="10" y="122" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="138">Row 3 · boss 1</text></g>
+<rect class="bx dsh" x="240" y="122" width="70" height="24" />
+<g class="w6 d3"><rect class="f-src k2" x="240" y="122" width="70" height="24" rx="6" /><text class="f11 m" x="275" y="138">Row 3</text></g>
+<g><rect class="f-src k2" x="10" y="152" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="168">Row 4 · boss 2</text></g>
+<rect class="bx dsh" x="240" y="152" width="70" height="24" />
+<g class="w6 d3"><rect class="f-src k2" x="240" y="152" width="70" height="24" rx="6" /><text class="f11 m" x="275" y="168">Row 4</text></g>
+<g class="w1 d2 tmp"><g class="mv m2 x23 y0"><rect class="f-src k3" x="10" y="62" width="70" height="24" rx="6" /><rect class="f-src k3" x="10" y="92" width="70" height="24" rx="6" /><rect class="f-src k3" x="10" y="122" width="70" height="24" rx="6" /><rect class="f-src k3" x="10" y="152" width="70" height="24" rx="6" /></g></g>
+<path class="s-mat dr p5 d4" pathLength="1" d="M114 104L236 74M229.15 72.55L236 74L230.61 78.46" />
+<path class="s-mat dr p4 d5" pathLength="1" d="M114 134L236 74M229 74.05L236 74L231.69 79.51" />
+<path class="s-mat dr p3 d6" pathLength="1" d="M114 164L236 104M229 104.05L236 104L231.69 109.51" />
+<text class="f10 w2 d7" x="10" y="196">Row 1 has no boss, so it has no pair</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="sj-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="sj-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="sj-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="sj-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="sj-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="sj-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="sj-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="sj-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="sj-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="sj-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="sj-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="sj-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="sj-r1">1</label><label class="sa-sb sb2" for="sj-r2">2</label><label class="sa-sb sb3" for="sj-r3">3</label><label class="sa-sb sb4" for="sj-r4">4</label><label class="sa-sb sb5" for="sj-r5">5</label></span>
+</div>
+<p class="ca-cap">A self join joins a table to itself. Aliases such as e and b give the two copies different names, so each row of one copy can be matched with a row of the other.</p>
+<ol class="sa-steps">
+<li>One table T; rows name a boss row</li>
+<li>A copy of T slides over</li>
+<li>Two names for one table: e and b</li>
+<li>Rows pair with their boss row</li>
+<li>Row 1 has no boss, so no pair</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Press Run on each query.
+
+### 1. Chain joins, and ask what one row is
+
+A **join chain** writes one `JOIN` after another, and each link works as in *INNER JOIN: pairing rows on a key* (S19): it
+pairs the rows built so far with the next table wherever its `ON` is true. The `ON` may name any table already in the
+chain, not only the one just before.
+
+After each join, ask two questions: *is the key unique in the table I just added?* and *what is one row now?* The
+counting rule of S19 and the fan-out of S21 answer them: the grain stays the same, or becomes finer.
+
+**Try it**. Before you run it: start from `order_items` and add `orders`, `products` and `stores`, each
+on a key that is unique on the added side. How many rows will you get?
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN stores AS s ON o.store_id = s.store_id;`} />
+
+Expected: 1 row, 1 column. *Why:* **3287**, the lines of `order_items`. `order_id` is unique in `orders`, `product_id` in
+`products` and `store_id` in `stores`, so no join adds a line, and each line has a partner, so none drops. One row is
+still one line, now with its store, status, category and price. Each box of the picture answers the two questions for one
+link.
+
+<figure>
+<svg viewBox="0 0 360 374" width="360" role="img" aria-labelledby="mj-chain-title mj-chain-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="mj-chain-title">A four-table join chain with its grain at every step</title>
+<desc id="mj-chain-desc">Five stacked boxes joined by arrows. FROM order_items: one row is a line, 3,287 rows. JOIN orders: still a line, now with store and status, 3,287 rows, because each line has one order. JOIN products: still a line, now with category and price, 3,287 rows, because each line has one product. JOIN stores: still a line, now with the store name, 3,287 rows, because each order has one store. WHERE Campus, coffee, completed, March: 112 rows, the lines that pass all four conditions.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">A join chain: the grain after each join</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="34" width="340" height="40" /><rect x="10" y="100" width="340" height="40" /><rect x="10" y="166" width="340" height="40" /><rect x="10" y="232" width="340" height="40" /><rect x="10" y="298" width="340" height="40" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.6"><path d="M180 72V96M176 91L180 96L184 91" /><path d="M180 138V162M176 157L180 162L184 157" /><path d="M180 204V228M176 223L180 228L184 223" /><path d="M180 270V294M176 289L180 294L184 289" /></g>
+<g><text x="18" y="50" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">FROM order_items</text><text x="18" y="66" font-size="11" opacity="0.8">one row is a line</text><text x="342" y="50" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="89" font-size="11" opacity="0.8">each line has one order</text><text x="18" y="116" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN orders</text><text x="18" y="132" font-size="11" opacity="0.8">still a line, now with store and status</text><text x="342" y="116" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="155" font-size="11" opacity="0.8">each line has one product</text><text x="18" y="182" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN products</text><text x="18" y="198" font-size="11" opacity="0.8">still a line, now with category and price</text><text x="342" y="182" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="221" font-size="11" opacity="0.8">each order has one store</text><text x="18" y="248" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">JOIN stores</text><text x="18" y="264" font-size="11" opacity="0.8">still a line, now with the store name</text><text x="342" y="248" text-anchor="end" font-size="12" font-weight="600">3,287 rows</text><text x="190" y="287" font-size="11" opacity="0.8">rows leave, none are added</text><text x="18" y="314" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" font-weight="600">WHERE Campus, coffee, completed, March</text><text x="18" y="330" font-size="11" opacity="0.8">a line that passes all four</text><text x="342" y="314" text-anchor="end" font-size="12" font-weight="600">112 rows</text></g>
+<text x="10" y="362" font-size="11" font-weight="600">Every key on the far side is unique, so no join adds rows.</text>
+</svg>
+</figure>
+
+### 2. Rebuild E7: conditions run once, at the end
+
+`WHERE`, `GROUP BY` and the rest run once, on the final wide table. So pile up the joins first, then state every
+condition together.
+
+*Excel:* in E7 the four conditions of the Campus coffee were four columns of one sheet, beside each line. A join chain
+builds such a sheet: each `JOIN` brings the next table's columns next to every line.
+
+**Try it**: Campus, coffee, completed orders, March.
+
+<RunSQL query={`SELECT COUNT(*) AS lines,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN stores AS s ON o.store_id = s.store_id
+WHERE s.store_name = 'Campus'
+  AND p.category = 'coffee'
+  AND o.status = 'completed'
+  AND o.ordered_at >= DATE '2026-03-01'
+  AND o.ordered_at < DATE '2026-04-01';`} />
+
+Expected: 1 row, 2 columns: `112 | 706.25`. *Why:* the
+rows are completed orders only. Canceled order 1461 is a Campus order from March 1 with a 5.00 coffee line: leave out the
+status condition and you get 113 lines and 711.25. The extra-zero line of order 2075 is an Old Town order from May, so it
+is not in this slice.
+
+### 3. One table, two roles
+
+A **self-join** is an ordinary join with one table named twice, once per role, each with its own alias. Here `c` is the
+customer and `r` is the customer who referred them. Without aliases DuckDB cannot tell the two uses apart and stops with
+an error.
+
+Link the roles through the key: the foreign key of one against the primary key of the other (S18), so
+`c.referred_by = r.customer_id`.
+
+**Try it**: first, how many customers name a referrer?
+
+<RunSQL query={`SELECT COUNT(referred_by) AS referred_customers FROM customers;`} />
+
+Expected: 1 row, 1 column: `30`. *Why:* `COUNT(column)` skips empty values (S7). The other 120 of the 150 customers
+have an empty `referred_by`.
+
+**Try it**. Before you run it: each referred customer has one referrer, because `customer_id` is
+unique. How many pairs will the join return?
+
+<RunSQL query={`SELECT COUNT(*) AS pairs
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id;`} />
+
+Expected: 1 row, 1 column. *Why:* **30**, one pair for each customer counted above. The 120 customers whose
+`referred_by` is empty pair with nobody, so the inner join leaves them out.
+
+### 4. Read the pairs
+
+After a self-join each column name exists twice, so qualify every column with its alias (S19). The rest works as before,
+join types included: a `LEFT` self-join keeps the unpaired rows, as in S20.
+
+**Try it**: look at the pairs.
+
+<RunSQL query={`SELECT c.customer_id AS customer,
+       c.loyalty_tier AS customer_tier,
+       r.customer_id AS referrer,
+       r.loyalty_tier AS referrer_tier
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id
+WHERE c.customer_id IN (6, 30, 34, 144)
+ORDER BY c.customer_id;`} />
+
+Expected: 4 rows, 4 columns. *Why:* customer 144 was referred by customer 86, as in the table of the question. That
+answers the owner. Customer 24 is the referrer of both 30 and 34: one to many again, now inside a single table. The
+picture shows the same rows.
+
+<figure>
+<svg viewBox="0 0 360 424" width="360" role="img" aria-labelledby="mj-self-title mj-self-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="mj-self-title">The customers table played twice: referred and referrer</title>
+<desc id="mj-self-desc">Two grids. First, seven rows of the customers table: 3 gold, 6 bronze referred by 3, 24 bronze, 30 referred by 24, 34 silver referred by 24, 86 bronze and 144 bronze referred by 86. The rows for 6, 30, 34 and 144 are shaded and marked as the referred customer, c; the rows for 3, 24 and 86 are marked as the referrer, r. Second, the self-join result with four rows: c 6 with referrer 3, gold; c 30 with referrer 24, bronze; c 34 with referrer 24, bronze; c 144 with referrer 86, bronze. The columns c.referred_by and r.customer_id are shaded because their values are equal.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One table, two roles</text>
+<text x="10" y="44" font-size="11" font-weight="600">customers: 7 of the 150 rows</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="10" y="96" width="340" height="22" /><rect x="10" y="140" width="340" height="22" /><rect x="10" y="162" width="340" height="22" /><rect x="10" y="206" width="340" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="52" width="85" height="22" /><rect x="95" y="52" width="90" height="22" /><rect x="185" y="52" width="85" height="22" /><rect x="270" y="52" width="80" height="22" /><rect x="10" y="74" width="85" height="22" /><rect x="95" y="74" width="90" height="22" /><rect x="185" y="74" width="85" height="22" /><rect x="270" y="74" width="80" height="22" /><rect x="10" y="96" width="85" height="22" /><rect x="95" y="96" width="90" height="22" /><rect x="185" y="96" width="85" height="22" /><rect x="270" y="96" width="80" height="22" /><rect x="10" y="118" width="85" height="22" /><rect x="95" y="118" width="90" height="22" /><rect x="185" y="118" width="85" height="22" /><rect x="270" y="118" width="80" height="22" /><rect x="10" y="140" width="85" height="22" /><rect x="95" y="140" width="90" height="22" /><rect x="185" y="140" width="85" height="22" /><rect x="270" y="140" width="80" height="22" /><rect x="10" y="162" width="85" height="22" /><rect x="95" y="162" width="90" height="22" /><rect x="185" y="162" width="85" height="22" /><rect x="270" y="162" width="80" height="22" /><rect x="10" y="184" width="85" height="22" /><rect x="95" y="184" width="90" height="22" /><rect x="185" y="184" width="85" height="22" /><rect x="270" y="184" width="80" height="22" /><rect x="10" y="206" width="85" height="22" /><rect x="95" y="206" width="90" height="22" /><rect x="185" y="206" width="85" height="22" /><rect x="270" y="206" width="80" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="90" y="67" text-anchor="end">customer_id</text><text x="100" y="67">loyalty_tier</text><text x="265" y="67" text-anchor="end">referred_by</text><text x="275" y="67">role in the join</text></g>
+<g><text x="90" y="89" text-anchor="end">3</text><text x="100" y="89">gold</text><text x="265" y="89" text-anchor="end" opacity="0.6">NULL</text><text x="275" y="89">r  (referrer)</text><text x="90" y="111" text-anchor="end" font-weight="600">6</text><text x="100" y="111" font-weight="600">bronze</text><text x="265" y="111" text-anchor="end" font-weight="600">3</text><text x="275" y="111" font-weight="600">c  (referred)</text><text x="90" y="133" text-anchor="end">24</text><text x="100" y="133">bronze</text><text x="265" y="133" text-anchor="end" opacity="0.6">NULL</text><text x="275" y="133">r  (referrer)</text><text x="90" y="155" text-anchor="end" font-weight="600">30</text><text x="100" y="155" font-weight="600">bronze</text><text x="265" y="155" text-anchor="end" font-weight="600">24</text><text x="275" y="155" font-weight="600">c  (referred)</text><text x="90" y="177" text-anchor="end" font-weight="600">34</text><text x="100" y="177" font-weight="600">silver</text><text x="265" y="177" text-anchor="end" font-weight="600">24</text><text x="275" y="177" font-weight="600">c  (referred)</text><text x="90" y="199" text-anchor="end">86</text><text x="100" y="199">bronze</text><text x="265" y="199" text-anchor="end" opacity="0.6">NULL</text><text x="275" y="199">r  (referrer)</text><text x="90" y="221" text-anchor="end" font-weight="600">144</text><text x="100" y="221" font-weight="600">bronze</text><text x="265" y="221" text-anchor="end" font-weight="600">86</text><text x="275" y="221" font-weight="600">c  (referred)</text></g>
+<text x="10" y="252" font-size="11" font-weight="600">customers AS c JOIN customers AS r: 4 of the 30 rows</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="90" y="282" width="90" height="22" /><rect x="180" y="282" width="90" height="22" /><rect x="90" y="304" width="90" height="22" /><rect x="180" y="304" width="90" height="22" /><rect x="90" y="326" width="90" height="22" /><rect x="180" y="326" width="90" height="22" /><rect x="90" y="348" width="90" height="22" /><rect x="180" y="348" width="90" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="260" width="80" height="22" /><rect x="90" y="260" width="90" height="22" /><rect x="180" y="260" width="90" height="22" /><rect x="270" y="260" width="80" height="22" /><rect x="10" y="282" width="80" height="22" /><rect x="90" y="282" width="90" height="22" /><rect x="180" y="282" width="90" height="22" /><rect x="270" y="282" width="80" height="22" /><rect x="10" y="304" width="80" height="22" /><rect x="90" y="304" width="90" height="22" /><rect x="180" y="304" width="90" height="22" /><rect x="270" y="304" width="80" height="22" /><rect x="10" y="326" width="80" height="22" /><rect x="90" y="326" width="90" height="22" /><rect x="180" y="326" width="90" height="22" /><rect x="270" y="326" width="80" height="22" /><rect x="10" y="348" width="80" height="22" /><rect x="90" y="348" width="90" height="22" /><rect x="180" y="348" width="90" height="22" /><rect x="270" y="348" width="80" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="85" y="275" text-anchor="end">c.customer_id</text><text x="175" y="275" text-anchor="end">c.referred_by</text><text x="265" y="275" text-anchor="end">r.customer_id</text><text x="275" y="275">r.loyalty_tier</text></g>
+<g><text x="85" y="297" text-anchor="end">6</text><text x="175" y="297" text-anchor="end">3</text><text x="265" y="297" text-anchor="end">3</text><text x="275" y="297">gold</text><text x="85" y="319" text-anchor="end">30</text><text x="175" y="319" text-anchor="end">24</text><text x="265" y="319" text-anchor="end">24</text><text x="275" y="319">bronze</text><text x="85" y="341" text-anchor="end">34</text><text x="175" y="341" text-anchor="end">24</text><text x="265" y="341" text-anchor="end">24</text><text x="275" y="341">bronze</text><text x="85" y="363" text-anchor="end">144</text><text x="175" y="363" text-anchor="end">86</text><text x="265" y="363" text-anchor="end">86</text><text x="275" y="363">bronze</text></g>
+<text x="10" y="394" font-size="11" font-weight="600">The shaded columns match: c.referred_by = r.customer_id.</text>
+<text x="10" y="412" font-size="11" opacity="0.8">Customer 24 referred two customers, 30 and 34.</text>
+</svg>
+</figure>
+
+### 5. Check by hand
+
+Pick one customer whose lines you can add up yourself, and compare. Customer 144 has few orders. Start the chain at
+`customers` this time.
+
+**Try it**: the lines of customer 144.
+
+<RunSQL query={`SELECT o.order_id, p.product_name, oi.quantity,
+       oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id
+INNER JOIN order_items AS oi ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+WHERE c.customer_id = 144
+ORDER BY oi.order_item_id;`} />
+
+Expected: 4 rows, 4 columns. Add the four amounts by hand before you go on. *Why:* the grain is a line again: the first
+join made it one row per order, the second made it one row per line. Now total the same chain in SQL:
+
+<RunSQL query={`SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS spend_usd
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id
+INNER JOIN order_items AS oi ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+WHERE c.customer_id = 144;`} />
+
+Expected: 1 row, 1 column: `17.25`. By hand: 4.50 + 4.25 + 5.00 + 3.50 = 17.25. Two orders, both completed.
+
+The chain returned E7's 112 lines and 706.25, and customer 144's 17.25 matches the hand total. The 30 pairs of unit 3 equal
+the 30 customers who name a referrer, so no pair was lost or doubled.
+
+<details>
+<summary>Explain it in your own words: why does the chain keep all 3,287 lines, while the self-join returns only 30 of 150 customers?</summary>
+
+The 30 comes from `referred_by`: 120 customers hold `NULL` there, and a `NULL` finds no partner, so only the 30 who hold
+an id get a pair. A `LEFT JOIN` (S20) would keep all 150, with `NULL` for the referrer.
+
+</details>
+
+<Aside type="tip" title="Remember">
+
+- Each `JOIN` pairs the rows built so far with the next table. After each, ask: was the key unique, and what is one row now?
+- `WHERE`, `GROUP BY` and the rest run once, on the final wide table.
+- A self-join names the table twice with two aliases, linked foreign key to primary key.
+- Qualify every column with its alias.
+
+**Common trap: "a self-join needs a special join, or a copy of the table."** It is an ordinary join. A copied table is not
+needed: the 30 pairs of unit 3 come from one `customers` table, named twice, with two aliases keeping the roles apart.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-self-and-multi-table-joins-1">
+
+**What were the completed sales of each store?** Expected: 3 rows, 2 columns (the store name
+and its sales), sorted by store name. The three amounts should add up to E21's Sales, 22,749.25.
+
+Done for you: the grain is a line, and the first join is in place. This starter shows the units sold for each store
+number, as a stand-in for the answer:
+
+<RunSQL query={`SELECT o.store_id,
+       SUM(oi.quantity) AS units
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+GROUP BY o.store_id
+ORDER BY o.store_id;`} />
+
+Now finish it: add the joins to `products` and `stores`, keep only the completed orders, and show the store name and the
+sum of the line amounts in place of the store number and the units.
+
+<details>
+<summary>Hint</summary>
+
+The two joins are the ones from unit 1, and the `WHERE` is the status test from unit 2. `GROUP BY` as in *GROUP BY and
+HAVING* (S8).
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+...
+INNER JOIN products AS p ON ... = ...
+INNER JOIN stores AS s ON ... = ...
+WHERE ...
+GROUP BY ...
+ORDER BY s.store_name;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT s.store_name,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN stores AS s ON o.store_id = s.store_id
+WHERE o.status = 'completed'
+GROUP BY s.store_name
+ORDER BY s.store_name;
+```
+
+The result is Campus 8,998.75, Harbor 4,606.25 and Old Town 9,144.25. They add up to **22,749.25**, E21's Sales: the
+completed orders only, with the extra-zero line of order 2075 (an Old Town order) still inside. With the canceled order 1461
+kept, Campus would read 9,003.75.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-self-and-multi-table-joins-2">
+
+**How many referred customers live in the same city as the customer who referred them?**
+
+Before you run anything, write one sentence as a comment in the editor: what one row of the join is, how many rows it has before
+any city condition, and which customers can never be in it. Then write the query.
+
+Expected shape, to check your sentence against: 1 row, 1 column. It counts customers, not dollars, so order 2075 does
+not matter.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Start from the self-join of unit 3. The city condition compares a column of `c` with a column of `r`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One number: how many of the referred customers share their referrer's city."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS same_city
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id
+WHERE c.city = r.city;
+```
+
+The result is `10`: 10 of the 30 pairs. The 120 customers nobody referred can never be in the join, because their
+`referred_by` is empty.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: after joining `order_items` to `orders`, `products` and `stores`, what is one row of the result,
+and how do you write a join of a table to itself?
+
+<details>
+<summary>Answer</summary>
+
+One row is still one line, because each added table has a unique key and so adds no rows. A self-join writes the table
+twice with two aliases, one per role, and links a foreign key of one alias to the primary key of the other.
+
+</details>
+
+<Exercise id="sql-self-and-multi-table-joins-3">
+
+**Spot the flaw.** A colleague wants each referred customer next to the tier of the customer who referred them, and
+runs this:
+
+<RunSQL query={`SELECT c.customer_id AS customer,
+       r.customer_id AS referrer,
+       r.loyalty_tier AS referrer_tier
+FROM customers AS c
+INNER JOIN customers AS r ON c.customer_id = r.referred_by
+ORDER BY c.customer_id;`} />
+
+Expected from that query: 30 rows, 3 columns, as in unit 3. Its row for customer 3 reads `3 | 6 | bronze`. The picture
+showed that customer 6 was referred by customer 3, who is gold. What went wrong, and what is the right query?
+
+<Solution>
+
+`c.customer_id = r.referred_by` says that `r` was referred by `c`, the opposite of the plan. The column called
+`customer` holds the referrer, and `referrer_tier` holds the tier of the referred customer. The row count is 30 either
+way, so the count cannot catch it; a pair you know can. Link the foreign key of `c`, the customer, to the key of `r`:
+
+```sql
+SELECT c.customer_id AS customer,
+       r.customer_id AS referrer,
+       r.loyalty_tier AS referrer_tier
+FROM customers AS c
+INNER JOIN customers AS r ON c.referred_by = r.customer_id
+ORDER BY c.customer_id;
+```
+
+Expected: 30 rows, 3 columns, and the row for customer 6 reads `6 | 3 | gold`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can chain joins across four tables and say what one row is after each, join a table to itself with
+two aliases, and check a total against one customer I can add up by hand.*
+Test: Exercise sql-self-and-multi-table-joins-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **after every join, say what one row is and whether the key was unique; a self-join is the
+same join with two aliases.** The next lesson, *Subqueries and EXISTS* (S23), puts a query inside a query.

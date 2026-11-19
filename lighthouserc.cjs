@@ -12,7 +12,7 @@ module.exports = {
 	ci: {
 		collect: {
 			staticDistDir: process.env.FIXTURE_DIST || './dist',
-			url: ['/index.html', '/start/index.html', '/sql/sql-joins/index.html', '/reference/sql/inner-join/index.html'],
+			url: ['/index.html', '/start/index.html', '/sql/sql-joins/index.html', '/sql/playground/index.html', '/reference/sql/inner-join/index.html'],
 			numberOfRuns: Number(process.env.LHCI_RUNS || 3),
 			...(chromePath ? { chromePath } : {}),
 			settings: { chromeFlags: '--no-sandbox --headless=new' },

@@ -16,7 +16,7 @@ prerequisites:
   - sql-dates-and-time
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-lag-lead-moving-windows.ipynb
+
 reviewed: 2026-11-16
 sources:
   - title: 'DuckDB documentation: Window functions'
@@ -27,29 +27,37 @@ sources:
     url: https://support.microsoft.com/en-us/excel/switch-between-relative-absolute-and-mixed-references
   - title: 'Google Docs Editors Help: AVERAGE'
     url: https://support.google.com/docs/answer/3093615
-  - title: 'DataLemur: 5 SQL interview patterns you need to know'
-    url: https://datalemur.com/blog/sql-interview-patterns
 status: draft
 ---
 
-This lesson runs on **DuckDB**, a free database engine, inside a Google Colab notebook, so there is nothing to
-install. It works on one table, `orders`: first on its monthly counts, then on its daily counts.
+This lesson works on one table, `orders`: first on its monthly counts, then on its daily counts. Each query runs in the
+editor on this page, with the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel to
+Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**, the invented three-cafe chain we use from Excel
-to Python. In the notebook, each query sits between `con.sql("""` and `""").show()`: only the text inside the triple
-quotes is SQL, and `.show()` prints the result as a table. The notebook cells leave out the closing `;` that this
-page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)`
-runs the whole load script, and that `.show()` prints tables as described. Check that a zero denominator gives `inf` there, as in step 3, and that the `RANGE` form in step 5 gives the same averages. Time the lesson against its 30 minutes. When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line. In particular, check that a zero denominator gives `inf` (unit 2) and that the `RANGE` form in unit 3 gives the same averages. Time the lesson against its 30 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Orders went from 218 in February to 258 in March. How much did they grow each month, and is the chain really
+> growing, or is it just the new cafe?
+
+The monthly counts, the table we will compare row with row:
+
+| month | orders |
+|---|---:|
+| 2026-01-01 | 242 |
+| 2026-02-01 | 218 |
+| 2026-03-01 | 258 |
+| 2026-04-01 | 349 |
+| 2026-05-01 | 380 |
+| 2026-06-01 | 353 |
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. Write a query that counts the orders of each month (*Working with dates and time*, S11, and *GROUP BY and HAVING*,
    S8). Expected: 6 rows, 2 columns.
@@ -78,28 +86,139 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-## The question
+## The big idea
 
-The owner of the cafes asks:
+Some window functions look at the neighbors of each row: the row above, the row below, or a stretch of rows that slides
+along the series.
 
-> Orders went from 218 in February to 258 in March. How much did they grow each month, and is the chain really
-> growing, or is it just the new cafe?
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="sw-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="sw" id="sw-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="sw" id="sw-r1" aria-label="Step 1 of 4: The frame is this row and the 2 before" />
+<input class="sa-r r2 o4" type="radio" name="sw" id="sw-r2" aria-label="Step 2 of 4: The frame slides down, row by row" />
+<input class="sa-r r3 o5" type="radio" name="sw" id="sw-r3" aria-label="Step 3 of 4: Every row has its average" />
+<input class="sa-r r4 o8" type="radio" name="sw" id="sw-r4" aria-label="Step 4 of 4: LAG shows the row above" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 224" width="360" role="img" aria-labelledby="sw-t sw-d">
+<title id="sw-t">A frame slides down the rows; LAG looks one row up</title>
+<desc id="sw-d">Four ordered rows x1 to x4. A frame covering the current row and the two rows before it starts on row 1, where the two seats above are empty. It slides down one row at a time, and each stop gives that row the average of the rows inside the frame: x1, then x1 to x2, then x1 to x3, then x2 to x4. A second column, LAG, shows for each row the value of the row above it: none, x1, x2, x3.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · The frame is this row and the 2 before</text>
+<text class="f10 b w3 d2 tmp" x="10" y="29">2 · The frame slides down, row by row</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">3 · Every row has its average</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · LAG shows the row above</text>
+<text class="f11 b" x="10" y="14">A frame slides down the rows</text>
+<text class="f10 b mo m w3 d6" x="132" y="52">LAG</text>
+<text class="f10 b mo m" x="270" y="52">AVG of frame</text>
+<rect class="bx dsh" x="10" y="40" width="56" height="24" />
+<rect class="bx dsh" x="10" y="70" width="56" height="24" />
+<g><rect class="f-src k2" x="10" y="100" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="116">x1</text></g>
+<g><rect class="f-win k3" x="230" y="100" width="80" height="24" rx="6" /><text class="f11 m" x="270" y="116">x1</text></g>
+<g class="w3 d6"><rect class="f-win k1" x="104" y="100" width="56" height="24" rx="6" /><text class="f11 m" x="132" y="116">none</text></g>
+<g><rect class="f-src k2" x="10" y="130" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="146">x2</text></g>
+<g class="w6 d3"><rect class="f-win k3" x="230" y="130" width="80" height="24" rx="6" /><text class="f11 m" x="270" y="146">x1..x2</text></g>
+<g class="w3 d6"><rect class="f-win k2" x="104" y="130" width="56" height="24" rx="6" /><text class="f11 m" x="132" y="146">x1</text></g>
+<path class="s-win dr p3 d6" pathLength="1" d="M68 112L102 142M99.29 135.55L102 142L95.26 140.11" />
+<g><rect class="f-src k2" x="10" y="160" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="176">x3</text></g>
+<g class="w5 d4"><rect class="f-win k3" x="230" y="160" width="80" height="24" rx="6" /><text class="f11 m" x="270" y="176">x1..x3</text></g>
+<g class="w2 d7"><rect class="f-win k2" x="104" y="160" width="56" height="24" rx="6" /><text class="f11 m" x="132" y="176">x2</text></g>
+<path class="s-win dr p2 d7" pathLength="1" d="M68 142L102 172M99.29 165.55L102 172L95.26 170.11" />
+<g><rect class="f-src k2" x="10" y="190" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="206">x4</text></g>
+<g class="w4 d5"><rect class="f-win k3" x="230" y="190" width="80" height="24" rx="6" /><text class="f11 m" x="270" y="206">x2..x4</text></g>
+<g class="w1 d8"><rect class="f-win k2" x="104" y="190" width="56" height="24" rx="6" /><text class="f11 m" x="132" y="206">x3</text></g>
+<path class="s-win dr p1 d8" pathLength="1" d="M68 172L102 202M99.29 195.55L102 202L95.26 200.11" />
+<g class="w8"><g class="mv m2 x0 y3"><g class="w8"><g class="mv m3 x0 y3"><g class="w8"><g class="mv m4 x0 y3"><rect class="s-win" x="4" y="37" width="68" height="90" rx="8" /></g></g></g></g></g></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="sw-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="sw-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="sw-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="sw-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="sw-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="sw-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="sw-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="sw-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="sw-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="sw-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="sw-r1">1</label><label class="sa-sb sb2" for="sw-r2">2</label><label class="sa-sb sb3" for="sw-r3">3</label><label class="sa-sb sb4" for="sw-r4">4</label></span>
+</div>
+<p class="ca-cap">A window frame is the current row plus the rows around it. The frame slides down and each row gets its own result. LAG reads a value from the row above.</p>
+<ol class="sa-steps">
+<li>The frame is this row and the 2 before</li>
+<li>The frame slides down, row by row</li>
+<li>Every row has its average</li>
+<li>LAG shows the row above</li>
+</ol>
+</figure>
 
-The monthly counts, the table we will compare row with row:
+## Learn by doing
 
-| month | orders |
-|---|---:|
-| 2026-01-01 | 242 |
-| 2026-02-01 | 218 |
-| 2026-03-01 | 258 |
-| 2026-04-01 | 349 |
-| 2026-05-01 | 380 |
-| 2026-06-01 | 353 |
+Five small steps. Each gives you one idea, then you try it in the editor.
 
-By the end you will have each month's change from the month before, the same comparison for each cafe, a smoothed
-daily series, and a warning about one function that surprises everybody once.
+### 1. The row above, the row below
 
-## The picture
+Window functions need a clean series first: one row per period, here one per month, from `GROUP BY`. `LAG(x)` then writes
+beside each row the value of `x` from the row above, and `LEAD(x)` the value from the row below. "Above" and "below"
+follow the `ORDER BY` inside `OVER`.
+
+`LAG(x, n, default)` reaches `n` rows back, and `LEAD` reaches `n` rows forward; `n` is 1 if you leave it out. With no row
+that far away you get `NULL`, unless the third argument supplies a `default`.
+
+**Try it:** the monthly series. Every monthly query below starts with this `monthly` stage.
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY month
+)
+SELECT month, orders
+FROM monthly
+ORDER BY month;`} />
+
+Expected: 6 rows, 2 columns, the table from the question. *Excel:* a PivotTable of orders by month.
+
+**Try it:** beside each month, the orders of the month before and the month after.
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY month
+)
+SELECT month, orders,
+       LAG(orders)  OVER (ORDER BY month) AS prev_orders,
+       LEAD(orders) OVER (ORDER BY month) AS next_orders
+FROM monthly
+ORDER BY month;`} />
+
+Expected: 6 rows, 4 columns; January has `NULL` in `prev_orders` and June has `NULL` in `next_orders`. *Excel:* a
+reference to the cell above, such as `=B2` in row 3, copied down, moves down with the row (E3, *Relative and absolute
+references*); `LEAD` is the cell below.
+
+### 2. Change and percent change
+
+The change is a row's value minus the one above it. The percent change divides by the previous month, so always say
+"compared with the month before". In DuckDB 2.0.0 a division by zero returns `inf`, which is no percentage, so
+`NULLIF(prev_orders, 0)` turns a zero denominator into `NULL`.
+
+**Try it:**
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY month
+),
+with_prev AS (
+  SELECT month, orders, LAG(orders) OVER (ORDER BY month) AS prev_orders
+  FROM monthly
+)
+SELECT month, orders, prev_orders,
+       orders - prev_orders AS change,
+       ROUND((orders - prev_orders) * 100.0 / NULLIF(prev_orders, 0), 1) AS pct_change
+FROM with_prev
+ORDER BY month;`} />
+
+Expected: 6 rows, 5 columns. The change from February to March is 40 orders, or 18.3 percent of February's 218. *Excel:*
+`=B3-B2` and `=(B3-B2)/B2`. *Why:* the `with_prev` stage lets two columns share the `LAG`. The picture shows the same table.
 
 <figure>
 <svg viewBox="0 0 360 230" width="360" role="img" aria-labelledby="months-title months-desc" font-family="inherit" font-size="12" fill="currentColor">
@@ -133,269 +252,164 @@ daily series, and a warning about one function that surprises everybody once.
 <text x="350" y="190" font-size="11" text-anchor="end">-7.1%</text>
 <text x="10" y="214" font-size="11">January has no row above it: NULL.</text>
 </svg>
-<svg viewBox="0 0 360 215" width="360" role="img" aria-labelledby="days-title days-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="days-title">Daily orders and their 7-day moving average</title>
-<desc id="days-desc">Daily orders from March 25 to April 12 as bars, with the 7-day moving average as a line. The average on April 4 is 10.29: it covers the seven days March 29 to April 4, with 72 orders in total. April 4 itself had 18 orders, so the line rises slowly where the bars jump.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">A 7-day window slides one day at a time</text>
-<rect x="92" y="30" width="114" height="120" fill="currentColor" fill-opacity="0.12" />
-<g stroke="currentColor" stroke-opacity="0.45"><line x1="26" y1="150" x2="334" y2="150" /></g>
-<rect x="30" y="100" width="12" height="50" fill="currentColor" fill-opacity="0.35" />
-<rect x="46" y="100" width="12" height="50" fill="currentColor" fill-opacity="0.35" />
-<rect x="62" y="106" width="12" height="44" fill="currentColor" fill-opacity="0.35" />
-<rect x="78" y="95" width="12" height="55" fill="currentColor" fill-opacity="0.35" />
-<rect x="94" y="100" width="12" height="50" fill="currentColor" fill-opacity="0.35" />
-<rect x="110" y="112" width="12" height="38" fill="currentColor" fill-opacity="0.35" />
-<rect x="126" y="106" width="12" height="44" fill="currentColor" fill-opacity="0.35" />
-<rect x="142" y="95" width="12" height="55" fill="currentColor" fill-opacity="0.35" />
-<rect x="158" y="90" width="12" height="60" fill="currentColor" fill-opacity="0.35" />
-<rect x="174" y="100" width="12" height="50" fill="currentColor" fill-opacity="0.35" />
-<rect x="190" y="51" width="12" height="99" fill="currentColor" fill-opacity="0.35" />
-<rect x="206" y="68" width="12" height="82" fill="currentColor" fill-opacity="0.35" />
-<rect x="222" y="84" width="12" height="66" fill="currentColor" fill-opacity="0.35" />
-<rect x="238" y="100" width="12" height="50" fill="currentColor" fill-opacity="0.35" />
-<rect x="254" y="95" width="12" height="55" fill="currentColor" fill-opacity="0.35" />
-<rect x="270" y="78" width="12" height="72" fill="currentColor" fill-opacity="0.35" />
-<rect x="286" y="95" width="12" height="55" fill="currentColor" fill-opacity="0.35" />
-<rect x="302" y="68" width="12" height="82" fill="currentColor" fill-opacity="0.35" />
-<rect x="318" y="68" width="12" height="82" fill="currentColor" fill-opacity="0.35" />
-<polyline points="36,106.8 52,103.6 68,102.9 84,102.9 100,102.1 116,102.9 132,102.9 148,102.1 164,100.5 180,99.7 196,93.4 212,88.7 228,84.8 244,84.0 260,84.0 276,82.4 292,81.6 308,84.0 324,84.0" fill="none" stroke="currentColor" stroke-width="2" />
-<text x="196" y="46" text-anchor="middle" font-size="11" font-weight="600">18</text>
-<text x="36" y="164" text-anchor="middle" font-size="10">Mar 25</text>
-<text x="148" y="164" text-anchor="middle" font-size="10">Apr 1</text>
-<text x="196" y="164" text-anchor="middle" font-size="10">Apr 4</text>
-<text x="324" y="164" text-anchor="middle" font-size="10">Apr 12</text>
-<text x="10" y="186" font-size="11">Shaded: the window of April 4, March 29 to April 4.</text>
-<text x="10" y="202" font-size="11">72 orders / 7 days = 10.29 a day. Line: the 7-day average.</text>
-</svg>
 </figure>
 
-In S14 a window function worked on a group of rows. Two kinds of window function work on **neighbors** instead:
+`LAG` and `LEAD` never reach into another group. So `PARTITION BY store_id` gives each cafe its own series.
 
-- `LAG(x)` returns `x` from the row above in the window's order; `LEAD(x)` returns it from the row below. If there
-  is no such row, they return `NULL`. `LAG(x, 7)` looks seven rows up, and a third argument sets a default instead
-  of `NULL`: `LAG(x, 1, 0)`.
-- A **frame** with `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` gives an aggregate the current row and the six rows
-  before it. `AVG` over that frame is a **moving average**: it smooths day-to-day noise. At the start of a series
-  the frame is cropped to the rows that exist.
+**Try it:**
 
-**Excel and Google Sheets.** A spreadsheet compares to the row above with a plain reference, and a moving average is
-`AVERAGE` over a range that moves as you copy the formula down. With months in A2 to A7 and orders in B2 to B7:
+<RunSQL query={`WITH monthly AS (
+  SELECT store_id, CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY store_id, month
+),
+with_prev AS (
+  SELECT store_id, month, orders,
+         LAG(orders) OVER (PARTITION BY store_id ORDER BY month) AS prev_orders
+  FROM monthly
+)
+SELECT store_id, month, orders, prev_orders,
+       ROUND((orders - prev_orders) * 100.0 / NULLIF(prev_orders, 0), 1) AS pct_change
+FROM with_prev
+ORDER BY store_id, month;`} />
 
-| SQL | Reads as | In Excel or Google Sheets |
-|---|---|---|
-| `LAG(orders) OVER (ORDER BY month)` | the value one row up | a reference to the cell above, such as `=B2` in row 3 |
-| `orders - LAG(orders) OVER (...)` | the change from the row above | `=B3-B2` |
-| `(orders - prev_orders) * 100.0 / prev_orders` | the percent change | `=(B3-B2)/B2` |
-| `AVG(orders) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)` | a 7-row moving average | `=AVERAGE(B2:B8)`, copied down |
-
-In the sheet, the first data row has no row above, so you start the formula one row lower; SQL gives that row a
-`NULL`. Rolling averages are a common interview question.
-
-## Worked example
-
-Question: **how much did orders change from month to month, for the chain and for each cafe, and is the daily trend
-smooth?** Run the setup cell, then one cell per step.
-
-1. **Build the monthly table.**
-
-   ```sql
-   WITH monthly AS (
-     SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY month
-   )
-   SELECT month, orders
-   FROM monthly
-   ORDER BY month;
-   ```
-
-   Expected: 6 rows, 2 columns, the table from the question. *Excel:* a PivotTable of orders by month. *Why:* a window
-   function needs a clean series first: one row per month, in an order you can name. The `monthly` stage starts each
-   monthly query.
-
-2. **Look at the row above and the row below.**
-
-   ```sql
-   WITH monthly AS (
-     SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY month
-   )
-   SELECT month, orders,
-          LAG(orders)  OVER (ORDER BY month) AS prev_orders,
-          LEAD(orders) OVER (ORDER BY month) AS next_orders
-   FROM monthly
-   ORDER BY month;
-   ```
-
-   Read it: *beside each month, put the orders of the month before and the month after*. Expected: 6 rows, 4 columns;
-   January has `NULL` in `prev_orders` and June has `NULL` in `next_orders`. *Excel:* the cell above and the cell
-   below. *Why:* `ORDER BY month` inside `OVER` defines "before" and "after".
-
-3. **Compute the change and the percent change.**
-
-   ```sql
-   WITH monthly AS (
-     SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY month
-   ),
-   with_prev AS (
-     SELECT month, orders, LAG(orders) OVER (ORDER BY month) AS prev_orders
-     FROM monthly
-   )
-   SELECT month, orders, prev_orders,
-          orders - prev_orders AS change,
-          ROUND((orders - prev_orders) * 100.0 / NULLIF(prev_orders, 0), 1) AS pct_change
-   FROM with_prev
-   ORDER BY month;
-   ```
-
-   Expected: 6 rows, 5 columns. The change from February to March is 40 orders, or 18.3 percent of February's 218. *Excel:*
-   `=B3-B2` and `=(B3-B2)/B2`. *Why:* the percent change uses the previous month as the denominator, so always say
-   "compared with the month before". The first row stays `NULL`, because arithmetic with `NULL` gives `NULL`.
-   `NULLIF(prev_orders, 0)` turns a zero denominator into `NULL`: in DuckDB 2.0.0 a division by zero returns
-   `inf`, which is no percentage. The `with_prev` stage lets two columns share the `LAG`.
-
-4. **Compare inside each cafe.**
-
-   ```sql
-   WITH monthly AS (
-     SELECT store_id, CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY store_id, month
-   ),
-   with_prev AS (
-     SELECT store_id, month, orders,
-            LAG(orders) OVER (PARTITION BY store_id ORDER BY month) AS prev_orders
-     FROM monthly
-   )
-   SELECT store_id, month, orders, prev_orders,
-          ROUND((orders - prev_orders) * 100.0 / NULLIF(prev_orders, 0), 1) AS pct_change
-   FROM with_prev
-   ORDER BY store_id, month;
-   ```
-
-   Expected: 15 rows, 5 columns. Harbor's April has `NULL`: it has no row for March, since it opened on April 1. *Excel:* the
-   same formulas, restarted for each cafe. *Why:* `PARTITION BY store_id` makes each cafe its own series. The answer to the owner: the chain grew 35.3 percent
-   in April, but that is Harbor's 123 first orders; Old Town fell 7.5 percent and Campus 17.6 percent.
-
-5. **Smooth the daily series.** Predict first: what will the 7-day average show on January 1, the first day of the
-   data?
-
-   <details>
-   <summary>Prediction</summary>
-
-   4.0, just that day's orders. The frame is cropped to the rows that exist, so on January 1 the average has one value,
-   and on January 7 it has seven.
-
-   </details>
-
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS day, COUNT(*) AS orders
-     FROM orders
-     GROUP BY day
-   ),
-   smoothed AS (
-     SELECT day, orders,
-            ROUND(AVG(orders) OVER (ORDER BY day
-                                    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS avg_7_days
-     FROM daily
-   )
-   SELECT day, orders, avg_7_days
-   FROM smoothed
-   WHERE day BETWEEN '2026-03-30' AND '2026-04-07'
-   ORDER BY day;
-   ```
-
-   Expected: 9 rows, 3 columns, the days around the jump in early April (second picture). *Excel:* `=AVERAGE(B2:B8)` copied
-   down. *Why:* the frame is the current day and the six rows before it. The date filter comes after the `smoothed`
-   stage: a `WHERE` in the same query would remove the earlier days before the average could see them. Rows are days
-   here because all 181 days from January 1 to June 30 have orders; with a missing day a row-based window would reach
-   back further than 7 days. The DuckDB documentation uses `RANGE` with an `INTERVAL` of days "to handle any missing
-   days", such as `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`; *Complete time series and recursive
-   CTEs* (S27) fills the gaps instead. The first seven rows, to check the cropped start:
-
-   ```sql
-   WITH daily AS (
-     SELECT CAST(ordered_at AS DATE) AS day, COUNT(*) AS orders
-     FROM orders
-     GROUP BY day
-   )
-   SELECT day, orders,
-          ROUND(AVG(orders) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS avg_7_days
-   FROM daily
-   ORDER BY day
-   LIMIT 7;
-   ```
-
-   Expected: 7 rows, 3 columns. The first six averages use fewer than seven days; the window is full from the
-   seventh row.
-
-6. **Meet the `LAST_VALUE` trap.** Predict first: what will `last_default` show on the March row?
-
-   <details>
-   <summary>Prediction</summary>
-
-   258, March's own orders. With an `ORDER BY` and no frame, the frame ends at the current row (and its peers), so the
-   last value of the frame is the current row.
-
-   </details>
-
-   ```sql
-   WITH monthly AS (
-     SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY month
-   )
-   SELECT month, orders,
-          LAST_VALUE(orders) OVER (ORDER BY month) AS last_default,
-          LAST_VALUE(orders) OVER (ORDER BY month
-                                   ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_whole
-   FROM monthly
-   ORDER BY month;
-   ```
-
-   Expected: 6 rows, 4 columns. *Why:* the default frame stops at the current row, so the last row of the frame is the row
-   itself. Widening the frame to `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` reaches the end of the
-   series. `FIRST_VALUE` shows no trap, because the frame always starts at the first row.
-
-7. **Verify.**
-
-   ```sql
-   WITH monthly AS (
-     SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
-     FROM orders
-     GROUP BY month
-   )
-   SELECT SUM(orders) AS total_orders
-   FROM monthly;
-   ```
-
-   Expected: 1 row, 1 column: `1800`. The monthly counts add up to every order in the dataset, so no row was lost on the
-   way. The changes of step 3 reconcile too: -24 + 40 + 91 + 31 - 27 = 111, which is June's 353 minus January's 242.
-   And the percent change of March by hand, 40 / 218, is 18.3 percent, the same as the query.
+Expected: 15 rows, 5 columns. Harbor's April has `NULL`: it has no row for March, since it opened on April 1. *Excel:* the
+same formulas, restarted for each cafe. The answer to the owner: the chain grew 35.3 percent in April, but that is
+Harbor's 123 first orders; Old Town fell 7.5 percent and Campus 17.6 percent.
 
 <details>
 <summary>Explain it in your own words: why is January's change NULL, and why is that better than 0?</summary>
 
-January has no month before it. `NULL` says "no value"; a `0` would claim that orders did not change.
+A `0` would say that the month before had zero orders, and January would then show a jump of 242. `NULL` says "no
+value", and the arithmetic stays `NULL`.
 
 </details>
+
+### 3. A moving average
+
+A frame function averages the current row and the rows around it, as many as `ROWS BETWEEN` says, writes the answer
+beside the current row, and then the window moves down one row. `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` counts rows:
+the current one and the six before it. Like `LAG`, it counts rows, not calendar time.
+
+**Try it:** the days around the jump in early April.
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, COUNT(*) AS orders
+  FROM orders
+  GROUP BY day
+),
+smoothed AS (
+  SELECT day, orders,
+         ROUND(AVG(orders) OVER (ORDER BY day
+                                 ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS avg_7_days
+  FROM daily
+)
+SELECT day, orders, avg_7_days
+FROM smoothed
+WHERE day BETWEEN '2026-03-30' AND '2026-04-07'
+ORDER BY day;`} />
+
+Expected: 9 rows, 3 columns. *Excel:* `=AVERAGE(B2:B8)` copied down. *Why:* rows are days here because all 181 days from
+January 1 to June 30 have orders. On April 4, the day of the jump, 18 orders average out to 10.29: the frame holds March 29
+to April 4, 72 orders in all.
+
+`RANGE` measures distance in values instead of counting rows. DuckDB's documentation uses `RANGE` with an `INTERVAL` of
+days "to handle any missing days"; ours is `RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`. *Complete time
+series and recursive CTEs* (S27) fills the gaps instead.
+
+**Try it.** Predict first: what will the 7-day average show on January 1, the first day
+of the data?
+
+<details>
+<summary>Prediction</summary>
+
+4.0, just that day's orders. The frame is cropped to the rows that exist, so on January 1 the average has one value,
+and on January 7 it has seven.
+
+</details>
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, COUNT(*) AS orders
+  FROM orders
+  GROUP BY day
+)
+SELECT day, orders,
+       ROUND(AVG(orders) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS avg_7_days
+FROM daily
+ORDER BY day
+LIMIT 7;`} />
+
+Expected: 7 rows, 3 columns. The first six averages use fewer than seven days; the window is full from the seventh row.
+
+### 4. The `LAST_VALUE` trap
+
+`LAST_VALUE` returns the last value of the frame. If you write no frame, the default frame of S14 applies.
+
+**Try it.** Predict first: what will `last_default` show on the March row?
+
+<details>
+<summary>Prediction</summary>
+
+258, March's own orders. With an `ORDER BY` and no frame, the frame ends at the current row (and its peers), so the
+last value of the frame is the current row.
+
+</details>
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY month
+)
+SELECT month, orders,
+       LAST_VALUE(orders) OVER (ORDER BY month) AS last_default,
+       LAST_VALUE(orders) OVER (ORDER BY month
+                                ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_whole
+FROM monthly
+ORDER BY month;`} />
+
+Expected: 6 rows, 4 columns. *Why:* widening the frame to `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`
+reaches the end of the series. `FIRST_VALUE` shows no trap, because the frame always starts at the first row.
+
+### 5. Check the numbers
+
+**Try it:**
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
+  FROM orders
+  GROUP BY month
+)
+SELECT SUM(orders) AS total_orders
+FROM monthly;`} />
+
+Expected: 1 row, 1 column: `1800`. The monthly counts add up to every order in the dataset, so no row was lost on the
+way. The changes of unit 2 reconcile too: -24 + 40 + 91 + 31 - 27 = 111, which is June's 353 minus January's 242. And the
+percent change of March by hand, 40 / 218, is 18.3 percent, the same as the query.
+
+<Aside type="tip" title="Remember">
+
+- Build the series first. `LAG` and `LEAD` read the row above and below, in the order of the `ORDER BY` inside `OVER`.
+- With no row that far away you get `NULL`, or the default you pass; `NULLIF` guards a division.
+- `ROWS BETWEEN` counts rows; `RANGE` measures distance in values.
+- `LAST_VALUE` needs a wider frame than the default to see the end of the series.
+
+**Common trap: "a 7-row frame is a 7-day average."** The two agree only while every day has a row. Suppose April 2 had no
+orders and so no row: the frame of April 4 would still hold seven rows, and it would reach back to March 28, eight
+calendar days. The `RANGE` form above would hold six rows, March 29 to April 4.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-lag-lead-moving-windows-1">
 
-**Compared with the same weekday last week.** Use the Exercise 1 cell. Expected: 7 rows, 4 columns: the day, its orders,
-the orders of the same weekday a week earlier, and the change.
+**Compared with the same weekday last week.** Expected: 7 rows, 4 columns: the day, its orders, the orders of the same
+weekday a week earlier, and the change.
 
 The first steps are done for you: the `daily` stage, and a `compared` stage that does not compare anything yet. The
-query lists the week of April 4 to 10:
+query lists the week of April 4 to 10.
 
-```sql
-WITH daily AS (
+<RunSQL query={`WITH daily AS (
   SELECT CAST(ordered_at AS DATE) AS day, COUNT(*) AS orders
   FROM orders
   GROUP BY day
@@ -407,8 +421,7 @@ compared AS (
 SELECT day, orders
 FROM compared
 WHERE day BETWEEN '2026-04-04' AND '2026-04-10'
-ORDER BY day;
-```
+ORDER BY day;`} />
 
 Now finish it: in `compared`, add a column `same_day_last_week` with the orders seven rows earlier, and in the last
 `SELECT`, add the change from that value.
@@ -459,8 +472,7 @@ ORDER BY day;
 | 2026-04-09 | 13 | 11 | 2 |
 | 2026-04-10 | 10 | 9 | 1 |
 
-April 4, a Saturday, had 18 orders against 10 the Saturday before (+8). `LAG` can reach March 28 because the date
-filter comes in the last `SELECT`, after `LAG` has run.
+April 4, a Saturday, had 18 orders against 10 the Saturday before (+8).
 
 </Solution>
 
@@ -470,18 +482,20 @@ filter comes in the last `SELECT`, after `LAG` has run.
 
 <Exercise id="sql-lag-lead-moving-windows-2">
 
-**A three-month average.** Work in the Exercise 2 cells. Smooth the monthly orders with the average of each month, the
-month before and the month after.
+**A three-month average.** Smooth the monthly orders with the average of each month, the month before and the month
+after.
 
-Before you run anything, write one sentence in the first cell: which months will be averaged for January, and which
-for June? Then write the query.
+Before you run anything, write one sentence as a comment in the editor: which months will be averaged for January, and
+which for June? Then write the query.
 
 Expected shape, to check your sentence against: 6 rows, 3 columns.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
 
-Use `AVG` over a frame of one row before and one row after the current row, as in step 5 but centered.
+Use `AVG` over a frame of one row before and one row after the current row, as in unit 3 but centered.
 
 </details>
 
@@ -550,8 +564,7 @@ January is the average of January and February (242 and 218, so 230.0), and June
 
 **Spot the flaw.** A colleague wants the change from February to March, and the months after it. The query runs:
 
-```sql
-WITH monthly AS (
+<RunSQL query={`WITH monthly AS (
   SELECT CAST(DATE_TRUNC('month', ordered_at) AS DATE) AS month, COUNT(*) AS orders
   FROM orders
   GROUP BY month
@@ -560,8 +573,7 @@ SELECT month, orders,
        orders - LAG(orders) OVER (ORDER BY month) AS change
 FROM monthly
 WHERE month >= '2026-03-01'
-ORDER BY month;
-```
+ORDER BY month;`} />
 
 Expected: 4 rows, 3 columns. Look at the first row, find the flaw and fix it.
 
@@ -569,7 +581,7 @@ Expected: 4 rows, 3 columns. Look at the first row, find the flaw and fix it.
 
 March's `change` is `NULL`, not 40. `WHERE` runs before the window function, so February is already gone when `LAG`
 looks for the row above, and March becomes the first row of the series. Compute `LAG` in a stage and filter in the
-next one, as in step 3:
+next one, as in unit 2:
 
 ```sql
 WITH monthly AS (
@@ -602,7 +614,7 @@ Expected after the fix: 4 rows, 3 columns, and March shows +40.
 
 **Can you do it?** *I can compare each row with the row before it, write a percent change that does not break on the
 first row, and choose the frame of a moving average.*
-Test: Exercise sql-lag-lead-moving-windows-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-lag-lead-moving-windows-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **put the series in order with `ORDER BY` inside `OVER`, look at a neighbor with `LAG` and
 `LEAD`, or at a window of rows with `ROWS BETWEEN`, and filter only after the window is computed.** The next lesson,

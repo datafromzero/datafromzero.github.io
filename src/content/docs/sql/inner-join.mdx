@@ -1,0 +1,598 @@
+---
+id: sql-inner-join
+title: 'INNER JOIN: pairing rows on a key'
+description: Combine two tables on a key with INNER JOIN, predict the row count first and check it afterwards.
+stage: sql
+order: 190
+level: beginner
+duration: 30
+objectives:
+  - Explain a join as pairing rows that share a key
+  - Write an INNER JOIN with table aliases
+  - Predict the output row count before running
+  - Detect and explain a row count that grew after a join
+prerequisites:
+  - sql-relational-model
+  - sql-group-by-having
+  - sql-expressions-and-types
+  - sql-null-handling
+  - excel-xlookup
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+  - title: 'DuckDB documentation: NULL values'
+    url: https://duckdb.org/docs/stable/sql/data_types/nulls
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+status: draft
+---
+
+This lesson uses the same tables as *From a spreadsheet to SQL* (S1): the five tables of **cafe-sales**, the invented
+three-cafe chain we use from Excel to Python. Each query runs in the editor on this page.
+
+TODO(owner): run every block on this page, in order, and check each result against its Expected line, including the error of exercise 3. Time the lesson against its 30 minutes. The *a* × *b* rule in unit 4 is derived from the DuckDB FROM page's statement that a join matches pairs of rows; the page does not state it, and the 9-row result of `order_items` joined to a copy of itself on `order_id` for order 1001 checks it. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> What have we sold in dollars, and which products earn the most? In Excel the total came to 22,754.25. Does the
+> database agree?
+
+Until now every query read one table. The money lives in two. Three lines of order 1001 in `order_items`, and the three
+products they point at in `products`:
+
+| order_item_id | order_id | product_id | quantity | discount_usd |
+|---:|---:|---:|---:|---:|
+| 5001 | 1001 | 10 | 1 | 0.00 |
+| 5002 | 1001 | 6 | 1 | 0.00 |
+| 5003 | 1001 | 1 | 2 | 0.00 |
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 6 | Cold Brew | coffee | 4.75 |
+| 10 | Croissant | bakery | 3.25 |
+
+A line is worth `quantity × unit_price_usd − discount_usd`. The quantity and the discount sit on the line; the price
+sits in `products`. The dollars need both tables.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Tables, keys and grain* (S18), which column of `order_items` links it to `products`, and what is one row of
+   `order_items`?
+
+   <details>
+   <summary>Answer</summary>
+
+   `product_id`, a foreign key that holds values of `products.product_id`, the primary key. One row of `order_items`
+   is one product line inside one order.
+
+   </details>
+
+2. In *Counting and summing: aggregate functions* (S7), write one query for the number of lines and the units sold.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS lines, SUM(quantity) AS units FROM order_items;
+   ```
+
+   One row, two columns: 3287 lines and 5162 units.
+
+   </details>
+
+## The big idea
+
+A **join** pairs up the rows of two tables that share a value, such as a product id, and gives you one wider row for
+each pair.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-inner-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="jn-inner" id="jn-inner-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="jn-inner" id="jn-inner-r1" aria-label="Step 1 of 5: Two tables, each with keys" />
+<input class="sa-r r2 o2" type="radio" name="jn-inner" id="jn-inner-r2" aria-label="Step 2 of 5: Matching keys shake hands" />
+<input class="sa-r r3 o3" type="radio" name="jn-inner" id="jn-inner-r3" aria-label="Step 3 of 5: The pairs move into the result" />
+<input class="sa-r r4 o4" type="radio" name="jn-inner" id="jn-inner-r4" aria-label="Step 4 of 5: Rows with no partner are not kept" />
+<input class="sa-r r5 o8" type="radio" name="jn-inner" id="jn-inner-r5" aria-label="Step 5 of 5: The result has 2 rows" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 226" width="360" role="img" aria-labelledby="jn-inner-t jn-inner-d">
+<title id="jn-inner-t">INNER JOIN · only handshakes get through</title>
+<desc id="jn-inner-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Keys B and C match: they slide together, shake hands and move into the result as pairs. INNER JOIN keeps only those 2 pairs; the rows with keys A and D have no partner, are marked red and stay behind: 2 rows. Two circles in the corner show which keys are kept.</desc>
+<text class="f10 b w1 tmp" x="10" y="27">1 · Two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · Matching keys shake hands</text>
+<text class="f10 b w1 d3 tmp" x="10" y="27">3 · The pairs move into the result</text>
+<text class="f10 b w1 d4 tmp" x="10" y="27">4 · Rows with no partner are not kept</text>
+<text class="f10 b w4 d5" x="10" y="27">5 · The result has 2 rows</text>
+<text class="f11 b" x="10" y="14">INNER JOIN · only handshakes get through</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="150" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="f-mat k3 w6 d3" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<g><circle class="ln" cx="44" cy="190" r="26" /><circle class="ln" cx="78" cy="190" r="26" /></g>
+<text class="f10 b m" x="35" y="194">t1</text>
+<text class="f10 b m" x="87" y="194">t2</text>
+<rect class="bx dsh" x="10" y="44" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="134" width="52" height="24" rx="6" />
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g><rect class="f-mat k3 w6 d3" x="62" y="82" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="90">B r1</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="70" width="120" height="32" rx="10" /></g></g>
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g><rect class="f-mat k3 w6 d3" x="62" y="112" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="120">C r2</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="100" width="120" height="32" rx="10" /></g></g>
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g><rect class="f-src k2" x="150" y="134" width="52" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="150" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="150">D r3</text></g>
+<text class="f11 b w4 d5" x="220" y="114">2 rows</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="jn-inner-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="jn-inner-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="jn-inner-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="jn-inner-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="jn-inner-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="jn-inner-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="jn-inner-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="jn-inner-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="jn-inner-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="jn-inner-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="jn-inner-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="jn-inner-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="jn-inner-r1">1</label><label class="sa-sb sb2" for="jn-inner-r2">2</label><label class="sa-sb sb3" for="jn-inner-r3">3</label><label class="sa-sb sb4" for="jn-inner-r4">4</label><label class="sa-sb sb5" for="jn-inner-r5">5</label></span>
+</div>
+<p class="ca-cap">INNER JOIN keeps only the pairs whose keys match. A row with no partner is not kept.</p>
+<ol class="sa-steps">
+<li>Two tables, each with keys</li>
+<li>Matching keys shake hands</li>
+<li>The pairs move into the result</li>
+<li>Rows with no partner are not kept</li>
+<li>The result has 2 rows</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Each gives you one idea, then you try it in the editor.
+
+### 1. Pair the rows on a key
+
+`INNER JOIN` lays out every possible pair, one line and one product, then keeps the pairs where the `ON` condition is
+true. Every possible pair is what a `CROSS JOIN` returns (every row with every row, no `ON`): 16 products and 3,287
+lines make 52,592 pairs. Each kept pair becomes one wider row, with the columns of both tables. If the key is unique in
+the table you join to, each row has at most one partner, so the count cannot grow.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-cross-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="jn-cross" id="jn-cross-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="jn-cross" id="jn-cross-r1" aria-label="Step 1 of 4: Two tables, each with keys" />
+<input class="sa-r r2 o2" type="radio" name="jn-cross" id="jn-cross-r2" aria-label="Step 2 of 4: Every row meets every row" />
+<input class="sa-r r3 o5" type="radio" name="jn-cross" id="jn-cross-r3" aria-label="Step 3 of 4: Every pairing becomes a result row" />
+<input class="sa-r r4 o8" type="radio" name="jn-cross" id="jn-cross-r4" aria-label="Step 4 of 4: The result has 9 rows" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 250" width="360" role="img" aria-labelledby="jn-cross-t jn-cross-d">
+<title id="jn-cross-t">CROSS JOIN · everyone meets everyone</title>
+<desc id="jn-cross-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Lines join every row of the first table to every row of the second. Every pairing becomes a row of the result, three at a time, 9 rows in all.</desc>
+<text class="f10 b w1 tmp" x="10" y="27">1 · Two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · Every row meets every row</text>
+<text class="f10 b w3 d3 tmp" x="10" y="27">3 · Every pairing becomes a result row</text>
+<text class="f10 b w3 d6" x="10" y="27">4 · The result has 9 rows</text>
+<text class="f11 b" x="10" y="14">CROSS JOIN · everyone meets everyone</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="100" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="s-mat dr p7 d2" pathLength="1" d="M62 56L100 56M62 56L100 86M62 56L100 116M62 86L100 56M62 86L100 86M62 86L100 116M62 116L100 56M62 116L100 86M62 116L100 116" />
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g>
+<g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g>
+<g><rect class="f-src k2" x="100" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="60">B r1</text></g>
+<g><rect class="f-src k2" x="100" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="90">C r2</text></g>
+<g><rect class="f-src k2" x="100" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="126" y="120">D r3</text></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="46" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="59">A l1 · B r1</text></g></g></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="66" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="79">A l1 · C r2</text></g></g></g>
+<g class="w6 d3"><g class="mv m3 x3 y0"><g><rect class="f-mat k2" x="190" y="86" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="99">A l1 · D r3</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="106" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="119">B l2 · B r1</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="126" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="139">B l2 · C r2</text></g></g></g>
+<g class="w5 d4"><g class="mv m4 x3 y0"><g><rect class="f-mat k2" x="190" y="146" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="159">B l2 · D r3</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="166" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="179">C l3 · B r1</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="186" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="199">C l3 · C r2</text></g></g></g>
+<g class="w4 d5"><g class="mv m5 x3 y0"><g><rect class="f-mat k2" x="190" y="206" width="120" height="18" rx="6" /><text class="f10 m" x="250" y="219">C l3 · D r3</text></g></g></g>
+<text class="f11 b w3 d6" x="220" y="244">9 rows</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="jn-cross-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="jn-cross-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="jn-cross-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="jn-cross-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="jn-cross-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="jn-cross-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="jn-cross-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="jn-cross-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="jn-cross-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="jn-cross-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="jn-cross-r1">1</label><label class="sa-sb sb2" for="jn-cross-r2">2</label><label class="sa-sb sb3" for="jn-cross-r3">3</label><label class="sa-sb sb4" for="jn-cross-r4">4</label></span>
+</div>
+<p class="ca-cap">CROSS JOIN has no keys to match: every row of the first table meets every row of the second.</p>
+<ol class="sa-steps">
+<li>Two tables, each with keys</li>
+<li>Every row meets every row</li>
+<li>Every pairing becomes a result row</li>
+<li>The result has 9 rows</li>
+</ol>
+</figure>
+
+**Try it.** Before you run it: every line has one `product_id`, and `product_id` is the primary key of
+`products`. How many rows will the join return?
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id;`} />
+
+Read it: `AS oi` and `AS p` are **aliases**, short names for the tables, so `oi.product_id` (table, a dot, column)
+leaves no doubt about which table a column comes from. `ON` names the key on each side: the foreign key of the many
+side against the primary key of the other (S18). `JOIN` alone means the same as `INNER JOIN`.
+
+Expected: 1 row, 1 column. *Excel:* an XLOOKUP column filled down, with a price on every line, as in *Bring in a value
+by key with XLOOKUP* (E8).
+
+*Why:* each line meets exactly one product, so the answer is **3287**, the lines of `order_items` (S18). The grain (what one
+row is) is still one line. A different number would mean a line was lost or doubled.
+
+**Try it:** now look at five of the pairs.
+
+<RunSQL query={`SELECT oi.order_item_id, oi.order_id, p.product_name,
+       oi.quantity, p.unit_price_usd, oi.discount_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+ORDER BY oi.order_item_id
+LIMIT 5;`} />
+
+Expected: 5 rows, 6 columns; the first row is line 5001, a Croissant at 3.25. *Why:* the columns come from both tables,
+named through the aliases. `ORDER BY` fixes the order, because a join promises none.
+
+### 2. Use the wider table
+
+After the join, every pair is one row of a wider table, and `WHERE`, `GROUP BY` and the rest of the query work on it.
+The price lives in `products`, so now a line's amount can use it.
+
+**Try it:** the amount of each line.
+
+<RunSQL query={`SELECT oi.order_item_id,
+       p.product_name,
+       oi.quantity * p.unit_price_usd - oi.discount_usd AS line_amount_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+ORDER BY oi.order_item_id
+LIMIT 5;`} />
+
+Expected: 5 rows, 3 columns; line 5003 reads 6.00, as in E8. *Excel:* `=D2*F2-E2`. *Why:* the dataset's rule is quantity times
+price, minus the discount on the line. The price needs the join; `oi.quantity` and `oi.discount_usd` do not.
+
+**Try it:** add it up.
+
+<RunSQL query={`SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id;`} />
+
+Expected: 1 row, 1 column: `22754.25`. *Why:* this covers all 3,287 lines of all 1,800 orders. It includes the one
+canceled order, 1461 (a Mocha line of 5.00), and the extra-zero line of order 2075 (20 Turkey Sandwiches, 185.00, where
+2 was meant). It is the total E8 reached with XLOOKUP and a `SUM`, and the status-bar Sum of *Summarize with a
+PivotTable* (E15), so the database agrees.
+
+### 3. A row with no partner disappears
+
+Only paired rows are returned. A row with no partner, from either table, is missing from the result. That includes a
+row whose key is `NULL`, an empty value: in an `=` test `NULL` is never equal to anything, not even another `NULL`, so
+it pairs with nothing.
+
+**Try it.** Grain: *one row per product sold*. Before you run it: the menu has 16 products. How many
+rows?
+
+<RunSQL query={`SELECT p.product_name,
+       SUM(oi.quantity) AS units,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+GROUP BY p.product_name
+ORDER BY sales_usd DESC;`} />
+
+Expected: 3 columns. *Why:* **15** rows. The Pumpkin Spice Latte is in `products` but on no line, so nothing pairs with
+it and the inner join drops it: the product S18 found unsold. The Latte (product 3) leads with 2,927.00, and Green Tea
+is last with 783.75. That answers the owner's second question.
+
+Watch the same thing on a few rows.
+
+<figure class="sa not-content">
+<input class="sa-r r1" type="radio" name="ij" id="ij-r1" aria-label="Step 1 of 5: JOIN" aria-describedby="ij-c1" checked />
+<input class="sa-r r2" type="radio" name="ij" id="ij-r2" aria-label="Step 2 of 5: ON" aria-describedby="ij-c2" />
+<input class="sa-r r3" type="radio" name="ij" id="ij-r3" aria-label="Step 3 of 5: ON" aria-describedby="ij-c3" />
+<input class="sa-r r4" type="radio" name="ij" id="ij-r4" aria-label="Step 4 of 5: ON" aria-describedby="ij-c4" />
+<input class="sa-r r5" type="radio" name="ij" id="ij-r5" aria-label="Step 5 of 5: ON" aria-describedby="ij-c5" />
+<svg class="sa-svg" viewBox="0 0 360 414" width="360" role="img" aria-labelledby="ij-t ij-d">
+<title id="ij-t">INNER JOIN pairs each line with its product and drops the product with no line</title>
+<desc id="ij-d">Five steps. Two tables: seven order_items lines with product_ids 10, 6, 1, 10, 15, 6 and 1, and five products: 1 Espresso, 6 Cold Brew, 10 Croissant, 15 Turkey Sandwich and 16 Pumpkin Spice Latte, with a pairs column. ON matches product_ids one key at a time, each key with its own shade. Products 1, 6 and 10 each match 2 lines and product 15 matches 1, and each pair is one row of the result, seven rows in all. Product 16 matches no line, so it has 0 pairs, is dimmed and is absent from the result.</desc>
+<text class="f11 b" x="10" y="20">order_items: 7 lines</text>
+<text class="f11 b" x="150" y="20">products: 5 of 16 rows</text>
+<g><rect class="bx" x="10" y="30" width="72" height="20" /><rect class="bx" x="82" y="30" width="60" height="20" /><rect class="f-src k2" x="10" y="30" width="132" height="20" /><text class="f10 b e" x="77" y="44">order_item_id</text><text class="f10 b e" x="137" y="44">product_id</text></g>
+<g><rect class="bx" x="150" y="30" width="58" height="20" /><rect class="bx" x="208" y="30" width="106" height="20" /><rect class="bx" x="314" y="30" width="36" height="20" /><rect class="f-src k2" x="150" y="30" width="200" height="20" /><text class="f10 b e" x="203" y="44">product_id</text><text class="f10 b" x="213" y="44">product_name</text><text class="f10 b e" x="345" y="44">pairs</text></g>
+<g><rect class="bx" x="10" y="50" width="72" height="20" /><rect class="bx" x="82" y="50" width="60" height="20" /><rect class="f-mat k3 fx i4" x="82" y="50" width="60" height="20" /><text class="f11 e" x="77" y="64">5001</text><text class="f11 e" x="137" y="64">10</text></g>
+<g><rect class="bx" x="10" y="70" width="72" height="20" /><rect class="bx" x="82" y="70" width="60" height="20" /><rect class="f-mat k2 fx i3" x="82" y="70" width="60" height="20" /><text class="f11 e" x="77" y="84">5002</text><text class="f11 e" x="137" y="84">6</text></g>
+<g><rect class="bx" x="10" y="90" width="72" height="20" /><rect class="bx" x="82" y="90" width="60" height="20" /><rect class="f-mat k1 fx i2" x="82" y="90" width="60" height="20" /><text class="f11 e" x="77" y="104">5003</text><text class="f11 e" x="137" y="104">1</text></g>
+<g><rect class="bx" x="10" y="110" width="72" height="20" /><rect class="bx" x="82" y="110" width="60" height="20" /><rect class="f-mat k3 fx i4" x="82" y="110" width="60" height="20" /><text class="f11 e" x="77" y="124">5004</text><text class="f11 e" x="137" y="124">10</text></g>
+<g><rect class="bx" x="10" y="130" width="72" height="20" /><rect class="bx" x="82" y="130" width="60" height="20" /><rect class="f-mat k4 fx i4" x="82" y="130" width="60" height="20" /><text class="f11 e" x="77" y="144">5005</text><text class="f11 e" x="137" y="144">15</text></g>
+<g><rect class="bx" x="10" y="150" width="72" height="20" /><rect class="bx" x="82" y="150" width="60" height="20" /><rect class="f-mat k2 fx i3" x="82" y="150" width="60" height="20" /><text class="f11 e" x="77" y="164">5006</text><text class="f11 e" x="137" y="164">6</text></g>
+<g><rect class="bx" x="10" y="170" width="72" height="20" /><rect class="bx" x="82" y="170" width="60" height="20" /><rect class="f-mat k1 fx i2" x="82" y="170" width="60" height="20" /><text class="f11 e" x="77" y="184">5007</text><text class="f11 e" x="137" y="184">1</text></g>
+<g><rect class="bx" x="150" y="50" width="58" height="20" /><rect class="bx" x="208" y="50" width="106" height="20" /><rect class="bx" x="314" y="50" width="36" height="20" /><rect class="f-mat k1 fx i2" x="150" y="50" width="58" height="20" /><text class="f11 e" x="203" y="64">1</text><text class="f10" x="213" y="64">Espresso</text><text class="f11" x="319" y="64"></text></g>
+<text class="f11 b e fx i2" x="345" y="64">2</text>
+<g><rect class="bx" x="150" y="70" width="58" height="20" /><rect class="bx" x="208" y="70" width="106" height="20" /><rect class="bx" x="314" y="70" width="36" height="20" /><rect class="f-mat k2 fx i3" x="150" y="70" width="58" height="20" /><text class="f11 e" x="203" y="84">6</text><text class="f10" x="213" y="84">Cold Brew</text><text class="f11" x="319" y="84"></text></g>
+<text class="f11 b e fx i3" x="345" y="84">2</text>
+<g><rect class="bx" x="150" y="90" width="58" height="20" /><rect class="bx" x="208" y="90" width="106" height="20" /><rect class="bx" x="314" y="90" width="36" height="20" /><rect class="f-mat k3 fx i4" x="150" y="90" width="58" height="20" /><text class="f11 e" x="203" y="104">10</text><text class="f10" x="213" y="104">Croissant</text><text class="f11" x="319" y="104"></text></g>
+<text class="f11 b e fx i4" x="345" y="104">2</text>
+<g><rect class="bx" x="150" y="110" width="58" height="20" /><rect class="bx" x="208" y="110" width="106" height="20" /><rect class="bx" x="314" y="110" width="36" height="20" /><rect class="f-mat k4 fx i4" x="150" y="110" width="58" height="20" /><text class="f11 e" x="203" y="124">15</text><text class="f10" x="213" y="124">Turkey Sandwich</text><text class="f11" x="319" y="124"></text></g>
+<text class="f11 b e fx i4" x="345" y="124">1</text>
+<g class="fx o5 od"><g><rect class="bx" x="150" y="130" width="58" height="20" /><rect class="bx" x="208" y="130" width="106" height="20" /><rect class="bx" x="314" y="130" width="36" height="20" /><text class="f11 e" x="203" y="144">16</text><text class="f10" x="213" y="144">Pumpkin Spice Latte</text><text class="f11" x="319" y="144"></text></g><text class="f11 b e fx i5" x="345" y="144">0</text></g>
+<rect class="s-mat fx i2 h3" x="150" y="50" width="200" height="20" />
+<rect class="s-mat fx i2 h3" x="10" y="90" width="132" height="20" />
+<rect class="s-mat fx i2 h3" x="10" y="170" width="132" height="20" />
+<rect class="s-mat fx i3 h4" x="150" y="70" width="200" height="20" />
+<rect class="s-mat fx i3 h4" x="10" y="70" width="132" height="20" />
+<rect class="s-mat fx i3 h4" x="10" y="150" width="132" height="20" />
+<rect class="s-mat fx i4 h5" x="150" y="90" width="200" height="20" />
+<rect class="s-mat fx i4 h5" x="10" y="50" width="132" height="20" />
+<rect class="s-mat fx i4 h5" x="10" y="110" width="132" height="20" />
+<rect class="s-mat fx i4 h5" x="150" y="110" width="200" height="20" />
+<rect class="s-mat fx i4 h5" x="10" y="130" width="132" height="20" />
+<rect class="s-flt fx i5" x="150" y="130" width="200" height="20" />
+<text class="f11 b fx i2" x="10" y="222">Result of the join on product_id</text>
+<g class="fx i2"><g><rect class="bx" x="10" y="230" width="100" height="20" /><rect class="bx" x="110" y="230" width="70" height="20" /><rect class="bx" x="180" y="230" width="170" height="20" /><rect class="f-out k2" x="10" y="230" width="340" height="20" /><text class="f10 b e" x="105" y="244">order_item_id</text><text class="f10 b e" x="175" y="244">product_id</text><text class="f10 b" x="185" y="244">product_name</text></g></g>
+<g class="fx i2"><rect class="bx" x="10" y="250" width="100" height="20" /><rect class="bx" x="110" y="250" width="70" height="20" /><rect class="bx" x="180" y="250" width="170" height="20" /><rect class="f-mat k1" x="110" y="250" width="240" height="20" /><text class="f11 e" x="105" y="264">5003</text><text class="f11 e" x="175" y="264">1</text><text class="f11" x="185" y="264">Espresso</text></g>
+<g class="fx i2"><rect class="bx" x="10" y="270" width="100" height="20" /><rect class="bx" x="110" y="270" width="70" height="20" /><rect class="bx" x="180" y="270" width="170" height="20" /><rect class="f-mat k1" x="110" y="270" width="240" height="20" /><text class="f11 e" x="105" y="284">5007</text><text class="f11 e" x="175" y="284">1</text><text class="f11" x="185" y="284">Espresso</text></g>
+<g class="fx i3"><rect class="bx" x="10" y="290" width="100" height="20" /><rect class="bx" x="110" y="290" width="70" height="20" /><rect class="bx" x="180" y="290" width="170" height="20" /><rect class="f-mat k2" x="110" y="290" width="240" height="20" /><text class="f11 e" x="105" y="304">5002</text><text class="f11 e" x="175" y="304">6</text><text class="f11" x="185" y="304">Cold Brew</text></g>
+<g class="fx i3"><rect class="bx" x="10" y="310" width="100" height="20" /><rect class="bx" x="110" y="310" width="70" height="20" /><rect class="bx" x="180" y="310" width="170" height="20" /><rect class="f-mat k2" x="110" y="310" width="240" height="20" /><text class="f11 e" x="105" y="324">5006</text><text class="f11 e" x="175" y="324">6</text><text class="f11" x="185" y="324">Cold Brew</text></g>
+<g class="fx i4"><rect class="bx" x="10" y="330" width="100" height="20" /><rect class="bx" x="110" y="330" width="70" height="20" /><rect class="bx" x="180" y="330" width="170" height="20" /><rect class="f-mat k3" x="110" y="330" width="240" height="20" /><text class="f11 e" x="105" y="344">5001</text><text class="f11 e" x="175" y="344">10</text><text class="f11" x="185" y="344">Croissant</text></g>
+<g class="fx i4"><rect class="bx" x="10" y="350" width="100" height="20" /><rect class="bx" x="110" y="350" width="70" height="20" /><rect class="bx" x="180" y="350" width="170" height="20" /><rect class="f-mat k3" x="110" y="350" width="240" height="20" /><text class="f11 e" x="105" y="364">5004</text><text class="f11 e" x="175" y="364">10</text><text class="f11" x="185" y="364">Croissant</text></g>
+<g class="fx i4"><rect class="bx" x="10" y="370" width="100" height="20" /><rect class="bx" x="110" y="370" width="70" height="20" /><rect class="bx" x="180" y="370" width="170" height="20" /><rect class="f-mat k4" x="110" y="370" width="240" height="20" /><text class="f11 e" x="105" y="384">5005</text><text class="f11 e" x="175" y="384">15</text><text class="f11" x="185" y="384">Turkey Sandwich</text></g>
+<text class="f11 b fx i5" x="10" y="404">Product 16 has no line to pair with: it drops out, 7 rows.</text>
+</svg>
+<div class="sa-ctl">
+<span class="sa-nav bk bk1" aria-hidden="true">&#9664;</span>
+<label class="sa-nav bk bk2" for="ij-r1"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ij-r2"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ij-r3"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="ij-r4"><span aria-hidden="true">&#9664;</span><span class="sr">Back</span></label>
+<span class="sa-sbs"><label class="sa-sb c-src sb1" for="ij-r1">1</label><label class="sa-sb c-mat sb2" for="ij-r2">2</label><label class="sa-sb c-mat sb3" for="ij-r3">3</label><label class="sa-sb c-mat sb4" for="ij-r4">4</label><label class="sa-sb c-mat sb5" for="ij-r5">5</label></span>
+<label class="sa-nav nx nx1" for="ij-r2"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ij-r3"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ij-r4"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="ij-r5"><span aria-hidden="true">&#9654;</span><span class="sr">Next</span></label>
+<label class="sa-nav nx nx5" for="ij-r1"><span aria-hidden="true">&#8634;</span><span class="sr">Start over</span></label>
+</div>
+<ol class="sa-steps">
+<li id="ij-c1"><span class="sa-cl c-src">JOIN</span> Two tables: seven order_items lines and five of the sixteen products. They share the column product_id. <b class="sa-pr">Predict:</b> INNER JOIN keeps every pair of rows whose product_ids are equal. Which product will have no line to pair with, and how many rows will the result have?</li>
+<li id="ij-c2"><span class="sa-cl c-mat">ON</span> ON order_items.product_id = products.product_id matches product 1: every line with product_id 1 pairs with Espresso, and each pair adds one row to the result.</li>
+<li id="ij-c3"><span class="sa-cl c-mat">ON</span> Product 6 is matched the same way: every line with product_id 6 pairs with Cold Brew.</li>
+<li id="ij-c4"><span class="sa-cl c-mat">ON</span> Products 10 and 15 are matched the same way, and their pairs join the result.</li>
+<li id="ij-c5"><span class="sa-cl c-mat">ON</span> A product that matches no line adds nothing to the result, so INNER JOIN drops it and its row is dimmed. Compare the result with your prediction.</li>
+</ol>
+</figure>
+
+### 4. A repeated key multiplies rows
+
+If a key value appears *a* times on one side and *b* times on the other, it gives *a* × *b* rows. Order 1001 has 3
+lines, so a copy of `order_items` joined to itself on `order_id` gives 3 × 3 = 9 rows for it. *Excel:* `XLOOKUP`
+returns the first match for one key; a join returns every match, and each match is a row.
+
+<figure>
+<svg viewBox="0 0 360 402" width="360" role="img" aria-labelledby="ij-grow-title ij-grow-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="ij-grow-title">One order pairs with all of its lines</title>
+<desc id="ij-grow-desc">Two grids. First, three orders rows: 1001 for customer 15, 1002 for customer 46 and 1003 for customer 61, all completed. Second, the result of joining orders to order_items on order_id, with seven rows: order 1001 three times, with items 5001, 5002 and 5003; order 1002 twice, items 5004 and 5005; order 1003 twice, items 5006 and 5007. The rows of orders 1001 and 1003 are shaded so that the three groups can be told apart. Three orders became seven rows.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One order pairs with all its lines</text>
+<text x="10" y="44" font-size="11" font-weight="600">orders: 3 rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="52" width="100" height="22" /><rect x="110" y="52" width="120" height="22" /><rect x="230" y="52" width="120" height="22" /><rect x="10" y="74" width="100" height="22" /><rect x="110" y="74" width="120" height="22" /><rect x="230" y="74" width="120" height="22" /><rect x="10" y="96" width="100" height="22" /><rect x="110" y="96" width="120" height="22" /><rect x="230" y="96" width="120" height="22" /><rect x="10" y="118" width="100" height="22" /><rect x="110" y="118" width="120" height="22" /><rect x="230" y="118" width="120" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="105" y="67" text-anchor="end">order_id</text><text x="225" y="67" text-anchor="end">customer_id</text><text x="235" y="67">status</text></g>
+<g><text x="105" y="89" text-anchor="end">1001</text><text x="225" y="89" text-anchor="end">15</text><text x="235" y="89">completed</text><text x="105" y="111" text-anchor="end">1002</text><text x="225" y="111" text-anchor="end">46</text><text x="235" y="111">completed</text><text x="105" y="133" text-anchor="end">1003</text><text x="225" y="133" text-anchor="end">61</text><text x="235" y="133">completed</text></g>
+<text x="10" y="164" font-size="11" font-weight="600">orders joined to order_items on order_id: 7 rows</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="10" y="194" width="340" height="22" /><rect x="10" y="216" width="340" height="22" /><rect x="10" y="238" width="340" height="22" /><rect x="10" y="304" width="340" height="22" /><rect x="10" y="326" width="340" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="172" width="70" height="22" /><rect x="80" y="172" width="90" height="22" /><rect x="170" y="172" width="100" height="22" /><rect x="270" y="172" width="80" height="22" /><rect x="10" y="194" width="70" height="22" /><rect x="80" y="194" width="90" height="22" /><rect x="170" y="194" width="100" height="22" /><rect x="270" y="194" width="80" height="22" /><rect x="10" y="216" width="70" height="22" /><rect x="80" y="216" width="90" height="22" /><rect x="170" y="216" width="100" height="22" /><rect x="270" y="216" width="80" height="22" /><rect x="10" y="238" width="70" height="22" /><rect x="80" y="238" width="90" height="22" /><rect x="170" y="238" width="100" height="22" /><rect x="270" y="238" width="80" height="22" /><rect x="10" y="260" width="70" height="22" /><rect x="80" y="260" width="90" height="22" /><rect x="170" y="260" width="100" height="22" /><rect x="270" y="260" width="80" height="22" /><rect x="10" y="282" width="70" height="22" /><rect x="80" y="282" width="90" height="22" /><rect x="170" y="282" width="100" height="22" /><rect x="270" y="282" width="80" height="22" /><rect x="10" y="304" width="70" height="22" /><rect x="80" y="304" width="90" height="22" /><rect x="170" y="304" width="100" height="22" /><rect x="270" y="304" width="80" height="22" /><rect x="10" y="326" width="70" height="22" /><rect x="80" y="326" width="90" height="22" /><rect x="170" y="326" width="100" height="22" /><rect x="270" y="326" width="80" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="75" y="187" text-anchor="end">order_id</text><text x="165" y="187" text-anchor="end">customer_id</text><text x="265" y="187" text-anchor="end">order_item_id</text><text x="345" y="187" text-anchor="end">product_id</text></g>
+<g><text x="75" y="209" text-anchor="end" font-weight="600">1001</text><text x="165" y="209" text-anchor="end" font-weight="600">15</text><text x="265" y="209" text-anchor="end" font-weight="600">5001</text><text x="345" y="209" text-anchor="end" font-weight="600">10</text><text x="75" y="231" text-anchor="end" font-weight="600">1001</text><text x="165" y="231" text-anchor="end" font-weight="600">15</text><text x="265" y="231" text-anchor="end" font-weight="600">5002</text><text x="345" y="231" text-anchor="end" font-weight="600">6</text><text x="75" y="253" text-anchor="end" font-weight="600">1001</text><text x="165" y="253" text-anchor="end" font-weight="600">15</text><text x="265" y="253" text-anchor="end" font-weight="600">5003</text><text x="345" y="253" text-anchor="end" font-weight="600">1</text><text x="75" y="275" text-anchor="end">1002</text><text x="165" y="275" text-anchor="end">46</text><text x="265" y="275" text-anchor="end">5004</text><text x="345" y="275" text-anchor="end">10</text><text x="75" y="297" text-anchor="end">1002</text><text x="165" y="297" text-anchor="end">46</text><text x="265" y="297" text-anchor="end">5005</text><text x="345" y="297" text-anchor="end">15</text><text x="75" y="319" text-anchor="end" font-weight="600">1003</text><text x="165" y="319" text-anchor="end" font-weight="600">61</text><text x="265" y="319" text-anchor="end" font-weight="600">5006</text><text x="345" y="319" text-anchor="end" font-weight="600">6</text><text x="75" y="341" text-anchor="end" font-weight="600">1003</text><text x="165" y="341" text-anchor="end" font-weight="600">61</text><text x="265" y="341" text-anchor="end" font-weight="600">5007</text><text x="345" y="341" text-anchor="end" font-weight="600">1</text></g>
+<text x="10" y="372" font-size="11" font-weight="600">3 orders in, 7 rows out: one row for every order and line.</text>
+<text x="10" y="390" font-size="11" opacity="0.8">XLOOKUP returns the first match; a join returns every match.</text>
+</svg>
+</figure>
+
+**Try it.** Before you run it: there are 1,800 orders. How many rows will `orders` joined to
+`order_items` return?
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows
+FROM orders AS o
+INNER JOIN order_items AS oi ON o.order_id = oi.order_id;`} />
+
+Expected: 1 row, 1 column. *Why:* **3287**. The key repeats on the `oi` side: an order pairs with each of its one to three
+lines, so the grain of the result is the line, and `COUNT(*)` counts lines, not orders. The count grew from 1,800 to
+3,287 because the join went from the one side to the many side.
+
+### 5. Check the numbers
+
+No new query. The 3,287 of unit 1 equals the lines of `order_items` and the count of unit 4, so the join to `products`
+lost no line and doubled none. Two more Excel totals are slices of unit 2's 22,754.25: E7's Campus coffee in March
+(completed orders only) and E21's Sales of 22,749.25 (completed orders only). Exercise 1 reproduces E21's.
+
+<details>
+<summary>Explain it in your own words: why did the join to products keep 3,287 rows while the join to order_items grew?</summary>
+
+It depends on which side the key is unique. `product_id` is unique in `products`, so each line finds one product and
+the count stays. `order_id` is unique in `orders` but repeats in `order_items`, so each order finds several lines and
+the count grows.
+
+</details>
+
+<Aside type="tip" title="Remember">
+
+- `INNER JOIN` makes one wider row for every pair whose `ON` is true.
+- A row with no partner, or with an empty key, is missing from the result.
+- Key unique on one side: the count cannot grow. Key repeated: *a* × *b* rows.
+- Name the key, predict the rows, run the join, compare the count.
+
+**Common trap: "a join is a Venn diagram of two sets."** The circles are right about which keys have a partner: an
+inner join keeps the overlap. They say nothing about row counts, because a join counts pairs, not keys. Order 1001 is
+one key, but its 3 lines make 3 rows.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-inner-join-1">
+
+**What did completed orders sell, in dollars?** E21 reported Sales of 22,749.25. Expected: 1
+row, 1 column, equal to E21's figure.
+
+Done for you: the grain is a line, and the first part of the query is unit 2's:
+
+<RunSQL query={`SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id`} />
+
+The status lives in `orders`, and the result of one join can be joined again. Now finish it: add a second
+`INNER JOIN`, to `orders` on `order_id`, and keep only the completed orders.
+
+<details>
+<summary>Hint</summary>
+
+The second join goes on the line after the first. Copy the shape of unit 4 for the `ON`, and use `WHERE` as in
+*Filtering rows with WHERE* (S3) for the status.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+...
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN orders AS o ON ... = ...
+WHERE ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS sales_usd
+FROM order_items AS oi
+INNER JOIN products AS p ON oi.product_id = p.product_id
+INNER JOIN orders AS o ON oi.order_id = o.order_id
+WHERE o.status = 'completed';
+```
+
+The result is `22749.25`, E21's Sales. It is 22,754.25 − 5.00: the canceled order 1461 is out. The figure covers 3,286
+lines of 1,799 completed orders, and still includes the extra-zero line of order 2075. Chaining joins is the subject of
+*Joining three tables and a table to itself* (S22).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-inner-join-2">
+
+**A teammate says: "orders joined to customers gives one row per order, so 1,800 rows."** Test the claim in the editor.
+
+Before you run anything, write one sentence as a comment in the editor: how many rows the join of `orders` to `customers` on
+`customer_id` returns, and why. Then run it, run a plain `COUNT(*)` of `orders` for comparison, and finish with one
+sentence: where did the difference go?
+
+Expected shape, to check your sentence against: two queries, each 1 row, 1 column. The counts cover all 1,800 orders,
+the canceled one included, and count orders, not dollars, so the extra-zero line (order 2075) does not matter.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+One order has no customer (E8, S4). What does comparing an empty value with anything give?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Two single numbers. The join returns fewer rows than `orders` has, and the gap is the number of
+orders whose `customer_id` is empty."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS joined_rows
+FROM orders AS o
+INNER JOIN customers AS c ON o.customer_id = c.customer_id;
+
+SELECT COUNT(*) AS orders FROM orders;
+```
+
+The results are `1799` and `1800`. Order 1335, the walk-in, has no `customer_id`. A comparison with an empty value is
+never true (S4), so that order pairs with nobody, and the inner join drops it without a warning. Comparing the join's
+count with `COUNT(*)` is what exposed it. The next lesson keeps such rows.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what does an `INNER JOIN` return, and how do you predict its row count before you run it?
+
+<details>
+<summary>Answer</summary>
+
+Only the rows that got a pair. Look at which side the key is unique on: if it is unique in the table you join to, the
+count cannot grow, and it falls if some rows find no partner; if the key repeats there, the count can grow. Rows with
+no pair, or with an empty key, are missing.
+
+</details>
+
+<Exercise id="sql-inner-join-3">
+
+**Spot the flaw.** A colleague wants each order next to its lines and runs this query. It gives an error, not a table:
+
+<RunSQL query={`SELECT order_id, status, quantity
+FROM orders AS o
+INNER JOIN order_items AS oi ON o.order_id = oi.order_id;`} />
+
+Expected: an error that says a column name is ambiguous. Read it, then fix the query.
+
+<Solution>
+
+The error reads `Ambiguous reference to column name "order_id" (use: "o.order_id" or
+"oi.order_id")`. Both tables have an `order_id` column, so the bare name could mean either. Qualify it with an alias:
+
+```sql
+SELECT o.order_id, o.status, oi.quantity
+FROM orders AS o
+INNER JOIN order_items AS oi ON o.order_id = oi.order_id;
+```
+
+Expected: 3287 rows, 3 columns. `status` and `quantity` exist in one table each, so they would run bare, but qualify
+every column in a join: the query stays readable and survives a new column.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can pair two tables on a key with an aliased `INNER JOIN`, predict the row count from the keys
+before I run it, and say which rows a total covers.*
+Test: Exercise sql-inner-join-2, done from the blank editor without opening the hints.
+
+The pattern to remember: **name the key, predict the rows, run the join, compare the count.** The next lesson, *LEFT
+JOIN and finding rows with no match* (S20), keeps the rows an inner join drops.

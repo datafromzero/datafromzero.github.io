@@ -1,0 +1,780 @@
+---
+id: sql-set-operations
+title: 'Comparing sets: UNION, INTERSECT, EXCEPT'
+description: Stack and compare result sets with UNION, INTERSECT and EXCEPT, and answer coverage questions with grouped counts.
+stage: sql
+order: 240
+level: intermediate
+duration: 30
+objectives:
+  - Combine two queries with UNION and UNION ALL
+  - Find shared and missing rows with INTERSECT and EXCEPT
+  - Match column count, order and type across the queries
+  - Answer "bought from every category" with GROUP BY and HAVING COUNT(DISTINCT)
+prerequisites:
+  - sql-ctes
+  - sql-left-join-anti-join
+  - sql-subqueries
+  - sql-self-and-multi-table-joins
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Set operations'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/setops
+  - title: 'DuckDB documentation: Subqueries'
+    url: https://duckdb.org/docs/stable/sql/expressions/subqueries
+  - title: 'Microsoft Support: UNIQUE function'
+    url: https://support.microsoft.com/en-us/office/unique-function-c5ab87fd-30a3-4ce9-9d1a-40204fb85e1e
+status: draft
+---
+
+TODO(owner): The DuckDB set operations page does not say how `NULL` values are compared; the lesson shows the effect of the walk-in order's empty `customer_id` and filters it out, so check that step. The rule in unit 2 that two `NULL`s count as one row rests on a result run on DuckDB 2.0.0 (`SELECT NULL INTERSECT SELECT NULL` returns one row), not on a documentation page; check it in the output. Check that the column-count error in unit 4 reads as shown. The stub also named the DataLemur patterns page as a source: it does not mention set operations, so it is not listed. The map notes about the cost of `UNION` against `UNION ALL` and about `MINUS` in Oracle are not in the lesson; they need a source first. Run every block on this page after a fresh load and check each result against its Expected line. Time the lesson against its 30 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> Harbor opened on April 1. Of the customers who ordered there, how many had already ordered at the other two cafes, and
+> how many are new to us? And which customers have tried every kind of product?
+
+Three customers, and whether each was seen before April and at Harbor:
+
+| customer_id | ordered before April | ordered at Harbor |
+|---:|---|---|
+| 1 | yes | no |
+| 2 | yes | yes |
+| 13 | no | yes |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Subqueries and EXISTS* (S23), write the query that counts the customers who have at least one order.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*) AS ordered
+   FROM customers c
+   WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id);
+   ```
+
+   It returns `145`; the other 5 customers never ordered.
+
+   </details>
+
+2. In S23, why did `customer_id NOT IN (SELECT customer_id FROM orders)` return no rows?
+
+   <details>
+   <summary>Answer</summary>
+
+   The list holds an empty `customer_id` (the walk-in order 1335). With a `NULL` in the list, `NOT IN` never becomes
+   true. Keep that in mind: an empty value can also slip into a set.
+
+   </details>
+
+## The big idea
+
+A **set operation** takes two lists of rows, such as the customers from two queries, and keeps whole rows by where they appear: in both lists, in either, or in only one.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="so-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="so" id="so-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="so" id="so-r1" aria-label="Step 1 of 4: Two sets of keys" />
+<input class="sa-r r2 o3" type="radio" name="so" id="so-r2" aria-label="Step 2 of 4: UNION: every key once" />
+<input class="sa-r r3 o5" type="radio" name="so" id="so-r3" aria-label="Step 3 of 4: INTERSECT: keys in both" />
+<input class="sa-r r4 o8" type="radio" name="so" id="so-r4" aria-label="Step 4 of 4: EXCEPT: in the first, not the second" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 176" width="360" role="img" aria-labelledby="so-t so-d">
+<title id="so-t">Set operators combine two lists: UNION, INTERSECT, EXCEPT</title>
+<desc id="so-d">Two overlapping circles: set 1 holds the keys A, B and C, set 2 holds B, C and D; B and C sit in the overlap. UNION lights both circles and lists A, B, C, D. INTERSECT lights only the overlap and lists B, C. EXCEPT lights the part of set 1 that is outside set 2 and lists A.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Two sets of keys</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · UNION: every key once</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · INTERSECT: keys in both</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · EXCEPT: in the first, not the second</text>
+<text class="f11 b" x="10" y="14">Two lists, three ways to combine</text>
+<path class="f-out k3 w2 d2 tmp" d="M135 60.29A56 56 0 1 0 135 147.71A56 56 0 0 1 135 60.29Z" />
+<path class="f-out k3 w2 d2 tmp" d="M135 60.29A56 56 0 0 0 135 147.71A56 56 0 0 0 135 60.29Z" />
+<path class="f-out k3 w2 d2 tmp" d="M135 60.29A56 56 0 1 1 135 147.71A56 56 0 0 0 135 60.29Z" />
+<path class="f-out k3 w2 d4 tmp" d="M135 60.29A56 56 0 0 0 135 147.71A56 56 0 0 0 135 60.29Z" />
+<path class="f-out k3 w3 d6" d="M135 60.29A56 56 0 1 0 135 147.71A56 56 0 0 1 135 60.29Z" />
+<g><circle class="ln" cx="100" cy="104" r="56" /><circle class="ln" cx="170" cy="104" r="56" /></g>
+<text class="f10 b m" x="79" y="52">set 1</text>
+<text class="f10 b m" x="191" y="52">set 2</text>
+<text class="f11 b m" x="79" y="108">A</text>
+<text class="f11 b m" x="135" y="108">B C</text>
+<text class="f11 b m" x="191" y="108">D</text>
+<g class="w6 d3"><rect class="f-out k3" x="240" y="46" width="110" height="24" rx="6" /><text class="f11 m" x="295" y="62">UNION · A B C D</text></g>
+<g class="w4 d5"><rect class="f-out k3" x="240" y="80" width="110" height="24" rx="6" /><text class="f11 m" x="295" y="96">INTERSECT · B C</text></g>
+<g class="w2 d7"><rect class="f-out k3" x="240" y="114" width="110" height="24" rx="6" /><text class="f11 m" x="295" y="130">EXCEPT · A</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="so-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="so-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="so-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="so-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="so-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="so-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="so-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="so-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="so-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="so-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="so-r1">1</label><label class="sa-sb sb2" for="so-r2">2</label><label class="sa-sb sb3" for="so-r3">3</label><label class="sa-sb sb4" for="so-r4">4</label></span>
+</div>
+<p class="ca-cap">UNION keeps every key once, INTERSECT keeps the keys in both lists, and EXCEPT keeps the keys of the first list that are not in the second.</p>
+<ol class="sa-steps">
+<li>Two sets of keys</li>
+<li>UNION: every key once</li>
+<li>INTERSECT: keys in both</li>
+<li>EXCEPT: in the first, not the second</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Each gives you one idea, then you try it in the editor under it.
+
+### 1. Write the two lists
+
+Call the customers who ordered before April **A**, and the ones who ordered at Harbor **B**. Each is a **set**: a list where every customer appears once, which is what `DISTINCT` gives. "Ordered" means any order, the canceled one included.
+
+The walk-in order 1335 (February 14) has no customer, so its `customer_id` is empty (`NULL`). A leaves it out with `IS NOT NULL`.
+
+**Try it**: list A.
+
+<RunSQL query={`SELECT DISTINCT customer_id
+FROM orders
+WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+ORDER BY customer_id;`} />
+
+Expected: 97 rows, 1 column. Now list B.
+
+<RunSQL query={`SELECT DISTINCT customer_id
+FROM orders
+WHERE store_id = 3
+ORDER BY customer_id;`} />
+
+Expected: 90 rows, 1 column.
+
+*Why:* a set has no repeats, so each query gives one row per customer. Without the `IS NOT NULL`, A would hold one empty row.
+
+### 2. In both, or in only one
+
+`INTERSECT` keeps the rows found in both lists. `EXCEPT` keeps the rows of the first list that are not in the second, so swapping the lists changes the answer. It is the anti join of S20 and S23, written as sets.
+
+Both compare whole rows, and two `NULL`s count as the same row here, unlike in `=` (S19).
+
+**Try it**: in both A and B.
+
+<RunSQL query={`SELECT customer_id FROM orders
+WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+INTERSECT
+SELECT customer_id FROM orders
+WHERE store_id = 3
+ORDER BY customer_id;`} />
+
+Expected: 60 rows, 1 column; the first is customer 2. *Why:* the `ORDER BY` goes last and sorts the whole result.
+
+**Try it**: in A but not in B.
+
+<RunSQL query={`SELECT customer_id FROM orders
+WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+EXCEPT
+SELECT customer_id FROM orders
+WHERE store_id = 3
+ORDER BY customer_id;`} />
+
+Expected: 37 rows, 1 column; the first is customer 1. Now swap the two queries, for B without A.
+
+<RunSQL query={`SELECT customer_id FROM orders
+WHERE store_id = 3
+EXCEPT
+SELECT customer_id FROM orders
+WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+ORDER BY customer_id;`} />
+
+Expected: 30 rows, 1 column; the first is customer 13. *Why:* the 30 are Harbor customers not seen before April: new to us. The 37 never came to Harbor.
+
+One more, to see the `NULL` rule.
+
+<RunSQL query={`SELECT NULL INTERSECT SELECT NULL;`} />
+
+Expected: 1 row, 1 column. *Why:* the two empty values count as one row, so `INTERSECT` keeps it. With `=` they would never match.
+
+### 3. Stack the lists
+
+`UNION` stacks two lists and removes repeated rows. `UNION ALL` stacks them exactly as they are. `INTERSECT` and `EXCEPT` also remove repeats (the documentation calls this set semantics): only the `ALL` variants keep them. That is why unit 2 needed no `DISTINCT`.
+
+**Try it**. You saw 60 customers in both lists. Before you run these two: how many rows will each return?
+
+<RunSQL query={`SELECT COUNT(*) AS union_rows
+FROM (
+  SELECT DISTINCT customer_id FROM orders
+  WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+  UNION
+  SELECT DISTINCT customer_id FROM orders WHERE store_id = 3
+);`} />
+
+<RunSQL query={`SELECT COUNT(*) AS union_all_rows
+FROM (
+  SELECT DISTINCT customer_id FROM orders
+  WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+  UNION ALL
+  SELECT DISTINCT customer_id FROM orders WHERE store_id = 3
+);`} />
+
+Expected: 1 row, 1 column each: 127 and 187. *Excel:* `UNIQUE` (E19, *Spilling results with FILTER, SORT and UNIQUE*) is the repeat-removing half of `UNION`: put one list under the other, and `UNIQUE` over the pasted range keeps each value once.
+
+*Why:* `UNION ALL` does not look for repeats, so use it when you want every row, or when the parts cannot overlap.
+
+<details>
+<summary>Explain it in your own words: why is 187 more than 127?</summary>
+
+187 is 97 + 90, every row of both lists. The 60 customers who are in both lists are in that sum twice, so taking the repeats out removes 60 rows: 127.
+
+</details>
+
+Here are the same two lists, customers 1 to 13, through all four operators.
+
+<figure>
+<svg viewBox="0 0 360 322" width="360" role="img" aria-labelledby="sq-sets-title sq-sets-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-sets-title">The same two sets, run through each set operator</title>
+<desc id="sq-sets-desc">A table of customers 1 to 13. Column A marks the customers who ordered before April: 1 to 12, not 13. Column B marks the customers who ordered at Harbor: 2, 3, 5, 6, 7, 10, 11, 12, 13. The next four columns mark the customers each operator returns. UNION: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13. INTERSECT: 2, 3, 5, 6, 7, 10, 11, 12. A EXCEPT B: 1, 4, 8, 9. B EXCEPT A: 13.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">One pair of sets, four operators</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="126" y="74" width="52" height="16" />
+<rect x="126" y="90" width="52" height="16" />
+<rect x="126" y="106" width="52" height="16" />
+<rect x="126" y="122" width="52" height="16" />
+<rect x="126" y="138" width="52" height="16" />
+<rect x="126" y="154" width="52" height="16" />
+<rect x="126" y="170" width="52" height="16" />
+<rect x="126" y="186" width="52" height="16" />
+<rect x="126" y="202" width="52" height="16" />
+<rect x="126" y="218" width="52" height="16" />
+<rect x="126" y="234" width="52" height="16" />
+<rect x="126" y="250" width="52" height="16" />
+<rect x="126" y="266" width="52" height="16" />
+<rect x="178" y="90" width="64" height="16" />
+<rect x="178" y="106" width="64" height="16" />
+<rect x="178" y="138" width="64" height="16" />
+<rect x="178" y="154" width="64" height="16" />
+<rect x="178" y="170" width="64" height="16" />
+<rect x="178" y="218" width="64" height="16" />
+<rect x="178" y="234" width="64" height="16" />
+<rect x="178" y="250" width="64" height="16" />
+<rect x="242" y="74" width="54" height="16" />
+<rect x="242" y="122" width="54" height="16" />
+<rect x="242" y="186" width="54" height="16" />
+<rect x="242" y="202" width="54" height="16" />
+<rect x="296" y="266" width="54" height="16" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="34" width="28" height="40" />
+<rect x="10" y="74" width="28" height="16" />
+<rect x="10" y="90" width="28" height="16" />
+<rect x="10" y="106" width="28" height="16" />
+<rect x="10" y="122" width="28" height="16" />
+<rect x="10" y="138" width="28" height="16" />
+<rect x="10" y="154" width="28" height="16" />
+<rect x="10" y="170" width="28" height="16" />
+<rect x="10" y="186" width="28" height="16" />
+<rect x="10" y="202" width="28" height="16" />
+<rect x="10" y="218" width="28" height="16" />
+<rect x="10" y="234" width="28" height="16" />
+<rect x="10" y="250" width="28" height="16" />
+<rect x="10" y="266" width="28" height="16" />
+<rect x="38" y="34" width="44" height="40" />
+<rect x="38" y="74" width="44" height="16" />
+<rect x="38" y="90" width="44" height="16" />
+<rect x="38" y="106" width="44" height="16" />
+<rect x="38" y="122" width="44" height="16" />
+<rect x="38" y="138" width="44" height="16" />
+<rect x="38" y="154" width="44" height="16" />
+<rect x="38" y="170" width="44" height="16" />
+<rect x="38" y="186" width="44" height="16" />
+<rect x="38" y="202" width="44" height="16" />
+<rect x="38" y="218" width="44" height="16" />
+<rect x="38" y="234" width="44" height="16" />
+<rect x="38" y="250" width="44" height="16" />
+<rect x="38" y="266" width="44" height="16" />
+<rect x="82" y="34" width="44" height="40" />
+<rect x="82" y="74" width="44" height="16" />
+<rect x="82" y="90" width="44" height="16" />
+<rect x="82" y="106" width="44" height="16" />
+<rect x="82" y="122" width="44" height="16" />
+<rect x="82" y="138" width="44" height="16" />
+<rect x="82" y="154" width="44" height="16" />
+<rect x="82" y="170" width="44" height="16" />
+<rect x="82" y="186" width="44" height="16" />
+<rect x="82" y="202" width="44" height="16" />
+<rect x="82" y="218" width="44" height="16" />
+<rect x="82" y="234" width="44" height="16" />
+<rect x="82" y="250" width="44" height="16" />
+<rect x="82" y="266" width="44" height="16" />
+<rect x="126" y="34" width="52" height="40" />
+<rect x="126" y="74" width="52" height="16" />
+<rect x="126" y="90" width="52" height="16" />
+<rect x="126" y="106" width="52" height="16" />
+<rect x="126" y="122" width="52" height="16" />
+<rect x="126" y="138" width="52" height="16" />
+<rect x="126" y="154" width="52" height="16" />
+<rect x="126" y="170" width="52" height="16" />
+<rect x="126" y="186" width="52" height="16" />
+<rect x="126" y="202" width="52" height="16" />
+<rect x="126" y="218" width="52" height="16" />
+<rect x="126" y="234" width="52" height="16" />
+<rect x="126" y="250" width="52" height="16" />
+<rect x="126" y="266" width="52" height="16" />
+<rect x="178" y="34" width="64" height="40" />
+<rect x="178" y="74" width="64" height="16" />
+<rect x="178" y="90" width="64" height="16" />
+<rect x="178" y="106" width="64" height="16" />
+<rect x="178" y="122" width="64" height="16" />
+<rect x="178" y="138" width="64" height="16" />
+<rect x="178" y="154" width="64" height="16" />
+<rect x="178" y="170" width="64" height="16" />
+<rect x="178" y="186" width="64" height="16" />
+<rect x="178" y="202" width="64" height="16" />
+<rect x="178" y="218" width="64" height="16" />
+<rect x="178" y="234" width="64" height="16" />
+<rect x="178" y="250" width="64" height="16" />
+<rect x="178" y="266" width="64" height="16" />
+<rect x="242" y="34" width="54" height="40" />
+<rect x="242" y="74" width="54" height="16" />
+<rect x="242" y="90" width="54" height="16" />
+<rect x="242" y="106" width="54" height="16" />
+<rect x="242" y="122" width="54" height="16" />
+<rect x="242" y="138" width="54" height="16" />
+<rect x="242" y="154" width="54" height="16" />
+<rect x="242" y="170" width="54" height="16" />
+<rect x="242" y="186" width="54" height="16" />
+<rect x="242" y="202" width="54" height="16" />
+<rect x="242" y="218" width="54" height="16" />
+<rect x="242" y="234" width="54" height="16" />
+<rect x="242" y="250" width="54" height="16" />
+<rect x="242" y="266" width="54" height="16" />
+<rect x="296" y="34" width="54" height="40" />
+<rect x="296" y="74" width="54" height="16" />
+<rect x="296" y="90" width="54" height="16" />
+<rect x="296" y="106" width="54" height="16" />
+<rect x="296" y="122" width="54" height="16" />
+<rect x="296" y="138" width="54" height="16" />
+<rect x="296" y="154" width="54" height="16" />
+<rect x="296" y="170" width="54" height="16" />
+<rect x="296" y="186" width="54" height="16" />
+<rect x="296" y="202" width="54" height="16" />
+<rect x="296" y="218" width="54" height="16" />
+<rect x="296" y="234" width="54" height="16" />
+<rect x="296" y="250" width="54" height="16" />
+<rect x="296" y="266" width="54" height="16" />
+</g>
+<text x="15" y="57.5" font-size="9" font-weight="600">id</text>
+<text x="43" y="46.5" font-size="9" font-weight="600">A</text>
+<text x="43" y="57.5" font-size="9" font-weight="600">before</text>
+<text x="43" y="68.5" font-size="9" font-weight="600">April</text>
+<text x="87" y="46.5" font-size="9" font-weight="600">B</text>
+<text x="87" y="57.5" font-size="9" font-weight="600">at</text>
+<text x="87" y="68.5" font-size="9" font-weight="600">Harbor</text>
+<text x="131" y="57.5" font-size="9" font-weight="600">UNION</text>
+<text x="183" y="57.5" font-size="9" font-weight="600">INTERSECT</text>
+<text x="247" y="52.0" font-size="9" font-weight="600">A EXCEPT</text>
+<text x="247" y="63.0" font-size="9" font-weight="600">B</text>
+<text x="301" y="52.0" font-size="9" font-weight="600">B EXCEPT</text>
+<text x="301" y="63.0" font-size="9" font-weight="600">A</text>
+<text x="15" y="86.0" font-size="11">1</text>
+<text x="15" y="102.0" font-size="11">2</text>
+<text x="15" y="118.0" font-size="11">3</text>
+<text x="15" y="134.0" font-size="11">4</text>
+<text x="15" y="150.0" font-size="11">5</text>
+<text x="15" y="166.0" font-size="11">6</text>
+<text x="15" y="182.0" font-size="11">7</text>
+<text x="15" y="198.0" font-size="11">8</text>
+<text x="15" y="214.0" font-size="11">9</text>
+<text x="15" y="230.0" font-size="11">10</text>
+<text x="15" y="246.0" font-size="11">11</text>
+<text x="15" y="262.0" font-size="11">12</text>
+<text x="15" y="278.0" font-size="11">13</text>
+<circle cx="60.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="60.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="104.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="152.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="98.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="114.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="146.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="162.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="178.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="226.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="242.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="210.0" cy="258.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="82.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="130.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="194.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="269.0" cy="210.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="323.0" cy="274.0" r="4" fill="currentColor" stroke="none" />
+<text x="10" y="300" font-size="10" opacity="0.8">A: ordered before April 1. B: ordered at Harbor. Customers 1 to 13 of 150.</text>
+<text x="10" y="314" font-size="10" opacity="0.8">A dot means the customer is in that set, or in that result.</text>
+</svg>
+</figure>
+
+**Check**: the four sizes in one row.
+
+<RunSQL query={`WITH before_april AS (
+  SELECT DISTINCT customer_id FROM orders
+  WHERE ordered_at < DATE '2026-04-01' AND customer_id IS NOT NULL
+),
+at_harbor AS (
+  SELECT DISTINCT customer_id FROM orders WHERE store_id = 3
+)
+SELECT (SELECT COUNT(*) FROM before_april) AS a,
+       (SELECT COUNT(*) FROM at_harbor) AS b,
+       (SELECT COUNT(*) FROM (SELECT * FROM before_april INTERSECT SELECT * FROM at_harbor)) AS in_both,
+       (SELECT COUNT(*) FROM (SELECT * FROM before_april UNION SELECT * FROM at_harbor)) AS in_either;`} />
+
+Expected: 1 row, 4 columns: `97 | 90 | 60 | 127`. Answer: **of the 90 Harbor customers, 60 had ordered before April and 30 had not.** The sizes agree: 97 + 90 − 60 = 127, 60 + 37 = 97 and 60 + 30 = 90.
+
+### 4. Line up the columns
+
+Set operations match columns by position, not by name. Both queries need the same number of columns, and the result takes its names from the first query. When the types differ, DuckDB casts where it can; for `UNION`, the documentation says it throws an error when it cannot.
+
+**Try it**: a total row under the three stores.
+
+<RunSQL query={`SELECT s.store_name, COUNT(*) AS orders
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+GROUP BY s.store_name
+UNION ALL
+SELECT 'All stores', COUNT(*)
+FROM orders
+ORDER BY orders;`} />
+
+Expected: 4 rows, 2 columns; the last is `All stores`, 1800. *Why:* both queries give text, then a number.
+
+Now give one query a different number of columns.
+
+<RunSQL query={`SELECT 1 AS a, 2 AS b
+UNION ALL
+SELECT 3;`} />
+
+Expected: an error saying that set operations need the same number of result columns.
+
+### 5. "Every" is a count
+
+For a long or changing list, "every" is easier as a count than as a chain of `INTERSECT`s. Count the different categories each customer bought with `COUNT(DISTINCT …)`, and compare with the number of categories on the menu.
+
+**Try it**: customers who bought from every category, completed orders only.
+
+<RunSQL query={`SELECT o.customer_id, COUNT(DISTINCT p.category) AS categories
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND o.customer_id IS NOT NULL
+GROUP BY o.customer_id
+HAVING COUNT(DISTINCT p.category) = (SELECT COUNT(DISTINCT category) FROM products)
+ORDER BY o.customer_id;`} />
+
+Expected: 111 rows, 2 columns. *Why:* the joins repeat a category once per line, so `DISTINCT` counts each once (S21). The number to reach comes from a scalar subquery (S23), so a fifth category would not break the query.
+
+<figure>
+<svg viewBox="0 0 360 210" width="360" role="img" aria-labelledby="sq-cover-title sq-cover-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="sq-cover-title">Which customers bought from every category</title>
+<desc id="sq-cover-desc">Five customers against the four categories bakery, coffee, food and tea, with a dot where the customer has a completed order in that category. customer 1: bakery, coffee, food, tea (4); customer 13: bakery, coffee, food, tea (4); customer 29: bakery, coffee, food (3); customer 36: coffee, food (2); customer 43: bakery, coffee, tea (3). Customers 1 and 13 reach all four categories, the number of categories on the menu, so HAVING keeps them.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Bought from every category?</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none">
+<rect x="10" y="70" width="340" height="20" />
+<rect x="10" y="90" width="340" height="20" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45">
+<rect x="10" y="40" width="66" height="30" />
+<rect x="10" y="70" width="66" height="20" />
+<rect x="10" y="90" width="66" height="20" />
+<rect x="10" y="110" width="66" height="20" />
+<rect x="10" y="130" width="66" height="20" />
+<rect x="10" y="150" width="66" height="20" />
+<rect x="76" y="40" width="46" height="30" />
+<rect x="76" y="70" width="46" height="20" />
+<rect x="76" y="90" width="46" height="20" />
+<rect x="76" y="110" width="46" height="20" />
+<rect x="76" y="130" width="46" height="20" />
+<rect x="76" y="150" width="46" height="20" />
+<rect x="122" y="40" width="46" height="30" />
+<rect x="122" y="70" width="46" height="20" />
+<rect x="122" y="90" width="46" height="20" />
+<rect x="122" y="110" width="46" height="20" />
+<rect x="122" y="130" width="46" height="20" />
+<rect x="122" y="150" width="46" height="20" />
+<rect x="168" y="40" width="46" height="30" />
+<rect x="168" y="70" width="46" height="20" />
+<rect x="168" y="90" width="46" height="20" />
+<rect x="168" y="110" width="46" height="20" />
+<rect x="168" y="130" width="46" height="20" />
+<rect x="168" y="150" width="46" height="20" />
+<rect x="214" y="40" width="46" height="30" />
+<rect x="214" y="70" width="46" height="20" />
+<rect x="214" y="90" width="46" height="20" />
+<rect x="214" y="110" width="46" height="20" />
+<rect x="214" y="130" width="46" height="20" />
+<rect x="214" y="150" width="46" height="20" />
+<rect x="260" y="40" width="90" height="30" />
+<rect x="260" y="70" width="90" height="20" />
+<rect x="260" y="90" width="90" height="20" />
+<rect x="260" y="110" width="90" height="20" />
+<rect x="260" y="130" width="90" height="20" />
+<rect x="260" y="150" width="90" height="20" />
+</g>
+<text x="15" y="58.5" font-size="9" font-weight="600">customer_id</text>
+<text x="99.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">bakery</text>
+<text x="145.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">coffee</text>
+<text x="191.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">food</text>
+<text x="237.0" y="58.5" font-size="9" font-weight="600" text-anchor="middle">tea</text>
+<text x="305.0" y="53.0" font-size="9" font-weight="600" text-anchor="middle">COUNT(DISTINCT</text>
+<text x="305.0" y="64.0" font-size="9" font-weight="600" text-anchor="middle">category)</text>
+<text x="15" y="84.0" font-size="11">1</text>
+<text x="305.0" y="84.0" font-size="11" text-anchor="middle">4</text>
+<text x="15" y="104.0" font-size="11">13</text>
+<text x="305.0" y="104.0" font-size="11" text-anchor="middle">4</text>
+<text x="15" y="124.0" font-size="11">29</text>
+<text x="305.0" y="124.0" font-size="11" text-anchor="middle">3</text>
+<text x="15" y="144.0" font-size="11">36</text>
+<text x="305.0" y="144.0" font-size="11" text-anchor="middle">2</text>
+<text x="15" y="164.0" font-size="11">43</text>
+<text x="305.0" y="164.0" font-size="11" text-anchor="middle">3</text>
+<circle cx="99.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="80.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="100.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="120.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="140.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="191.0" cy="140.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="99.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="145.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<circle cx="237.0" cy="160.0" r="4" fill="currentColor" stroke="none" />
+<text x="10" y="188" font-size="10" opacity="0.8">Completed orders only. The menu has 4 categories.</text>
+<text x="10" y="202" font-size="10" opacity="0.8">HAVING keeps the shaded rows: the count equals the number of categories.</text>
+</svg>
+</figure>
+
+**Check**: count the customers by how many categories they bought.
+
+<RunSQL query={`SELECT categories, COUNT(*) AS customers
+FROM (
+  SELECT o.customer_id, COUNT(DISTINCT p.category) AS categories
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed' AND o.customer_id IS NOT NULL
+  GROUP BY o.customer_id
+) AS per_customer
+GROUP BY categories
+ORDER BY categories;`} />
+
+Expected: 4 rows, 2 columns: 1 category 4 customers, 2 categories 9, 3 categories 20, 4 categories 111. They add up to 144, the 145 customers who ordered minus customer 42, whose only order was canceled.
+
+<Aside type="tip" title="Remember">
+
+- A set operation compares whole rows from two queries.
+- `INTERSECT`: in both. `EXCEPT`: in the first only, so the order matters. `UNION`: in either, once. `UNION ALL`: every row, repeats kept.
+- Columns line up by position, and the names come from the first query.
+- For "every", compare `COUNT(DISTINCT …)` with the total.
+
+**Common trap: "`UNION` is a join."** A join pairs rows and puts the columns of two tables side by side. `UNION` puts one result under the other: the columns stay those of the first query, and only the rows change.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-set-operations-1">
+
+**Which customers ordered at both Old Town (store 1) and Campus (store 2)?** Use the editor below. Expected: 1
+column, the customer ids.
+
+The first steps are done for you: the first query and the place for the operator. Until you add the operator, the editor shows one store's rows, one for each order.
+
+<RunSQL query={`SELECT customer_id FROM orders WHERE store_id = 1
+-- add the operator and the second query here
+ORDER BY customer_id;`} />
+
+Now finish it: add the operator and the second query, so the result is sorted by `customer_id`.
+
+<details>
+<summary>Hint</summary>
+
+"In both" is unit 2. The second query is the same, with the other store.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT customer_id FROM orders WHERE store_id = 1
+INTERSECT
+SELECT customer_id FROM orders WHERE store_id = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id FROM orders WHERE store_id = 1
+INTERSECT
+SELECT customer_id FROM orders WHERE store_id = 2
+ORDER BY customer_id;
+```
+
+81 rows. Check: 108 different customers ordered at Old Town and 108 at Campus, so 81 in both is plausible.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-set-operations-2">
+
+**Which customers ordered at all three cafes?** Use the editor below.
+
+Before you run anything, write one sentence as a comment in the editor: what one row of the result is, and which customers must
+not appear. Then answer it with the coverage pattern of unit 5, not with `INTERSECT`.
+
+Expected shape, to check your sentence against: 1 column, `customer_id`. Count any order, canceled included, and keep
+the walk-in order out.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Count the different `store_id` values for each customer and compare with the number of rows of `stores`, as unit 5
+compares with the number of categories. No join is needed.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One id column: customers whose orders touch every store."*
+
+```sql
+SELECT customer_id
+FROM orders
+WHERE customer_id IS NOT NULL
+GROUP BY customer_id
+HAVING COUNT(DISTINCT store_id) = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT customer_id
+FROM orders
+WHERE customer_id IS NOT NULL
+GROUP BY customer_id
+HAVING COUNT(DISTINCT store_id) = (SELECT COUNT(*) FROM stores)
+ORDER BY customer_id;
+```
+
+44 customers. Grouping them by how many cafes they used gives 28 with one, 73 with two and 44 with three: 145
+customers. `COUNT(*)` instead of `COUNT(DISTINCT store_id)` would count orders, not cafes.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what do `UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` return, and how does DuckDB line up the
+   columns?
+
+   <details>
+   <summary>Answer</summary>
+
+   `UNION`: rows in either, once each. `UNION ALL`: every row of both, repeats kept. `INTERSECT`: rows in both.
+   `EXCEPT`: rows of the first that are not in the second. The queries need the same number of columns, matched by
+   position, with the names of the first.
+
+   </details>
+
+<Exercise id="sql-set-operations-3">
+
+**Spot the flaw.** A colleague wants the customer and store pairs that appear both before and after April, and writes:
+
+<RunSQL query={`SELECT customer_id, store_id FROM orders WHERE ordered_at < DATE '2026-04-01'
+INTERSECT
+SELECT store_id, customer_id FROM orders WHERE ordered_at >= DATE '2026-04-01'
+ORDER BY customer_id, store_id;`} />
+
+Expected from that query: 2 rows, 2 columns, with no error. What went wrong, and what is the right result?
+
+<Solution>
+
+Both columns are integers, so DuckDB lines them up by position without complaint: it compares the first query's `customer_id`
+with the second query's `store_id`, and `store_id` with `customer_id`. The question it answers, "is there a row after
+April where the store number is this customer and the customer number is this store?", is nonsense that two rows happen
+to satisfy. Put the columns in the same order:
+
+```sql
+SELECT customer_id, store_id FROM orders WHERE ordered_at < DATE '2026-04-01'
+INTERSECT
+SELECT customer_id, store_id FROM orders WHERE ordered_at >= DATE '2026-04-01'
+ORDER BY customer_id, store_id;
+```
+
+Expected: 92 rows, 2 columns. A mismatch of counts raises an error; a swap of same-typed columns gives a plausible wrong
+answer, so read the column lists side by side.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say which rows I want in terms of two sets, line up the columns, and choose between `UNION`,
+`UNION ALL`, `INTERSECT` and `EXCEPT`; and I can answer "every" with `HAVING COUNT(DISTINCT …)`.*
+Test: Exercise sql-set-operations-2, done in an empty editor without opening the hints.
+
+The pattern to remember: **name the two sets, line the columns up by position, then pick the operator; for "every", compare
+`COUNT(DISTINCT …)` with the total.** The next lesson, *Funnels: where do people drop off?* (S25), counts customers step by
+step.

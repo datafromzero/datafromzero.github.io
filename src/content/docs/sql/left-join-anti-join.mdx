@@ -1,0 +1,644 @@
+---
+id: sql-left-join-anti-join
+title: LEFT JOIN and finding rows with no match
+description: Keep unmatched rows with LEFT JOIN, find customers who never ordered with an anti-join, and place conditions in ON or WHERE on purpose.
+stage: sql
+order: 200
+level: intermediate
+duration: 30
+objectives:
+  - Explain INNER, LEFT, RIGHT and FULL joins as policies about unpaired rows
+  - Write a LEFT JOIN that keeps unmatched rows
+  - Find rows with no match using LEFT JOIN ... IS NULL
+  - Explain how a WHERE on the right table turns a LEFT JOIN into an inner join
+prerequisites:
+  - sql-inner-join
+  - sql-null-handling
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#joins
+  - title: 'DuckDB documentation: Semi and anti joins'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from#semi-and-anti-joins
+  - title: 'Microsoft Support: XLOOKUP function'
+    url: https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929
+status: draft
+---
+
+An inner join (S19) drops the rows that found no pair, and says nothing: the walk-in order 1335, the unsold Pumpkin Spice
+Latte. Sometimes those rows are exactly what you are looking for. Every query on this page runs in the editor under it:
+press Run.
+
+TODO(owner): run every block on the page and check each result against its Expected line. Time the lesson against its 30 minutes (raised from 25: the page now holds 12 runnable queries and three animations). The DuckDB page opened for this lesson does not say that a comparison with `NULL` never pairs rows in `ON`, or how `WHERE` treats it; the lesson shows both by results (units 1 and 3) and calls them standard SQL. Source them in *How a query runs* (S12), or drop the sentences. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> We want to send a welcome offer to customers who signed up but have never ordered. Who are they? And do we have
+> customers whose only order was canceled?
+
+Three rows of `customers`:
+
+| customer_id | signup_date | city | loyalty_tier |
+|---:|---|---|---|
+| 140 | 2026-06-10 | Alameda | bronze |
+| 141 | 2026-06-12 | Alameda | silver |
+| 147 | 2026-06-22 | Alameda | bronze |
+
+Customer 141 placed orders 2673 and 2744. Customers 140 and 147 appear in no order, so an inner join would never show
+them.
+
+## Warm-up
+
+Answer from memory before you open anything. Then click to check.
+
+1. In *INNER JOIN: pairing rows on a key* (S19), write the join of `orders` to `customers` on `customer_id` that
+   returned 1,799 rows from 1,800 orders. Which order was missing, and why?
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT COUNT(*)
+   FROM orders AS o
+   INNER JOIN customers AS c ON o.customer_id = c.customer_id;
+   ```
+
+   Order 1335, the walk-in, has an empty `customer_id`. A comparison with an empty value is never true, so it pairs
+   with nobody.
+
+   </details>
+
+2. In *NULL: unknown is not zero* (S4), how do you test for an empty value, and why does `= NULL` not work?
+
+   <details>
+   <summary>Answer</summary>
+
+   `IS NULL`. A comparison with an unknown value is never true, so `= NULL` keeps no row.
+
+   </details>
+
+## The big idea
+
+A join pairs rows by key, and the join type decides what happens to a row that finds no partner.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-all-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="jn-all" id="jn-all-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="jn-all" id="jn-all-r1" aria-label="Step 1 of 4: LEFT JOIN: every row of t1 is kept" />
+<input class="sa-r r2 o4" type="radio" name="jn-all" id="jn-all-r2" aria-label="Step 2 of 4: RIGHT JOIN: every row of t2 is kept" />
+<input class="sa-r r3 o6" type="radio" name="jn-all" id="jn-all-r3" aria-label="Step 3 of 4: INNER JOIN: only the pairs are kept" />
+<input class="sa-r r4 o8" type="radio" name="jn-all" id="jn-all-r4" aria-label="Step 4 of 4: FULL JOIN: every row of both is kept" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 228" width="360" role="img" aria-labelledby="jn-all-t jn-all-d">
+<title id="jn-all-t">Join types · who gets through?</title>
+<desc id="jn-all-d">Two small tables of labels: keys A, B and C, and keys B, C and D. Keys B and C match. The animation steps through LEFT JOIN, RIGHT JOIN, INNER JOIN and FULL JOIN, naming each, lighting the rows it keeps and listing its result: LEFT 3 rows, RIGHT 3 rows, INNER 2 rows, FULL 4 rows. Rows with no partner that a join does not keep are marked red.</desc>
+<text class="f10 b w2 tmp" x="10" y="27">1 · LEFT JOIN: every row of t1 is kept</text>
+<text class="f10 b w2 d3 tmp" x="10" y="27">2 · RIGHT JOIN: every row of t2 is kept</text>
+<text class="f10 b w2 d5 tmp" x="10" y="27">3 · INNER JOIN: only the pairs are kept</text>
+<text class="f10 b w2 d7" x="10" y="27">4 · FULL JOIN: every row of both is kept</text>
+<text class="f11 b" x="10" y="14">Join types · who gets through?</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="80" y="41">t2</text>
+<text class="f10 mu" x="180" y="41">result</text>
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><rect class="f-flt k3 w2 d3 tmp" x="10" y="44" width="52" height="24" rx="6" /><rect class="f-flt k3 w2 d5 tmp" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g>
+<g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g>
+<g><rect class="f-src k2" x="80" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3" x="80" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="106" y="90">B r1</text></g>
+<g><rect class="f-src k2" x="80" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3" x="80" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="106" y="120">C r2</text></g>
+<g><rect class="f-src k2" x="80" y="134" width="52" height="24" rx="6" /><rect class="f-flt k3 w2 tmp" x="80" y="134" width="52" height="24" rx="6" /><rect class="f-flt k3 w2 d5 tmp" x="80" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="106" y="150">D r3</text></g>
+<path class="s-mat" d="M62 86L80 86M62 116L80 116" />
+<g class="w2 tmp"><rect class="f-src k2" x="180" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="60">A l1</text></g>
+<g class="w2 tmp"><rect class="f-ord k2" x="240" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="60">NULL</text></g>
+<g class="w2 tmp"><rect class="f-mat k2" x="180" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="90">B l2</text></g>
+<g class="w2 tmp"><rect class="f-mat k2" x="240" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="90">B r1</text></g>
+<g class="w2 tmp"><rect class="f-mat k2" x="180" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="120">C l3</text></g>
+<g class="w2 tmp"><rect class="f-mat k2" x="240" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="120">C r2</text></g>
+<text class="f11 b w2 tmp" x="300" y="120">3 rows</text>
+<g class="w2 d3 tmp"><rect class="f-mat k2" x="180" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="60">B l2</text></g>
+<g class="w2 d3 tmp"><rect class="f-mat k2" x="240" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="60">B r1</text></g>
+<g class="w2 d3 tmp"><rect class="f-mat k2" x="180" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="90">C l3</text></g>
+<g class="w2 d3 tmp"><rect class="f-mat k2" x="240" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="90">C r2</text></g>
+<g class="w2 d3 tmp"><rect class="f-ord k2" x="180" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="120">NULL</text></g>
+<g class="w2 d3 tmp"><rect class="f-src k2" x="240" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="120">D r3</text></g>
+<text class="f11 b w2 d3 tmp" x="300" y="120">3 rows</text>
+<g class="w2 d5 tmp"><rect class="f-mat k2" x="180" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="60">B l2</text></g>
+<g class="w2 d5 tmp"><rect class="f-mat k2" x="240" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="60">B r1</text></g>
+<g class="w2 d5 tmp"><rect class="f-mat k2" x="180" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="90">C l3</text></g>
+<g class="w2 d5 tmp"><rect class="f-mat k2" x="240" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="90">C r2</text></g>
+<text class="f11 b w2 d5 tmp" x="300" y="90">2 rows</text>
+<g class="w2 d7"><rect class="f-src k2" x="180" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="60">A l1</text></g>
+<g class="w2 d7"><rect class="f-ord k2" x="240" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="60">NULL</text></g>
+<g class="w2 d7"><rect class="f-mat k2" x="180" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="90">B l2</text></g>
+<g class="w2 d7"><rect class="f-mat k2" x="240" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="90">B r1</text></g>
+<g class="w2 d7"><rect class="f-mat k2" x="180" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="120">C l3</text></g>
+<g class="w2 d7"><rect class="f-mat k2" x="240" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="120">C r2</text></g>
+<g class="w2 d7"><rect class="f-ord k2" x="180" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="206" y="150">NULL</text></g>
+<g class="w2 d7"><rect class="f-src k2" x="240" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="266" y="150">D r3</text></g>
+<text class="f11 b w2 d7" x="300" y="150">4 rows</text>
+<path class="f-mat k3 w2 tmp" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-src k3 w2 tmp" d="M61 170.33A26 26 0 1 0 61 209.67A26 26 0 0 1 61 170.33Z" />
+<path class="f-mat k3 w2 d3 tmp" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-src k3 w2 d3 tmp" d="M61 170.33A26 26 0 1 1 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-mat k3 w2 d5 tmp" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-mat k3 w2 d7" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-src k3 w2 d7" d="M61 170.33A26 26 0 1 0 61 209.67A26 26 0 0 1 61 170.33Z" />
+<path class="f-src k3 w2 d7" d="M61 170.33A26 26 0 1 1 61 209.67A26 26 0 0 0 61 170.33Z" />
+<g><circle class="ln" cx="44" cy="190" r="26" /><circle class="ln" cx="78" cy="190" r="26" /></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="jn-all-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="jn-all-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="jn-all-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="jn-all-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="jn-all-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="jn-all-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="jn-all-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="jn-all-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="jn-all-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="jn-all-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="jn-all-r1">1</label><label class="sa-sb sb2" for="jn-all-r2">2</label><label class="sa-sb sb3" for="jn-all-r3">3</label><label class="sa-sb sb4" for="jn-all-r4">4</label></span>
+</div>
+<p class="ca-cap">The four joins differ only in which unpaired rows they keep: LEFT the first table’s, RIGHT the second’s, INNER neither, FULL both.</p>
+<ol class="sa-steps">
+<li>LEFT JOIN: every row of t1 is kept</li>
+<li>RIGHT JOIN: every row of t2 is kept</li>
+<li>INNER JOIN: only the pairs are kept</li>
+<li>FULL JOIN: every row of both is kept</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Press Run on each query. Counts cover all 1,800
+orders, the canceled one included, unless a step says otherwise, and count rows, not dollars, so order 2075 does not
+matter.
+
+### 1. LEFT JOIN keeps the left table's lonely rows
+
+An inner join keeps only the pairs. A **LEFT JOIN** also keeps every row of the left table, the one written before
+`JOIN`: a row with no match comes out once, with `NULL` (an empty value, S4) in every column of the right table.
+
+*Excel:* when `XLOOKUP` finds nothing (E8, *Bring in a value by key with XLOOKUP*), the row stays and shows `#N/A`, or the
+text you gave for that case. A `LEFT JOIN` does the same with `NULL`.
+
+**Try it**: first what an inner join keeps.
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows,
+       COUNT(DISTINCT c.customer_id) AS customers_paired
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id;`} />
+
+Expected: 1 row, 2 columns. *Why:* **1799** rows, the orders that name a customer (S19), and **145** customers. The
+other 5 of the 150 pair with nothing, so the inner join dropped them without a word.
+
+**Try it**: keep everyone with `LEFT JOIN`. Before you run it: how many rows?
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows,
+       COUNT(o.order_id) AS paired_rows,
+       COUNT(DISTINCT c.customer_id) AS customers
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id;`} />
+
+Expected: 1 row, 3 columns. *Why:* **1804** rows: the 1,799 pairs plus one row for each of the 5 customers with no
+order. `COUNT(o.order_id)` skips `NULL` (S7), so it counts only the pairs. **150** customers: none lost. Order 1335 is not
+here, because `customers` is the left table.
+
+**Try it**: see the `NULL`s.
+
+<RunSQL query={`SELECT c.customer_id, c.loyalty_tier, o.order_id, o.status
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE c.customer_id IN (42, 140, 141, 147)
+ORDER BY c.customer_id, o.order_id;`} />
+
+Expected: 5 rows, 4 columns. *Why:* customer 141 has two orders and so two rows. Customers 140 and 147 have one row
+each, with `NULL` in `order_id` and `status`. Customer 42's only order, the canceled order 1461, pairs normally. The same
+five rows, drawn:
+
+<figure>
+<svg viewBox="0 0 360 500" width="360" role="img" aria-labelledby="lj-keep-title lj-keep-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="lj-keep-title">LEFT JOIN keeps customers with no order</title>
+<desc id="lj-keep-desc">Three grids. First, four customers rows: 42 silver, 140 bronze, 141 silver and 147 bronze. Second, the three orders that these customers placed: order 1461 for customer 42, canceled, and orders 2673 and 2744 for customer 141, completed. Customers 140 and 147 placed none. Third, the result of customers LEFT JOIN orders, with five rows: customer 42 with order 1461, customer 140 with NULL in order_id and status, customer 141 with order 2673, customer 141 with order 2744, and customer 147 with NULL in order_id and status. The two rows with NULL are shaded.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">LEFT JOIN keeps the unpaired rows</text>
+<text x="10" y="44" font-size="11" font-weight="600">customers: 4 rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="52" width="100" height="22" /><rect x="110" y="52" width="120" height="22" /><rect x="230" y="52" width="120" height="22" /><rect x="10" y="74" width="100" height="22" /><rect x="110" y="74" width="120" height="22" /><rect x="230" y="74" width="120" height="22" /><rect x="10" y="96" width="100" height="22" /><rect x="110" y="96" width="120" height="22" /><rect x="230" y="96" width="120" height="22" /><rect x="10" y="118" width="100" height="22" /><rect x="110" y="118" width="120" height="22" /><rect x="230" y="118" width="120" height="22" /><rect x="10" y="140" width="100" height="22" /><rect x="110" y="140" width="120" height="22" /><rect x="230" y="140" width="120" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="105" y="67" text-anchor="end">customer_id</text><text x="115" y="67">loyalty_tier</text><text x="235" y="67">signup_date</text></g>
+<g><text x="105" y="89" text-anchor="end">42</text><text x="115" y="89">silver</text><text x="235" y="89">2025-09-11</text><text x="105" y="111" text-anchor="end">140</text><text x="115" y="111">bronze</text><text x="235" y="111">2026-06-10</text><text x="105" y="133" text-anchor="end">141</text><text x="115" y="133">silver</text><text x="235" y="133">2026-06-12</text><text x="105" y="155" text-anchor="end">147</text><text x="115" y="155">bronze</text><text x="235" y="155">2026-06-22</text></g>
+<text x="10" y="186" font-size="11" font-weight="600">orders placed by these customers: 3 rows</text>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="194" width="100" height="22" /><rect x="110" y="194" width="120" height="22" /><rect x="230" y="194" width="120" height="22" /><rect x="10" y="216" width="100" height="22" /><rect x="110" y="216" width="120" height="22" /><rect x="230" y="216" width="120" height="22" /><rect x="10" y="238" width="100" height="22" /><rect x="110" y="238" width="120" height="22" /><rect x="230" y="238" width="120" height="22" /><rect x="10" y="260" width="100" height="22" /><rect x="110" y="260" width="120" height="22" /><rect x="230" y="260" width="120" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="105" y="209" text-anchor="end">order_id</text><text x="225" y="209" text-anchor="end">customer_id</text><text x="235" y="209">status</text></g>
+<g><text x="105" y="231" text-anchor="end">1461</text><text x="225" y="231" text-anchor="end">42</text><text x="235" y="231">canceled</text><text x="105" y="253" text-anchor="end">2673</text><text x="225" y="253" text-anchor="end">141</text><text x="235" y="253">completed</text><text x="105" y="275" text-anchor="end">2744</text><text x="225" y="275" text-anchor="end">141</text><text x="235" y="275">completed</text></g>
+<text x="10" y="306" font-size="11" font-weight="600">customers LEFT JOIN orders: 5 rows</text>
+<g fill="currentColor" fill-opacity="0.12" stroke="none"><rect x="10" y="358" width="340" height="22" /><rect x="10" y="424" width="340" height="22" /></g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.45"><rect x="10" y="314" width="100" height="22" /><rect x="110" y="314" width="120" height="22" /><rect x="230" y="314" width="120" height="22" /><rect x="10" y="336" width="100" height="22" /><rect x="110" y="336" width="120" height="22" /><rect x="230" y="336" width="120" height="22" /><rect x="10" y="358" width="100" height="22" /><rect x="110" y="358" width="120" height="22" /><rect x="230" y="358" width="120" height="22" /><rect x="10" y="380" width="100" height="22" /><rect x="110" y="380" width="120" height="22" /><rect x="230" y="380" width="120" height="22" /><rect x="10" y="402" width="100" height="22" /><rect x="110" y="402" width="120" height="22" /><rect x="230" y="402" width="120" height="22" /><rect x="10" y="424" width="100" height="22" /><rect x="110" y="424" width="120" height="22" /><rect x="230" y="424" width="120" height="22" /></g>
+<g font-size="10" font-weight="600"><text x="105" y="329" text-anchor="end">customer_id</text><text x="225" y="329" text-anchor="end">order_id</text><text x="235" y="329">status</text></g>
+<g><text x="105" y="351" text-anchor="end">42</text><text x="225" y="351" text-anchor="end">1461</text><text x="235" y="351">canceled</text><text x="105" y="373" text-anchor="end" font-weight="600">140</text><text x="225" y="373" text-anchor="end" opacity="0.6" font-weight="600">NULL</text><text x="235" y="373" opacity="0.6" font-weight="600">NULL</text><text x="105" y="395" text-anchor="end">141</text><text x="225" y="395" text-anchor="end">2673</text><text x="235" y="395">completed</text><text x="105" y="417" text-anchor="end">141</text><text x="225" y="417" text-anchor="end">2744</text><text x="235" y="417">completed</text><text x="105" y="439" text-anchor="end" font-weight="600">147</text><text x="225" y="439" text-anchor="end" opacity="0.6" font-weight="600">NULL</text><text x="235" y="439" opacity="0.6" font-weight="600">NULL</text></g>
+<text x="10" y="470" font-size="11" font-weight="600">4 customers in, 5 rows out. Nobody is lost.</text>
+<text x="10" y="488" font-size="11" opacity="0.8">Shaded: order_id IS NULL, the customers with no order.</text>
+</svg>
+</figure>
+
+### 2. Find the rows with no partner
+
+To list the rows of one table that have no partner in another, keep the unpaired rows with a `LEFT JOIN`. Then keep the
+ones where a column that is never empty on a real right-table row, such as its primary key, is `NULL`. Test it with
+`IS NULL`, never `= NULL` (S4).
+
+DuckDB can also write it directly: `ANTI JOIN` gives the left rows with no match, and `SEMI JOIN` the left rows with at
+least one. Neither returns more rows than the left table has.
+
+**Try it**: the anti-join with `LEFT JOIN` and `IS NULL`.
+
+<RunSQL query={`SELECT c.customer_id, c.signup_date, c.loyalty_tier
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id;`} />
+
+Expected: 3 columns. *Why:* **5** rows: customers 140, 147, 148, 149 and 150, who all signed up between June 10 and
+June 26. That answers the first question.
+
+**Try it**: a second route, with `ANTI JOIN`.
+
+<RunSQL query={`SELECT c.customer_id
+FROM customers AS c
+ANTI JOIN orders AS o ON o.customer_id = c.customer_id
+ORDER BY c.customer_id;`} />
+
+Expected: 1 column, the same customers as the `LEFT JOIN` query above. *Why:* the same list, with no `NULL` test to write.
+
+### 3. Where the condition goes: ON or WHERE
+
+`ON` decides which rows pair. `WHERE` runs afterward, on the finished rows, the padded ones included, and it sees their
+`NULL`s (*How a query runs: the order of the clauses*, S12). So a condition on the right table gives a different answer
+in each place.
+
+**Try it**: the tempting way to ask about completed orders.
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows,
+       COUNT(DISTINCT c.customer_id) AS customers
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE o.status = 'completed';`} />
+
+Expected: 1 row, 2 columns. *Why:* **1798** rows and **144** customers. The 5 customers with no order are gone. On an unpaired row `o.status` is `NULL`, and `NULL = 'completed'` is not true, so the row leaves. The
+LEFT JOIN has become an inner join.
+
+**Try it**: put the condition in `ON`. Before you run it: how many customers have no completed order?
+
+<RunSQL query={`SELECT c.customer_id
+FROM customers AS c
+LEFT JOIN orders AS o
+       ON o.customer_id = c.customer_id AND o.status = 'completed'
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id;`} />
+
+Expected: 1 column. *Why:* **6** customers: the five from unit 2, and customer 42, whose only order was canceled, the one customer the `WHERE` above also lost. Now
+`status` only decides who pairs, and customer 42 stays unpaired. "Never ordered" gives 5 and "no completed order" gives 6:
+say which question you answer.
+
+<details>
+<summary>Explain it in your own words: why does the WHERE in unit 3 lose the five customers, while the same condition in ON keeps them?</summary>
+
+A customer with no order has nothing in `status`, so a test on `status` has nothing to say yes to, and `WHERE` throws the
+row away. In `ON` the test asks a different question: does this order qualify as a partner? A customer with no
+qualifying order is just unpaired, and a LEFT JOIN keeps unpaired rows.
+
+</details>
+
+### 4. RIGHT and FULL keep the other side too
+
+`RIGHT` keeps the right table's unpaired rows, as `LEFT` does for the left table. `FULL` keeps both sides'. Every row of a
+kept side appears at least once.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-right-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="jn-right" id="jn-right-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="jn-right" id="jn-right-r1" aria-label="Step 1 of 5: Two tables, each with keys" />
+<input class="sa-r r2 o2" type="radio" name="jn-right" id="jn-right-r2" aria-label="Step 2 of 5: Matching keys shake hands" />
+<input class="sa-r r3 o3" type="radio" name="jn-right" id="jn-right-r3" aria-label="Step 3 of 5: The pairs move into the result" />
+<input class="sa-r r4 o4" type="radio" name="jn-right" id="jn-right-r4" aria-label="Step 4 of 5: Right rows with no partner are kept (NULL)" />
+<input class="sa-r r5 o8" type="radio" name="jn-right" id="jn-right-r5" aria-label="Step 5 of 5: The result has 3 rows" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 226" width="360" role="img" aria-labelledby="jn-right-t jn-right-d">
+<title id="jn-right-t">RIGHT JOIN · every right row gets through</title>
+<desc id="jn-right-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Keys B and C match: they slide together, shake hands and move into the result as pairs. RIGHT JOIN also moves the row with key D into the result, with NULL in the first table’s column: 3 rows. Two circles in the corner show which keys are kept.</desc>
+<text class="f10 b w1 tmp" x="10" y="27">1 · Two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · Matching keys shake hands</text>
+<text class="f10 b w1 d3 tmp" x="10" y="27">3 · The pairs move into the result</text>
+<text class="f10 b w1 d4 tmp" x="10" y="27">4 · Right rows with no partner are kept (NULL)</text>
+<text class="f10 b w4 d5" x="10" y="27">5 · The result has 3 rows</text>
+<text class="f11 b" x="10" y="14">RIGHT JOIN · every right row gets through</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="150" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="f-mat k3 w6 d3" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-src k3 w5 d4" d="M61 170.33A26 26 0 1 1 61 209.67A26 26 0 0 0 61 170.33Z" />
+<g><circle class="ln" cx="44" cy="190" r="26" /><circle class="ln" cx="78" cy="190" r="26" /></g>
+<text class="f10 b m" x="35" y="194">t1</text>
+<text class="f10 b m" x="87" y="194">t2</text>
+<rect class="bx dsh" x="10" y="44" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="134" width="52" height="24" rx="6" />
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g><rect class="f-mat k3 w6 d3" x="62" y="82" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="90">B r1</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="70" width="120" height="32" rx="10" /></g></g>
+<g class="w8"><g class="mv m3 x21 yn3"><g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g><rect class="f-mat k3 w6 d3" x="62" y="112" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="120">C r2</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="100" width="120" height="32" rx="10" /></g></g>
+<g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><rect class="f-flt k3 w5 d4" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g>
+<g class="w8"><g class="mv m4 x13 yn3"><g><rect class="f-src k2" x="150" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="150">D r3</text></g></g></g>
+<g class="w4 d5"><rect class="f-ord k2" x="220" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="246" y="120">NULL</text></g>
+<text class="f11 b w4 d5" x="220" y="144">3 rows</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="jn-right-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="jn-right-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="jn-right-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="jn-right-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="jn-right-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="jn-right-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="jn-right-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="jn-right-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="jn-right-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="jn-right-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="jn-right-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="jn-right-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="jn-right-r1">1</label><label class="sa-sb sb2" for="jn-right-r2">2</label><label class="sa-sb sb3" for="jn-right-r3">3</label><label class="sa-sb sb4" for="jn-right-r4">4</label><label class="sa-sb sb5" for="jn-right-r5">5</label></span>
+</div>
+<p class="ca-cap">RIGHT JOIN keeps every row of the second table. A row with no partner is kept, with NULL in the first table’s columns.</p>
+<ol class="sa-steps">
+<li>Two tables, each with keys</li>
+<li>Matching keys shake hands</li>
+<li>The pairs move into the result</li>
+<li>Right rows with no partner are kept (NULL)</li>
+<li>The result has 3 rows</li>
+</ol>
+</figure>
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="jn-full-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="jn-full" id="jn-full-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="jn-full" id="jn-full-r1" aria-label="Step 1 of 5: Two tables, each with keys" />
+<input class="sa-r r2 o2" type="radio" name="jn-full" id="jn-full-r2" aria-label="Step 2 of 5: Matching keys shake hands" />
+<input class="sa-r r3 o3" type="radio" name="jn-full" id="jn-full-r3" aria-label="Step 3 of 5: The pairs move into the result" />
+<input class="sa-r r4 o4" type="radio" name="jn-full" id="jn-full-r4" aria-label="Step 4 of 5: Rows with no partner are kept (NULL)" />
+<input class="sa-r r5 o8" type="radio" name="jn-full" id="jn-full-r5" aria-label="Step 5 of 5: The result has 4 rows" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 226" width="360" role="img" aria-labelledby="jn-full-t jn-full-d">
+<title id="jn-full-t">FULL JOIN · every row gets through</title>
+<desc id="jn-full-d">Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Keys B and C match: they slide together, shake hands and move into the result as pairs. FULL JOIN also moves the row with key A, with NULL on the right, and the row with key D, with NULL on the left, into the result: 4 rows. Two circles in the corner show which keys are kept.</desc>
+<text class="f10 b w1 tmp" x="10" y="27">1 · Two tables, each with keys</text>
+<text class="f10 b w1 d2 tmp" x="10" y="27">2 · Matching keys shake hands</text>
+<text class="f10 b w1 d3 tmp" x="10" y="27">3 · The pairs move into the result</text>
+<text class="f10 b w1 d4 tmp" x="10" y="27">4 · Rows with no partner are kept (NULL)</text>
+<text class="f10 b w4 d5" x="10" y="27">5 · The result has 4 rows</text>
+<text class="f11 b" x="10" y="14">FULL JOIN · every row gets through</text>
+<text class="f10 mu" x="10" y="41">t1</text>
+<text class="f10 mu" x="150" y="41">t2</text>
+<text class="f10 mu" x="220" y="41">result</text>
+<path class="f-mat k3 w6 d3" d="M61 170.33A26 26 0 0 0 61 209.67A26 26 0 0 0 61 170.33Z" />
+<path class="f-src k3 w5 d4" d="M61 170.33A26 26 0 1 0 61 209.67A26 26 0 0 1 61 170.33Z" />
+<path class="f-src k3 w5 d4" d="M61 170.33A26 26 0 1 1 61 209.67A26 26 0 0 0 61 170.33Z" />
+<g><circle class="ln" cx="44" cy="190" r="26" /><circle class="ln" cx="78" cy="190" r="26" /></g>
+<text class="f10 b m" x="35" y="194">t1</text>
+<text class="f10 b m" x="87" y="194">t2</text>
+<rect class="bx dsh" x="10" y="44" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="74" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="104" width="52" height="24" rx="6" />
+<rect class="bx dsh" x="150" y="134" width="52" height="24" rx="6" />
+<g class="w8"><g class="mv m3 x21 y0"><g><rect class="f-src k2" x="10" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="90">B l2</text></g><rect class="f-mat k3 w6 d3" x="62" y="82" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="74" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="74" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="90">B r1</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="70" width="120" height="32" rx="10" /></g></g>
+<g class="w8"><g class="mv m3 x21 y0"><g><rect class="f-src k2" x="10" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="10" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="120">C l3</text></g><rect class="f-mat k3 w6 d3" x="62" y="112" width="8" height="8" rx="2" /><g class="w8"><g class="mv m2 xn8 y0"><g><rect class="f-src k2" x="150" y="104" width="52" height="24" rx="6" /><rect class="f-mat k3 w7 d2" x="150" y="104" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="120">C r2</text></g></g></g><rect class="s-mat u1 d3 tmp" x="6" y="100" width="120" height="32" rx="10" /></g></g>
+<g class="w8"><g class="mv m4 x21 y0"><g><rect class="f-src k2" x="10" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="36" y="60">A l1</text></g></g></g>
+<g class="w4 d5"><rect class="f-ord k2" x="280" y="44" width="52" height="24" rx="6" /><text class="f11 m" x="306" y="60">NULL</text></g>
+<g class="w8"><g class="mv m4 x13 y0"><g><rect class="f-src k2" x="150" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="176" y="150">D r3</text></g></g></g>
+<g class="w4 d5"><rect class="f-ord k2" x="220" y="134" width="52" height="24" rx="6" /><text class="f11 m" x="246" y="150">NULL</text></g>
+<text class="f11 b w4 d5" x="220" y="174">4 rows</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="jn-full-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="jn-full-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="jn-full-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="jn-full-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="jn-full-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="jn-full-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="jn-full-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="jn-full-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="jn-full-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="jn-full-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="jn-full-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="jn-full-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="jn-full-r1">1</label><label class="sa-sb sb2" for="jn-full-r2">2</label><label class="sa-sb sb3" for="jn-full-r3">3</label><label class="sa-sb sb4" for="jn-full-r4">4</label><label class="sa-sb sb5" for="jn-full-r5">5</label></span>
+</div>
+<p class="ca-cap">FULL JOIN keeps every row of both tables. A row with no partner is kept, with NULL in the other table’s columns.</p>
+<ol class="sa-steps">
+<li>Two tables, each with keys</li>
+<li>Matching keys shake hands</li>
+<li>The pairs move into the result</li>
+<li>Rows with no partner are kept (NULL)</li>
+<li>The result has 4 rows</li>
+</ol>
+</figure>
+
+You have met all three kinds of rows: 1,799 pairs, 5 customers with no order and 1 order with no customer, the walk-in
+1335.
+
+**Try it**. Before you run them: how many rows will `RIGHT JOIN` and `FULL JOIN` give? Unit 1's count (1,804 with `LEFT`)
+with `RIGHT`:
+
+<RunSQL query={`SELECT COUNT(*) AS right_rows
+FROM customers AS c
+RIGHT JOIN orders AS o ON o.customer_id = c.customer_id;`} />
+
+and with `FULL`:
+
+<RunSQL query={`SELECT COUNT(*) AS full_rows
+FROM customers AS c
+FULL JOIN orders AS o ON o.customer_id = c.customer_id;`} />
+
+Expected: 1 row, 1 column each. *Why:* **1800** and **1805**. `RIGHT` keeps every order, with order 1335 paired to nobody.
+`FULL` keeps all three kinds of rows.
+
+### 5. Check the numbers
+
+No new query. Each join keeps the pairs plus its kept side's lonely rows: `INNER` 1,799 (S19); `LEFT` 1,799 + 5 = 1,804;
+`RIGHT` 1,799 + 1 = 1,800; `FULL` 1,799 + 5 + 1 = 1,805. S8 counted 145 customers who ordered, and 150 − 145 = 5, the
+list of unit 2. The sixth customer without a completed order is customer 42.
+
+<Aside type="tip" title="Remember">
+
+- `LEFT JOIN` keeps every row of the left table; with no match, the right table's columns are `NULL`.
+- To find rows with no partner: `LEFT JOIN`, then the right table's key `IS NULL` (or `ANTI JOIN`).
+- `ON` decides who pairs; `WHERE` filters the finished rows. A `WHERE` on the right table can undo a `LEFT JOIN`.
+- `RIGHT` keeps the right table's unpaired rows, `FULL` both sides'.
+
+**Common trap: "`NOT IN` is just another way to write an anti join."** DuckDB's page says an anti join has the logic of
+`NOT IN`, except that it ignores `NULL` values from the right table. That exception matters here: the customer ids of
+`orders` include a `NULL` (the walk-in order 1335), and a comparison with `NULL` is never true, so a `NOT IN` over those
+ids gives wrong results, although some customers never ordered. *Subqueries and EXISTS* (S23) goes further.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-left-join-anti-join-1">
+
+**Which products have never been sold?** Expected: 1 row, 1 column.
+
+Done for you: the grain is one product, and the table to keep whole is `products`:
+
+<RunSQL query={`SELECT p.product_name
+FROM products AS p`} />
+
+Now finish it: add a `LEFT JOIN` to `order_items` on `product_id`, and keep only the products with no line.
+
+<details>
+<summary>Hint</summary>
+
+The join and the filter are the ones from units 1 and 2, with `products` on the left. Which column of `order_items`
+is never empty on a real line?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT p.product_name
+FROM products AS p
+LEFT JOIN order_items AS oi ON ... = ...
+WHERE ... IS NULL;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT p.product_name
+FROM products AS p
+LEFT JOIN order_items AS oi ON oi.product_id = p.product_id
+WHERE oi.order_item_id IS NULL;
+```
+
+The result is the Pumpkin Spice Latte. Second route: S18 found 15 different products on the lines, and 16 − 15 = 1.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-left-join-anti-join-2">
+
+**How many orders did each store take in January 2026?** Every store must be listed.
+
+Before you run anything, write one sentence as a comment in the editor: which stores must appear, how many rows you expect, and
+whether the January condition goes in `ON` or in `WHERE`, and why. Then write the query. Use the date range as in
+*Working with dates and time* (S11): from January 1, up to but not including February 1.
+
+Expected shape, to check your sentence against: 2 columns (the store name and its number of orders). The
+counts cover orders of any status, and count orders, not dollars, so order 2075 does not matter.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Keep `stores` whole, so it is the left table. Count a column of `orders`, not `*`: see unit 1.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One row per store, each with the number of its January orders."*
+
+</details>
+
+<Solution>
+
+```sql
+SELECT s.store_name, COUNT(o.order_id) AS orders
+FROM stores AS s
+LEFT JOIN orders AS o
+       ON o.store_id = s.store_id
+      AND o.ordered_at >= DATE '2026-01-01'
+      AND o.ordered_at < DATE '2026-02-01'
+GROUP BY s.store_name
+ORDER BY s.store_name;
+```
+
+The result is Campus 114, Harbor 0 and Old Town 128. Harbor opened on April 1, so it has no January orders, and it still
+appears. 114 + 128 = 242, the January order count in E21 (no January order was canceled).
+
+The dates belong in `ON`: in `WHERE`, Harbor's `NULL` dates would drop its row, and the answer would show two stores.
+`COUNT(o.order_id)` gives Harbor 0, because it skips `NULL`; `COUNT(*)` would give 1, counting Harbor's unpaired row.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what do INNER, LEFT, RIGHT and FULL joins do with unpaired rows, and how do you list the rows of
+one table that have no partner in another?
+
+<details>
+<summary>Answer</summary>
+
+INNER drops unpaired rows from both tables. LEFT keeps those of the left table, RIGHT those of the right table, FULL
+those of both, with `NULL` in the other table's columns. To list rows with no partner: `LEFT JOIN`, then `WHERE` the
+right table's key `IS NULL`.
+
+</details>
+
+<Exercise id="sql-left-join-anti-join-3">
+
+**Spot the flaw.** A colleague wants the customers with no completed order and runs this:
+
+<RunSQL query={`SELECT c.customer_id
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE o.status <> 'completed';`} />
+
+Expected from that query: 1 row, 1 column: `42`. The colleague reports "only customer 42". What went wrong, and what is the right
+query?
+
+<Solution>
+
+The right answer is 6 customers. The five who never ordered have `NULL` in `o.status`, and `NULL <> 'completed'` is not
+true, so `WHERE` drops them. Only customer 42, whose canceled order has a real status, survives. Put the condition in
+`ON` and test the key for `NULL`, as in unit 3:
+
+```sql
+SELECT c.customer_id
+FROM customers AS c
+LEFT JOIN orders AS o
+       ON o.customer_id = c.customer_id AND o.status = 'completed'
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id;
+```
+
+Expected: 6 rows, 1 column: 42, 140, 147, 148, 149 and 150.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can keep unmatched rows with a `LEFT JOIN`, list rows with no partner with `IS NULL`, and put a
+condition on the right table in `ON` on purpose.*
+Test: Exercise sql-left-join-anti-join-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **`LEFT JOIN`, then test the right table's key for `NULL`; conditions on the right table go
+in `ON`.** The next lesson, *Join fan-out: aggregate before you join* (S21), is about joins that add rows.

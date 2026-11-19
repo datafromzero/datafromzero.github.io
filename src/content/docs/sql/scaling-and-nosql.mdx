@@ -1,0 +1,506 @@
+---
+id: sql-scaling-and-nosql
+title: 'Beyond one database: scale and NoSQL'
+description: 'What changes when data outgrows one machine, and when teams pick a document or key-value store. A preview: the core stage goes deeper.'
+stage: sql
+order: 350
+level: intermediate
+duration: 20
+objectives:
+  - Tell a single-machine database from a distributed one
+  - Explain partitioning in one sentence
+  - Say when a NoSQL store fits and when SQL is still the answer
+prerequisites:
+  - sql-indexes-and-explain
+  - sql-create-table-constraints
+  - sql-inner-join
+  - sql-group-by-having
+  - sql-dates-and-time
+datasets:
+  - cafe-sales
+reviewed: 2026-11-18
+sources:
+  - title: 'DuckDB documentation: Partitioned writes'
+    url: https://duckdb.org/docs/stable/data/partitioning/partitioned_writes
+  - title: 'DuckDB documentation: Hive partitioning'
+    url: https://duckdb.org/docs/stable/data/partitioning/hive_partitioning
+  - title: 'DuckDB documentation: JSON overview'
+    url: https://duckdb.org/docs/stable/data/json/overview
+  - title: 'DuckDB: Why DuckDB'
+    url: https://duckdb.org/why_duckdb
+  - title: 'Microsoft Learn: Data partitioning recommendations for reliability'
+    url: https://learn.microsoft.com/en-us/azure/well-architected/design-guides/partition-data
+  - title: 'Microsoft Learn: Understand data models (Azure Architecture Center)'
+    url: https://learn.microsoft.com/en-us/azure/architecture/data-guide/technology-choices/understand-data-store-models
+status: draft
+---
+
+Every query on this page runs on the page: edit it and press Run. The data is **cafe-sales**, the invented three-cafe
+chain we use from Excel to Python.
+
+This is a **preview** of distributed databases, partitions and NoSQL, on the small cafe-sales data. The core stage, after
+Python, goes deeper. No NoSQL engine runs here; the documents are small pieces of JSON text that DuckDB can read. Unit 3
+writes a small folder of files, kept in the page and gone when you leave it. **Reset data** starts you over.
+
+TODO(owner): run every block on the page in order and check each result against its Expected line. Time the lesson against its 20 minutes. When you have checked it, set
+`reviewed` to that day and `status: published`.
+
+## The question
+
+The owner of the cafes asks:
+
+> A friend says our orders belong in "a NoSQL database" and that big data needs "sharding". We have 1,800 orders.
+> What would those words mean for us, and when is SQL still the answer?
+
+Order 1001 as the tables hold it, joined:
+
+| order_id | store_name | product_name | quantity |
+|---:|---|---|---:|
+| 1001 | Campus | Croissant | 1 |
+| 1001 | Campus | Cold Brew | 1 |
+| 1001 | Campus | Espresso | 2 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *INNER JOIN: pairing rows on a key* (S19), write the query that lists the product names on order 1001.
+
+   <details>
+   <summary>Answer</summary>
+
+   ```sql
+   SELECT p.product_name
+   FROM order_items AS oi JOIN products AS p ON p.product_id = oi.product_id
+   WHERE oi.order_id = 1001
+   ORDER BY oi.order_item_id;
+   ```
+
+   Three rows: Croissant, Cold Brew and Espresso.
+
+   </details>
+
+## The big idea
+
+**Partitioning** splits a table's rows into pieces by a key, so that each piece can be stored, read and managed on its own.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="sh-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="sh" id="sh-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="sh" id="sh-r1" aria-label="Step 1 of 4: One big table of keyed rows" />
+<input class="sa-r r2 o4" type="radio" name="sh" id="sh-r2" aria-label="Step 2 of 4: Rows move to shards by key" />
+<input class="sa-r r3 o5" type="radio" name="sh" id="sh-r3" aria-label="Step 3 of 4: A query asks for key B" />
+<input class="sa-r r4 o8" type="radio" name="sh" id="sh-r4" aria-label="Step 4 of 4: Only shard B is visited" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 256" width="360" role="img" aria-labelledby="sh-t sh-d">
+<title id="sh-t">Sharding splits a big table by key, so one key means one shard</title>
+<desc id="sh-d">One table of five rows with keys A, B, C, A and B. The rows slide into three shards by key: the A rows into shard A, the B rows into shard B, the C row into shard C. A query for key B then appears and its arrow points only at shard B, which lights up. Shards A and C are marked not visited.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · One big table of keyed rows</text>
+<text class="f10 b w3 d2 tmp" x="10" y="29">2 · Rows move to shards by key</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">3 · A query asks for key B</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · Only shard B is visited</text>
+<text class="f11 b" x="10" y="14">Split by key, ask one shard</text>
+<rect class="bx dsh w4 tmp" x="10" y="70" width="66" height="24" />
+<rect class="bx dsh w4 tmp" x="10" y="100" width="66" height="24" />
+<rect class="bx dsh w4 tmp" x="10" y="130" width="66" height="24" />
+<rect class="bx dsh w4 tmp" x="10" y="160" width="66" height="24" />
+<rect class="bx dsh w4 tmp" x="10" y="190" width="66" height="24" />
+<rect class="s-grp" x="150" y="44" width="200" height="64" rx="6" />
+<text class="f11 b e" x="346" y="61">shard A</text>
+<rect class="s-grp" x="150" y="114" width="200" height="64" rx="6" />
+<text class="f11 b e" x="346" y="131">shard B</text>
+<rect class="s-grp" x="150" y="184" width="200" height="64" rx="6" />
+<text class="f11 b e" x="346" y="201">shard C</text>
+<g class="w8"><g class="mv m2 x15 y0"><g><rect class="f-grp k2" x="10" y="70" width="66" height="24" rx="6" /><text class="f11 m" x="43" y="86">Row 1 · A</text></g></g></g>
+<g class="w8"><g class="mv m3 x15 y4"><g><rect class="f-grp k3" x="10" y="100" width="66" height="24" rx="6" /><text class="f11 m" x="43" y="116">Row 2 · B</text></g></g></g>
+<g class="w8"><g class="mv m4 x15 y8"><g><rect class="f-grp k4" x="10" y="130" width="66" height="24" rx="6" /><text class="f11 m" x="43" y="146">Row 3 · C</text></g></g></g>
+<g class="w8"><g class="mv m2 x22 yn9"><g><rect class="f-grp k2" x="10" y="160" width="66" height="24" rx="6" /><text class="f11 m" x="43" y="176">Row 4 · A</text></g></g></g>
+<g class="w8"><g class="mv m3 x22 yn5"><g><rect class="f-grp k3" x="10" y="190" width="66" height="24" rx="6" /><text class="f11 m" x="43" y="206">Row 5 · B</text></g></g></g>
+<g class="w4 d5"><rect class="f-src k3" x="10" y="152" width="100" height="24" rx="6" /><text class="f11 m" x="60" y="168">WHERE key = B</text></g>
+<path class="s-src dr p4 d5" pathLength="1" d="M112 164L148 164M141.7 160.96L148 164L141.7 167.04" />
+<rect class="s-out u1 d6 tmp" x="146" y="110" width="208" height="72" rx="8" />
+<text class="f10 b w3 d6" x="160" y="174">visited</text>
+<text class="f10 mu w3 d6" x="160" y="104">not visited</text>
+<text class="f10 mu w3 d6" x="160" y="244">not visited</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="sh-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="sh-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="sh-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="sh-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="sh-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="sh-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="sh-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="sh-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="sh-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="sh-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="sh-r1">1</label><label class="sa-sb sb2" for="sh-r2">2</label><label class="sa-sb sb3" for="sh-r3">3</label><label class="sa-sb sb4" for="sh-r4">4</label></span>
+</div>
+<p class="ca-cap">Sharding splits a big table into pieces by key, often on different machines. A query that names the key goes to one shard and skips the rest.</p>
+<ol class="sa-steps">
+<li>One big table of keyed rows</li>
+<li>Rows move to shards by key</li>
+<li>A query asks for key B</li>
+<li>Only shard B is visited</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Four small steps. Counts cover all 1,800 orders, the canceled one included.
+
+### 1. One order, three shapes
+
+Data can outgrow a database in two ways: there can be more of it than one machine copes with, or it can have a shape other
+than tables. **NoSQL** stores (databases that relax some relational behavior) mostly answer the second, and many also
+scale out. They relax rules such as a fixed schema and the reach of a transaction, the changes that succeed or fail
+together: for a document store that is one document, for a key-value store one key.
+
+| Shape | Looks like | Good at | Gives up |
+|---|---|---|---|
+| Structured (relational) | tables, keys, joins | rules, joins, changes across many rows at once | fields that differ from row to row |
+| Document | JSON objects whose fields can differ | reading or saving one whole object | ad hoc joins across documents |
+| Key-value | a key and a value the store does not look inside | very fast lookup by key | any question that is not "the value for this key" |
+
+<figure>
+<svg viewBox="0 0 360 392" width="360" role="img" aria-labelledby="three-title three-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="three-title">Order 1001 as rows, as a document and as a key-value pair</title>
+<desc id="three-desc">Three panels. Rows: the orders row for order 1001, with customer 15 and store 2, and its three order_items rows: Croissant 1, Cold Brew 1 and Espresso 2, spread over two tables. Document: one JSON object for order 1001 that holds the store Campus, the customer 15 and a list of three items, all in one piece. Key-value: the key order:1001 points to the whole document as one value, which can be found only by its key.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Order 1001, three shapes</text>
+<text x="10" y="42" font-size="11" font-weight="600">Rows: two tables, joined by order_id</text>
+<rect x="10" y="48" width="50" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="60" y="48" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="126" y="48" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="66" width="50" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="60" y="66" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="126" y="66" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="55" y="61.0" font-size="10" font-weight="600" text-anchor="end">order_id</text>
+<text x="121" y="61.0" font-size="10" font-weight="600" text-anchor="end">customer</text>
+<text x="187" y="61.0" font-size="10" font-weight="600" text-anchor="end">store</text>
+<text x="55" y="79.0" font-size="11" text-anchor="end">1001</text>
+<text x="121" y="79.0" font-size="11" text-anchor="end">15</text>
+<text x="187" y="79.0" font-size="11" text-anchor="end">2</text>
+<rect x="10" y="94" width="76" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="86" y="94" width="60" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="146" y="94" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="212" y="94" width="36" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="112" width="76" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="86" y="112" width="60" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="146" y="112" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="212" y="112" width="36" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="130" width="76" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="86" y="130" width="60" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="146" y="130" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="212" y="130" width="36" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="10" y="148" width="76" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="86" y="148" width="60" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="146" y="148" width="66" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<rect x="212" y="148" width="36" height="18" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="81" y="107.0" font-size="10" font-weight="600" text-anchor="end">order_item_id</text>
+<text x="141" y="107.0" font-size="10" font-weight="600" text-anchor="end">order_id</text>
+<text x="207" y="107.0" font-size="10" font-weight="600" text-anchor="end">product_id</text>
+<text x="243" y="107.0" font-size="10" font-weight="600" text-anchor="end">qty</text>
+<text x="81" y="125.0" font-size="11" text-anchor="end">5001</text>
+<text x="141" y="125.0" font-size="11" text-anchor="end">1001</text>
+<text x="207" y="125.0" font-size="11" text-anchor="end">10</text>
+<text x="243" y="125.0" font-size="11" text-anchor="end">1</text>
+<text x="81" y="143.0" font-size="11" text-anchor="end">5002</text>
+<text x="141" y="143.0" font-size="11" text-anchor="end">1001</text>
+<text x="207" y="143.0" font-size="11" text-anchor="end">6</text>
+<text x="243" y="143.0" font-size="11" text-anchor="end">1</text>
+<text x="81" y="161.0" font-size="11" text-anchor="end">5003</text>
+<text x="141" y="161.0" font-size="11" text-anchor="end">1001</text>
+<text x="207" y="161.0" font-size="11" text-anchor="end">1</text>
+<text x="243" y="161.0" font-size="11" text-anchor="end">2</text>
+<text x="10" y="186" font-size="11" font-weight="600">Document: one JSON object, in one piece</text>
+<rect x="10" y="192" width="340" height="100" fill="currentColor" fill-opacity="0.06" stroke="none" />
+<rect x="10" y="192" width="340" height="100" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="206" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">&#123; "order_id": 1001,</text>
+<text x="18" y="221" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">  "store": "Campus", "customer": 15,</text>
+<text x="18" y="236" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">  "items": [</text>
+<text x="18" y="251" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">    &#123; "product": "Croissant", "qty": 1 &#125;,</text>
+<text x="18" y="266" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">    &#123; "product": "Cold Brew", "qty": 1 &#125;,</text>
+<text x="18" y="281" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">    &#123; "product": "Espresso", "qty": 2 &#125; ] &#125;</text>
+<text x="10" y="316" font-size="11" font-weight="600">Key-value: find the value by its key, nothing else</text>
+<rect x="10" y="326" width="96" height="28" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="10" y="326" width="96" height="28" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="18" y="344" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">order:1001</text>
+<path d="M106 340 L160 340" fill="none" stroke="currentColor" stroke-width="1.5" />
+<path d="M154 335 L162 340 L154 345" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="164" y="326" width="186" height="28" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="172" y="344" font-size="11">the whole document above</text>
+<text x="10" y="376" font-size="11" opacity="0.8">The same facts in all three; they differ in how you ask for them.</text>
+</svg>
+</figure>
+
+**Try it** (order 1001 as rows). A structured store spreads one order over tables.
+
+<RunSQL query={`SELECT o.order_id, s.store_name, p.product_name, oi.quantity
+FROM orders AS o
+JOIN stores AS s ON s.store_id = o.store_id
+JOIN order_items AS oi ON oi.order_id = o.order_id
+JOIN products AS p ON p.product_id = oi.product_id
+WHERE o.order_id = 1001
+ORDER BY oi.order_item_id;`} />
+
+Expected: 3 rows, 4 columns, the table of the question. It took joins across four tables (S19). A document keeps the lines
+inside the order, so reading one order needs no join. Microsoft Learn calls document and key-value stores denormalized
+(related facts kept together) and relational stores normalized (each fact kept once, in its own table).
+
+**Try it** (the same orders as documents under a key). A key and a value, here JSON text in DuckDB's `JSON` type. Order 1335
+is the walk-in with no customer.
+
+<RunSQL query={`CREATE OR REPLACE TABLE order_docs (doc_key VARCHAR PRIMARY KEY, doc JSON);
+INSERT INTO order_docs VALUES
+('order:1001', '{"order_id": 1001, "store": "Campus", "customer": 15, "items": [{"product": "Croissant", "qty": 1}, {"product": "Cold Brew", "qty": 1}, {"product": "Espresso", "qty": 2}]}'),
+('order:1002', '{"order_id": 1002, "store": "Old Town", "customer": 46, "items": [{"product": "Croissant", "qty": 1}, {"product": "Turkey Sandwich", "qty": 1}]}'),
+('order:1335', '{"order_id": 1335, "store": "Old Town", "items": [{"product": "Americano", "qty": 2}]}');
+SELECT COUNT(*) AS documents FROM order_docs;`} />
+
+Expected: 1 row, 1 column: 3 documents. (`CREATE OR REPLACE` lets you run it again.)
+
+### 2. Read inside a document, or look it up by key
+
+`->>` reads a field of a document as text, and `[0]` is the first item: JSON counts from 0, says the DuckDB documentation. A
+field the document lacks gives `NULL`.
+
+**Try it** (read fields, and a missing one).
+
+<RunSQL query={`SELECT doc_key, doc->>'$.store' AS store, doc->>'$.customer' AS customer, doc->>'$.items[0].product' AS first_item
+FROM order_docs
+ORDER BY doc_key;`} />
+
+Expected: 3 rows, 4 columns. *Why:* order 1335's document has no `customer` field, so its result is `NULL`.
+
+**Try it** (a lookup by key). The key is all a key-value store needs.
+
+<RunSQL query={`SELECT doc FROM order_docs WHERE doc_key = 'order:1001';`} />
+
+Expected: 1 row, 1 column.
+
+### 3. Split the orders by a key
+
+A **single-machine** database keeps its data on one computer; by default DuckDB runs inside the program that uses it. A
+**distributed** database spreads data over several machines, because one system made bigger eventually hits a hardware
+limit. Partitioning splits the rows by a **partition key**: each row goes to the piece for its key value, and pieces on
+separate servers are called **shards**. DuckDB's `PARTITION_BY` writes one folder per value, named like
+`store_id=3`, with the rows inside.
+
+**Try it** (partition the orders by store). The files stay in the page's memory.
+
+<RunSQL query={`COPY (SELECT order_id, customer_id, store_id, ordered_at, status, payment_method FROM orders)
+TO 'orders_by_store' (FORMAT parquet, PARTITION_BY (store_id));`} />
+
+Expected: 1 row, 1 column: the 1,800 rows written. A folder `orders_by_store` now has a subfolder per store: `store_id=1`,
+`store_id=2`, `store_id=3`, with Parquet files inside.
+
+**Try it** (read the partitions). Before you run it: how many rows? Then, for a filter on store 3, how many of the three
+folders will the engine open?
+
+<RunSQL query={`SELECT store_id, COUNT(*) AS orders
+FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
+GROUP BY store_id
+ORDER BY store_id;`} />
+
+<RunSQL query={`EXPLAIN SELECT COUNT(*)
+FROM read_parquet('orders_by_store/*/*.parquet', hive_partitioning = true)
+WHERE store_id = 3;`} />
+
+Expected: the first returns 3 rows, 2 columns. The plan has a read-Parquet step with `File Filters` on `store_id = 3` and a
+`Scanning Files` line whose first number is smaller than its second. *Why:* a query that filters on the key opens only the folders with that value; the other folders are never opened.
+
+<figure>
+<svg viewBox="0 0 360 206" width="360" role="img" aria-labelledby="parts-title parts-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="parts-title">The 1,800 orders split into one folder per store</title>
+<desc id="parts-desc">Three folders, one per store, from partitioning orders by store_id: store_id=1 holds 729 orders, store_id=2 holds 716 and store_id=3 holds 355. The bars are drawn to the same scale. A query that filters on store_id = 3 reads only the third folder. Harbor, store 3, opened in April, so its folder is about half the size of the others.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">orders_by_store: one folder per store</text>
+<text x="10" y="54" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">store_id=1</text>
+<rect x="104" y="40" width="146" height="20" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="104" y="40" width="146" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="256" y="54" font-size="11">729 orders</text>
+<text x="10" y="71" font-size="10" opacity="0.75">Old Town</text>
+<text x="10" y="98" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">store_id=2</text>
+<rect x="104" y="84" width="143" height="20" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="104" y="84" width="143" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="253" y="98" font-size="11">716 orders</text>
+<text x="10" y="115" font-size="10" opacity="0.75">Campus</text>
+<text x="10" y="142" font-size="11" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">store_id=3</text>
+<rect x="104" y="128" width="71" height="20" fill="currentColor" fill-opacity="0.3" stroke="none" />
+<rect x="104" y="128" width="71" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="181" y="142" font-size="11">355 orders</text>
+<text x="10" y="159" font-size="10" opacity="0.75">Harbor</text>
+<text x="10" y="178" font-size="11" font-weight="600">WHERE store_id = 3 reads one folder, not three.</text>
+<text x="10" y="194" font-size="11" opacity="0.8">Total: 729 + 716 + 355 = 1,800 orders.</text>
+</svg>
+</figure>
+
+### 4. What spreading costs, and when SQL still wins
+
+The key decides which piece holds a row, so it decides how the work spreads. A piece that gets far more work than the rest
+is a **hot partition**. A **replica** is a copy of a piece kept on another server. Copies take time to synchronize, so for
+a while two of them can differ: this is **eventual consistency**.
+
+**Try it** (check the sizes). The 729, 716 and 355 of unit 3 must add up to the whole.
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders;`} />
+
+Expected: 1 row, 1 column. *Why:* **1800**, the sum of the three folders. Harbor opened on April 1, so its folder is half the
+size of the others.
+
+<details>
+<summary>Explain it in your own words: why can SQL still answer questions across the documents?</summary>
+
+A SQL engine looks inside many rows at once, so a total by store is one query. A store that serves whole objects by key
+leaves that work to the application.
+
+</details>
+
+**When SQL is still the answer:** for questions across many rows (totals, comparisons, joins), when rules and multi-row
+changes must hold, and when the data fits one machine, as the 1,800 orders of cafe-sales do.
+
+<Aside type="tip" title="Remember">
+
+- Partition by a key; a query that filters on the key opens only the pieces it needs.
+- Document: one whole object at a time. Key-value: a lookup by key. Tables: rules and joins.
+- Copies (replicas) can differ for a while: eventual consistency.
+
+**Common trap: "NoSQL means a database with no SQL."** NoSQL names stores that relax relational rules, not stores that cannot
+be queried: Azure Cosmos DB for NoSQL supports SQL-like querying. Microsoft's guide adds that most production systems use
+several storage models.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-scaling-and-nosql-1">
+
+**Read two fields from each document.** Use `order_docs` from unit 1. Expected: 3 rows, 3 columns.
+
+Done for you: the first field.
+
+<RunSQL query={`SELECT doc_key, doc->>'$.store' AS store
+FROM order_docs
+ORDER BY doc_key;`} />
+
+Now finish it: add the product of each order's second item (`$.items[1].product`).
+
+<details>
+<summary>Hint</summary>
+
+Copy `first_item` from unit 2 and change the 0.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`doc->>'$.items[...].product' AS second_item`, then `ORDER BY ...`.
+
+</details>
+
+<Solution>
+
+```sql
+SELECT doc_key, doc->>'$.store' AS store, doc->>'$.items[1].product' AS second_item
+FROM order_docs ORDER BY doc_key;
+```
+
+Order 1001 gives Cold Brew, order 1002 Turkey Sandwich, and order 1335 `NULL`: it has one item, so no second.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-scaling-and-nosql-2">
+
+**Which key spreads the orders most evenly: store, month or payment method?** Use the Exercise 2 block.
+
+Before you run anything, write one sentence: which key do you expect to be the most even, and why? Then count orders per
+store, per month (`strftime(ordered_at, '%Y-%m')`) and per `payment_method`, and compare the biggest group with the total.
+Expected shape: three queries, one row per group, 2 columns.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+The most even key has the smallest biggest group. Remember when Harbor opened.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "Store gives 3 groups, month ..., payment method ...; the biggest group is ... of 1,800 in each."
+
+</details>
+
+<Solution>
+
+```sql
+SELECT store_id, COUNT(*) AS orders FROM orders GROUP BY store_id ORDER BY store_id;
+SELECT strftime(ordered_at, '%Y-%m') AS month, COUNT(*) AS orders FROM orders GROUP BY month ORDER BY month;
+SELECT payment_method, COUNT(*) AS orders FROM orders GROUP BY payment_method ORDER BY payment_method;
+```
+
+Store: 729, 716 and 355, the biggest 40.5%. Month: 242, 218, 258, 349, 380 and 353, the biggest 21.1%. Payment: card 1,001, mobile 546
+and cash 253, card 55.6%. Month is the most even, though the first three months are smaller because Harbor opened in April.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the three shapes of store and one strength of each, and say what partitioning is in one sentence.
+
+<details>
+<summary>Answer</summary>
+
+Structured tables: rules and joins. Document: one whole JSON object at a time. Key-value: fast lookup by key. Partitioning splits a
+table's rows by a key into pieces that can be stored, read and managed on their own.
+
+</details>
+
+<Exercise id="sql-scaling-and-nosql-3">
+
+**Spot the flaw.** A colleague says: "Orders is our biggest table. Let's shard it by store across three servers, so queries stay
+fast." Check the size first:
+
+<RunSQL query={`SELECT COUNT(*) AS orders FROM orders;`} />
+
+Expected: 1 row, 1 column. What is wrong with the proposal?
+
+<details>
+<summary>Hint</summary>
+
+Compare the count with what one laptop holds, and recall the folders of unit 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Start from: "1,800 orders are tiny, so ... The three shards would also be uneven, and ..."
+
+</details>
+
+<Solution>
+
+There are 1,800 orders (and 3,287 lines): one machine holds that easily, and Microsoft's guidance says partitioning is not
+important when one server can handle the data. Sharding also adds work: the shards would be uneven (Harbor about half the
+size of the others), a total across stores must ask all three, and a change touching two servers is no longer one simple
+transaction.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can tell a single-machine database from a distributed one, say what partitioning is, and say when a
+document or key-value store fits and when SQL is still the answer.*
+Test: Exercise sql-scaling-and-nosql-2, done from an empty editor without opening the hints.
+
+The pattern to remember: **one database until the size or the access pattern forces a change.** The core stage goes deeper.

@@ -14,7 +14,7 @@ prerequisites:
   - sql-group-by-having
 datasets:
   - cafe-sales
-notebook: notebooks/sql/sql-query-execution-order.ipynb
+
 reviewed: 2026-11-18
 sources:
   - title: 'DuckDB documentation: SELECT statement'
@@ -29,28 +29,40 @@ sources:
     url: https://duckdb.org/docs/stable/sql/dialect/friendly_sql
   - title: 'DuckDB documentation: Python API overview'
     url: https://duckdb.org/docs/stable/clients/python/overview
+  - title: 'Microsoft Support: Filter data in a range or table'
+    url: https://support.microsoft.com/en-us/office/filter-data-in-a-range-or-table-01832226-31b5-4568-8806-38c37dcc180e
   - title: 'PostgreSQL documentation: SELECT'
     url: https://www.postgresql.org/docs/current/sql-select.html
 status: draft
 ---
 
-This lesson runs on **DuckDB** inside a Google Colab notebook, like *From a spreadsheet to SQL: your first queries*
-(S1). It teaches no new function. You write a query with `SELECT` first, but the engine reads it in a different order,
-and that order explains most of the errors you meet.
+This lesson teaches no new function. You write `SELECT` first, but the engine reads a query in a different order, and
+that order explains most of the errors you meet. Each query runs in the editor on this page, with the five tables of
+**cafe-sales**, the invented three-cafe chain we use from Excel to Python.
 
-**Your practice notebook** loads the five tables of **cafe-sales**. Each query sits between `con.sql("""` and
-`""").show()`: only the text inside the triple quotes is SQL. The notebook cells leave out the closing `;` that this
-page shows.
-
-<OpenInColab />
-
-TODO(owner): in Colab, check that the first cell can download the load script from release tag `v0.1.0` (the tag
-must exist, and the notebook must be on `main`), that the first cell installs `duckdb==2.0.0` without errors, that `con.execute(script)` runs the whole load script, and that `.show()` prints tables as described. Compare the error text of step 5 with Colab's version, and check that a column alias is accepted in `WHERE` there (step 7) and that exercise 3 returns 0 rows there. Time the lesson against its 20 minutes. When you have checked it, set
+TODO(owner): run every block on this page, in order, and check each result against its Expected line. In particular, check that the unit 2 error says `WHERE clause cannot contain aggregates!`, that the alias in `WHERE` (unit 4) is accepted, and that exercise 3 returns 0 rows. Time the lesson against its 20 minutes. When you have checked it, set
 `reviewed` to that day and `status: published`.
+
+## The question
+
+The owner is writing a menu board for the cafes:
+
+> Among the items under \$5, which two categories have the most items, counting only categories with at least three?
+
+The top of the `products` table, which has 16 rows:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+| 4 | Cappuccino | coffee | 4.50 |
+
+One query answers it, if each clause does its own job. You will build it one clause at a time.
 
 ## Warm-up
 
-Answer from memory before you open anything. Then click to check.
+From memory first, then click to check.
 
 1. In *GROUP BY and HAVING* (S8), what is the difference between `WHERE` and `HAVING`?
 
@@ -78,69 +90,129 @@ Answer from memory before you open anything. Then click to check.
 
    </details>
 
-3. In S2, what does `AS` do in `COUNT(*) AS items`?
+## The big idea
 
-   <details>
-   <summary>Answer</summary>
+A query runs its clauses in a fixed order, not the order you write them, and each clause works on the rows the one
+before it left.
 
-   It gives the result column a name, an alias. The table is not changed.
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="lo-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="lo" id="lo-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="lo" id="lo-r1" aria-label="Step 1 of 5: FROM and JOIN build one table" />
+<input class="sa-r r2 o2" type="radio" name="lo" id="lo-r2" aria-label="Step 2 of 5: WHERE drops rows" />
+<input class="sa-r r3 o4" type="radio" name="lo" id="lo-r3" aria-label="Step 3 of 5: GROUP BY makes groups; HAVING drops one" />
+<input class="sa-r r4 o5" type="radio" name="lo" id="lo-r4" aria-label="Step 4 of 5: SELECT picks the output" />
+<input class="sa-r r5 o8" type="radio" name="lo" id="lo-r5" aria-label="Step 5 of 5: ORDER BY sorts; LIMIT cuts" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 316" width="360" role="img" aria-labelledby="lo-t lo-d">
+<title id="lo-t">The order a query runs in, compared with the order it is written in</title>
+<desc id="lo-d">Left, the clauses in written order: SELECT, FROM/JOIN/ON, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, each with the number of the step it runs in: SELECT 5, FROM/JOIN/ON 1, WHERE 2, GROUP BY 3, HAVING 4, ORDER BY 6, LIMIT 7. Right: tables t1 and t2 are combined into one table of seven rows. WHERE drops two rows, which slide out. GROUP BY gives the rest their group shade and makes one row per group: A, B and C. HAVING drops group A. SELECT chooses the output, ORDER BY gives the groups a sort number, and LIMIT drops the group that sorts second.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · FROM and JOIN build one table</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · WHERE drops rows</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">3 · GROUP BY makes groups; HAVING drops one</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">4 · SELECT picks the output</text>
+<text class="f10 b w3 d6" x="10" y="29">5 · ORDER BY sorts; LIMIT cuts</text>
+<text class="f11 b" x="10" y="14">Written order → run order</text>
+<rect class="f-out k2 w1 d5 tmp" x="8" y="42" width="116" height="22" rx="6" />
+<rect class="f-src k2 w1 tmp" x="8" y="66" width="116" height="22" rx="6" />
+<rect class="f-flt k2 w1 d2 tmp" x="8" y="90" width="116" height="22" rx="6" />
+<rect class="f-grp k2 w1 d3 tmp" x="8" y="114" width="116" height="22" rx="6" />
+<rect class="f-flt k2 w1 d4 tmp" x="8" y="138" width="116" height="22" rx="6" />
+<rect class="f-ord k2 w1 d6 tmp" x="8" y="162" width="116" height="22" rx="6" />
+<rect class="f-ord k2 w1 d7 tmp" x="8" y="186" width="116" height="22" rx="6" />
+<text class="f10 b mo" x="14" y="57">SELECT</text>
+<text class="f11 b e w4 d5" x="118" y="57">5</text>
+<text class="f10 b mo" x="14" y="81">FROM/JOIN/ON</text>
+<text class="f11 b e" x="118" y="81">1</text>
+<text class="f10 b mo" x="14" y="105">WHERE</text>
+<text class="f11 b e w7 d2" x="118" y="105">2</text>
+<text class="f10 b mo" x="14" y="129">GROUP BY</text>
+<text class="f11 b e w6 d3" x="118" y="129">3</text>
+<text class="f10 b mo" x="14" y="153">HAVING</text>
+<text class="f11 b e w5 d4" x="118" y="153">4</text>
+<text class="f10 b mo" x="14" y="177">ORDER BY</text>
+<text class="f11 b e w3 d6" x="118" y="177">6</text>
+<text class="f10 b mo" x="14" y="201">LIMIT</text>
+<text class="f11 b e w2 d7" x="118" y="201">7</text>
+<rect class="s-src" x="136" y="40" width="64" height="22" rx="6" />
+<text class="f11 b m" x="168" y="55">t1</text>
+<path class="s-src dr p8" pathLength="1" d="M168 64L168 80M171.04 73.7L168 80L164.96 73.7" />
+<rect class="s-src" x="212" y="40" width="64" height="22" rx="6" />
+<text class="f11 b m" x="244" y="55">t2</text>
+<path class="s-src dr p8" pathLength="1" d="M244 64L244 80M247.04 73.7L244 80L240.96 73.7" />
+<rect class="f-src k1" x="136" y="84" width="214" height="18" rx="4" />
+<rect class="f-grp k1 w6 d3" x="136" y="84" width="214" height="18" rx="4" />
+<text class="f11" x="146" y="97">r1</text>
+<text class="f11" x="192" y="97">a1 · b1</text>
+<text class="f11 b" x="328" y="97">A</text>
+<g class="w8"><g class="mv m2a x23 y0"><rect class="f-src k1" x="136" y="104" width="214" height="18" rx="4" /><rect class="f-flt k3 w7 d2" x="136" y="104" width="214" height="18" rx="4" /><text class="f11" x="146" y="117">r2</text><text class="f11" x="192" y="117">a2 · b2</text><text class="f11 b" x="328" y="117">A</text></g></g>
+<g class="w8"><g class="mv m2b x0 yn2"><rect class="f-src k1" x="136" y="124" width="214" height="18" rx="4" /><rect class="f-grp k2 w6 d3" x="136" y="124" width="214" height="18" rx="4" /><text class="f11" x="146" y="137">r3</text><text class="f11" x="192" y="137">a3 · b3</text><text class="f11 b" x="328" y="137">B</text></g></g>
+<g class="w8"><g class="mv m2b x0 yn2"><rect class="f-src k1" x="136" y="144" width="214" height="18" rx="4" /><rect class="f-grp k2 w6 d3" x="136" y="144" width="214" height="18" rx="4" /><text class="f11" x="146" y="157">r4</text><text class="f11" x="192" y="157">a4 · b4</text><text class="f11 b" x="328" y="157">B</text></g></g>
+<g class="w8"><g class="mv m2a x23 y0"><rect class="f-src k1" x="136" y="164" width="214" height="18" rx="4" /><rect class="f-flt k3 w7 d2" x="136" y="164" width="214" height="18" rx="4" /><text class="f11" x="146" y="177">r5</text><text class="f11" x="192" y="177">a5 · b5</text><text class="f11 b" x="328" y="177">B</text></g></g>
+<g class="w8"><g class="mv m2b x0 yn4"><rect class="f-src k1" x="136" y="184" width="214" height="18" rx="4" /><rect class="f-grp k4 w6 d3" x="136" y="184" width="214" height="18" rx="4" /><text class="f11" x="146" y="197">r6</text><text class="f11" x="192" y="197">a6 · b6</text><text class="f11 b" x="328" y="197">C</text></g></g>
+<g class="w8"><g class="mv m2b x0 yn4"><rect class="f-src k1" x="136" y="204" width="214" height="18" rx="4" /><rect class="f-grp k4 w6 d3" x="136" y="204" width="214" height="18" rx="4" /><text class="f11" x="146" y="217">r7</text><text class="f11" x="192" y="217">a7 · b7</text><text class="f11 b" x="328" y="217">C</text></g></g>
+<path class="s-grp dr p6 d3" pathLength="1" d="M150 226L150 246M153.04 239.7L150 246L146.96 239.7" />
+<g class="w6 d3"><g class="mv m4a x23 y0"><g><rect class="f-grp k1" x="136" y="252" width="140" height="18" rx="4" /><rect class="f-flt k3 w5 d4" x="136" y="252" width="140" height="18" rx="4" /><text class="f11 b" x="146" y="265">A</text><text class="f11" x="192" y="265">1 row</text></g></g></g>
+<g class="w6 d3"><g class="mv m4b x0 yn2"><g class="w8"><g class="mv m7 x23 y0"><g><rect class="f-grp k2" x="136" y="272" width="140" height="18" rx="4" /><rect class="f-out k3 w4 d5" x="136" y="272" width="140" height="18" rx="4" /><text class="f11 b" x="146" y="285">B</text><text class="f11" x="192" y="285">2 rows</text></g><g class="w3 d6"><rect class="f-ord k3" x="284" y="272" width="40" height="18" rx="6" /><text class="f11 m" x="304" y="285">2</text></g></g></g></g></g>
+<g class="w6 d3"><g class="mv m4b x0 yn2"><g><rect class="f-grp k4" x="136" y="292" width="140" height="18" rx="4" /><rect class="f-out k3 w4 d5" x="136" y="292" width="140" height="18" rx="4" /><text class="f11 b" x="146" y="305">C</text><text class="f11" x="192" y="305">2 rows</text></g><g class="w3 d6"><rect class="f-ord k3" x="284" y="292" width="40" height="18" rx="6" /><text class="f11 m" x="304" y="305">1</text></g></g></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="lo-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="lo-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="lo-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="lo-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="lo-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="lo-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="lo-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="lo-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="lo-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="lo-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="lo-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="lo-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="lo-r1">1</label><label class="sa-sb sb2" for="lo-r2">2</label><label class="sa-sb sb3" for="lo-r3">3</label><label class="sa-sb sb4" for="lo-r4">4</label><label class="sa-sb sb5" for="lo-r5">5</label></span>
+</div>
+<p class="ca-cap">The list is the order you write the clauses; the number is the order they run. Each clause works on the table the one before it left.</p>
+<ol class="sa-steps">
+<li>FROM and JOIN build one table</li>
+<li>WHERE drops rows</li>
+<li>GROUP BY makes groups; HAVING drops one</li>
+<li>SELECT picks the output</li>
+<li>ORDER BY sorts; LIMIT cuts</li>
+</ol>
+</figure>
 
-   </details>
+## Learn by doing
 
-## The question
+Five small steps. Each gives you one idea, then you try it in the editor.
 
-The owner is writing a menu board for the cafes:
+### 1. Rows first, then columns
 
-> Among the items under \$5, which two categories have the most items, counting only categories with at least three?
+`FROM` goes first and takes the whole table. Then `WHERE` keeps or drops single rows, judged by the table's own
+columns, and `SELECT` chooses the columns to show. `WHERE` chooses rows, `SELECT` chooses columns, and they never swap
+jobs.
 
-The top of the `products` table, which has 16 rows:
+*Excel:* a filter shows only the rows that meet your criteria and hides the rest (E5, *Tables, sorting and filtering*).
 
-| product_id | product_name | category | unit_price_usd |
-|---:|---|---|---:|
-| 1 | Espresso | coffee | 3.00 |
-| 2 | Americano | coffee | 3.50 |
-| 3 | Latte | coffee | 4.50 |
-| 4 | Cappuccino | coffee | 4.50 |
+**Try it:** the whole table.
 
-One query answers it, but only if each clause does its own job. By the end you will know the order the clauses run in,
-and you will have read the answer: **coffee with 5 items and bakery with 3**.
+<RunSQL query={`SELECT * FROM products;`} />
 
-## The picture
+Expected: 16 rows, 4 columns.
+
+**Try it:** keep the items under \$5.
+
+<RunSQL query={`SELECT * FROM products WHERE unit_price_usd < 5;`} />
+
+Expected: 12 rows, 4 columns. Rows went away, the columns stayed.
+
+**Try it:** show one column.
+
+<RunSQL query={`SELECT category FROM products WHERE unit_price_usd < 5;`} />
+
+Expected: 12 rows, 1 column: the same rows, fewer columns. The picture shows the two choices meeting.
 
 <figure>
-<svg viewBox="0 0 360 348" width="360" role="img" aria-labelledby="clause-order-title clause-order-desc" font-family="inherit" font-size="12" fill="currentColor">
-<title id="clause-order-title">The order a query runs in, with the rows left after each clause</title>
-<desc id="clause-order-desc">Seven stages from top to bottom, each with a bar that gets shorter as rows are dropped. 1 FROM products: 16 rows and 4 columns. 2 WHERE unit_price_usd below 5: 12 rows. 3 GROUP BY category: 4 groups, coffee 5, tea 3, bakery 3 and food 1. 4 HAVING COUNT of rows at least 3: 3 groups, because food has only 1. 5 SELECT category and the count as items: 3 rows and 2 columns. 6 ORDER BY items descending then category: coffee 5, bakery 3, tea 3. 7 LIMIT 2: coffee 5 and bakery 3.</desc>
-<text x="10" y="20" font-size="14" font-weight="600">The clauses in running order</text>
-<text x="10" y="46" font-size="11" font-weight="600">1</text>
-<text x="24" y="46" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">FROM products</text>
-<rect x="24" y="52" width="128" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="160" y="60" font-size="10">16 rows, 4 columns</text>
-<text x="10" y="90" font-size="11" font-weight="600">2</text>
-<text x="24" y="90" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE unit_price_usd &lt; 5</text>
-<rect x="24" y="96" width="96" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="128" y="104" font-size="10">12 rows, 4 columns</text>
-<text x="10" y="134" font-size="11" font-weight="600">3</text>
-<text x="24" y="134" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">GROUP BY category</text>
-<rect x="24" y="140" width="32" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="64" y="148" font-size="10">4 groups: coffee 5, tea 3, bakery 3, food 1</text>
-<text x="10" y="178" font-size="11" font-weight="600">4</text>
-<text x="24" y="178" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">HAVING COUNT(&#42;) &gt;= 3</text>
-<rect x="24" y="184" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="56" y="192" font-size="10">3 groups: food (1) drops out</text>
-<text x="10" y="222" font-size="11" font-weight="600">5</text>
-<text x="24" y="222" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT category, COUNT(&#42;) AS items</text>
-<rect x="24" y="228" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="56" y="236" font-size="10">3 rows, 2 columns</text>
-<text x="10" y="266" font-size="11" font-weight="600">6</text>
-<text x="24" y="266" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">ORDER BY items DESC, category</text>
-<rect x="24" y="272" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="56" y="280" font-size="10">coffee 5, bakery 3, tea 3</text>
-<text x="10" y="310" font-size="11" font-weight="600">7</text>
-<text x="24" y="310" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">LIMIT 2</text>
-<rect x="24" y="316" width="16" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
-<text x="48" y="324" font-size="10">coffee 5, bakery 3</text>
-</svg>
 <svg viewBox="0 0 360 334" width="360" role="img" aria-labelledby="rows-columns-title rows-columns-desc" font-family="inherit" font-size="12" fill="currentColor">
 <title id="rows-columns-title">WHERE chooses rows, SELECT chooses columns</title>
 <desc id="rows-columns-desc">The 16 rows of the products table in four columns: product_id, product_name, category and unit_price_usd. The three tea rows, Green Tea 3.25, Chai Latte 4.75 and Iced Lemon Tea 3.75, are shaded: WHERE category equals tea keeps those rows. The product_name and unit_price_usd columns have a heavy outline: SELECT product_name, unit_price_usd keeps those columns. The result is where the two meet: 3 rows and 2 columns.</desc>
@@ -290,151 +362,160 @@ and you will have read the answer: **coffee with 5 items and bakery with 3**.
 </svg>
 </figure>
 
-You write `SELECT` first. The engine runs it near the end. The DuckDB documentation says so in its own words: "Logically,
-the FROM clause is where the query starts execution." and "Logically the WHERE clause is applied immediately after the
-FROM clause." For the SELECT clause: "While it appears first in the clause, logically the expressions here are executed
-only at the end." And for the last two: "ORDER BY, LIMIT, and OFFSET are output modifiers. Logically they are applied at
-the very end of the query." Between them, "the WHERE clause occurs before the grouping, the HAVING clause occurs after
-the grouping."
-
-| You write | The engine runs |
-|---|---|
-| 1. `SELECT` | 1. `FROM`: take the table |
-| 2. `FROM` | 2. `WHERE`: keep rows |
-| 3. `WHERE` | 3. `GROUP BY`: make groups |
-| 4. `GROUP BY` | 4. `HAVING`: keep groups |
-| 5. `HAVING` | 5. `SELECT`: choose columns, name them |
-| 6. `ORDER BY` | 6. `ORDER BY`: sort |
-| 7. `LIMIT` | 7. `LIMIT`: cut |
-
-Picture the table as a grid. `WHERE` chooses **rows** (and `HAVING` chooses groups). `SELECT` chooses **columns**. They
-never swap jobs, and `WHERE` runs first, on the whole table.
-
-## Worked example
-
-Question: **among the items under \$5, which two categories have the most items, counting only those with at least
-three?** Run the notebook's setup cell, then one cell per step. We build the query in running order.
-
-1. **FROM: start with the whole table.**
-
-   ```sql
-   SELECT * FROM products;
-   ```
-
-   Expected: 16 rows, 4 columns. *Why:* every query starts with the rows of its table.
-
-2. **WHERE chooses rows.**
-
-   ```sql
-   SELECT * FROM products WHERE unit_price_usd < 5;
-   ```
-
-   Expected: 12 rows, 4 columns. *Why:* rows are dropped, columns are untouched.
-
-3. **SELECT chooses columns.**
-
-   ```sql
-   SELECT category FROM products WHERE unit_price_usd < 5;
-   ```
-
-   Expected: 12 rows, 1 column. *Why:* the same 12 rows, one column. `WHERE` used `unit_price_usd`, which the output does
-   not show: `WHERE` works on the table, before `SELECT` picks columns.
-
-4. **GROUP BY turns rows into groups.**
-
-   ```sql
-   SELECT category, COUNT(*) AS items
-   FROM products
-   WHERE unit_price_usd < 5
-   GROUP BY category;
-   ```
-
-   Expected: 4 rows, 2 columns. *Why:* `food` counts 1 item, not 3, because `WHERE` ran first and dropped the dear ones.
-
-5. **An aggregate cannot go in WHERE.** The natural first try is to filter the count in `WHERE`:
-
-   ```sql
-   SELECT category, COUNT(*) AS items
-   FROM products
-   WHERE unit_price_usd < 5 AND COUNT(*) >= 3
-   GROUP BY category;
-   ```
-
-   Expected: an error that starts `Binder Error: WHERE clause cannot contain aggregates!`. *Why:* when `WHERE` runs there are no
-   groups yet, so there is no count to test. `HAVING` runs after the grouping:
-
-   ```sql
-   SELECT category, COUNT(*) AS items
-   FROM products
-   WHERE unit_price_usd < 5
-   GROUP BY category
-   HAVING COUNT(*) >= 3;
-   ```
-
-   Expected: 3 rows, 2 columns; `food` drops out.
-
-6. **ORDER BY and LIMIT run last.**
-
-   ```sql
-   SELECT category, COUNT(*) AS items
-   FROM products
-   WHERE unit_price_usd < 5
-   GROUP BY category
-   HAVING COUNT(*) >= 3
-   ORDER BY items DESC, category
-   LIMIT 2;
-   ```
-
-   Expected: 2 rows, 2 columns: coffee 5, bakery 3. *Why:* `ORDER BY items` can use the alias because `SELECT` has already
-   run. `category` breaks the tie between bakery and tea (S2).
-
-7. **What about an alias in WHERE?**
-
-   ```sql
-   SELECT product_name, unit_price_usd * 100 AS cents
-   FROM products
-   WHERE cents < 400;
-   ```
-
-   Expected: 7 rows, 2 columns. DuckDB accepts this: its documentation lists "Column aliases in WHERE, GROUP BY, and
-   HAVING" among its friendly features. PostgreSQL does not accept it. Its documentation says:
-   "An output column's name can be used to refer to the column's value in ORDER BY and GROUP BY clauses, but not in the
-   WHERE or HAVING clauses; there you must write out the expression instead." The portable habit is to write it out:
-   `WHERE unit_price_usd * 100 < 400` returns the same 7 rows. Even DuckDB stops for an alias of an aggregate:
-   `WHERE items >= 3` gives the error of step 5.
-
-8. **Verify.** Follow the counts in the picture: 16 rows, 12 rows, 4 groups, 3 groups, then 2 rows; each notebook step gave
-   them. A second method: coffee has 7 products, and 2 of them (Mocha at \$5.00 and Pumpkin Spice Latte at \$5.50) cost
-   \$5 or more, which leaves the 5 in the result. Answer: **coffee 5 and bakery 3**.
-
 <details>
-<summary>Explain it in your own words: why can `WHERE unit_price_usd < 5` use a column that the output does not show?</summary>
+<summary>Explain it in your own words: why can <code>WHERE unit_price_usd &lt; 5</code> use a column that the output does not show?</summary>
 
-`WHERE` runs on the full table, before `SELECT` chooses the output columns. Every column of the table is still there.
+The query above printed only `category`, yet `WHERE` read the price. So the price column was still there when `WHERE`
+ran: the table had not been cut down to the output columns yet.
 
 </details>
+
+### 2. Groups, then a filter for them
+
+`GROUP BY` sorts the remaining rows into groups. A clause cannot use what a later clause creates (DuckDB bends this for plain aliases, unit 4). `WHERE` runs before any
+group exists, so it has no count to test; `HAVING` runs after the grouping and keeps or drops whole groups, judged by
+what a group holds, such as its row count.
+
+**Try it:** count the cheap items of each category.
+
+<RunSQL query={`SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd < 5
+GROUP BY category;`} />
+
+Expected: 4 rows, 2 columns, in any order. *Why:* `food` counts 1 item, not 3, because `WHERE` ran first and dropped
+the dear ones.
+
+**Try it:** the natural first try filters the count in `WHERE`.
+
+<RunSQL query={`SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd < 5 AND COUNT(*) >= 3
+GROUP BY category;`} />
+
+Expected: an error that says `WHERE clause cannot contain aggregates!`. Now the same test in `HAVING`:
+
+<RunSQL query={`SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd < 5
+GROUP BY category
+HAVING COUNT(*) >= 3;`} />
+
+Expected: 3 rows, 2 columns, in any order; `food` drops out.
+
+### 3. Sort and cut come last
+
+`ORDER BY` and `LIMIT` are **output modifiers**: they work on the finished result, at the very end. `ORDER BY` sorts
+the rows, then `LIMIT` cuts the sorted list.
+
+*Excel:* a sort rearranges the rows of a table (E5).
+
+**Try it:**
+
+<RunSQL query={`SELECT category, COUNT(*) AS items
+FROM products
+WHERE unit_price_usd < 5
+GROUP BY category
+HAVING COUNT(*) >= 3
+ORDER BY items DESC, category
+LIMIT 2;`} />
+
+Expected: 2 rows, 2 columns: coffee 5, bakery 3. *Why:* `category` breaks the tie between bakery and tea (S2).
+
+### 4. Names you give
+
+`AS` gives an output column a name, an **alias**. The name is created when `SELECT` runs, so the clauses before it,
+such as `WHERE`, have no such name yet. `ORDER BY` runs after it, which is why `ORDER BY items` worked in unit 3. DuckDB also accepts an alias earlier, for a plain expression.
+
+**Try it:**
+
+<RunSQL query={`SELECT product_name, unit_price_usd * 100 AS cents
+FROM products
+WHERE cents < 400;`} />
+
+Expected: 7 rows, 2 columns. DuckDB's documentation lists "Column aliases in WHERE, GROUP BY, and HAVING" among its
+friendly features. PostgreSQL does not accept this. Its documentation allows an output column's name in "ORDER BY and
+GROUP BY clauses, but not in the WHERE or HAVING clauses; there you must write out the expression instead."
+
+The portable habit is to write it out: `WHERE unit_price_usd * 100 < 400` returns the same 7 rows. Even DuckDB stops for
+an alias of an aggregate: `WHERE items >= 3` gives the error of unit 2.
+
+### 5. Check the counts
+
+No new query. Follow the counts in the picture: 16 rows, 12 rows, 4 groups, 3 groups, then 2 rows. Each query above gave
+them.
+
+<figure>
+<svg viewBox="0 0 360 348" width="360" role="img" aria-labelledby="clause-order-title clause-order-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="clause-order-title">The order a query runs in, with the rows left after each clause</title>
+<desc id="clause-order-desc">Seven stages from top to bottom, each with a bar that gets shorter as rows are dropped. 1 FROM products: 16 rows and 4 columns. 2 WHERE unit_price_usd below 5: 12 rows. 3 GROUP BY category: 4 groups, coffee 5, tea 3, bakery 3 and food 1. 4 HAVING COUNT of rows at least 3: 3 groups, because food has only 1. 5 SELECT category and the count as items: 3 rows and 2 columns. 6 ORDER BY items descending then category: coffee 5, bakery 3, tea 3. 7 LIMIT 2: coffee 5 and bakery 3.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">The clauses in running order</text>
+<text x="10" y="46" font-size="11" font-weight="600">1</text>
+<text x="24" y="46" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">FROM products</text>
+<rect x="24" y="52" width="128" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="160" y="60" font-size="10">16 rows, 4 columns</text>
+<text x="10" y="90" font-size="11" font-weight="600">2</text>
+<text x="24" y="90" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">WHERE unit_price_usd &lt; 5</text>
+<rect x="24" y="96" width="96" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="128" y="104" font-size="10">12 rows, 4 columns</text>
+<text x="10" y="134" font-size="11" font-weight="600">3</text>
+<text x="24" y="134" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">GROUP BY category</text>
+<rect x="24" y="140" width="32" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="64" y="148" font-size="10">4 groups: coffee 5, tea 3, bakery 3, food 1</text>
+<text x="10" y="178" font-size="11" font-weight="600">4</text>
+<text x="24" y="178" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">HAVING COUNT(&#42;) &gt;= 3</text>
+<rect x="24" y="184" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="192" font-size="10">3 groups: food (1) drops out</text>
+<text x="10" y="222" font-size="11" font-weight="600">5</text>
+<text x="24" y="222" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">SELECT category, COUNT(&#42;) AS items</text>
+<rect x="24" y="228" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="236" font-size="10">3 rows, 2 columns</text>
+<text x="10" y="266" font-size="11" font-weight="600">6</text>
+<text x="24" y="266" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">ORDER BY items DESC, category</text>
+<rect x="24" y="272" width="24" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="56" y="280" font-size="10">coffee 5, bakery 3, tea 3</text>
+<text x="10" y="310" font-size="11" font-weight="600">7</text>
+<text x="24" y="310" font-size="10" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace">LIMIT 2</text>
+<rect x="24" y="316" width="16" height="8" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-opacity="0.6" />
+<text x="48" y="324" font-size="10">coffee 5, bakery 3</text>
+</svg>
+</figure>
+
+A second method: coffee has 7 products, and 2 of them (Mocha at \$5.00 and Pumpkin Spice Latte at \$5.50) cost \$5 or
+more, which leaves the 5 in the result. Answer: **coffee 5 and bakery 3**.
+
+<Aside type="tip" title="Remember">
+
+- The clauses run in this order: `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`, `LIMIT`.
+- `WHERE` chooses rows and `SELECT` chooses columns.
+- A clause cannot use what a later clause creates: a count belongs in `HAVING`, not `WHERE`.
+- An alias exists from `SELECT` on; to be portable, write the expression out.
+
+**Common trap: "`LIMIT` takes the first rows of the table, and then `ORDER BY` sorts them."** The sort runs first and
+`LIMIT` cuts the sorted list. `ORDER BY product_name LIMIT 2` returns Americano and Avocado Toast, although the first two
+rows of `products` are Espresso and Americano.
+
+</Aside>
 
 ## Finish it
 
 <Exercise id="sql-query-execution-order-1">
 
-**Which categories have at least three items costing \$4.00 or less?** Use the Exercise 1 cell. Expected: 1 row,
-2 columns (the category and its count).
+**Which categories have at least three items costing \$4.00 or less?** Expected: 1 row, 2 columns (the category and its
+count).
 
-The first steps are done for you:
+The first steps are done for you: the query below runs and counts the cheap items of each category. Now finish it: add
+the line that keeps only the groups of three or more.
 
-```sql
-SELECT category, COUNT(*) AS items
+<RunSQL query={`SELECT category, COUNT(*) AS items
 FROM products
 WHERE unit_price_usd <= 4
-```
-
-Now finish it: add the line that makes the groups and the line that keeps only the groups of three or more.
+GROUP BY category;`} />
 
 <details>
 <summary>Hint</summary>
 
-Row filter first, then groups, then a filter on the groups. Which clause filters on `COUNT(*)`?
+Rows first, then groups, then a filter on the groups. Which clause filters on `COUNT(*)`, and does it go before or after `GROUP BY`?
 
 </details>
 
@@ -442,7 +523,6 @@ Row filter first, then groups, then a filter on the groups. Which clause filters
 <summary>Half-solution</summary>
 
 ```sql
-GROUP BY ...
 HAVING COUNT(*) ...;
 ```
 
@@ -468,13 +548,14 @@ The result is bakery with 3 items. Coffee and tea have only two items each at \$
 
 <Exercise id="sql-query-execution-order-2">
 
-**Which stores took more than 400 completed orders?** Show `store_id` and the count, biggest first. Work in the Exercise 2
-cells.
+**Which stores took more than 400 completed orders?** Show `store_id` and the count, biggest first.
 
-Before you run anything, write one sentence in the first cell: which clause does each job (completed orders only, a count
-per store, stores over 400, the sort). Then write the query.
+Before you run anything, write one sentence as a comment in the editor: which clause does each job (completed orders
+only, a count per store, stores over 400, the sort). Then write the query.
 
 Expected shape, to check your sentence against: 2 rows, 2 columns.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
@@ -524,11 +605,9 @@ March 1, is store 2's, so the `WHERE` matters. Harbor, store 3, has 355 and is d
 **Spot the flaw.** A colleague wants the products over \$4 shown in cents. The query runs without an error but returns no
 rows:
 
-```sql
-SELECT product_name, unit_price_usd * 100 AS unit_price_usd
+<RunSQL query={`SELECT product_name, unit_price_usd * 100 AS unit_price_usd
 FROM products
-WHERE unit_price_usd > 400;
-```
+WHERE unit_price_usd > 400;`} />
 
 Expected: 0 rows, 2 columns. Nine products cost more than \$4. Find the flaw and fix the query.
 
@@ -551,7 +630,7 @@ Expected: 9 rows, 2 columns.
 </Exercise>
 
 **Can you do it?** *I can list the clauses in running order and use it to say why a query fails or returns nothing.*
-Test: Exercise sql-query-execution-order-2, done in the notebook from empty cells without opening the hints.
+Test: Exercise sql-query-execution-order-2, done from the blank editor without opening the hints.
 
 The pattern to remember: **FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT: rows are chosen before columns.** The
 next lesson, *Readable queries with CTEs* (S13), splits a long query into named steps.
