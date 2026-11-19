@@ -95,6 +95,8 @@ Before answering architecture, SPEC or "where is X defined / what depends on X" 
 `.claude/kb/GRAPH_REPORT.md` and use `node scripts/kb.mjs query|path|explain` (skill: `.claude/skills/kb/SKILL.md`)
 instead of re-reading SPEC.md or grepping. Open the cited file:line before relying on details.
 After changing SPEC.md, CLAUDE.md, design/README.md, `src/`, `scripts/` or config, run `npm run kb` and include the result.
+Research issues (label `research`) are copied into `research/issues/` by `npm run research:sync` (then kb indexes their
+sections, numbered findings and per-lesson table rows); run it whenever a research issue is filed or edited.
 
 ## Commands
 Use the Node version in `.nvmrc` (`nvm use`).

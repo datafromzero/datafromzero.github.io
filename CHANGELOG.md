@@ -7,6 +7,10 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Per-lesson cheatsheet links (SPEC D44, owner approved 2026-11-19): every cheatsheet card has a stable anchor, its lesson code in lowercase
+  (`/sql/cheatsheet/#s8`, `/excel/cheatsheet/#e15`; the first card when a lesson has two), now part of the URL contract. The footer of every
+  Excel and SQL lesson that has a card shows "Sum it up: this lesson in the SQL cheatsheet →" next to "Unlocks next", built at build time from the
+  sheet data; the target card gets a calm outline and clears the sticky header. No JavaScript; Python lessons and lessons without a card show none.
 - Python stage restructure (SPEC D45, owner decision, 2026-11-19, from research issue #61): 27 lessons instead of 25, so the curriculum is 166
   lessons and the four core stages 109. New lessons: `pandas-derived-columns` (`assign`, `map`, `apply`) and the exit capstone
   `cafe-quarterly-pack`, which comes before `notebook-to-script`. `charts` is split into `charts-matplotlib` and `charts-seaborn`; `files-csv-json`
@@ -197,6 +201,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- Cheatsheets: the bottom bar shows a space between a section's lesson codes and its title ("S1–S17 Analysis on one table").
 - Print: the Open in Colab and Make a copy buttons print as plain black text with their address, not as a black box.
 - Concept animations: the step buttons 1 to N have their bottom edge again (it was missing on every lesson).
 - SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,

@@ -3,6 +3,7 @@
  * tests run on it. Pure TypeScript with no Astro imports, so the build and the tests share it. The content itself lives
  * in `src/data/cheatsheets/{stage}.ts` and is distilled from published lessons only.
  */
+import { lessonCode } from './roadmap.ts';
 
 /** One pattern: a short piece of code, what it does in one plain sentence, the most common trap, and its lesson. */
 export interface CheatEntry {
@@ -55,6 +56,23 @@ export interface Cheatsheet {
 }
 
 export const isFigure = (i: CheatItem): i is CheatFigure => 'figure' in i;
+
+/**
+ * Stable card anchors (SPEC D44, a URL contract like reference pages): a card's id is its lesson code in lowercase
+ * (`#s8`, `#e15`). When several cards share a lesson, the first one on the page carries the id. Returns `slug -> id`
+ * for the lessons that have a card; `lessons` is `slug -> order` of the stage's published lessons.
+ */
+export function cardAnchors(sheet: Cheatsheet, lessons: ReadonlyMap<string, number>): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const part of sheet.parts) {
+		for (const item of part.items) {
+			const order = lessons.get(item.lesson);
+			const code = order === undefined ? undefined : lessonCode(sheet.stage, order);
+			if (code && !out.has(item.lesson)) out.set(item.lesson, code.toLowerCase());
+		}
+	}
+	return out;
+}
 
 /** `S1–S17` as the first and last lesson number. */
 export function codeRange(codes: string): [number, number] {
@@ -118,6 +136,12 @@ export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, nu
 			const used = [...cited].sort((a, b) => a - b).join(',');
 			if (named !== used) out.push(`${part.id}: label ${part.codes} does not match the lessons it cites`);
 		}
+	}
+	// Card anchors are unique, and none collides with a part id (both are ids on the same page).
+	const anchors = [...cardAnchors(sheet, lessons).values()];
+	for (const a of anchors) {
+		if (anchors.indexOf(a) !== anchors.lastIndexOf(a)) out.push(`card anchor "${a}" is used twice`);
+		if (seen.has(a)) out.push(`card anchor "${a}" is also a part id`);
 	}
 	return out;
 }

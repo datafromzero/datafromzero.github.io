@@ -44,6 +44,10 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   `tests/cheatsheet.test.ts` checks that every formula is the lesson's own text and every SQL twin is published. No lesson states a duplicate-key trap for
   lookups, so none is on a card. Python gets its page the same way once its lessons are published.
 
+- **Cheatsheet anchors and footer links (D44, 2026-11-19):** each card's id is its lesson code in lowercase (`#s8`; first card when a lesson has
+  several); `LessonFooter.astro` shows "Sum it up: this lesson in the SQL cheatsheet →" from `cheatsheetLink` (`src/data/cheatsheets/index.ts`).
+  A new stage sheet needs one line in `SHEETS` there; `tests/cheatsheet.test.ts` checks anchors are unique and every link resolves.
+
 ## What comes next (build plan item 8, content)
 
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice

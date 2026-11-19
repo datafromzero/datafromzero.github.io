@@ -227,7 +227,10 @@ function buildGraph() {
 		let parent = base, fence = false;
 		rl.forEach((l, i) => {
 			if (/^```/.test(l)) fence = !fence;
-			const h = !fence && l.match(/^(#{2,3})\s+(.*)$/);
+			// also index numbered bold-lead findings ("**3. groupby clicks …**") and per-lesson table rows ("| `slug` | …")
+			// as sub-sections, so a finding or a lesson row is found by its own words, not only by its heading's
+			const b = !fence && (l.match(/^\*\*(\d+\.\s[^*]+)\*\*/) || l.match(/^\|\s*`([a-z0-9-]+)`\s*\|/));
+			const h = !fence && (l.match(/^(#{2,3})\s+(.*)$/) || (b && [l, '###', b[1]]));
 			if (!h) return;
 			const label = clean(h[2]);
 			const id = h[1] === '##' ? `${base}#${slug(label)}` : `${parent}:${slug(label)}`;
