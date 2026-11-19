@@ -3,9 +3,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { codeRange, entriesOf, isFigure, sheetProblems } from '../src/lib/cheatsheet.ts';
+import { cardAnchors, codeRange, entriesOf, isFigure, sheetProblems } from '../src/lib/cheatsheet.ts';
 import { sqlCheatsheet } from '../src/data/cheatsheets/sql.ts';
 import { excelCheatsheet } from '../src/data/cheatsheets/excel.ts';
+import { SHEETS, cheatsheetLink } from '../src/data/cheatsheets/index.ts';
 import { CHEATSHEETS } from '../src/lib/roadmap.ts';
 
 function published(stage: string): Map<string, number> {
@@ -84,5 +85,51 @@ describe('Excel cheatsheet', () => {
 	});
 	test('is registered for the sidebar and /start/', () => {
 		assert.equal(CHEATSHEETS.excel.href, '/excel/cheatsheet/');
+	});
+});
+
+describe('Cheatsheet anchors and lesson footer links (D44)', () => {
+	for (const stage of ['sql', 'excel']) {
+		const sheet = SHEETS[stage];
+		const lessons = published(stage);
+		const anchors = cardAnchors(sheet, lessons);
+		const partIds = sheet.parts.map((p) => p.id);
+
+		test(`${stage}: every card anchor is unique, lowercase lesson code, and not a part id`, () => {
+			const ids = [...anchors.values()];
+			assert.equal(new Set(ids).size, ids.length);
+			for (const id of ids) assert.match(id, new RegExp(`^${stage === 'sql' ? 's' : 'e'}\\d+(\\.\\d+)?$`));
+			for (const id of ids) assert.ok(!partIds.includes(id), id);
+		});
+		test(`${stage}: the first card of a lesson carries its anchor (every cited lesson has one)`, () => {
+			const cited = new Set(sheet.parts.flatMap((p) => p.items.map((i) => i.lesson)));
+			assert.deepEqual([...anchors.keys()].sort(), [...cited].sort());
+		});
+		test(`${stage}: every footer link resolves to an existing anchor, and a lesson without a card gets none`, () => {
+			const ids = new Set(anchors.values());
+			let linked = 0;
+			for (const [slug, order] of lessons) {
+				const link = cheatsheetLink(stage, slug, order);
+				if (!anchors.has(slug)) {
+					assert.equal(link, undefined, `${slug} has no card, so no link`);
+					continue;
+				}
+				linked++;
+				assert.ok(link, slug);
+				const [path, hash] = link.href.split('#');
+				assert.equal(path, CHEATSHEETS[stage].href);
+				assert.ok(ids.has(hash), `${slug}: #${hash} is not a card`);
+			}
+			assert.ok(linked > 0);
+		});
+	}
+	test('lessons with two cards (Excel E4, E13) still yield one anchor', () => {
+		const all = excelCheatsheet.parts.flatMap((p) => p.items.map((i) => i.lesson));
+		assert.ok(all.length > new Set(all).size);
+		assert.equal(cardAnchors(excelCheatsheet, published('excel')).size, new Set(all).size);
+	});
+	test('a stage without a sheet (Python) and an unknown lesson get no link', () => {
+		assert.equal(cheatsheetLink('python', 'anything', 10), undefined);
+		assert.equal(cheatsheetLink('sql', 'no-such-lesson', 10), undefined);
 	});
 });

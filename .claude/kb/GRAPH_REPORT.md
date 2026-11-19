@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 948 nodes, 1251 edges, 139 communities (328 isolated nodes).
-- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 45, dependency 25, design-section 15, doc 16, i18n 6, layout 1, module 20, npm-script 19, page 4, research-section 166, rule 10, script 110, skill 1, spec-section 25, starlight-component 6, style 7, symbol 213, template 2, token 12.
-- Edges: defines 213, imports 49, mentions 676, overrides 6, references 27, runs 10, specified-by 4, uses 230, uses-token 31, validated-by 5.
+- 952 nodes, 1258 edges, 140 communities (328 isolated nodes).
+- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 45, dependency 25, design-section 15, doc 16, i18n 6, layout 1, module 21, npm-script 19, page 4, research-section 166, rule 10, script 110, skill 1, spec-section 25, starlight-component 6, style 7, symbol 216, template 2, token 12.
+- Edges: defines 216, imports 49, mentions 680, overrides 6, references 27, runs 10, specified-by 4, uses 230, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,7 +17,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/components/content/Exercise.astro` | component | 85 | src/components/content/Exercise.astro:1 |
 | 3 | `D41` Lesson step-by-step figures | decision | 49 | SPEC.md:68 |
 | 4 | `astro.config.mjs` | config | 41 | astro.config.mjs:1 |
-| 5 | `.claude/HANDOFF.md` | doc | 38 | .claude/HANDOFF.md:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 39 | .claude/HANDOFF.md:1 |
 | 6 | `src/components/content/RunSQL.astro` | component | 38 | src/components/content/RunSQL.astro:1 |
 | 7 | `D42` In-page SQL runner | decision | 29 | SPEC.md:69 |
 | 8 | `src/components/content/OpenInColab.astro` | component | 29 | src/components/content/OpenInColab.astro:1 |
@@ -37,7 +37,7 @@ Label propagation; each community is named by its top-degree node.
 - **C2 HANDOFF.md** (22): .claude/HANDOFF.md; D42 In-page SQL runner; D32 Four career branches; S5.1 Lesson (`src/content/docs/{stage}…; CLAUDE.md; S7 Datasets
 - **C3 site.ts** (22): src/site.ts; D30 Vietnamese paused; S8 Internationalization; .claude/agents/README.md; D24 Content source; agent:content-producer content-producer
 - **C4 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C5 cheatsheet.ts** (13): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C5 cheatsheet.ts** (14): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C6 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
 - **C7 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 - **C8 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C72 to C69, src/lib/content-schemas.ts:96)
-- `src/pages/excel/cheatsheet.astro` -mentions-> `src/data/cheatsheets/excel.ts` (C14 to C123, src/pages/excel/cheatsheet.astro:3)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C90 to C6, scripts/animations/concept-join.mjs:1)
-- `src/pages/sql/cheatsheet.astro` -mentions-> `src/data/cheatsheets/sql.ts` (C14 to C124, src/pages/sql/cheatsheet.astro:3)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C28 to C60, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C126 to C121, src/layouts/HomeLayout.astro:39)
+- `ctype:career` -specified-by-> `S5.4` (C74 to C71, src/lib/content-schemas.ts:96)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C92 to C6, scripts/animations/concept-join.mjs:1)
+- `src/pages/sql/cheatsheet.astro` -mentions-> `src/data/cheatsheets/sql.ts` (C18 to C125, src/pages/sql/cheatsheet.astro:3)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C28 to C62, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C127 to C123, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C3, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C21 to C36, design/README.md:181)
 - `M7` -mentions-> `D34` (C47 to C21, CLAUDE.md:65)
-- `M8` -mentions-> `D24` (C65 to C3, CLAUDE.md:66)
-- `research/curriculum/00-README.md` -mentions-> `S4` (C12 to C68, research/curriculum/00-README.md:134)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C115 to C2, scripts/check-placeholders.mjs:2)
+- `M8` -mentions-> `D24` (C67 to C3, CLAUDE.md:66)
+- `research/curriculum/00-README.md` -mentions-> `S4` (C12 to C70, research/curriculum/00-README.md:134)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C117 to C2, scripts/check-placeholders.mjs:2)
+- `M8` -mentions-> `S4` (C67 to C70, CLAUDE.md:70)
 
 ## Decisions (SPEC §1)
 
@@ -151,7 +151,7 @@ term: id — file:line
 - exercise: `src/components/content/Exercise.astro` — src/components/content/Exercise.astro:1
 - solution: `src/components/content/Solution.astro` — src/components/content/Solution.astro:1
 - colab: `src/lib/content-context.ts` — src/lib/content-context.ts:1
-- sheets: `R:curriculum/02-syllabus-inventory#1-stage-1-spreadsheets-and-the-bi-layer:1-5-google-sheets-what-transfers-what-is-sheets-only` — research/curriculum/02-syllabus-inventory.md:51
+- sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:11
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
 - katex: `pkg:katex` — package.json:49
 - math: `src/styles/math.css` — src/styles/math.css:1

@@ -5,7 +5,7 @@
 // column, a wide screen several; print gets a compact grid on two A4 sheets, black on white, with no site chrome.
 import { getCollection } from 'astro:content';
 import { classify } from '../../lib/content-schemas.ts';
-import { isFigure, type Cheatsheet } from '../../lib/cheatsheet.ts';
+import { cardAnchors, isFigure, type Cheatsheet } from '../../lib/cheatsheet.ts';
 import { lessonCode } from '../../lib/roadmap.ts';
 import CheatsheetFigure from './CheatsheetFigure.astro';
 
@@ -29,6 +29,22 @@ for (const d of docs) {
 	if (c.folder === sheet.stage) lessons.set(c.path.split('/')[1], info);
 	if (c.folder === 'sql') sqlLessons.set(c.path.split('/')[1], info);
 }
+
+// The lesson code in lowercase is the id of the first card of each lesson (`#s8`); the lesson footers link to it (D44).
+const orders = new Map<string, number>();
+for (const d of docs) {
+	const c = classify(d.id);
+	const data = d.data as unknown as { status?: string; order: number };
+	if (c.kind === 'lesson' && c.locale === null && c.folder === sheet.stage && data.status === 'published') orders.set(c.path.split('/')[1], data.order);
+}
+const anchors = cardAnchors(sheet, orders);
+const claimed = new Set<string>();
+const anchorFor = (lesson: string) => {
+	const id = anchors.get(lesson);
+	if (!id || claimed.has(id)) return undefined;
+	claimed.add(id);
+	return id;
+};
 
 // One sentence under each drawing, in words, so color and shape are never the only cue.
 const captions: Record<string, string> = {
@@ -60,13 +76,13 @@ const captions: Record<string, string> = {
 							</a>
 						);
 						return isFigure(item) ? (
-							<figure class="cs-e cs-fig">
+							<figure class="cs-e cs-fig" id={anchorFor(item.lesson)}>
 								{label}
 								<CheatsheetFigure name={item.figure} />
 								<figcaption>{captions[item.figure]}</figcaption>
 							</figure>
 						) : (
-							<article class="cs-e">
+							<article class="cs-e" id={anchorFor(item.lesson)}>
 								{label}
 								<pre class="cs-code" tabindex="0"><code>{item.code}</code></pre>
 								<p class="cs-does">{item.does}</p>
@@ -148,6 +164,14 @@ const captions: Record<string, string> = {
 		border: 1px solid var(--dim);
 		border-radius: var(--radius-panel);
 		overflow-wrap: anywhere;
+	}
+	/* Arriving from a lesson footer (#s8): calm outline in the site tokens, clear of the sticky header; no motion. */
+	.cs-e {
+		scroll-margin-top: 5rem;
+	}
+	.cs-e:target {
+		outline: 2px solid var(--fg);
+		outline-offset: 3px;
 	}
 	.cs-lesson {
 		display: flex;
@@ -233,6 +257,11 @@ const captions: Record<string, string> = {
 	}
 	.cs-foot {
 		display: none;
+	}
+	@media print {
+		.cs-e:target {
+			outline: none;
+		}
 	}
 	.cs a:focus-visible {
 		outline: 2px solid var(--fg);
