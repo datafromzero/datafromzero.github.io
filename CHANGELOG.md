@@ -158,6 +158,11 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
+  so the plan boxes line up.
+- Print: the Back, Next and step buttons of the lesson steppers are hidden, as those of the concept animations already were;
+  the final frame and the step captions print.
+- SQL S19: the ambiguous-column error is quoted the way the page shows it.
 - Lesson tables on phones: a long formula in a cell now wraps, so the other columns no longer shrink to one letter
   per line (Excel E4, E5, E7, E13, E21).
 
