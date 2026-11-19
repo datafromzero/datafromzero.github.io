@@ -45,6 +45,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-19 — The step buttons 1 2 3 4 of every concept animation lost their bottom edge (owner, on a phone): the shared
+  `.sa-sb` rule draws `border-bottom: 4px solid var(--c)`, and concept buttons carry no clause class, so `--c` was unset
+  and the whole bottom border dropped. → **A rule that uses a custom property either gives it a fallback
+  (`var(--c, …)`) or every element it matches sets it; screenshot new figure controls in light and dark at phone width.**
+
 - 2026-11-18 — A commit and push ran after `npm run check` failed (a description over 160 characters), because the
   commands were joined with `;`. → **Join check, commit and push with `&&`, so nothing is committed after a failed check.**
 
