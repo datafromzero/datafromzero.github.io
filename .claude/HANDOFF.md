@@ -1,7 +1,7 @@
 # Handoff: state of the work on 2026-11-17
 
 For the next lead session. Read `CLAUDE.md` first (rules, merging policy, commands), then this file.
-`SPEC.md` is authoritative; decisions D1–D43 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
+`SPEC.md` is authoritative; decisions D1–D45 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
 
 ## Who is who
 
@@ -28,8 +28,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
-- **Curriculum (D29, D32):** 159 lessons in 8 stages, all `status: draft` (never deployed):
-  Excel 22, SQL 30, Python 25, core 25, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
+- **Curriculum (D29, D32, D40, D45):** 166 lessons in 8 stages (Excel and SQL published, the rest `status: draft`, never deployed):
+  Excel 22, SQL 35, Python 27, core 25, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
   The map is `research/curriculum/06-curriculum-map.yaml`; lesson frontmatter is the source of truth.
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
 - **Open issues and PRs:** issue #41 (Excel checks in the real apps, Sheets copy links).
@@ -46,7 +46,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
    names) and sends Google Sheets `/copy` links; each link becomes a `sheet` field plus `<OpenInSheets />`.
-2. **Next stages:** SQL (35 lessons, D40; every query runs in the page, no notebooks or Colab, D43), then Python (where Colab starts; notebooks
+2. **Next stages:** SQL (35 lessons, D40; every query runs in the page, no notebooks or Colab, D43), then Python (27 lessons, D45; where Colab starts; notebooks
    load data from the `v0.1.0` tag, D39) and core. Use the
    lesson flow in `.claude/agents/README.md`: `content-producer` batches of ≤ 5 in parallel worktrees, following
    `.claude/agents/LESSON-STANDARD.md`, then `content-reviewer`, then fixes by the same writer. SQL needs a model
@@ -64,7 +64,20 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
    learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected
    result per exercise, and what "same result" means for row order) before it is built.
-6. **Release `v1.0.0`** when the four core stages (107 lessons, D40) are published; then enable Zenodo (SPEC §9, §14).
+6. **Release `v1.0.0`** when the four core stages (109 lessons, D40, D45) are published; then enable Zenodo (SPEC §9, §14).
+
+- **Python stage restructure (D45, 2026-11-19, from issue #61):** 27 lessons in `src/content/docs/python/` (all `.mdx`, all draft), in the new order of
+  `research/curriculum/06-curriculum-map.yaml` (origin tag per lesson, the 2 awareness boxes, the draft-to-new compression). Cut `comprehensions`; renamed
+  `files-csv-json` to `files-and-tables` (id kept); split `charts` into `charts-matplotlib` (id `python-charts` kept) and `charts-seaborn`; added
+  `pandas-derived-columns` and `cafe-quarterly-pack`. The text is still the owner's: every section keeps the draft line and gets a placeholder
+  paragraph. The 12 SQL-to-pandas bridge traps and 10 beginner traps of the issue are named exercise slots (each with a known answer checked against the
+  cafe-sales data), and `notebooks/python/{lesson-id}.ipynb` holds one skeleton per lesson (setup, data from `v0.1.0`, empty working cells, check
+  cells; 21 stated answers, the rest still a placeholder). The notebooks were run top to bottom locally with the solutions injected. Still open for the
+  owner: the placeholders, the fifth chart type, the real messy-text example for the NFC trap, the sources for `read_excel`, `read_sql`, DuckDB and
+  Plotly, the API for `apis-and-web-data`, and the issue's "8 to 6" compression (its own list gives 9 to 8).
+  Owner instruction of the same day (learners know only Excel and SQL): `first-notebook` opens with a team-draft story (sources in its frontmatter, accessed
+  2026-11-19) and no typing; lessons up to `dataframe-first-look` start with a "You already know this" bridge; the notebooks of those lessons carry
+  pre-filled try-it cells and starters (see `.claude/agents/LESSON-STANDARD.md`).
 
 ## Open items and owner decisions still pending
 

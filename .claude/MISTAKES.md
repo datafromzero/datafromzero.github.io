@@ -164,6 +164,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   0.5 KB gzipped per figure. → **Text that is the same in every state is written once (label, "Key idea", sign words in CSS
   `content`); measure a generator change as gzip of the figure with and without the feature, per figure, on all of them.**
 
+- 2026-11-19 — Generated notebooks used readable cell ids (`c000`), and `nbstripout --verify` failed because it renumbers ids to
+  `0`, `1`, `2`. → **Write notebook cell ids as sequential strings from `0`; run `npm run check:notebooks` (needs `nbstripout`)
+  before committing notebooks.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**
@@ -339,6 +343,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   test drops the row; DOUBLE stores an approximation; NULL is not 0), and the Explain-it answers repeated the unit text.
   → **An Idea must not state the fact its Predict asks for; that fact goes in the Why after the Result. An Explain-it asks
   a new question or uses a new example, never the unit's own sentence.**
+
+- 2026-11-19 — A draft objective in the Python stage said "NaN poisons sums", but pandas aggregates skip missing values (issue #61,
+  bridge trap 11), and an issue said "8 lessons to 6" where its own list gives 9 to 8. → **Check a stub's objective against the
+  research that now governs it, and recount any figure in a brief from the list it summarizes; report the mismatch instead of
+  copying it.**
 
 ## Agents and reviews
 
