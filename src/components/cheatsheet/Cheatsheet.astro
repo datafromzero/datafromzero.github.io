@@ -1,0 +1,330 @@
+---
+// A one-page stage cheatsheet (SPEC D44), reusable: it renders any `Cheatsheet` from `src/data/cheatsheets/`. Each entry is
+// a card with the pattern, one plain sentence, the most common trap and a link to the lesson that teaches it; the small
+// figures sit beside their lesson. Plain HTML and CSS: no script, so it reads with JavaScript off. A phone gets one
+// column, a wide screen several; print gets a compact grid on two A4 sheets, black on white, with no site chrome.
+import { getCollection } from 'astro:content';
+import { classify } from '../../lib/content-schemas.ts';
+import { isFigure, type Cheatsheet } from '../../lib/cheatsheet.ts';
+import { lessonCode } from '../../lib/roadmap.ts';
+import CheatsheetFigure from './CheatsheetFigure.astro';
+
+interface Props {
+	sheet: Cheatsheet;
+}
+const { sheet } = Astro.props;
+
+// The published English lessons of this stage by slug. A lesson that is not in the collection (a fixture build, a draft)
+// renders without its link: the unit test `tests/cheatsheet.test.ts` makes sure every cited lesson is published.
+const docs = await getCollection('docs');
+const lessons = new Map<string, { code: string; title: string; href: string }>();
+for (const d of docs) {
+	const c = classify(d.id);
+	const data = d.data as unknown as { status?: string; order: number };
+	if (c.kind !== 'lesson' || c.locale !== null || c.folder !== sheet.stage || data.status !== 'published') continue;
+	lessons.set(c.path.split('/')[1], { code: lessonCode(sheet.stage, data.order) ?? '', title: d.data.title, href: `/${c.path}/` });
+}
+---
+
+<div class="cs not-content">
+	<p class="cs-intro">{sheet.intro}</p>
+	{
+		sheet.parts.map((part) => (
+			<section class="cs-part" aria-labelledby={part.id}>
+				<h2 id={part.id}>
+					<span class="cs-codes">{part.codes}</span>
+					{part.title}
+				</h2>
+				<div class="cs-grid">
+					{part.items.map((item) => {
+						const lesson = lessons.get(item.lesson);
+						const label = lesson && (
+							<a class="cs-lesson" href={lesson.href}>
+								<span class="cs-code-no">{lesson.code}</span>
+								<span class="cs-name">{lesson.title}</span>
+							</a>
+						);
+						return isFigure(item) ? (
+							<figure class="cs-e cs-fig">
+								{label}
+								<CheatsheetFigure name={item.figure} />
+								<figcaption>
+									{item.figure === 'order' && 'The order a query runs its clauses, not the order you write them: rows are chosen (1 to 4) before columns (5).'}
+									{item.figure === 'joins' && 'What each join type keeps. An anti join is a LEFT JOIN that keeps only the rows whose right key is NULL.'}
+									{item.figure === 'window' && 'GROUP BY returns one row per group; a window function keeps every row and writes the group total beside it.'}
+								</figcaption>
+							</figure>
+						) : (
+							<article class="cs-e">
+								{label}
+								<pre class="cs-code" tabindex="0"><code>{item.code}</code></pre>
+								<p class="cs-does">{item.does}</p>
+								{item.trap && (
+									<p class="cs-trap">
+										<span class="cs-tag">Trap</span> {item.trap}
+									</p>
+								)}
+							</article>
+						);
+					})}
+				</div>
+			</section>
+		))
+	}
+	<p class="cs-foot">
+		From the free SQL stage of datafromzero, datafromzero.github.io/sql/ (content CC BY 4.0). Every pattern runs on the five
+		cafe-sales practice tables.
+	</p>
+</div>
+
+<style is:global>
+	/* Wider than a lesson column so that two or three cards sit side by side; one column on phones. */
+	:root:has(.cs) {
+		--sl-content-width: 62rem;
+	}
+	.cs {
+		--cs-gap: 1rem;
+	}
+	.cs-intro {
+		margin: 0 0 1.5rem;
+		color: var(--mute);
+		max-width: 42rem;
+	}
+	.cs-part {
+		margin: 0 0 2rem;
+	}
+	.cs-part h2 {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.25rem 0.75rem;
+		margin: 0 0 1rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--dim);
+		font-size: 1.25rem;
+		font-weight: 600;
+		line-height: 1.3;
+		scroll-margin-top: 5rem;
+	}
+	.cs-codes {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--mute);
+	}
+	/* Cards fill each column top to bottom, so the sheet reads down the columns. */
+	.cs-grid {
+		columns: 19rem;
+		column-gap: var(--cs-gap);
+	}
+	.cs-e {
+		break-inside: avoid;
+		margin: 0 0 var(--cs-gap);
+		padding: 0.75rem;
+		border: 1px solid var(--dim);
+		border-radius: var(--radius-panel);
+		overflow-wrap: anywhere;
+	}
+	.cs-lesson {
+		display: flex;
+		gap: 0.6rem;
+		align-items: baseline;
+		margin: 0 0 0.5rem;
+		font-size: 0.8rem;
+		color: var(--fg);
+		text-decoration: none;
+		/* a comfortable tap target without a bigger card */
+		min-height: 1.5rem;
+	}
+	.cs-lesson:hover .cs-name {
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.cs-code-no {
+		flex: none;
+		font-family: var(--font-mono);
+		font-weight: 500;
+		color: var(--mute);
+	}
+	.cs-code {
+		margin: 0 0 0.6rem;
+		padding: 0.5rem 0.6rem;
+		border-radius: 4px;
+		background: var(--sl-color-gray-6);
+		color: var(--fg);
+		font-family: var(--font-mono);
+		font-size: 0.74rem;
+		line-height: 1.5;
+		/* A long line scrolls inside its own block (never the page); print wraps it instead. */
+		white-space: pre;
+		overflow-x: auto;
+	}
+	.cs-code code {
+		font: inherit;
+		background: none;
+		padding: 0;
+	}
+	.cs-does,
+	.cs-trap {
+		margin: 0 0 0.45rem;
+		font-size: 0.85rem;
+		line-height: 1.5;
+	}
+	.cs-trap {
+		color: var(--mute);
+		margin-bottom: 0;
+		/* keep the two spaces inside TRIM('  iced  tea  ') */
+		white-space: pre-wrap;
+	}
+	.cs-tag {
+		margin-inline-end: 0.2rem;
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 500;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--fg);
+	}
+	.cs-fig {
+		margin-inline: 0;
+	}
+	.cs-fig svg {
+		margin: 0 0 0.5rem;
+	}
+	.cs-fig figcaption {
+		font-size: 0.8rem;
+		line-height: 1.5;
+		color: var(--mute);
+	}
+	.cs-foot {
+		display: none;
+	}
+	.cs a:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: 2px;
+	}
+
+	/* Print: one sheet, both sides. Black on white, a dense grid, no site chrome (the rest is hidden by print.css). */
+	@media print {
+		@page {
+			size: A4;
+			margin: 6mm 7mm;
+		}
+		:root:has(.cs) {
+			--sl-content-width: none;
+		}
+		:root:has(.cs) body {
+			font-size: 7pt;
+			line-height: 1.3;
+		}
+		/* The site footer and the taskbar spacer are chrome too: nothing may follow the sheet. */
+		:root:has(.cs) footer,
+		:root:has(.cs) .tb-gap {
+			display: none !important;
+		}
+		:root:has(.cs) main,
+		:root:has(.cs) .sl-markdown-content,
+		.cs {
+			min-height: 0 !important;
+			padding-block: 0 !important;
+			margin-block-end: 0 !important;
+		}
+		:root:has(.cs) h1 {
+			margin: 0 0 1.5mm;
+			font-size: 15pt;
+			line-height: 1.1;
+		}
+		.cs {
+			--cs-gap: 1.2mm;
+		}
+		.cs-intro {
+			display: none;
+		}
+		.cs-part {
+			margin: 0 0 1mm;
+		}
+		.cs-part h2 {
+			margin: 0 0 1.5mm;
+			padding-bottom: 0.6mm;
+			border-bottom: 0.4mm solid #000;
+			font-size: 9pt;
+			color: #000;
+		}
+		.cs-codes {
+			font-size: 7.5pt;
+			color: #000;
+		}
+		.cs-grid {
+			columns: 3;
+			column-gap: 3mm;
+		}
+		/* A ruled list instead of boxes: one hairline above each card, no padding to spend. */
+		.cs-e {
+			position: relative;
+			margin: 0 0 1.5mm;
+			padding: 1.1mm 0 0;
+			border: 0;
+			border-top: 0.3mm solid #000;
+			border-radius: 0;
+		}
+		/* The lesson code sits on the hairline above the card, so it costs no line of the sheet. */
+		.cs-lesson {
+			position: absolute;
+			top: -1.6mm;
+			right: 0;
+			margin: 0;
+			padding: 0 0.8mm;
+			min-height: 0;
+			background: #fff;
+			font-size: 6pt;
+			line-height: 1.1;
+			font-weight: 700;
+			text-decoration: none;
+		}
+		.cs-name {
+			display: none;
+		}
+		.cs-code-no {
+			color: #000;
+		}
+		.cs-code {
+			margin: 0 0 1mm;
+			padding: 0.8mm 1mm;
+			border: 0.2mm solid #999 !important;
+			border-radius: 0;
+			background: #f2f2f2 !important;
+			white-space: pre-wrap;
+			overflow: visible;
+			font-size: 5.3pt;
+			line-height: 1.26;
+		}
+		.cs-does,
+		.cs-trap {
+			margin: 0 0 0.7mm;
+			font-size: 6pt;
+			line-height: 1.24;
+			color: #000;
+		}
+		.cs-trap {
+			margin: 0;
+		}
+		.cs-tag {
+			font-size: 5.4pt;
+			color: #000;
+			font-weight: 700;
+		}
+		.cs-fig figcaption {
+			font-size: 5.8pt;
+			color: #000;
+		}
+		.cs-fig svg {
+			margin: 0 0 0.8mm;
+		}
+		.cs-foot {
+			display: block;
+			margin: 0;
+			font-size: 5.5pt;
+			color: #000;
+		}
+	}
+</style>

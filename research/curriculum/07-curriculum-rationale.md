@@ -42,7 +42,7 @@ Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each
 ## Deliberately excluded or reduced
 
 - **Algorithms and complexity.** No module (02 §8.2). No from-scratch sorting or data structures. The site must not imply a general algorithms curriculum.
-- **Math foundations.** Linear algebra and calculus are not taught. The neural network lesson states the math it assumes (00 §3).
+- **Math foundations.** Linear algebra and calculus are not taught. The neural network lesson states the math it assumes (00 §3). *Amended by the owner on 2026-11-19 (SPEC D44): linear algebra will be a small math block at the start of the Data Scientist and ML Engineer tracks; calculus is still not taught.*
 - **Excel advanced.** LAMBDA, Solver, forecast sheets, financial functions, macros, scenario manager and a finance-model audit lesson.
 - **BI in depth.** One tool-agnostic design lesson, one model lesson and one tool lesson. No Tableau or Power BI course.
 - **SQL.** Dialect porting as a lesson, gaps-and-islands, sessionization, JSON, stored logic. Dialect differences are callouts and reference entries.

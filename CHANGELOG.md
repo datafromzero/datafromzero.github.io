@@ -7,6 +7,13 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SQL in a nutshell (`/sql/cheatsheet/`, SPEC D44, owner decision, 2026-11-19): a one-page cheatsheet of the SQL stage in the three parts of
+  the stage. Each card has a short pattern, one plain sentence, the most common trap and a link to its lesson, all taken from the published
+  lessons; three small drawings show the order a query runs, the join types, and aggregate against window. It needs no JavaScript, is
+  linked from the sidebar and from the SQL stage on Start here, and prints on one A4 sheet, both sides, black on white. Every pattern was
+  run in DuckDB on the cafe-sales tables. Stage cheatsheets for Excel and Python will follow the same design.
+- Roadmap decision (D44, owner, 2026-11-19): linear algebra will be a small math block at the start of the Data Scientist and ML Engineer
+  tracks. The lessons are planned, not written yet.
 - The 35 SQL lessons are published (owner decision, 2026-11-19), each with in-page runnable queries and concept
   animations. The checks still to do in each lesson, formerly owner notes on the page, are tracked in issue #59.
 - Lesson figures, live counts and Key idea (D41 amended, owner decision, now on every figure): a strip of small labeled counters above the figure

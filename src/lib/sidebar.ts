@@ -7,7 +7,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { lessonCode, ROADMAP_STAGES } from './roadmap.ts';
+import { CHEATSHEETS, lessonCode, ROADMAP_STAGES } from './roadmap.ts';
 
 type Link = { label: string; link: string; attrs?: Record<string, string> };
 type Group = { label: string; collapsed?: boolean; items: Link[] };
@@ -34,8 +34,15 @@ function stageLessons(stage: string, includeDrafts: boolean): Link[] {
 		});
 }
 
+/** A stage's lessons, then its cheatsheet page (SPEC D44) when the stage has lessons to list. */
+function stageItems(stage: string, includeDrafts: boolean): Link[] {
+	const lessons = stageLessons(stage, includeDrafts);
+	const sheet = CHEATSHEETS[stage];
+	return sheet && lessons.length > 0 ? [...lessons, { label: sheet.label, link: sheet.href }] : lessons;
+}
+
 export function buildSidebar(includeDrafts: boolean): Group[] {
-	const stages = ROADMAP_STAGES.map((s) => ({ label: s.title, collapsed: true, items: stageLessons(s.id, includeDrafts) })).filter(
+	const stages = ROADMAP_STAGES.map((s) => ({ label: s.title, collapsed: true, items: stageItems(s.id, includeDrafts) })).filter(
 		(g) => g.items.length > 0,
 	);
 	return [
