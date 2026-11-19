@@ -74,8 +74,8 @@ headings are gone: their content moves as below.
   1. **Idea:** the rule in one to three short sentences, plain words, with one Excel or cafe comparison only when it
      helps. Define every new word in the sentence that uses it (row, column, key, aggregate, grain, NULL...); a lesson
      never uses a term before it has been explained. Idea sentences never state the answer to a Predict in the unit.
-  2. **Try it:** the worked-example query, labeled with its notebook step ("Try it (notebook step 3)") so the page and the
-     notebook stay in step even when a unit holds two queries or the units reorder the steps.
+  2. **Try it:** the worked-example query in a `<RunSQL>` block, introduced with "**Try it:**" (no step numbers: the
+     SQL stage has no notebook to stay in step with, D43).
   3. **Predict:** keep the existing prompts, before the query.
   4. **Result:** the Expected line (columns only after a "how many rows?" prompt), then the data **stepper** if this unit
      is the one it illustrates (D41: byte for byte from the generator), and any static figure that the unit's rule
@@ -99,7 +99,7 @@ headings are gone: their content moves as below.
 ## Rules the reviews kept catching
 
 - **Exercises never overwrite** the worked example's sheet, cells or output. Each exercise has its own pre-built
-  sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`; notebooks: their own cells). Anything the text calls "done for you"
+  sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`). Anything the text calls "done for you"
   must exist in the file.
 - **Raw data is never edited**, not in examples and not in solutions (`raw_*` sheets, source CSVs).
 - **Summary cells sit where a filter cannot hide them** (above the data or on another sheet).
@@ -131,7 +131,8 @@ Hints, half-solutions and solutions stay fenced blocks. Rules:
 - The block loads itself in the background; never tell learners to wait for it or mention an engine, a download or DuckDB.
 - Results come from DuckDB 1.4.3 in the browser, and the numbers in the lesson from DuckDB 2.0.0. Where a query has no
   `ORDER BY`, row order can differ (set operations, for example); say "in any order" or add the `ORDER BY`.
-- The notebook (Colab) stays and the lesson text keeps pointing at it as the second route.
+- The SQL stage has no notebooks and no Colab link (D43): every query runs in the page. Never write `con.sql`, `.show()`,
+  `%pip`, "notebook" or "Colab" in a SQL lesson, and never add a `notebook` field or `<OpenInColab />`.
 
 ## Step-by-step figures (SPEC D41)
 
@@ -237,12 +238,9 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   `common.py`, do not edit it), built by `python3 scripts/build-lesson-sheets.py {lesson-id}` into
   `sheets/excel/{lesson-id}.xlsx`; sheets `raw_*`, `calc`, `calc_ex1..3`, `output`. Plus the `TODO(owner)` paragraph
   about the Google Drive `sheet` link, copied from the model lesson.
-- SQL and Python: a notebook `notebooks/{stage}/{lesson-id}.ipynb` without outputs (the `notebook` field), loading
-  data from the release-tag URL in SPEC §7 (now `v0.1.0`, D39). SQL notebooks copy the model lesson's setup cell
-  (`%pip install -q duckdb==2.0.0`, then `con.execute(script)` on `cafe-sales.sql`; run
-  `python3 scripts/pin-notebook-duckdb.py` and `python3 scripts/wrap-notebook-error-cells.py` after adding a notebook,
-  so a cell that errors on purpose prints the error and Colab's Run all keeps going), use `con.sql("""...""").show()` cells without the closing `;`, one cell per
-  worked step, empty or partial cells per exercise, and no solutions. The lesson renames to `.mdx` for `<OpenInColab />`.
+- Python: a notebook `notebooks/python/{lesson-id}.ipynb` without outputs (the `notebook` field), loading data from the
+  release-tag URL in SPEC §7 (now `v0.1.0`, D39); the lesson renames to `.mdx` for `<OpenInColab />`. Colab starts in the
+  Python stage (D43). SQL lessons have no notebook.
 - SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
   `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
   in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what

@@ -7,6 +7,9 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- SPEC D43 (owner decision): the SQL stage has no notebooks or Colab; every query runs in the lesson page (D42), and Colab
+  is introduced in the Python stage. `scripts/refresh-concept-figures.mjs` re-pastes every concept figure into the lessons
+  from the generators (`--check` tests that they are current).
 - Concept animations, 29 more (D41 amended, owner decisions): one abstract, looping schematic per SQL idea, each with a plain-words
   metaphor, a changing phase label, a Pause button and its own spec `scripts/animations/concept-*.mjs` (`node scripts/make-animation.mjs
   concept-<key>`): query, select-order-limit, where, null, expression, case, aggregate, conditional-agg, text-clean, date truncation,
@@ -268,6 +271,9 @@ All notable changes to datafromzero are recorded here. The format follows
   style, layout and paint cost on the built site with a 4× CPU throttle at 390 and 1280 px.
 
 ### Removed
+- The 35 SQL notebooks (`notebooks/sql/`) and the two scripts that only served them (`pin-notebook-duckdb.py`,
+  `wrap-notebook-error-cells.py`), and the Colab button, setup paragraph and `notebook` field from SQL lessons S8, S14 and S19
+  (D43). The `v0.1.0` data tag, the optional `notebook` field, `<OpenInColab />` and the notebook output check stay for the Python stage.
 - Homepage: the marquee (and its pause control) and the "05 Begin" section, replaced by "05 Pick a direction".
 - The hero caption ("Excel → SQL → Python → DA · DE · DS") and its ScrambleText decode, and the separate
   "From A1 / to AI." headline (the lockup wordmark replaces it).
