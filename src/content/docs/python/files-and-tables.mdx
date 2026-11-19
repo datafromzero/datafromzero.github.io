@@ -1,17 +1,16 @@
 ---
 id: python-files-csv-json
 title: 'Reading files and tables: paths, CSV, JSON, Excel and SQL'
-description: Read CSV, JSON, Excel and one SQLite query into tables, find files by path, name the encoding, and run SQL on a table and a file with DuckDB.
+description: 'Find a file by its path, then read a CSV, JSON, an Excel sheet and a SQL query into tables, and name the encoding of a file that will not open.'
 stage: python
 order: 90
 level: beginner
 duration: 35
 objectives:
-  - Explain the working directory and a file path
-  - Read and write a text file, a CSV and a JSON file
-  - Read an Excel sheet and one SQLite query into a table
-  - Name the encoding of a file that is not UTF-8
-  - Run one GROUP BY on a table and on the CSV itself with DuckDB
+  - Explain the working directory, and build a relative path with Path
+  - Read a CSV file into a table, and name the encoding of a file that is not UTF-8
+  - Read a JSON file into dictionaries and lists, and a list of records into a table
+  - Read an Excel sheet and the result of a SQL query into a table
 prerequisites:
   - python-errors-and-debugging
   - python-dicts-and-sets
@@ -20,12 +19,20 @@ datasets:
 notebook: notebooks/python/python-files-csv-json.ipynb
 reviewed: 2026-11-16
 sources:
-  - title: 'Python documentation: Input and output'
-    url: https://docs.python.org/3/tutorial/inputoutput.html
-  - title: 'Python documentation: json module'
+  - title: 'Python documentation: pathlib, object-oriented filesystem paths (accessed 2026-11-19)'
+    url: https://docs.python.org/3/library/pathlib.html
+  - title: 'Python documentation: json, JSON encoder and decoder (accessed 2026-11-19)'
     url: https://docs.python.org/3/library/json.html
-  - title: 'Python documentation: unicodedata module'
-    url: https://docs.python.org/3/library/unicodedata.html
+  - title: 'Python documentation: sqlite3, DB-API interface for SQLite databases (accessed 2026-11-19)'
+    url: https://docs.python.org/3/library/sqlite3.html
+  - title: 'pandas documentation: read_csv (accessed 2026-11-19)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
+  - title: 'pandas documentation: read_excel (accessed 2026-11-19)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html
+  - title: 'pandas documentation: read_sql (accessed 2026-11-19)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.read_sql.html
+  - title: 'Microsoft Learn: Power Query Text/CSV connector (accessed 2026-11-19)'
+    url: https://learn.microsoft.com/en-us/power-query/connectors/text-csv
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
 status: draft
@@ -33,169 +40,326 @@ status: draft
 
 TODO(owner): Set `reviewed` and `status` when you publish this lesson.
 
-TODO(owner): Renamed from files-csv-json and extended (issue section 2, item 9). It uses the pandas readers before the DataFrame lesson: show only head() and shape here, and let the DataFrame lesson explain the object.
+TODO(owner): Team draft (owner request under D24, 2026-11-19); edit it. To keep four ideas the lesson drops the DuckDB demo of issue #61 (one `GROUP BY` over a table and over the CSV itself) and the `csv` module, and unit 4 pairs `read_excel` and `read_sql` under one idea, a reader for each source; split it in two if you want one reader per unit. The SQL route uses `sqlite3`, which comes with Python, on a small database that the notebook builds in memory from the five cafe-sales tables, because the release tag `v0.1.0` has no database file (its `cafe-sales.sql` is a DuckDB script). Unit 4 reads the Excel workbook from the same tag.
 
-TODO(owner): Hand-parsing CSV with split() is cut: it breaks on quoted commas (issue cut list).
+TODO(owner): Check these in a real Colab session: that `openpyxl`, which `read_excel` uses for `.xlsx` files, is installed there (Colab's published package list for its testing image names openpyxl 3.1.5, pandas 2.2.3 and duckdb 1.3.2, but says it may not match the live image), and that the working directory of a new notebook is a folder you can write to. The page does not name the Colab working directory.
 
-TODO(owner): The DuckDB demo is awareness plus one guided example, no drills, no administration (issue section 5).
-
-TODO(owner): Sources for read_excel, read_sql, DuckDB and encodings still have to be opened and added.
+TODO(owner): The Excel twin is *Repeatable cleaning with Power Query* (E14), whose import window you used on a CSV; the File origin box is on Microsoft Learn's Text/CSV connector page. The first-sheet default of `read_excel` is shown only by Exercise 2's wrong answer.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> How many orders did each cafe take? The till export is a file, the finance workbook has the same orders, and the database has them too.
+
+The first three rows of the orders, the same in all three places:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02:00 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38:00 | completed | mobile |
+| 1003 | 61 | 2 | 2026-01-01 15:47:00 | completed | mobile |
+
+A notebook starts empty. By the end of this page you will have read the same table from a file, a workbook and a database, checked that it is the same table, and counted the orders of each cafe.
 
 <Aside type="note" title="You already know this">
 
-TODO(owner): the Excel and SQL twin of this lesson's idea. Draft: Reading a file is File, Open or an import in Excel; read_sql is the SELECT of the SQL stage; DuckDB is SQL again.
+**Match.** In *Repeatable cleaning with Power Query* (E14), **Data > From Text/CSV** loaded a CSV file into a table. `pd.read_csv` is its twin: the cafe-sales orders file gives the same table of orders as the orders table you have used since lesson S1, as unit 5 checks.
+
+**Diverge.** The import window of E14 has a preview and a File origin box, where you choose the character set the file was saved in. `read_csv` has no window: it reads the file as UTF-8 unless you tell it otherwise, and unit 2 shows what that means for a file saved another way.
 
 </Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Repeatable cleaning with Power Query* (E14), which choices did you make on purpose when you imported a CSV?
+
+   <details>
+   <summary>answer</summary>
+
+   The delimiter, the data types and the locale. Nothing was left to a guess.
+
+   </details>
+
+2. In *Dictionaries, and a glance at sets* (P6), how do you read the value of the key `"store"` from a dictionary called `order`?
+
+   <details>
+   <summary>answer</summary>
+
+   `order["store"]`. A key goes in square brackets and the value comes out.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+Every source has a reader, a function that takes its location and gives back a table.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 232" width="360" role="img" aria-labelledby="ft-src-title ft-src-desc">
+<title id="ft-src-title">Four places a table can come from, and one table</title>
+<desc id="ft-src-desc">Four boxes on top of each other, each with the call that reads it: a CSV file read with read_csv, a JSON file read with json.loads and then DataFrame, an Excel sheet read with read_excel and a sheet name, and a SQL database read with read_sql, a query and a connection. An arrow from each box leads to one table with the columns order_id and store_id and the first rows 1001 with 2, 1002 with 1 and 1003 with 2, labeled one table: 1,800 rows, 6 columns.</desc>
+<defs>
+<marker id="ft-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="262" y="60" width="90" height="22" fill="currentColor" fill-opacity="0.14" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="8" y="8" width="210" height="46" rx="4" /><rect x="8" y="64" width="210" height="46" rx="4" /><rect x="8" y="120" width="210" height="46" rx="4" /><rect x="8" y="176" width="210" height="46" rx="4" />
+<rect x="262" y="60" width="90" height="88" />
+<path d="M262 82 H352 M262 104 H352 M262 126 H352 M307 60 V148" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.7">
+<path d="M220 31 L258 68" marker-end="url(#ft-arrow)" /><path d="M220 87 L258 91" marker-end="url(#ft-arrow)" /><path d="M220 143 L258 114" marker-end="url(#ft-arrow)" /><path d="M220 199 L258 137" marker-end="url(#ft-arrow)" />
+</g>
+<g fill="currentColor" font-size="12" font-weight="600">
+<text x="16" y="26">CSV file</text><text x="16" y="82">JSON file</text><text x="16" y="138">Excel sheet</text><text x="16" y="194">SQL database</text>
+</g>
+<g fill="currentColor" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10">
+<text x="16" y="44">pd.read_csv(path)</text><text x="16" y="100">json.loads(text), DataFrame(...)</text><text x="16" y="156">pd.read_excel(path, sheet_name)</text><text x="16" y="212">pd.read_sql(query, connection)</text>
+</g>
+<g fill="currentColor" font-size="10" text-anchor="middle">
+<text x="285" y="75" font-weight="600">order_id</text><text x="330" y="75" font-weight="600">store_id</text>
+<text x="285" y="97">1001</text><text x="330" y="97">2</text><text x="285" y="119">1002</text><text x="330" y="119">1</text><text x="285" y="141">1003</text><text x="330" y="141">2</text>
+<text x="307" y="168" fill-opacity="0.85">one table:</text><text x="307" y="182" fill-opacity="0.85">1,800 rows,</text><text x="307" y="196" fill-opacity="0.85">6 columns</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 4 new ideas: paths, CSV files, JSON files, and Excel with SQL as two more sources. The last unit only checks them. The cell of unit 2 that fails on purpose catches its error with `try` and `except` (lesson P8), so Run all never stops.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
-
 ### 1. Where is the file?
 
-TODO(owner): print the working directory; forward slashes and pathlib; Windows backslashes are escape characters (beginner trap 2).
+**Idea.** A path says where a file is. A relative path such as `cafe_data/products.csv` starts in the working directory, the folder the notebook runs in. An absolute path starts at the top of the disk. `Path("cafe_data") / "products.csv"` builds a path with `/`, and `exists()` asks whether a file is there.
 
-TODO(owner): one new piece of syntax, next to its Excel or SQL twin. Draft twin: the working directory is the folder Excel opens first; a path is where the file sits.
+**Try it.** The setup cell saved the price list in a folder called `cafe_data`:
 
-<Exercise id="python-files-csv-json-1">
+```python
+from pathlib import Path
 
-**Trap slot, beginner trap 2 of 10: relative paths resolve against the working directory.** Notebook: Exercise 1, A file in a folder.
+price_file = Path("cafe_data") / "products.csv"
+print(price_file, price_file.exists())
+print(Path("products.csv").exists())
+print(price_file.is_absolute(), Path.cwd().is_absolute())
+```
 
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** what do the three prints show? `Path.cwd()` is the working directory.
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+cafe_data/products.csv True
+False
+False True
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* the first path goes into `cafe_data`, and the file is there. The second asks for `products.csv` in the working directory itself, where there is no such file: the same name in another place is another path. The working directory is absolute, and the path you built is relative to it. Run `Path.cwd()` in a cell to see yours.
 
-TODO(owner): half-solution.
+### 2. A CSV file, and how its letters were saved
+
+**Idea.** `pd.read_csv(path)` reads a CSV file into a table, a DataFrame; the next lesson but one explains the object. `.shape` gives its rows and columns, and `.head(3)` its first three rows. Letters are saved as bytes, in an encoding, and `read_csv` expects UTF-8. `encoding="..."` names another one. `except ... as error` keeps a caught error in a name, and `error.reason` is its short reason.
+
+**Try it.** First the price list, then a file of board names that the till saved as `latin-1`:
+
+```python
+price_table = pd.read_csv(Path("cafe_data") / "products.csv")
+print(price_table.shape)
+price_table.head(3)
+```
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(16, 4)
+   product_id product_name category  unit_price_usd
+0           1     Espresso   coffee             3.0
+1           2    Americano   coffee             3.5
+2           3        Latte   coffee             4.5
+```
 
 </details>
 
-<Solution>
+*Why:* 16 products with 4 columns, and the first rows are the first products of the menu. Nothing tells the table where the file's path came from; a table has no memory of it.
 
-TODO(owner): solution and the known answer.
+**Try it.** Read the board names file as it is, then with its encoding:
 
-</Solution>
+```python
+board_file = Path("cafe_data") / "board_names.csv"
+try:
+    pd.read_csv(board_file)
+except UnicodeDecodeError as error:
+    print(type(error).__name__, "-", error.reason)
+board_names = pd.read_csv(board_file, encoding="latin-1")
+board_names["board_name"].tolist()
+```
 
-</Exercise>
-
-### 2. CSV and JSON
-
-TODO(owner): with open() for text; read_csv; JSON into nested dicts and lists.
-
-TODO(owner): one new piece of syntax, next to its Excel or SQL twin. Draft twin: read_csv is the text import of a CSV; JSON is nested records.
-
-### 3. Excel and a SQLite query
-
-TODO(owner): added: read_excel and one read_sql query (4 of 5 syllabi teach multi-source loading).
-
-TODO(owner): one new piece of syntax, next to its Excel or SQL twin. Draft twin: read_excel opens a sheet of a workbook; read_sql is SELECT on a database.
-
-### 4. Name the encoding
-
-TODO(owner): read_csv defaults to UTF-8; name encoding=; re-export as UTF-8 where possible (beginner trap 6).
-
-TODO(owner): one new piece of syntax, next to its Excel or SQL twin. Draft twin: encoding is the file origin that the text import asks for.
-
-<Exercise id="python-files-csv-json-2">
-
-**Trap slot, beginner trap 6 of 10: CSV encoding: read_csv defaults to UTF-8.** Notebook: Exercise 2, A file that will not open.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** the till saved this file as `latin-1`. How does the first read end, and what do the names look like after the second?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+UnicodeDecodeError - invalid continuation byte
+['Café espresso', 'Café au lait', 'Chai latté']
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* the é was saved as the single byte `0xe9`. UTF-8 does not read that byte on its own, so the first read stopped; with `encoding="latin-1"` the same byte reads as é. The error is the file telling you to find out how it was saved. If you can, save it again as UTF-8.
 
-TODO(owner): half-solution.
+### 3. A JSON file
+
+**Idea.** JSON is text in which values nest: curly brackets are dictionaries and square brackets are lists, the ones of lessons P6 and P5. `json.loads(text)` turns JSON text into those dictionaries and lists, and `Path.read_text` gives the text of a file. A list of records, one dictionary for each line, becomes a table with `pd.DataFrame(records)`.
+
+**Try it.** The file `cafe_data/order_1107.json` holds one order with its lines:
+
+```json
+{
+  "order_id": 1107,
+  "store": "Old Town",
+  "ordered_at": "2026-01-15 16:57:00",
+  "lines": [
+    {"product": "Mocha", "quantity": 2, "discount_usd": 0.5},
+    {"product": "Cappuccino", "quantity": 1, "discount_usd": 0.5}
+  ]
+}
+```
+
+```python
+import json
+
+order = json.loads((Path("cafe_data") / "order_1107.json").read_text(encoding="utf-8"))
+print(order["store"], len(order["lines"]))
+pd.DataFrame(order["lines"])
+```
+
+**Predict:** what do the two prints show, and what does the table look like?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+Old Town 2
+      product  quantity  discount_usd
+0       Mocha         2           0.5
+1  Cappuccino         1           0.5
+```
 
 </details>
 
-<Solution>
+*Why:* `order` is a dictionary, so `order["store"]` reads a value and `order["lines"]` is a list of two dictionaries. `DataFrame` turned that list into a table with one row for each dictionary and one column for each key. The order itself, its id and its store, stayed outside the table.
 
-TODO(owner): solution and the known answer.
+### 4. An Excel sheet and a SQL query
 
-</Solution>
+**Idea.** Excel and SQL are two more sources, each with its reader. A workbook holds several sheets, so `pd.read_excel(file, sheet_name="orders")` names the one you want. A database holds tables that you ask for with a query: `pd.read_sql(query, connection)` sends your SQL to it and returns the result as a table. The setup cell built a small database in memory with `sqlite3`, which comes with Python; yours would already exist.
 
-</Exercise>
+**Try it.** The workbook of the cafe data, and the `GROUP BY` of lesson S8 on the database:
 
-### 5. SQL on a table and on a file
+```python
+orders_excel = pd.read_excel(BASE + "cafe-sales.xlsx", sheet_name="orders")
+print(orders_excel.shape)
 
-TODO(owner): DuckDB demo: one GROUP BY over a DataFrame and over the CSV itself, result back with .df(); reuses the SQL stage.
+query = """
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id
+ORDER BY store_id
+"""
+pd.read_sql(query, connection)
+```
 
-TODO(owner): one new piece of syntax, next to its Excel or SQL twin. Draft twin: DuckDB runs the GROUP BY of the SQL stage on a table and on a file.
+**Predict:** what shape does the sheet have, and which table does the query give back?
 
-## Remember
+<details>
+<summary>Reveal the result</summary>
 
-Draft: the owner writes this section.
+```text
+(1800, 6)
+   store_id  orders
+0         1     729
+1         2     716
+2         3     355
+```
+
+</details>
+
+*Why:* the sheet holds the same 1,800 orders as the file. The query returns a table like any other: stores 1, 2 and 3 are Old Town, Campus and Harbor, so the owner's question is answered, and the query is the one you wrote in SQL, run from Python.
+
+### 5. Check: three routes, one table
+
+Write down the three shapes, then run the cell. The CSV file is the orders file of the release, the sheet is the one of unit 4, and the third table is every row of the database table.
+
+```python
+orders_csv = pd.read_csv(BASE + "orders.csv")
+orders_sql = pd.read_sql("SELECT * FROM orders", connection)
+print(orders_csv.shape, orders_excel.shape, orders_sql.shape)
+```
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(1800, 6) (1800, 6) (1800, 6)
+```
+
+</details>
+
+*Why:* the three sources hold the same table, and the shape is the quickest check that nothing was lost on the way in.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: relative paths resolve against the working directory; CSV encoding: read_csv defaults to UTF-8.
+- A relative path starts in the working directory; `Path("folder") / "file.csv"` builds one and `exists()` asks.
+- `read_csv` expects UTF-8; `encoding="..."` names how the file was saved.
+- `json.loads` gives dictionaries and lists; a list of records becomes a table with `pd.DataFrame`.
+- `read_excel` needs the sheet to read; `read_sql` needs a query and a connection.
+- After every read, look at `.shape`.
+
+**Common trap:** an accented name that comes out as other letters, or with letters missing: the file was read with an encoding it was not saved in.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-files-csv-json-1">
 
-<Exercise id="python-files-csv-json-3">
+**How many customers does the file `cafe_data/customers.csv` hold?** Its path is written for you. Replace the first `None` with the table that `read_csv` returns, then set `answer_1` to the number of rows of that table. Expected: one whole number.
 
-**Finish it.** Notebook: Exercise 3.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+customer_file = Path("cafe_data") / "customers.csv"
+customers_table = None  # replace None: read customer_file with read_csv
+answer_1 = None  # then set answer_1 to the number of rows of customers_table
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 2 reads a CSV file by its path. `shape` is a pair: the rows first, then the columns.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+customers_table = pd.read_csv(...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+customers_table = pd.read_csv(customer_file)
+answer_1 = customers_table.shape[0]
+```
+
+The answer is 150: one row for each loyalty-program customer. `shape[1]` is 5, the number of columns, and the check cell says so.
 
 </Solution>
 
@@ -203,31 +367,36 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-files-csv-json-2">
 
-<Exercise id="python-files-csv-json-4">
-
-**On your own.** Notebook: Exercise 4.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**How many rows does the `order_items` sheet of the workbook hold?** The workbook `cafe-sales.xlsx` holds all five tables, one sheet each, and its address is `BASE + "cafe-sales.xlsx"`. Before you start, say in one sentence what kind of number the answer is. Read the sheet and set `answer_2`. Expected: one whole number.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 4 reads one sheet of this workbook. A workbook has several sheets, so say which one you want.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A whole number: one row for each product line of an order."*
+
+```python
+order_lines = pd.read_excel(BASE + "cafe-sales.xlsx", ...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+order_lines = pd.read_excel(BASE + "cafe-sales.xlsx", sheet_name="order_items")
+answer_2 = order_lines.shape[0]
+```
+
+The answer is 3287, one row for each product line. A call without `sheet_name` reads another sheet and gives 3 rows, and the check cell says so.
 
 </Solution>
 
@@ -235,36 +404,55 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: what does a relative path start from, and what does `encoding="latin-1"` tell `read_csv`?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-files-csv-json-5">
+   A relative path starts in the working directory. The encoding tells `read_csv` how the letters of the file were saved, so it can read the bytes as the right letters.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 5.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-files-csv-json-3">
+
+**Spot the flaw.** The till saved `cafe_data/till_names.csv` in the encoding `latin-1`. A colleague saw an error, added `encoding_errors="ignore"` and got a table with no error at all. Read the names again so that every letter is right, then set `answer_3` to the list of the two names. Expected: a list of two names, both with their accents.
+
+```python
+till_file = Path("cafe_data") / "till_names.csv"
+till_names = pd.read_csv(till_file, encoding_errors="ignore")  # the colleague's fix
+answer_3 = None  # fix the line above, then set answer_3 to the list of the names in the till_name column
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Look at the names in the colleague's table. Ignoring an error does not make the bytes right. The task says how the file was saved.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+till_names = pd.read_csv(till_file, ...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+till_names = pd.read_csv(till_file, encoding="latin-1")
+answer_3 = till_names["till_name"].tolist()
+```
+
+The answer is `['Açaí green tea', 'Piña colada iced tea']`. `encoding_errors="ignore"` threw away every byte that was not valid UTF-8, and the table held `'Aa green tea'` and `'Pia colada iced tea'`, with no message at all.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can build a path and say where it starts, read a CSV file and name its encoding, read a JSON file into dictionaries and a table, and read an Excel sheet and a SQL query into tables.*
+Test: Exercise python-files-csv-json-2, done from the notebook without opening the hints.
+
+The pattern to remember: **point to the source, pick its reader, and check the shape.** The next lesson, *Arrays and vectorized math with NumPy* (P10), does arithmetic on a whole column at once.

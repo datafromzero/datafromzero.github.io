@@ -96,6 +96,17 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   Still open for the owner: the Colab screen details marked `TODO(owner)` in `first-notebook` (no official page could be read), the
   Excel `ROUND` tie check in `values-and-types`, and edits and approval of every lesson text.
 
+- **Python batch 2 (2026-11-19, team drafts for the owner to edit, D24, all still `status: draft`):** `files-and-tables` (P9), `numpy-vectorization` (P10),
+  `dataframe-first-look` (P11), `pandas-select-and-filter` (P12) and `pandas-derived-columns` (P13) are written in full in the interleaved shape with
+  their notebooks, one figure each and three exercises each (the blank-cell Exercise 2 starts at P11). Every notebook was run from the top on pandas 3.1.1 and
+  2.2.3, with the data from the real `v0.1.0` tag URLs, solutions injected, starters failing and one wrong answer per exercise rejected; the only
+  output that differs between the two versions is the text dtype in P11 unit 1 (`str` on pandas 3, `object` on 2.2), named in its Why. Choices that
+  the owner may reverse: P9 pairs `read_excel` and `read_sql` in one unit and drops the DuckDB demo and `csv` module; the SQL route uses `sqlite3` on an
+  in-memory database built from the cafe-sales tables (the tag has no database file; `cafe-sales.sql` is a DuckDB script); P10 leaves out `axis`,
+  seeded `default_rng` and `@`; P12 leaves out `sort_values` and the `loc` label slice; P13 leaves out `lambda`. Still open for the owner: which pandas version
+  Colab gives a new notebook today (its published package list names 2.2.3 and says it may be stale) and whether `openpyxl` is installed there, plus edits and
+  approval of every lesson text.
+
 ## Open items and owner decisions still pending
 
 - **Google Analytics:** on since 2026-11-17 (`G-0TNDBK1ZJX`, retention 2 months, consent first). If the owner changes
