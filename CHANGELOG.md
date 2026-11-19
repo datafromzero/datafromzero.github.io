@@ -7,6 +7,18 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Python stage restructure (SPEC D45, owner decision, 2026-11-19, from research issue #61): 27 lessons instead of 25, so the curriculum is 166
+  lessons and the four core stages 109. New lessons: `pandas-derived-columns` (`assign`, `map`, `apply`) and the exit capstone
+  `cafe-quarterly-pack`, which comes before `notebook-to-script`. `charts` is split into `charts-matplotlib` and `charts-seaborn`; `files-csv-json`
+  becomes `files-and-tables` (adds Excel, one SQLite query, encodings and one DuckDB demo); `comprehensions` is folded into `lists-and-loops`.
+  Polars (end of the stage) and Plotly (closing the seaborn lesson) are awareness boxes, not lessons. The twelve SQL-to-pandas bridge traps and the
+  ten beginner traps of the issue are named exercise slots, each with a known-answer check computed from the cafe-sales tables. Every Python lesson
+  has a notebook in the repository (`notebooks/python/{lesson-id}.ipynb`) that opens in Colab and reads the data from the `v0.1.0` tag. The lessons
+  stay drafts with the text still to be written; no Python page is published, so nothing needs a redirect. NumPy linear algebra stays out of this
+  stage and out of the advanced core: it belongs to the math block of the Data Scientist and ML Engineer tracks (D44).
+  For learners who arrive knowing only Excel and SQL, the first lesson opens with a short sourced story (lab notebooks, IPython, Project Jupyter and Colab, and
+  why the roadmap starts in Colab) and no typing; every lesson up to the first DataFrame starts with an Excel and SQL bridge; the notebooks start with
+  pre-filled cells and the blank working space grows across the stage.
 - SQL in a nutshell (`/sql/cheatsheet/`, SPEC D44, owner decision, 2026-11-19): a one-page cheatsheet of the SQL stage in the three parts of
   the stage. Each card has a short pattern, one plain sentence, the most common trap and a link to its lesson, all taken from the published
   lessons; three small drawings show the order a query runs, the join types, and aggregate against window. It needs no JavaScript, is
@@ -179,6 +191,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- Print: the Open in Colab and Make a copy buttons print as plain black text with their address, not as a black box.
 - Concept animations: the step buttons 1 to N have their bottom edge again (it was missing on every lesson).
 - SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
   so the plan boxes line up.

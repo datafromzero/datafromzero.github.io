@@ -274,7 +274,10 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   about the Google Drive `sheet` link, copied from the model lesson.
 - Python: a notebook `notebooks/python/{lesson-id}.ipynb` without outputs (the `notebook` field), loading data from the
   release-tag URL in SPEC §7 (now `v0.1.0`, D39); the lesson renames to `.mdx` for `<OpenInColab />`. Colab starts in the
-  Python stage (D43). SQL lessons have no notebook.
+  Python stage (D43). SQL lessons have no notebook. Learners arrive knowing only Excel and SQL (owner, 2026-11-19, D45): `first-notebook`
+  opens with a story and no typing (run written cells, change one value, then write a line); every lesson up to `dataframe-first-look` starts with a
+  "You already know this" Excel and SQL bridge and meets each new piece of syntax next to its twin; pure-Python lessons stay small, point toward the
+  DataFrame and use cafe-sales values, never foo and bar; notebooks start with pre-filled cells and grow blank working cells gradually.
 - SQL lessons (D40): every worked step and exercise shows its expected result shape under the task, outside the
   `<Solution>` ("Expected: 3 rows, 2 columns"); do not print answers the learner should predict. Keep a test script
   in your report that runs every query on DuckDB against `datasets/cafe-sales/v1/cafe-sales.sql`. Explain only what

@@ -1,6 +1,7 @@
 # Curriculum map: rationale
 
 Amended by the owner decision of 2026-11-17 at the end of this file (SPEC D32): four career branches, 159 lessons.
+Amended again on 2026-11-19 (SPEC D45, research issue #61): the Python stage has 27 lessons; 166 lessons in all (see the last section).
 The sections before it are kept as approved on 2026-11-16.
 
 Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each), 3 datasets, 80 glossary terms, 124 reference entries. `validate.mjs` passes with zero errors. Every lesson cites its research section in `research:`.
@@ -9,7 +10,7 @@ Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each
 
 - **One idea per lesson, one visual per lesson.** Each lesson names its canonical static visual (`visual:`). Playbook steppers and sliders (03 §7) are written as static frame sequences, because lessons ship no JavaScript.
 - **Order follows prerequisites (D25).** The graph module reports no cycles and no order violations. No lesson depends on a later stage. Only the first Excel lesson has no prerequisite; the first lesson of each later stage depends on the stage before it.
-- **Stage sizes.** Excel 22, SQL 30, Python 25, core 25, branches 11 to 12. Seven lessons are marked `[stretch]`: nothing on the main path depends on them, so they can be cut or deferred. Without them: 154 lessons.
+- **Stage sizes.** Excel 22, SQL 35 (D40), Python 27 (D45), core 25, branches 11 to 12. Six lessons are marked `[stretch]` (the Python environments lesson no longer is, D45): nothing on the main path depends on them, so they can be cut or deferred. Without them: 160 of 166 lessons.
 
 ## Ordering logic per stage
 
@@ -17,7 +18,7 @@ Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each
 
 **SQL (30), one complete block.** Tables, keys and grain, then retrieval, filtering, NULL, types, CASE. Aggregation and GROUP BY come before joins, so every join lesson can verify its row count with COUNT. Joins run inner, left and anti, then fan-out as a critique lesson, then self and multi-table joins. Then subqueries, CTEs (the house style from there on) and set logic. Window functions come last in the query half, with the hiring patterns after them: top-N, LAG and LEAD, deduplication, funnels, cohorts, date spine. Design basics (constraints, writes and transactions, normalization, indexes) finish the block before Python starts. The AI lesson is last. Pattern families 1 to 10 of 05 §2.1 are all covered.
 
-**Python (25).** One bridge lesson answers the same cafe question in Sheets, SQL and Python. Ten language lessons follow, taught for reading and recognition rather than for processing tables. NumPy vectorization comes before pandas, because "vectorize, never loop over rows" is an interview-graded habit. The pandas lessons are deliberately second representations of the SQL patterns: select and filter, groupby, merge with predict-validate-audit, missing data and types, dates, text, reshape, transform, rank and rolling. The block ends with charts, APIs, a notebook-to-script lesson (the first pipeline shape and the on-ramp to Data Engineer) and the AI lesson.
+**Python (27).** One bridge lesson answers the same cafe question in Sheets, SQL and Python. Seven language lessons follow, taught for reading and recognition rather than for processing tables; comprehensions are folded into lists and loops, and the calling half of functions moves up beside values and types. Files and tables (CSV, JSON, Excel, one SQLite query, one DuckDB demo) and NumPy vectorization come before the first DataFrame, because "vectorize, never loop over rows" is an interview-graded habit. The pandas lessons are deliberately second representations of the SQL patterns: first look, select and filter, derived columns, groupby, merge with predict-validate-audit, missing data and types, dates, text, reshape, transform, rank and rolling, and each carries the SQL-to-pandas traps of issue #61 as named exercise slots. Two chart lessons follow (matplotlib, then seaborn), then web data, environments and pip, the cafe quarterly pack capstone, a notebook-to-script lesson (the first pipeline shape and the on-ramp to Data Engineer) and the AI lesson. Polars and Plotly are awareness boxes, not lessons.
 
 **Core (25).** Statistics runs picture-first and formula-last: study design, center and spread, distributions, probability with natural frequencies, sampling and bias, sampling variability, intervals, tests, comparing groups, causation, regression (11 lessons). Analytics thinking: metrics, diagnosing a movement, experiment design, decision memo (4). Evaluation foundations: framing with split and baseline, leakage, metrics and error costs (3). Then Git (2), data modeling (2), cloud basics (2) and one AI literacy lesson on RAG and agents.
 
@@ -26,7 +27,7 @@ Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each
 ## Why some stages exceed 12 to 20 lessons
 
 - **SQL (30, 28 without stretch).** 00 §1 makes SQL one block: no later "advanced SQL". The inventory has 260+ items and ten hiring pattern families. Merging lessons breaks one idea per lesson. Twenty-eight lessons at about 25 minutes is about 12 hours.
-- **Python (25).** Three jobs in one stage: language (10), pandas (11), workflow and automation (4). Only `python-environments-and-pip` is stretch; the APIs and AI lessons are prerequisites of later lessons.
+- **Python (27).** Four jobs in one stage: language (8 with the first-notebook bridge), files and NumPy (2), pandas and charts (12), workflow, exit and automation (5). The 8 to 6 compression the issue states does not follow from its own list (9 lessons in the draft block, 8 in the new one); see `06-curriculum-map.yaml`. The APIs and AI lessons are prerequisites of later lessons, and `python-environments-and-pip` is a required late lesson, no longer a stretch lesson (issue #61 section 9).
 - **Core (25).** Six areas mandated by the brief, each needed by all five branches. Statistics alone is 11.
 - **Excel (22, 20 without stretch).** The Excel hiring task types (05 §2.2) need ten distinct skills, and Vietnamese locale traps add two.
 
@@ -104,3 +105,18 @@ match the homepage and the career quiz. The eleven draft lessons were folded in;
   The dbt capstone no longer requires the KPI dictionary, because branches do not depend on each other.
 - **Careers.** The Data Engineer portfolio may include a public dbt project; the Data Analyst portfolio adds a KPI
   dictionary. Lessons tagged `AE` lost that tag.
+
+## Amendment of 2026-11-19: the Python stage (SPEC D45)
+
+Owner decision, from research issue #61 ("Python for data: stage check, SQL bridge traps, and the Colab decision").
+
+- **Counts.** 166 lessons in 8 stages: Excel 22, SQL 35 (D40), Python 27, core 25, Data Analyst 13, Data Engineer 20,
+  Data Scientist 12, ML Engineer 12. The four core stages (Excel, SQL, Python, core) are 109 lessons. Six stretch lessons remain
+  (160 without them).
+- **Python 25 to 27.** Cut: `python-comprehensions` (folded into `python-lists-and-loops`). Renamed: `files-csv-json` to `files-and-tables`
+  (id `python-files-csv-json` kept). Split: `charts` into `charts-matplotlib` (id `python-charts` kept) and `charts-seaborn`.
+  Added: `python-pandas-derived-columns` and `python-cafe-quarterly-pack`. The new order is in `06-curriculum-map.yaml`, each lesson
+  with its origin tag (keep, change, add) and the traps it carries.
+- **Linear algebra.** NumPy matrix product and `numpy.linalg` are not taught in Python and do not go to the advanced core (issue section 4
+  said they would); they belong to the math block at the start of the Data Scientist and ML Engineer tracks (SPEC D44).
+- **Notebooks** live in the repository (`notebooks/python/{lesson-id}.ipynb`), not in Google Drive.
