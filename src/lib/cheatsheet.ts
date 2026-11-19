@@ -14,11 +14,22 @@ export interface CheatEntry {
 	does: string;
 	/** The most common trap, where the lesson names one. */
 	trap?: string;
+	/** The twin of this pattern in the coming stages (the "Next:" line); only the Excel sheet uses it. */
+	next?: CheatNext;
+}
+
+/**
+ * Where the same idea comes back later. SQL twins name a published SQL lesson (shown with its code and linked); pandas
+ * twins are method names only, because the Python lessons are drafts and have no page to link.
+ */
+export interface CheatNext {
+	sql?: { text: string; lesson: string }[];
+	pandas?: string;
 }
 
 /** A small static drawing placed beside the entries of the lesson it explains (see `CheatsheetFigure.astro`). */
 export interface CheatFigure {
-	figure: 'order' | 'joins' | 'window';
+	figure: 'order' | 'joins' | 'window' | 'tidy' | 'lookup' | 'pivot';
 	lesson: string;
 }
 
@@ -27,7 +38,7 @@ export type CheatItem = CheatEntry | CheatFigure;
 export interface CheatPart {
 	id: string;
 	title: string;
-	/** The lesson codes the part covers, e.g. `S1-S17`, written with an en dash. */
+	/** The lesson codes the part covers: a range written with an en dash (`S1–S17`) or a list (`E1, E4, E5`). */
 	codes: string;
 	items: CheatItem[];
 }
@@ -39,6 +50,8 @@ export interface Cheatsheet {
 	/** One or two sentences under the title. */
 	intro: string;
 	parts: CheatPart[];
+	/** The line printed under the sheet (a source note). */
+	foot: string;
 }
 
 export const isFigure = (i: CheatItem): i is CheatFigure => 'figure' in i;
@@ -50,14 +63,35 @@ export function codeRange(codes: string): [number, number] {
 	return [Number(m[1]), Number(m[2])];
 }
 
-/** Every problem found in a sheet, given the published lessons of its stage as `slug -> order`. */
-export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, number>): string[] {
+/** `E1, E4, E5` as the lesson numbers 1, 4, 5. */
+export function codeList(codes: string): number[] {
+	return codes.split(',').map((c) => {
+		const m = c.trim().match(/^[A-Z]+(\d+)$/);
+		if (!m) throw new Error(`bad code list "${codes}": write it like E1, E4, E5`);
+		return Number(m[1]);
+	});
+}
+
+/** Whether lesson number `n` belongs to a part labeled with a range (`S1–S17`) or a list (`E1, E4`). */
+export function codeCovers(codes: string, n: number): boolean {
+	if (codes.includes('–')) {
+		const [lo, hi] = codeRange(codes);
+		return n >= lo && n <= hi;
+	}
+	return codeList(codes).includes(n);
+}
+
+/**
+ * Every problem found in a sheet, given the published lessons of its stage as `slug -> order`. `sql` (the published SQL
+ * lessons the same way) is given when the sheet has "Next" lines, so that each SQL twin is checked to exist.
+ */
+export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, number>, sql?: ReadonlyMap<string, number>): string[] {
 	const out: string[] = [];
 	const seen = new Set<string>();
 	for (const part of sheet.parts) {
-		const [lo, hi] = codeRange(part.codes);
 		if (seen.has(part.id)) out.push(`part id "${part.id}" is used twice`);
 		seen.add(part.id);
+		const cited = new Set<number>();
 		for (const item of part.items) {
 			const order = lessons.get(item.lesson);
 			if (order === undefined) {
@@ -65,11 +99,24 @@ export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, nu
 				continue;
 			}
 			const n = order / 10;
-			if (n < lo || n > hi) out.push(`${part.id}: "${item.lesson}" is lesson ${n}, outside ${part.codes}`);
+			cited.add(n);
+			if (!codeCovers(part.codes, n)) out.push(`${part.id}: "${item.lesson}" is lesson ${n}, outside ${part.codes}`);
 			if (isFigure(item)) continue;
 			if (!item.code.trim()) out.push(`${item.lesson}: empty code`);
 			if (!item.does.trim().endsWith('.')) out.push(`${item.lesson}: "does" must be one sentence ending in a period`);
 			if (item.trap !== undefined && !item.trap.trim().endsWith('.')) out.push(`${item.lesson}: "trap" must end in a period`);
+			for (const t of item.next?.sql ?? []) {
+				if (sql && !sql.has(t.lesson)) out.push(`${item.lesson}: next SQL lesson "${t.lesson}" is not a published SQL lesson`);
+				if (!t.text.trim()) out.push(`${item.lesson}: empty next SQL text`);
+			}
+			if (item.next && !item.next.sql?.length && !item.next.pandas) out.push(`${item.lesson}: "next" is empty`);
+			if (item.next?.pandas && /https?:|\]\(/.test(item.next.pandas)) out.push(`${item.lesson}: pandas twins are names only, no links`);
+		}
+		// A part labeled with a list names exactly the lessons it cites.
+		if (!part.codes.includes('–')) {
+			const named = codeList(part.codes).sort((a, b) => a - b).join(',');
+			const used = [...cited].sort((a, b) => a - b).join(',');
+			if (named !== used) out.push(`${part.id}: label ${part.codes} does not match the lessons it cites`);
 		}
 	}
 	return out;

@@ -39,6 +39,10 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   (needs Python `duckdb`) after editing a pattern. Excel and Python get the same page by adding a data file, a `CHEATSHEETS` line
   in `src/lib/roadmap.ts` and a page in `src/pages/{stage}/`. Also decided the same day: a small linear algebra block at the start of
   the Data Scientist and ML Engineer tracks (planned, not written).
+- **Excel cheatsheet (D44, 2026-11-19):** `/excel/cheatsheet/` "Excel in a nutshell", data first (six parts in data-flow order, 24 cards, 3 drawings), from
+  `src/data/cheatsheets/excel.ts` through the same component. Each card has a `next` (linked SQL lessons, pandas method names, no links to draft pages);
+  `tests/cheatsheet.test.ts` checks that every formula is the lesson's own text and every SQL twin is published. No lesson states a duplicate-key trap for
+  lookups, so none is on a card. Python gets its page the same way once its lessons are published.
 
 ## What comes next (build plan item 8, content)
 

@@ -29,10 +29,11 @@ export const ROADMAP_STAGES: readonly StageDef[] = [
 
 /**
  * One-page cheatsheets (SPEC D44): a stage with an entry here has a printable page at `href`, linked from the sidebar
- * (after the stage's lessons) and from the stage on /start/. SQL first; the other stages add one line when built.
+ * (after the stage's lessons) and from the stage on /start/. SQL first, then Excel; the other stages add one line when built.
  */
 export const CHEATSHEETS: Readonly<Record<string, { label: string; href: string }>> = {
 	sql: { label: 'SQL in a nutshell', href: '/sql/cheatsheet/' },
+	excel: { label: 'Excel in a nutshell', href: '/excel/cheatsheet/' },
 };
 
 /** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8`; `undefined` for an unknown stage. */

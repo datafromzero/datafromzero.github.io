@@ -128,9 +128,9 @@ export function classify(entryId: string): Classified {
 	const path = segs.join('/');
 	const none = (problem?: string): Classified => ({ kind: null, locale, path, problem });
 	const [first] = segs;
-	// The SQL playground (src/pages/sql/playground.astro, D42) and the cheatsheet (src/pages/sql/cheatsheet.astro, D44) are
-	// pages, not lessons, although their URLs sit in /sql/.
-	if (path === 'sql/playground' || path === 'sql/cheatsheet') return none();
+	// The SQL playground (src/pages/sql/playground.astro, D42) and the cheatsheets (src/pages/{stage}/cheatsheet.astro, D44)
+	// are pages, not lessons, although their URLs sit in the stage folders.
+	if (path === 'sql/playground' || path === 'sql/cheatsheet' || path === 'excel/cheatsheet') return none();
 	if ((STAGES as readonly string[]).includes(first)) {
 		if (segs.length === 1) return none(); // stage landing page
 		if (segs.length === 2) return { kind: 'lesson', locale, path, folder: first };

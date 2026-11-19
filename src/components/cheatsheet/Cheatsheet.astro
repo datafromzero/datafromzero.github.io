@@ -14,16 +14,31 @@ interface Props {
 }
 const { sheet } = Astro.props;
 
-// The published English lessons of this stage by slug. A lesson that is not in the collection (a fixture build, a draft)
-// renders without its link: the unit test `tests/cheatsheet.test.ts` makes sure every cited lesson is published.
+// The published English lessons of this stage by slug, and of the SQL stage for the "Next" lines. A lesson that is not in
+// the collection (a fixture build, a draft) renders without its link: the unit test `tests/cheatsheet.test.ts` makes sure
+// every cited lesson is published.
+type Info = { code: string; title: string; href: string };
 const docs = await getCollection('docs');
-const lessons = new Map<string, { code: string; title: string; href: string }>();
+const lessons = new Map<string, Info>();
+const sqlLessons = new Map<string, Info>();
 for (const d of docs) {
 	const c = classify(d.id);
 	const data = d.data as unknown as { status?: string; order: number };
-	if (c.kind !== 'lesson' || c.locale !== null || c.folder !== sheet.stage || data.status !== 'published') continue;
-	lessons.set(c.path.split('/')[1], { code: lessonCode(sheet.stage, data.order) ?? '', title: d.data.title, href: `/${c.path}/` });
+	if (c.kind !== 'lesson' || c.locale !== null || data.status !== 'published') continue;
+	const info = { code: lessonCode(c.folder, data.order) ?? '', title: d.data.title, href: `/${c.path}/` };
+	if (c.folder === sheet.stage) lessons.set(c.path.split('/')[1], info);
+	if (c.folder === 'sql') sqlLessons.set(c.path.split('/')[1], info);
 }
+
+// One sentence under each drawing, in words, so color and shape are never the only cue.
+const captions: Record<string, string> = {
+	order: 'The order a query runs its clauses, not the order you write them: rows are chosen (1 to 4) before columns (5).',
+	joins: 'What each join type keeps. An anti join is a LEFT JOIN that keeps only the rows whose right key is NULL.',
+	window: 'GROUP BY returns one row per group; a window function keeps every row and writes the group total beside it.',
+	tidy: 'A sheet people read against a table a tool can read: one header row, one record per row, one fact per cell, no title, blank row or total inside the data.',
+	lookup: 'A lookup pairs rows by the key, not by position. A key with no partner returns #N/A, or the words you chose as the fourth argument.',
+	pivot: 'A PivotTable collapses many rows into one row per group and adds up the values; the grand total must equal the source total.',
+};
 ---
 
 <div class="cs not-content">
@@ -48,11 +63,7 @@ for (const d of docs) {
 							<figure class="cs-e cs-fig">
 								{label}
 								<CheatsheetFigure name={item.figure} />
-								<figcaption>
-									{item.figure === 'order' && 'The order a query runs its clauses, not the order you write them: rows are chosen (1 to 4) before columns (5).'}
-									{item.figure === 'joins' && 'What each join type keeps. An anti join is a LEFT JOIN that keeps only the rows whose right key is NULL.'}
-									{item.figure === 'window' && 'GROUP BY returns one row per group; a window function keeps every row and writes the group total beside it.'}
-								</figcaption>
+								<figcaption>{captions[item.figure]}</figcaption>
 							</figure>
 						) : (
 							<article class="cs-e">
@@ -64,6 +75,22 @@ for (const d of docs) {
 										<span class="cs-tag">Trap</span> {item.trap}
 									</p>
 								)}
+								{item.next && (
+									<p class="cs-next">
+										<span class="cs-tag">Next</span>
+										{item.next.sql?.map((t, i) => {
+											const l = sqlLessons.get(t.lesson);
+											return (
+												<>
+													{i === 0 ? ' SQL: ' : ', '}
+													{l ? <a href={l.href}>{t.text} ({l.code})</a> : t.text}
+												</>
+											);
+										})}
+										{item.next.sql?.length && item.next.pandas ? ' · ' : ''}
+										{item.next.pandas && <>pandas: {item.next.pandas}</>}
+									</p>
+								)}
 							</article>
 						);
 					})}
@@ -71,10 +98,7 @@ for (const d of docs) {
 			</section>
 		))
 	}
-	<p class="cs-foot">
-		From the free SQL stage of datafromzero, datafromzero.github.io/sql/ (content CC BY 4.0). Every pattern runs on the five
-		cafe-sales practice tables.
-	</p>
+	<p class="cs-foot">{sheet.foot}</p>
 </div>
 
 <style is:global>
@@ -165,16 +189,27 @@ for (const d of docs) {
 		padding: 0;
 	}
 	.cs-does,
-	.cs-trap {
+	.cs-trap,
+	.cs-next {
 		margin: 0 0 0.45rem;
 		font-size: 0.85rem;
 		line-height: 1.5;
 	}
 	.cs-trap {
 		color: var(--mute);
-		margin-bottom: 0;
 		/* keep the two spaces inside TRIM('  iced  tea  ') */
 		white-space: pre-wrap;
+	}
+	.cs-trap:last-child,
+	.cs-next {
+		margin-bottom: 0;
+	}
+	.cs-next {
+		color: var(--mute);
+	}
+	.cs-next a {
+		color: var(--fg);
+		text-underline-offset: 0.2em;
 	}
 	.cs-tag {
 		margin-inline-end: 0.2rem;
@@ -299,14 +334,20 @@ for (const d of docs) {
 			line-height: 1.26;
 		}
 		.cs-does,
-		.cs-trap {
+		.cs-trap,
+		.cs-next {
 			margin: 0 0 0.7mm;
 			font-size: 6pt;
 			line-height: 1.24;
 			color: #000;
 		}
-		.cs-trap {
+		.cs-trap:last-child,
+		.cs-next {
 			margin: 0;
+		}
+		.cs-next a {
+			color: #000;
+			text-decoration: none;
 		}
 		.cs-tag {
 			font-size: 5.4pt;
