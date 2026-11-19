@@ -1,7 +1,7 @@
 # Handoff: state of the work on 2026-11-17
 
 For the next lead session. Read `CLAUDE.md` first (rules, merging policy, commands), then this file.
-`SPEC.md` is authoritative; decisions D1–D45 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
+`SPEC.md` is authoritative; decisions D1–D46 are in its §1. Use `node scripts/kb.mjs query <topic>` to find things.
 
 ## Who is who
 
@@ -86,6 +86,15 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   Owner instruction of the same day (learners know only Excel and SQL): `first-notebook` opens with a team-draft story (sources in its frontmatter, accessed
   2026-11-19) and no typing; lessons up to `dataframe-first-look` start with a "You already know this" bridge; the notebooks of those lessons carry
   pre-filled try-it cells and starters (see `.claude/agents/LESSON-STANDARD.md`).
+
+- **Python batch 1 (2026-11-19, branch `python-batch-1`, team drafts for the owner to edit, D24):** the eight pure-Python lessons
+  (`first-notebook` to `errors-and-debugging`) are written in full in the interleaved shape, with their notebooks (hint and solution
+  cells, known-answer checks, adversarial cases, a scoreboard cell at the end). The teaching rules of research issue #66 are now in
+  `.claude/agents/LESSON-STANDARD.md` ("Python stage (D45, D46)"). D46 adds the companion dataset `datasets/cafe-menu-accents/` (accented
+  English café names in NFC and NFD, for the later text-cleaning lesson; no lesson uses it yet; no Vietnamese content until English and
+  later Spanish are complete). The notebooks read the cafe-sales tables from the `v0.1.0` tag; the accents file is newer than that tag.
+  Still open for the owner: the Colab screen details marked `TODO(owner)` in `first-notebook` (no official page could be read), the
+  Excel `ROUND` tie check in `values-and-types`, and edits and approval of every lesson text.
 
 ## Open items and owner decisions still pending
 

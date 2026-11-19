@@ -7,6 +7,7 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Accented menu names for the text-cleaning trap (SPEC D46, owner decision, 2026-11-19): a new companion dataset `datasets/cafe-menu-accents/` with one CSV, `v1/menu_accents.csv` (48 rows: the 16 products on the three cafes' menu boards, linked to cafe-sales by `store_id` and `product_id`), a README with license and a schema file, and the generator `scripts/build-cafe-menu-accents.py`. The board names use accented letters such as café, crème brûlée and jalapeño, stored in two Unicode forms on purpose, NFC and NFD, so the same name looks identical and does not match until it is normalized. The cafe-sales `v1/` files are untouched. No lesson uses it yet.
 - Per-lesson cheatsheet links (SPEC D44, owner approved 2026-11-19): every cheatsheet card has a stable anchor, its lesson code in lowercase
   (`/sql/cheatsheet/#s8`, `/excel/cheatsheet/#e15`; the first card when a lesson has two), now part of the URL contract. The footer of every
   Excel and SQL lesson that has a card shows "Sum it up: this lesson in the SQL cheatsheet →" next to "Unlocks next", built at build time from the
