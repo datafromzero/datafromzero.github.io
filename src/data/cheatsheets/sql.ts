@@ -13,6 +13,7 @@ export const sqlCheatsheet: Cheatsheet = {
 	description: 'One page of SQL patterns from the SQL stage, each with what it does, its most common trap and its lesson. Prints on two sheets.',
 	intro:
 		'Every pattern below runs on the five cafe-sales tables and comes from a lesson of the SQL stage. Each card names its lesson (S8); open it to learn the idea behind the pattern. The page prints on one A4 sheet, both sides, black on white.',
+	foot: 'From the free SQL stage of datafromzero, datafromzero.github.io/sql/ (content CC BY 4.0). Every pattern runs on the five cafe-sales practice tables.',
 	parts: [
 		{
 			id: 'one-table',

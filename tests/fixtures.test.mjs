@@ -41,6 +41,13 @@ describe('valid fixtures', () => {
 		const body = sheet.slice(sheet.indexOf('class="cs not-content"'), sheet.indexOf('cs-foot'));
 		assert.ok(body.length > 1000 && !body.includes('<script'));
 		assert.match(sheet, /<svg class="csf/);
+		// The Excel cheatsheet (data first, with "Next" bridges) builds the same way and ships no script either.
+		const excel = page('excel/cheatsheet');
+		assert.match(excel, /Excel in a nutshell/);
+		const excelBody = excel.slice(excel.indexOf('class="cs not-content"'), excel.indexOf('cs-foot'));
+		assert.ok(excelBody.length > 1000 && !excelBody.includes('<script'));
+		assert.equal((excelBody.match(/<svg class="csf/g) ?? []).length, 3);
+		assert.match(excelBody, /class="cs-next"/);
 	});
 });
 

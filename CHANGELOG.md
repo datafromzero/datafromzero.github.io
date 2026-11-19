@@ -19,6 +19,12 @@ All notable changes to datafromzero are recorded here. The format follows
   For learners who arrive knowing only Excel and SQL, the first lesson opens with a short sourced story (lab notebooks, IPython, Project Jupyter and Colab, and
   why the roadmap starts in Colab) and no typing; every lesson up to the first DataFrame starts with an Excel and SQL bridge; the notebooks start with
   pre-filled cells and the blank working space grows across the stage.
+- Excel in a nutshell (`/excel/cheatsheet/`, SPEC D44, owner request, 2026-11-19): a printable cheatsheet of the Excel stage written for data work, not
+  as a formula list. Six parts follow the flow of the data (shape it, clean it, query and summarize, combine tables, repeatable processing and
+  quality, communicate); each card has a short pattern, one plain sentence, the common trap, a link to its lesson and a "Next" line naming its twin
+  in SQL (linked lessons) and pandas (method names only). Everything comes from the 22 published lessons; three small drawings show a messy sheet
+  against a tidy table, a lookup as a key-matched join, and a pivot collapsing rows into groups. No JavaScript of its own; it is linked from the
+  sidebar and from the Excel stage on Start here, and prints on two A4 sides.
 - SQL in a nutshell (`/sql/cheatsheet/`, SPEC D44, owner decision, 2026-11-19): a one-page cheatsheet of the SQL stage in the three parts of
   the stage. Each card has a short pattern, one plain sentence, the most common trap and a link to its lesson, all taken from the published
   lessons; three small drawings show the order a query runs, the join types, and aggregate against window. It needs no JavaScript, is
