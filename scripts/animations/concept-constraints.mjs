@@ -5,6 +5,7 @@
 // Facts (DuckDB 2.0.0, concept2/facts.out), table (id PRIMARY KEY, name NOT NULL UNIQUE, age CHECK (age >= 0)): inserting a NULL name fails
 // ("NOT NULL constraint failed"); a repeated name fails ("violates unique constraint"); age -1 fails ("CHECK constraint failed"); age NULL
 // is accepted (a CHECK that evaluates to NULL passes); a failed INSERT stores nothing.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const ROWS = [['Row 1', 0], ['Row 2 · age ?', 0], ['Row 3 · no name', 4], ['Row 4 · repeat', 5], ['Row 5 · bad age', 6]]; // label, phase of the bounce (0 = goes in)
@@ -20,7 +21,18 @@ export default function make({ id = 'cn' } = {}) {
 		desc:
 			'A table with three rules, NOT NULL, UNIQUE and CHECK, and five rows waiting. Row 1 follows the rules and goes in. Row 2 has a question mark as its age, which passes CHECK, so it goes in. Row 3 has no name and bounces off NOT NULL. Row 4 repeats a key and bounces off UNIQUE. Row 5 has a bad age and bounces off CHECK. Two rows end up stored.',
 		caption: 'A constraint is a rule the table checks on every new row. A row that breaks a rule is refused and nothing is stored. A ? (NULL) passes a CHECK, so add NOT NULL when it matters.',
-		phases: [[1, 'A table with three rules'], [2, 'Rows 1 and 2 follow the rules: in'], [4, 'Row 3 has no name: NOT NULL says no'], [5, 'Row 4 repeats a key: UNIQUE says no'], [6, 'Row 5 has a bad age: CHECK says no']],
+		phases: [
+			[1, 'A table with three rules', { role: 'src', key: 'A constraint is a rule the table checks on every row that tries to enter.', changes: [['+', '3 rules: NOT NULL, UNIQUE, CHECK'], ['+', '5 rows waiting']] }],
+			[2, 'Rows 1 and 2 follow the rules: in', { role: 'out', key: 'Rows that follow the rules are stored. A ? in a column with only a CHECK rule passes it.', changes: [['+', '2 rows stored']] }],
+			[4, 'Row 3 has no name: NOT NULL says no', { role: 'flt', key: 'NOT NULL refuses a row that has no value in that column.', changes: [['−', 'Row 3 refused: no name']] }],
+			[5, 'Row 4 repeats a key: UNIQUE says no', { role: 'flt', key: 'UNIQUE refuses a value that is already stored in another row.', changes: [['−', 'Row 4 refused: repeated key']] }],
+			[6, 'Row 5 has a bad age: CHECK says no', { role: 'flt', key: 'CHECK refuses a row whose value fails its test, and a refused row stores nothing.', changes: [['−', 'Row 5 refused: bad age'], ['~', 'the table keeps 2 rows']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 5]] },
+			{ label: 'stored', role: 'out', values: [[2, 1], [3, 2]] },
+			{ label: 'refused', role: 'flt', values: [[4, 1], [5, 2], [6, 3]] },
+		],
 	});
 	a.text(10, 14, 'Rows that break a rule bounce off', 'f11 b');
 	a.box(150, 44, 200, 208, { role: 'out', title: 'table with rules' });

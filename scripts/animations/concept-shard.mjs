@@ -5,6 +5,7 @@
 // Facts: a design idea, not a DuckDB feature (DuckDB runs on one machine; sharding spreads a table across machines in other systems):
 // the shard is chosen from the key, so a query that names the key can skip the other shards, while a query that does not name it must
 // ask every shard.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const ROWS = [['A', 0], ['B', 0], ['C', 0], ['A', 1], ['B', 1]]; // key, slot in its shard
@@ -21,7 +22,18 @@ export default function make({ id = 'sh' } = {}) {
 		desc:
 			'One table of five rows with keys A, B, C, A and B. The rows slide into three shards by key: the A rows into shard A, the B rows into shard B, the C row into shard C. A query for key B then appears and its arrow points only at shard B, which lights up. Shards A and C are marked not visited.',
 		caption: 'Sharding splits a big table into pieces by key, often on different machines. A query that names the key goes to one shard and skips the rest.',
-		phases: [[1, 'One big table of keyed rows'], [2, 'Rows move to shards by key'], [5, 'A query asks for key B'], [6, 'Only shard B is visited']],
+		phases: [
+			[1, 'One big table of keyed rows', { role: 'src', key: 'A big table holds many rows, each with a key.', changes: [['+', '5 rows, keys A, B and C']] }],
+			[2, 'Rows move to shards by key', { role: 'grp', key: 'Sharding splits the table into pieces by key, so each key lives in exactly one shard.', changes: [['+', '3 shards: A, B, C'], ['~', 'rows moved by key']] }],
+			[5, 'A query asks for key B', { role: 'src', key: 'A query that names the key knows which shard to ask.', changes: [['+', 'query: WHERE key = B']] }],
+			[6, 'Only shard B is visited', { role: 'out', key: 'Only shard B is visited and the rest are skipped. Without the key, every shard must be asked.', changes: [['−', 'shards A and C skipped'], ['+', '1 of 3 shards read']] }],
+		],
+		counters: [
+			{ label: 'shard A', role: 'grp', values: [[1, 0], [2, 2]] },
+			{ label: 'shard B', role: 'grp', values: [[1, 0], [3, 2]] },
+			{ label: 'shard C', role: 'grp', values: [[1, 0], [4, 1]] },
+			{ label: 'shards used', role: 'out', values: [[5, '0 of 3'], [6, '1 of 3']] },
+		],
 	});
 	a.text(10, 14, 'Split by key, ask one shard', 'f11 b');
 	ROWS.forEach((_, i) => a.ghost(10, Y(i), 66, 24, { hide: 5 }));

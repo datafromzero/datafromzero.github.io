@@ -4,6 +4,7 @@
 // 7 gets label C; 8 hold. Facts (DuckDB 2.0.0, concept2/facts.out): CASE returns the result of the first WHEN that is true; a row
 // whose test is NULL counts as not true and goes on (10, NULL, 30 with WHEN v>20 / WHEN v>5 / ELSE gave mid, other, hi); with no
 // ELSE and no true test the result is NULL.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const ROWS = [['Row 1', 1, 'A'], ['Row 2', 2, 'B'], ['Row 3', 3, 'C']]; // row, the column it stops at, its label
@@ -18,7 +19,18 @@ export default function make({ id = 'cs' } = {}) {
 		desc:
 			'Three rows wait on the left; three columns of tests follow: WHEN 1, WHEN 2 and ELSE. All rows step to WHEN 1. Row 1 passes: it is marked yes, stops, and gets label A. Rows 2 and 3 fail: they are marked no and step on to WHEN 2. Row 2 passes and gets label B. Row 3 fails again and steps on to ELSE, where it gets label C.',
 		caption: 'CASE walks each row down the WHEN tests in order. The first test that is true gives the row its label and the walk stops. A row that passes none gets ELSE.',
-		phases: [[1, 'Three rows wait'], [2, 'Every row tries WHEN 1'], [3, 'Row 1 says yes: label A, stop'], [4, 'The rest try WHEN 2: row 2 gets B'], [6, 'Row 3 reaches ELSE and gets C']],
+		phases: [
+			[1, 'Three rows wait', { role: 'src', key: 'Each row starts with no label. CASE will choose one for it.', changes: [['+', '3 rows, no label yet']] }],
+			[2, 'Every row tries WHEN 1', { role: 'flt', key: 'Every row is tested against WHEN 1 first, then WHEN 2, and so on, in order.', changes: [['~', '3 rows at WHEN 1']] }],
+			[3, 'Row 1 says yes: label A, stop', { role: 'out', key: 'The first WHEN that is true gives the row its label, and that row stops walking.', changes: [['+', 'Row 1 gets label A'], ['−', 'Row 1 leaves the walk'], ['~', 'Rows 2 and 3 go on']] }],
+			[4, 'The rest try WHEN 2: row 2 gets B', { role: 'flt', key: 'A row that fails a test just moves on to the next WHEN.', changes: [['+', 'Row 2 gets label B'], ['~', 'Row 3 fails again and goes on']] }],
+			[6, 'Row 3 reaches ELSE and gets C', { role: 'out', key: 'ELSE catches every row that passed none of the tests.', changes: [['+', 'Row 3 gets label C']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 3]] },
+			{ label: 'labeled', role: 'out', values: [[3, 1], [5, 2], [7, 3]] },
+			{ label: 'still walking', role: 'flt', values: [[3, 2], [5, 1], [7, 0]] },
+		],
 	});
 	a.text(10, 14, 'Walk down the tests, first yes wins', 'f11 b');
 	[['WHEN 1', 117], ['WHEN 2', 187], ['ELSE', 257]].forEach(([t, x]) => a.text(x, 52, t, 'f10 b mo', undefined, 'm'));

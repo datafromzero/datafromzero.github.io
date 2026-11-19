@@ -3,6 +3,7 @@
 // make the next, narrower bar; 3, 5 and 7 that bar gets its label and the dashed red outline shows the users who left.
 // Facts: not SQL output; the rule shown is the usual funnel count, each step counts only users who also did the earlier steps, so
 // n1 >= n2 >= n3 >= n4 by construction.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const W = [300, 200, 120, 60];
@@ -17,7 +18,16 @@ export default function make({ id = 'fu' } = {}) {
 		desc:
 			'Four bars of users, step 1 to step 4, each narrower than the one above: n1 is the widest, then n2, n3 and n4. For each next step, the users who go on slide down from the bar above to form the next bar. A dashed red outline beside each narrower bar shows the users who left at that step.',
 		caption: 'A funnel counts how many users reach each step. Every step keeps only the users who also did the earlier steps, so the bars can only get narrower.',
-		phases: [[1, 'Everyone starts at step 1'], [2, 'Some go on to step 2'], [4, 'Fewer reach step 3'], [6, 'Fewest reach step 4']],
+		phases: [
+			[1, 'Everyone starts at step 1', { role: 'src', key: 'A funnel starts with everyone who did step 1.', changes: [['+', 'n1 users at step 1']] }],
+			[2, 'Some go on to step 2', { role: 'out', key: 'Step 2 counts only users who also did step 1, so its bar cannot be wider than the one above.', changes: [['−', 'n1 − n2 users left'], ['+', 'bar n2']] }],
+			[4, 'Fewer reach step 3', { role: 'out', key: 'A user counted at step 3 has also done steps 1 and 2.', changes: [['−', 'n2 − n3 users left'], ['+', 'bar n3']] }],
+			[6, 'Fewest reach step 4', { role: 'out', key: 'So n1 ≥ n2 ≥ n3 ≥ n4, and the drop between two bars shows where users are lost.', changes: [['−', 'n3 − n4 users left'], ['+', 'bar n4']] }],
+		],
+		counters: [
+			{ label: 'users at step', role: 'src', values: [[1, 'n1'], [3, 'n2'], [5, 'n3'], [7, 'n4']] },
+			{ label: 'left', role: 'flt', values: [[3, 'n1 − n2'], [5, 'n2 − n3'], [7, 'n3 − n4']] },
+		],
 	});
 	a.text(10, 14, 'Fewer users at every step', 'f11 b');
 	W.forEach((w, i) => {

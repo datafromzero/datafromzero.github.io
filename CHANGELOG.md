@@ -7,13 +7,18 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-- Lesson figures, live counts and Key idea (D41 amended, owner decision; pilot): a strip of small labeled counters above the figure
+- Lesson figures, live counts and Key idea (D41 amended, owner decision, now on every figure): a strip of small labeled counters above the figure
   ("—" until its step; the counter that changed is lit in its clause color; in autoplay they follow the phases) shows what each
   clause does to the number of rows, for example `rows 10`, `groups 3`, `after HAVING 2`. Under the controls the current step
   also gets one short Key idea sentence and What changed chips (`+` added, `−` removed, `~` changed). CSS only, no JavaScript, in
   both the data steppers and the concept animations; print shows the final counts and every step's text, and nothing appears
-  before its step, so a Predict is never given away. Pilot on the three data steppers (S8, S14, S19, numbers recomputed with
-  DuckDB 2.0.0) and five concept animations (group-by, where, logical order, left join, sliding window).
+  before its step, so a Predict is never given away. Piloted on the three data steppers (S8, S14, S19, numbers recomputed with
+  DuckDB 2.0.0) and five concept animations, then rolled out to all 34 concept animations (including every join variant). Each
+  claim in a Key idea was checked on DuckDB 2.0.0 or the spec's evidence; `concept-cte-kinds` has a Key idea but no strip because it
+  shows three structures, not rows to count. The markup is lean: a counter label is written once, and the words "Key idea",
+  "Step n", Added, Removed and Changed come from the stylesheet, so a figure grows by about 0.37 KB gzipped on average. Print now
+  shows every step's Key idea as one numbered block before the caption list. `scripts/refresh-concept-figures.mjs` also re-pastes
+  the data steppers.
 - SPEC D43 (owner decision): the SQL stage has no notebooks or Colab; every query runs in the lesson page (D42), and Colab
   is introduced in the Python stage. `scripts/refresh-concept-figures.mjs` re-pastes every concept figure into the lessons
   from the generators (`--check` tests that they are current).

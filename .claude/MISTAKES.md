@@ -146,6 +146,19 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-18 — Error tips were drafted before checking the engine's real wording. → **Every tip is written from a captured
   engine message (`tests/sql-errors.test.ts`); no message, no tip.**
 
+- 2026-11-19 — Rolling the live counts out, the captions of `concept-conditional-agg` ended each step one phase before its counter
+  ticked (the tally appears the phase after the dot arrives), so a step showed a caption about Row 5 beside a C counter that
+  had just changed. → **Choose step boundaries from the phases where each counter changes, then read every step's frame (counters,
+  picture, caption, key idea) together; `scripts/animations` counters and `phases` are aligned in the spec, not by eye.**
+- 2026-11-19 — A lit counter tinted by a pseudo-element sat above its label's text (an element with `opacity` animates in its own
+  layer), and a label in `--mute` on the tint measured 3.6:1 in light mode. → **Text goes in a layer above any tint (`position:
+  relative; z-index: 1`), and the contrast of every lit state is measured (tint over page background), not assumed.**
+- 2026-11-19 — A CSS `content` with `\00b7 key idea` lost its space (a hex escape swallows one following space). → **End a CSS
+  escape with `\0020` or a second space, and read the printed page, not only the computed style.**
+- 2026-11-19 — The pilot repeated each counter label once per state and the Key idea text twice (panel and print copy), about
+  0.5 KB gzipped per figure. → **Text that is the same in every state is written once (label, "Key idea", sign words in CSS
+  `content`); measure a generator change as gzip of the figure with and without the feature, per figure, on all of them.**
+
 ## Datasets and generated files
 
 - 2026-11-17 — Order ids did not rise with time across stores. → **Generate events in time order, then assign ids.**

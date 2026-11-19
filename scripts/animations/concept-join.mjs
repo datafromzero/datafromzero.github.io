@@ -5,7 +5,7 @@
 // also keeps move in (with NULL cells), or are marked red and stay behind; 5 the row count; 6 to 8 hold.
 // CROSS has no keys to match: every row meets every row, and every pairing is a result row, three at a time.
 // `all` steps through LEFT, RIGHT, INNER and FULL, two phases each, with the type name lit.
-// The `left` variant also carries live counters, a Key idea and What changed (D41 pilot); the other variants do not yet.
+// Every variant carries live counters, a Key idea and What changed (D41).
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const L = [['A', 'l1'], ['B', 'l2'], ['C', 'l3']];
@@ -26,22 +26,35 @@ const CAPTION = {
 	cross: 'CROSS JOIN has no keys to match: every row of the first table meets every row of the second.',
 	all: 'The four joins differ only in which unpaired rows they keep: LEFT the first table’s, RIGHT the second’s, INNER neither, FULL both.',
 };
-// the pilot's live counts for LEFT JOIN (the rows drawn at each phase) with a Key idea and What changed per step
-const LEFT_LIVE = {
-	phases: [
-		[1, 'Two tables, each with keys', { role: 'src', key: 'A join starts from two tables; every row has a key.', changes: [['+', 't1: 3 rows'], ['+', 't2: 3 rows']] }],
-		[2, 'Matching keys shake hands', { role: 'mat', key: 'Rows with equal keys are a match; the others have no partner.', changes: [['+', '2 matches: B and C']] }],
-		[3, 'The pairs move into the result', { role: 'mat', key: 'Each match becomes one result row, with the columns of both tables.', changes: [['+', '2 result rows'], ['+', 'columns from t1 and t2']] }],
-		[4, 'Left rows with no partner are kept (NULL)', { role: 'src', key: 'LEFT JOIN also keeps the t1 rows with no partner and fills the gap with NULL.', changes: [['+', 'row A, t1 only'], ['+', 'NULL in the t2 column']] }],
-		[5, 'The result has 3 rows', { role: 'out', key: 'Every t1 row appears at least once, so the result never has fewer rows than t1.', changes: [['~', '3 rows: 2 matched, 1 kept alone']] }],
-	],
+// Live counts (D41): the rows drawn at each phase, with a Key idea and What changed per step. The four keyed variants share steps 1 to 3
+// and differ in what they keep (step 4) and in the closing step.
+const PAIRS = [
+	[1, 'Two tables, each with keys', { role: 'src', key: 'A join starts from two tables; every row has a key.', changes: [['+', 't1: 3 rows'], ['+', 't2: 3 rows']] }],
+	[2, 'Matching keys shake hands', { role: 'mat', key: 'Rows with equal keys are a match; the others have no partner.', changes: [['+', '2 matches: B and C']] }],
+	[3, 'The pairs move into the result', { role: 'mat', key: 'Each match becomes one result row, with the columns of both tables.', changes: [['+', '2 result rows'], ['+', 'columns from t1 and t2']] }],
+];
+const KEPT = {
+	inner: { role: 'flt', key: 'INNER JOIN drops the rows with no partner, so only the matched pairs are in the result.', changes: [['−', 'row A (t1) not kept'], ['−', 'row D (t2) not kept']] },
+	left: { role: 'src', key: 'LEFT JOIN also keeps the t1 rows with no partner and fills the gap with NULL.', changes: [['+', 'row A, t1 only'], ['+', 'NULL in the t2 column']] },
+	right: { role: 'src', key: 'RIGHT JOIN also keeps the t2 rows with no partner and fills the gap with NULL.', changes: [['+', 'row D, t2 only'], ['+', 'NULL in the t1 column']] },
+	full: { role: 'src', key: 'FULL JOIN keeps the rows with no partner from both tables, with NULL where the other side is missing.', changes: [['+', 'row A, NULL on the right'], ['+', 'row D, NULL on the left']] },
+};
+const END = {
+	inner: { role: 'out', key: 'The result holds only matched pairs, so it can have fewer rows than either table.', changes: [['~', '2 rows: both matched']] },
+	left: { role: 'out', key: 'Every t1 row appears at least once, so the result never has fewer rows than t1.', changes: [['~', '3 rows: 2 matched, 1 kept alone']] },
+	right: { role: 'out', key: 'Every t2 row appears at least once, so the result never has fewer rows than t2.', changes: [['~', '3 rows: 2 matched, 1 kept alone']] },
+	full: { role: 'out', key: 'Every row of both tables appears at least once, so no row is lost.', changes: [['~', '4 rows: 2 matched, 2 kept alone']] },
+};
+const PHASE4 = { inner: 'Rows with no partner are not kept', left: 'Left rows with no partner are kept (NULL)', right: 'Right rows with no partner are kept (NULL)', full: 'Rows with no partner are kept (NULL)' };
+const live = (variant, rows) => ({
+	phases: [...PAIRS, [4, PHASE4[variant], KEPT[variant]], [5, `The result has ${rows} rows`, END[variant]]],
 	counters: [
 		{ label: 't1', role: 'src', values: [[1, 3]] },
 		{ label: 't2', role: 'src', values: [[1, 3]] },
 		{ label: 'matches', role: 'mat', values: [[2, 2]] },
-		{ label: 'result rows', role: 'out', values: [[3, 2], [4, 3]] },
+		{ label: 'result rows', role: 'out', values: [[3, 2], [4, rows]] },
 	],
-};
+});
 const Y = (i) => 44 + 30 * i; // row i of a source column or of the result
 const W = 52;
 
@@ -67,9 +80,8 @@ export default function make({ id, variant = 'left' } = {}) {
 			}[variant]
 		} Two circles in the corner show which keys are kept.`,
 		caption: CAPTION[variant],
-		phases: [[1, 'Two tables, each with keys'], [2, 'Matching keys shake hands'], [3, 'The pairs move into the result'], [4, { inner: 'Rows with no partner are not kept', left: 'Left rows with no partner are kept (NULL)', right: 'Right rows with no partner are kept (NULL)', full: 'Rows with no partner are kept (NULL)' }[variant]], [5, `The result has ${rows} rows`]],
 		tag: { y: 27 },
-		...(variant === 'left' ? LEFT_LIVE : {}),
+		...live(variant, rows),
 	});
 	a.text(10, 14, TITLE[variant], 'f11 b');
 	a.text(10, 41, 't1', 'f10 mu');
@@ -122,7 +134,18 @@ function cross(id) {
 		title: TITLE.cross,
 		desc: 'Two small tables of labels: the first has keys A, B and C, the second has keys B, C and D. Lines join every row of the first table to every row of the second. Every pairing becomes a row of the result, three at a time, 9 rows in all.',
 		caption: CAPTION.cross,
-		phases: [[1, 'Two tables, each with keys'], [2, 'Every row meets every row'], [3, 'Every pairing becomes a result row'], [6, 'The result has 9 rows']],
+		phases: [
+			[1, 'Two tables, each with keys', { role: 'src', key: 'A cross join needs no keys: it only needs two tables.', changes: [['+', 't1: 3 rows'], ['+', 't2: 3 rows']] }],
+			[2, 'Every row meets every row', { role: 'mat', key: 'Every row of t1 is paired with every row of t2, whatever their keys are.', changes: [['+', '3 × 3 pairs']] }],
+			[3, 'Every pairing becomes a result row', { role: 'out', key: 'Each pair becomes one result row, so the rows multiply instead of adding up.', changes: [['+', 'result rows grow 3, 6, 9']] }],
+			[6, 'The result has 9 rows', { role: 'out', key: 'The result has as many rows as t1 times t2: every pair, once.', changes: [['~', '3 × 3 = 9 rows']] }],
+		],
+		counters: [
+			{ label: 't1', role: 'src', values: [[1, 3]] },
+			{ label: 't2', role: 'src', values: [[1, 3]] },
+			{ label: 'pairs', role: 'mat', values: [[2, '3 × 3']] },
+			{ label: 'result rows', role: 'out', values: [[3, 3], [4, 6], [5, 9]] },
+		],
 		tag: { y: 27 },
 	});
 	a.text(10, 14, TITLE.cross, 'f11 b');
@@ -158,7 +181,17 @@ function all(id) {
 		title: TITLE.all,
 		desc: 'Two small tables of labels: keys A, B and C, and keys B, C and D. Keys B and C match. The animation steps through LEFT JOIN, RIGHT JOIN, INNER JOIN and FULL JOIN, naming each, lighting the rows it keeps and listing its result: LEFT 3 rows, RIGHT 3 rows, INNER 2 rows, FULL 4 rows. Rows with no partner that a join does not keep are marked red.',
 		caption: CAPTION.all,
-		phases: [[1, 'LEFT JOIN: every row of t1 is kept'], [3, 'RIGHT JOIN: every row of t2 is kept'], [5, 'INNER JOIN: only the pairs are kept'], [7, 'FULL JOIN: every row of both is kept']],
+		phases: [
+			[1, 'LEFT JOIN: every row of t1 is kept', { role: 'src', key: 'LEFT JOIN keeps every row of t1, matched or not.', changes: [['+', '3 rows: 2 pairs and A']] }],
+			[3, 'RIGHT JOIN: every row of t2 is kept', { role: 'src', key: 'RIGHT JOIN keeps every row of t2, matched or not.', changes: [['+', '3 rows: 2 pairs and D']] }],
+			[5, 'INNER JOIN: only the pairs are kept', { role: 'mat', key: 'INNER JOIN keeps only the pairs, so A and D are both left out.', changes: [['−', 'A and D left out'], ['~', '2 rows: the pairs']] }],
+			[7, 'FULL JOIN: every row of both is kept', { role: 'out', key: 'FULL JOIN keeps every row of both tables, matched or not.', changes: [['+', '4 rows: 2 pairs, A and D']] }],
+		],
+		counters: [
+			{ label: 'result rows', role: 'out', values: [[1, 3], [3, 3], [5, 2], [7, 4]] },
+			{ label: 'matched pairs', role: 'mat', values: [[1, 2], [3, 2], [5, 2], [7, 2]] },
+			{ label: 'unpaired kept', role: 'src', values: [[1, 1], [3, 1], [5, 0], [7, 2]] },
+		],
 		tag: { y: 27 },
 	});
 	a.text(10, 14, TITLE.all, 'f11 b');

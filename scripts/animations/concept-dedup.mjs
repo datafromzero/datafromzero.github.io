@@ -4,6 +4,7 @@
 // 6 and 7 the two kept rows slide into the clean table; 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out): row_number() OVER (PARTITION BY k ORDER BY ts) gives A: 1, 2, 3 and B: 1, 2; WHERE rn = 1
 // keeps one row per key.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const ROWS = [['A', 1], ['A', 2], ['B', 1], ['A', 3], ['B', 2]]; // key, number within its key
@@ -19,7 +20,19 @@ export default function make({ id = 'dd' } = {}) {
 		desc:
 			'Five rows with keys A, A, B, A and B. The rows of key A are numbered 1, 2 and 3, and the rows of key B are numbered 1 and 2. The rows numbered 1 are kept; the three other rows turn red and are marked dropped. The two kept rows slide into a clean table on the right, one row per key.',
 		caption: 'To remove duplicates, number the rows within each key with ROW_NUMBER, then keep only the rows numbered 1.',
-		phases: [[1, 'Rows with a key; some keys repeat'], [2, 'Number the rows within each key'], [4, 'Keep only #1'], [5, 'The other rows are dropped'], [6, 'The kept rows move to a clean table']],
+		phases: [
+			[1, 'Rows with a key; some keys repeat', { role: 'src', key: 'Some keys appear more than once. Rows that repeat a key are the duplicates.', changes: [['+', '5 rows, 2 keys']] }],
+			[2, 'Number the rows within each key', { role: 'grp', key: 'ROW_NUMBER with PARTITION BY numbers the rows inside each key, starting at 1.', changes: [['+', 'a number #n on every row']] }],
+			[4, 'Keep only #1', { role: 'out', key: 'Each key has exactly one row numbered 1. That is the row to keep.', changes: [['+', '2 rows marked to keep']] }],
+			[5, 'The other rows are dropped', { role: 'flt', key: 'Keeping only #1 drops every other row of that key.', changes: [['−', '3 rows dropped']] }],
+			[6, 'The kept rows move to a clean table', { role: 'out', key: 'What is left is one row per key: a table without duplicates.', changes: [['+', 'new table: 2 rows'], ['−', '5 rows reduced to 2']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 5]] },
+			{ label: 'kept #1', role: 'out', values: [[4, 2]] },
+			{ label: 'dropped', role: 'flt', values: [[5, 3]] },
+			{ label: 'new table', role: 'out', values: [[6, 1], [7, 2]] },
+		],
 	});
 	a.text(10, 14, 'Number the repeats, keep #1', 'f11 b');
 	a.text(250, 52, 'clean table', 'f10 b', undefined, 'm');

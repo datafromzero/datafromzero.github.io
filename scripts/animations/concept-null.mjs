@@ -4,6 +4,7 @@
 // x3 flow into the sum while the ? is skipped; 8 the sum is x1 + x3.
 // Facts (DuckDB 2.0.0, concept2/facts.out): over 10, NULL, 30: `v = NULL` gives NULL on every row, `v IS NULL` gives false, true,
 // false; `SUM(v)` = 40 (the NULL is skipped), `COUNT(*)` = 3, `COUNT(v)` = 2.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const V = ['x1', '?', 'x3'];
@@ -18,7 +19,19 @@ export default function make({ id = 'nu' } = {}) {
 		desc:
 			'Top panel: three rows hold x1, a question mark meaning no value, and x3. The test equals NULL answers a question mark, unknown, for every row, so it never says yes. The test IS NULL answers no, yes, no. Bottom panel: SUM adds x1 and x3 through arrows into a result x1 plus x3, and the row with the question mark is skipped.',
 		caption: 'A ? (NULL) is no value, so = NULL can only answer ? . IS NULL gives a clear yes or no. Aggregates such as SUM skip the ?.',
-		phases: [[1, 'A ? means \'no value\''], [2, '= NULL answers ? for every row'], [4, 'IS NULL answers yes or no'], [6, 'SUM adds only the values it sees'], [8, 'The sum is x1 + x3, the ? skipped']],
+		phases: [
+			[1, 'A ? means \'no value\'', { role: 'src', key: 'A ? (NULL) means there is no value here. It is not zero and not an empty text.', changes: [['+', '3 rows, one of them a ?']] }],
+			[2, '= NULL answers ? for every row', { role: 'ord', key: '= NULL asks “is it equal to an unknown value?”, and the answer is unknown, never yes.', changes: [['+', 'a ? answer on every row'], ['−', 'no row can pass']] }],
+			[4, 'IS NULL answers yes or no', { role: 'out', key: 'IS NULL is the right question: it answers a clear yes or no for every row.', changes: [['+', 'yes for the row with the ?']] }],
+			[6, 'SUM adds only the values it sees', { role: 'out', key: 'SUM skips a ? and adds only the values that are there.', changes: [['+', 'x1 and x3 added'], ['−', 'the ? skipped']] }],
+			[8, 'The sum is x1 + x3, the ? skipped', { role: 'out', key: 'The total is x1 + x3. The ? does not turn the sum into a ?; it is just left out.', changes: [['+', 'Σ = x1 + x3']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 3]] },
+			{ label: '= NULL kept', role: 'ord', values: [[2, 0]] },
+			{ label: 'IS NULL kept', role: 'out', values: [[4, 1]] },
+			{ label: 'summed', role: 'out', values: [[6, 1], [7, 2]] },
+		],
 	});
 	a.text(10, 14, 'Asking about a ?', 'f11 b');
 	const ry = (y0, i) => y0 + 52 + 28 * i;

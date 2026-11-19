@@ -3,6 +3,7 @@
 // outside, one per phase; 3, 4, 5 and 6 the key link to each one draws the phase after it arrives; 7 a ring marks the star; 8 hold.
 // Facts: a modeling pattern, not engine output: the fact table holds one row per event with a key to each dimension, and a query joins the
 // fact table to the dimensions it needs, one join per dimension.
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const DIMS = [
@@ -22,7 +23,18 @@ export default function make({ id = 'st' } = {}) {
 		desc:
 			'A fact table sits in the middle. Four dimension tables, dim A, dim B, dim C and dim D, slide in one after another from the edges, and a short link labeled with a key joins each one to the fact table: ka, kb, kc and kd. The picture is a star.',
 		caption: 'In a star schema the fact table holds the events, with a key to each dimension. A query joins the fact table to the dimension tables it needs, one join per key.',
-		phases: [[1, 'The fact table: one row per event'], [2, 'Dimension tables arrive one by one'], [6, 'A key links each one to the fact table'], [7, 'A star: one join per key']],
+		phases: [
+			[1, 'The fact table: one row per event', { role: 'out', key: 'A fact table has one row per event, such as a sale.', changes: [['+', 'fact table: many rows']] }],
+			[2, 'Dimension tables arrive one by one', { role: 'src', key: 'Dimension tables describe the things in the events, such as products or stores.', changes: [['+', '4 dimension tables']] }],
+			[6, 'A key links each one to the fact table', { role: 'mat', key: 'The fact table stores one key for each dimension, so a join can link them.', changes: [['+', '4 keys: ka, kb, kc, kd']] }],
+			[7, 'A star: one join per key', { role: 'out', key: 'To use a dimension in a query, join the fact table to it on that key: one join per dimension.', changes: [['~', 'a star: 1 fact table, 4 dimensions']] }],
+		],
+		counters: [
+			{ label: 'fact', role: 'out', values: [[1, 1]] },
+			{ label: 'dims', role: 'src', values: [[2, 1], [3, 2], [4, 3], [5, 4]] },
+			{ label: 'keys', role: 'mat', values: [[3, 1], [4, 2], [5, 3], [6, 4]] },
+			{ label: 'joins', role: 'out', values: [[7, 4]] },
+		],
 	});
 	a.text(10, 14, 'A fact table with dimensions around it', 'f11 b');
 	a.box(130, 100, 100, 60, { role: 'out', title: 'fact table' });

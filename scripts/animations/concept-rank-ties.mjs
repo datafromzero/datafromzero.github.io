@@ -3,6 +3,7 @@
 // 1, 2, 3, 4 (two rows at a time); 4 to 5 RANK gives 1, 2, 2, 4 (skips 3); 6 to 7 DENSE_RANK gives 1, 2, 2, 3 (no gap); 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out), scores 90, 80, 80, 70 with ORDER BY score DESC: row_number 1,2,3,4; rank 1,2,2,4;
 // dense_rank 1,2,2,3. ROW_NUMBER gives tied rows an arbitrary order unless the ORDER BY has a tie-breaker (here: the name).
+// Live counters and Key idea (D41): each counter shows the rows or items drawn in the picture at that phase, and appears with it.
 import { anim } from '../lib/step-animation.mjs';
 
 const SCORE = [9, 8, 8, 7];
@@ -22,7 +23,18 @@ export default function make({ id = 'rt' } = {}) {
 		desc:
 			'Four rows sorted by score from high to low: 9, 8, 8 and 7; the two rows with 8 tie. ROW_NUMBER numbers them 1, 2, 3, 4 and never repeats. RANK gives 1, 2, 2, 4: the tied rows share 2 and the next number skips 3. DENSE_RANK gives 1, 2, 2, 3: the tied rows share 2 and no number is skipped.',
 		caption: 'ROW_NUMBER never repeats a number. RANK gives tied rows the same number and then skips ahead. DENSE_RANK gives tied rows the same number and skips nothing.',
-		phases: [[1, 'Rows sorted by score; two tie'], [2, 'ROW_NUMBER: 1, 2, 3, 4, no repeats'], [4, 'RANK: 1, 2, 2, 4, skips 3'], [6, 'DENSE_RANK: 1, 2, 2, 3, no gap']],
+		phases: [
+			[1, 'Rows sorted by score; two tie', { role: 'src', key: 'Two rows have the same score. They are tied: sorting cannot tell them apart.', changes: [['+', '4 rows sorted by score'], ['+', '2 tied rows']] }],
+			[2, 'ROW_NUMBER: 1, 2, 3, 4, no repeats', { role: 'win', key: 'ROW_NUMBER gives every row its own number, so tied rows get different numbers.', changes: [['+', 'numbers 1 to 4, none repeated']] }],
+			[4, 'RANK: 1, 2, 2, 4, skips 3', { role: 'win', key: 'RANK gives tied rows the same number, then skips ahead by the size of the tie.', changes: [['+', '2 and 2 for the tied rows'], ['~', 'number 3 skipped']] }],
+			[6, 'DENSE_RANK: 1, 2, 2, 3, no gap', { role: 'win', key: 'DENSE_RANK gives tied rows the same number and never skips one.', changes: [['+', '2 and 2 for the tied rows'], ['~', 'no gap: 1, 2, 2, 3']] }],
+		],
+		counters: [
+			{ label: 'rows', role: 'src', values: [[1, 4]] },
+			{ label: 'tied', role: 'src', values: [[1, 2]] },
+			{ label: 'distinct numbers', role: 'win', values: [[3, 4], [5, 3], [7, 3]] },
+			{ label: 'last number', role: 'win', values: [[3, 4], [5, 4], [7, 3]] },
+		],
 	});
 	a.text(10, 14, 'Same rows, three numberings', 'f11 b');
 	SCORE.forEach((s, i) => a.chip(10, Y(i), `Row ${i + 1} · ${s}`, { role: 'src', level: 2, w: 82 }));

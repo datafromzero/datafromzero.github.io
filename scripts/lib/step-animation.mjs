@@ -39,7 +39,7 @@
  *             `[1, 'caption', { role, key, changes }]`. Counters and the Key idea panel follow the phases of the loop (same keyframes
  *             as the picture, so a step button shows them at the end of its last phase); a counter set in a step stays lit to the end of it.
  *   Nothing may spoil a Predict: a count, key idea or change belongs to the step that shows it; step 1 shows inputs only.
- *   Print shows the final counter values and every step's Key idea and What changed in the caption list.
+ *   Print shows the final counter values and, in a block before the caption list, every step's Key idea and What changed.
  *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
@@ -87,7 +87,6 @@ const loopFx = (id) => (fx) => {
 const escA = (s) => esc(s).replace(/"/g, '&quot;');
 
 const SIGNS = { '+': 'pl', '−': 'mi', '~': 'ch' };
-const SIGN_WORD = { '+': 'Added: ', '−': 'Removed: ', '~': 'Changed: ' };
 
 /** Normalizes `changes` to [[sign, text], ...] with a typographic minus; throws on an unknown sign. */
 const checkChanges = (id, where, changes = []) =>
@@ -97,11 +96,8 @@ const checkChanges = (id, where, changes = []) =>
 		return [sign, text];
 	});
 
-/** The chips of "What changed"; `sr` adds the screen-reader words (the panel on screen; the print copy has the sign from CSS). */
-const chips = (changes, sr) =>
-	changes.length
-		? `<span class="sa-chs">${changes.map(([sg, t]) => `<span class="sa-ch ${SIGNS[sg]}">${sr ? `<span class="sr">${SIGN_WORD[sg]}</span>` : ''}${esc(t)}</span>`).join('')}</span>`
-		: '';
+/** The chips of "What changed"; the sign and its spoken word (Added, Removed, Changed) come from the stylesheet. */
+const chips = (changes) => (changes.length ? `<span class="sa-chs">${changes.map(([sg, t]) => `<span class="sa-ch ${SIGNS[sg]}">${esc(t)}</span>`).join('')}</span>` : '');
 
 export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters }) {
 	if (w > 360) throw new Error(`${id}: viewBox width ${w} is over 360`);
@@ -155,11 +151,11 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 	};
 	const push = (s) => stack[stack.length - 1].push(s);
 
-	/** A counter: one <i> per state ({ value, hl, cls }), stacked in one cell by the stylesheet. */
+	/** A counter: the label once, then one <i> per state ({ value, hl, cls }), stacked in one cell by the stylesheet. */
 	const counterMarkup = (label, role, states) =>
-		`<span class="sa-n c-${role}">${states.map((st) => `<i${cls(st.cls, st.hl ? 'hl' : '')}><small>${esc(label)}</small><b>${esc(st.value)}</b></i>`).join('')}</span>`;
-	/** The Key idea line and What changed chips of one step (`sr`: the panel on screen; otherwise the print copy). */
-	const keyMarkup = (m, sr) => `<b>Key idea</b> ${esc(m.key)}${chips(m.changes, sr)}`;
+		`<span class="sa-n c-${role}"><small>${esc(label)}</small><span>${states.map((st) => `<i${cls(st.cls, st.hl ? 'hl' : '')}>${esc(st.value)}</i>`).join('')}</span></span>`;
+	/** The Key idea sentence and What changed chips of one step (the words "Key idea" come from the stylesheet). */
+	const keyMarkup = (m) => `${esc(m.key)}${chips(m.changes)}`;
 	/** Stepper counters: a step lists the counters it sets; "—" until a counter's first step; lit at the steps that set it. */
 	const stepperStrip = () => {
 		const list = [];
@@ -396,12 +392,12 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				const btn =
 					`<div class="sa-ctl">\n${lab('ca-btn', 'pp', '<span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span>')}\n` +
 					`${lab('ca-btn ca-au', 'r0', '<span aria-hidden="true">&#9654;</span> Play')}\n${bks.join('\n')}\n${nxs.join('\n')}\n<span class="sa-sbs">${sbs.join('')}</span>\n</div>`;
-				const lis = caps.map((c, i) => `<li>${esc(c)}${hasNow ? ` <span class="sa-px">${keyMarkup(meta[i], false)}</span>` : ''}</li>`).join('\n');
+				const lis = caps.map((c) => `<li>${esc(c)}</li>`).join('\n');
 				const strip = conceptStrip();
 				// the Key idea panel: step k shows from its first phase to the one before the next step's (the last stays)
 				const now = hasNow
 					? `\n<div class="sa-now" aria-hidden="true">\n${meta
-							.map((m, i) => `<div${cls(`c-${m.role}`, fxClasses({ in: phases[i][0], ...(phases[i + 1] ? { hide: phases[i + 1][0] } : {}) }))}>${keyMarkup(m, false)}</div>`)
+							.map((m, i) => `<div${cls(`c-${m.role}`, fxClasses({ in: phases[i][0], ...(phases[i + 1] ? { hide: phases[i + 1][0] } : {}) }))}>${keyMarkup(m)}</div>`)
 							.join('\n')}\n</div>`
 					: '';
 				const markup = `<figure class="ca sa not-content t${loop.cycle}">\n<input class="ca-pp" type="checkbox" id="${id}-pp" aria-label="Pause the animation" />\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${btn}${now}\n<p class="ca-cap">${esc(caption)}</p>\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
@@ -436,14 +432,13 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 					(s, i) =>
 						`<li id="${id}-c${i + 1}"><span class="sa-cl c-${s.role}">${esc(s.clause)}</span> ${esc(s.text)}` +
 						(s.predict ? ` <b class="sa-pr">Predict:</b> ${esc(s.predict)}` : '') +
-						(hasNow ? ` <span class="sa-px">${keyMarkup(s, false)}</span>` : '') +
 						'</li>',
 				)
 				.join('\n');
 			const strip = stepperStrip();
 			// the current step's Key idea and What changed (the panel keeps the height of the tallest, so nothing below jumps)
 			const now = hasNow
-				? `\n<div class="sa-now sa-st">\n${steps.map((s, i) => `<div class="z${i + 1} c-${s.role}">${keyMarkup(s, true)}</div>`).join('\n')}\n</div>`
+				? `\n<div class="sa-now sa-st">\n${steps.map((s, i) => `<div class="z${i + 1} c-${s.role}">${keyMarkup(s)}</div>`).join('\n')}\n</div>`
 				: '';
 			// not-content keeps Starlight's own list and form styling off the figure
 			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
