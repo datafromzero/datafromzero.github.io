@@ -201,6 +201,7 @@ All notable changes to datafromzero are recorded here. The format follows
     and InertiaPlugin (the marquee's exponential smoothing already is the friction curve).
 
 ### Fixed
+- Cheatsheets: the bottom bar shows a space between a section's lesson codes and its title ("S1–S17 Analysis on one table").
 - Print: the Open in Colab and Make a copy buttons print as plain black text with their address, not as a black box.
 - Concept animations: the step buttons 1 to N have their bottom edge again (it was missing on every lesson).
 - SQL runner: a result cell with line breaks (an `EXPLAIN` plan) keeps them and scrolls sideways inside the result box,
