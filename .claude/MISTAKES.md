@@ -358,6 +358,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   starter notebook from the top and confirm that no exercise check passes, and that a plausible wrong answer is rejected.**
 - 2026-11-19 — A hint of a notebook exercise showed the output of the solved run, not of the starter the learner sees. → **Text
   that shows what the starter prints comes from a hidden cell that runs the starter, not from the solved notebook run.**
+- 2026-11-19 — Reveal blocks showed `(float, int, str, bool)` for cells whose raw output is `<class 'float'>` and so on. → **A reveal block must be the notebook's raw printed output, including `<class '...'>` wrappers; if a shorter form reads better, change the cell to print it.**
 - 2026-11-19 — Research issues #61 and #66 and a first brief built a Vietnamese menu file; the owner withdrew it: no Vietnamese
   anywhere until English and later Spanish are complete. → **No Vietnamese text, data or Vietnam-specific example in lessons,
   notebooks, datasets or the lesson standard; where research says "Vietnamese", write "accented text" (D46: English café names).**
