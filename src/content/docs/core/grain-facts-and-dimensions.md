@@ -3,7 +3,7 @@ id: core-grain-facts-and-dimensions
 title: Grain, facts and dimensions
 description: Split a business process into facts (events and measures) and dimensions (who, what, where, when), and fix the grain first.
 stage: core
-order: 210
+order: 160
 level: intermediate
 duration: 25
 objectives:
@@ -26,6 +26,8 @@ sources:
     url: https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/pl-300
 status: draft
 ---
+
+TODO(owner): Part 3 of 5, Shapes of data (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 4.
 
 ## Warm-up
 

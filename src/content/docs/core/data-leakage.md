@@ -3,7 +3,7 @@ id: core-data-leakage
 title: Data leakage
 description: Find a feature or a preprocessing step that sneaks the answer into training, and re-run the evaluation honestly.
 stage: core
-order: 170
+order: 210
 level: intermediate
 duration: 25
 objectives:

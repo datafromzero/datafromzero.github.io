@@ -3,7 +3,7 @@ id: core-ai-literacy-rag-and-agents
 title: 'RAG and agents: what they are and how to judge them'
 description: Explain retrieval-augmented generation and agents in plain terms, and judge such a product by correctness, citations and refusals.
 stage: core
-order: 250
+order: 360
 level: intermediate
 duration: 30
 objectives:
@@ -14,6 +14,7 @@ objectives:
   - Say when SQL or a plain prompt beats RAG
 prerequisites:
   - core-metrics-and-error-costs
+  - core-trust-but-verify-ai-output
   - python-ai-assisted-code
   - python-apis-and-web-data
 reviewed: 2026-11-16
@@ -26,6 +27,10 @@ sources:
     url: https://owasp.org/www-project-top-10-for-large-language-model-applications/
 status: draft
 ---
+
+TODO(owner): Part 5 of 5 ends here (SPEC D49): finish with the project step on cafe-sales, the project README and the final memo, then Choose your track (/choose-your-track/).
+
+TODO(owner): Fold in data ethics: never paste personal data into a tool; who is responsible for a wrong answer. Then link to Choose your track (/choose-your-track/).
 
 ## Warm-up
 

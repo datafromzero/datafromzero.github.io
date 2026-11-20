@@ -3,7 +3,7 @@ id: core-cloud-storage-compute-and-access
 title: 'The cloud: storage, compute and who may access what'
 description: Explain object storage, compute and regions, and why access is granted by roles, with one provider as the worked example.
 stage: core
-order: 230
+order: 320
 level: beginner
 duration: 25
 objectives:
@@ -12,8 +12,8 @@ objectives:
   - Tell an object store from a database from a spreadsheet
   - Name three things never to put in a public bucket
 prerequisites:
-  - python-notebook-to-script
   - core-git-save-history
+  - core-logging-config-secrets
 reviewed: 2026-11-16
 sources:
   - title: 'AWS documentation: What is Amazon S3'
@@ -24,6 +24,10 @@ sources:
     url: https://learn.microsoft.com/en-in/credentials/certifications/resources/study-guides/dp-900
 status: draft
 ---
+
+TODO(owner): Part 5 of 5, Platform and the AI era (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Choose your track.
+
+TODO(owner): Open with the eight infrastructure concepts of issue #72, one sentence each. Cover access control and data governance (who may see what). Docker gets one awareness box, no build (builds are in the DE and ML tracks).
 
 ## Warm-up
 

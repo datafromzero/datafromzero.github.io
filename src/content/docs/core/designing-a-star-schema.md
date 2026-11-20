@@ -3,7 +3,7 @@ id: core-designing-a-star-schema
 title: Designing a star schema from business questions
 description: Start from the questions the business asks, choose the grain, then derive the fact table, dimensions and keys on paper.
 stage: core
-order: 220
+order: 170
 level: intermediate
 duration: 30
 objectives:

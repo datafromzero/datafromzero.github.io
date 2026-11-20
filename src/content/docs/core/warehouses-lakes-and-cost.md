@@ -3,7 +3,7 @@ id: core-warehouses-lakes-and-cost
 title: Warehouses, data lakes and what things cost
 description: Compare transactional and analytical databases, a warehouse and a data lake, and read how storage and scanning are billed.
 stage: core
-order: 240
+order: 330
 level: intermediate
 duration: 25
 objectives:

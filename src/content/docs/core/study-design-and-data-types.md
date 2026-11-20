@@ -24,6 +24,10 @@ sources:
 status: draft
 ---
 
+TODO(owner): Part 1 of 5, Statistics I (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 2.
+
+TODO(owner): Ethics, privacy and governance have no lesson of their own (SPEC D49): cover consent and personally identifiable information (PII) here.
+
 ## Warm-up
 
 Draft: the owner writes this section.

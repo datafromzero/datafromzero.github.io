@@ -27,6 +27,8 @@ sources:
 status: draft
 ---
 
+TODO(owner): Part 2 of 5 ends here (SPEC D49): finish with the project step on cafe-sales, a decision memo: one cafe question, the test or experiment that answers it, and the recommendation.
+
 ## Warm-up
 
 Draft: the owner writes this section.
