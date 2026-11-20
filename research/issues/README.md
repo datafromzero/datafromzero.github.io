@@ -18,3 +18,6 @@ Copies of the GitHub issues labelled `research`, refreshed by `npm run research:
 | [#58](58-illustrating-sql-concepts-animation-vs-step-by-step-statics.md) | open | Research: illustrating SQL concepts — animation vs step-by-step statics |
 | [#61](61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md) | open | Research: Python for data — stage check, SQL bridge traps, and the Colab decision |
 | [#66](66-how-competitors-teach-python-for-data-lesson-by-lesson-findi.md) | open | Research: How competitors teach Python for data — lesson-by-lesson findings for the 27-lesson stage |
+| [#71](71-python-as-an-engineer-the-advanced-core-block-shared-vs-trac.md) | open | Research: Python as an engineer — the advanced core block (shared vs track, depth, environment, traps) |
+| [#72](72-working-in-the-ai-era-prompting-without-dependence-data-beyo.md) | open | Research: Working in the AI era — prompting without dependence, data beyond tables, infrastructure awareness |
+| [#73](73-where-dsa-belongs-a-literacy-module-in-the-core-a-practice-g.md) | open | Research: Where DSA belongs — a literacy module in the core, a practice gym beside the tracks |
