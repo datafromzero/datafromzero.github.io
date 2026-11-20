@@ -1,7 +1,7 @@
 ---
 id: core-debugging-and-retries
 title: 'When it breaks: errors, retries and debugging'
-short_title: Errors, retries, debugging
+short_title: Errors and debugging
 description: Read a traceback, catch specific errors, retry a flaky step, and find a bug with the editor debugger.
 stage: core
 order: 280

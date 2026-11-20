@@ -1,7 +1,7 @@
 # Curriculum map: rationale
 
 Amended by the owner decision of 2026-11-17 at the end of this file (SPEC D32): four career branches, 159 lessons.
-Amended again on 2026-11-19 (SPEC D45, research issue #61): the Python stage has 27 lessons; 166 lessons in all (see the last section).
+Amended again on 2026-11-19 (SPEC D45, research issue #61): the Python stage has 27 lessons; 166 lessons in all. Amended on 2026-11-20 (D49): core 36, 177 lessons (see the last section).
 The sections before it are kept as approved on 2026-11-16.
 
 Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each), 3 datasets, 80 glossary terms, 124 reference entries. `validate.mjs` passes with zero errors. Every lesson cites its research section in `research:`.
@@ -10,7 +10,7 @@ Outline only. 161 lessons, about 72 hours of learner time (15 to 30 minutes each
 
 - **One idea per lesson, one visual per lesson.** Each lesson names its canonical static visual (`visual:`). Playbook steppers and sliders (03 §7) are written as static frame sequences, because lessons ship no JavaScript.
 - **Order follows prerequisites (D25).** The graph module reports no cycles and no order violations. No lesson depends on a later stage. Only the first Excel lesson has no prerequisite; the first lesson of each later stage depends on the stage before it.
-- **Stage sizes.** Excel 22, SQL 35 (D40), Python 27 (D45), core 25, branches 11 to 12. Six lessons are marked `[stretch]` (the Python environments lesson no longer is, D45): nothing on the main path depends on them, so they can be cut or deferred. Without them: 160 of 166 lessons.
+- **Stage sizes.** Excel 22, SQL 35 (D40), Python 27 (D45), core 36 (D49), branches 11 to 12. Six lessons are marked `[stretch]` (the Python environments lesson no longer is, D45): nothing on the main path depends on them, so they can be cut or deferred. Without them: 160 of 166 lessons.
 
 ## Ordering logic per stage
 
@@ -120,3 +120,11 @@ Owner decision, from research issue #61 ("Python for data: stage check, SQL brid
 - **Linear algebra.** NumPy matrix product and `numpy.linalg` are not taught in Python and do not go to the advanced core (issue section 4
   said they would); they belong to the math block at the start of the Data Scientist and ML Engineer tracks (SPEC D44).
 - **Notebooks** live in the repository (`notebooks/python/{lesson-id}.ipynb`), not in Google Drive.
+
+## Amendment of 2026-11-20: the advanced core (SPEC D49)
+
+Owner decisions, from research issues #71, #72 and #73.
+
+- **Counts.** 177 lessons in 8 stages: Excel 22, SQL 35, Python 27, core 36, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12. The four core stages are 120 lessons.
+- **Core 25 to 36**, in five parts of about four hours with a skip check at the start and a project step on cafe-sales at the end of each. New: `data-beyond-tables`, `a-feel-for-scale`, `laptop-setup-and-terminal`, `python-project-layout`, `environments-and-dependencies`, `debugging-and-retries`, `testing-with-pytest`, `logging-config-secrets`, `readable-code-and-classes`, `prompting-with-the-data-in-the-room`, `trust-but-verify-ai-output`. The order is in `06-curriculum-map.yaml`.
+- No ethics lesson; it is folded into four lessons. The DSA practice gym is planned after the tracks. See D49 for the rest.

@@ -1,0 +1,347 @@
+---
+// The skills chart on /choose-your-track/ (SPEC D49): a radar of the four careers on seven skills, an original
+// inline SVG drawn at build time from src/data/track-skills.ts. No JavaScript. Every label is inside the figure; the
+// same numbers are in a table below it and the way each score was derived is in a <details> list.
+import { AXES, EVIDENCE, ROLES, SCALE, SCORES, chartDescription, type RoleId } from '../../data/track-skills.ts';
+import { GITHUB_REPO } from '../../site';
+
+const W = 400;
+const H = 372;
+const CX = 200;
+const CY = 180;
+const R = 100; // radius of score 5
+const N = AXES.length;
+const angle = (i: number) => ((-90 + (i * 360) / N) * Math.PI) / 180;
+const pt = (i: number, r: number): [number, number] => [CX + r * Math.cos(angle(i)), CY + r * Math.sin(angle(i))];
+const f = (n: number) => String(Math.round(n * 10) / 10);
+const poly = (role: RoleId) => AXES.map((a, i) => pt(i, (R * SCORES[role][a.id].score) / 5).map(f).join(',')).join(' ');
+const rings = [1, 2, 3, 4, 5].map((s) => AXES.map((_, i) => pt(i, (R * s) / 5).map(f).join(',')).join(' '));
+
+/** Where a two-line axis label goes: outside the spoke, anchored away from the chart. */
+const labels = AXES.map((a, i) => {
+	const [x, y] = pt(i, R + 14);
+	const c = Math.cos(angle(i));
+	const s = Math.sin(angle(i));
+	const anchor = c > 0.25 ? 'start' : c < -0.25 ? 'end' : 'middle';
+	const first = s < -0.9 ? y - 17 : s > 0.6 ? y + 1 : y - 3;
+	return { a, x: Math.round(x), y1: Math.round(first), y2: Math.round(first + 13), anchor };
+});
+
+/** Marker for each role at each vertex: a different shape as well as a different color. */
+const marker = (role: RoleId, x: number, y: number): string => {
+	const r = 4;
+	if (role === 'da') return `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" />`;
+	if (role === 'de') return `<rect x="${f(x - r)}" y="${f(y - r)}" width="${r * 2}" height="${r * 2}" />`;
+	if (role === 'ds') return `<polygon points="${f(x)},${f(y - r - 1)} ${f(x + r + 1)},${f(y + r)} ${f(x - r - 1)},${f(y + r)}" />`;
+	return `<polygon points="${f(x)},${f(y - r - 1)} ${f(x + r + 1)},${f(y)} ${f(x)},${f(y + r + 1)} ${f(x - r - 1)},${f(y)}" />`;
+};
+const dots = (role: RoleId) => AXES.map((a, i) => marker(role, ...pt(i, (R * SCORES[role][a.id].score) / 5))).join('');
+const legend = ROLES.map((r, i) => ({ r, x: 36 + (i % 2) * 180, y: 330 + Math.floor(i / 2) * 22 }));
+const issue = (n: number) => `https://github.com/${GITHUB_REPO}/issues/${n}`;
+---
+
+<div class="tc not-content">
+	<figure class="tc-fig">
+		<svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby="tc-t tc-d" xmlns="http://www.w3.org/2000/svg">
+			<title id="tc-t">Skills of the four careers, scored 1 to 5</title>
+			<desc id="tc-d">{chartDescription()}</desc>
+			<g class="grid" fill="none">
+				{rings.map((p, i) => <polygon points={p} class={i === 4 ? 'ring outer' : 'ring'} />)}
+				{AXES.map((_, i) => <line x1={CX} y1={CY} x2={f(pt(i, R)[0])} y2={f(pt(i, R)[1])} />)}
+			</g>
+			{
+				ROLES.map((r) => (
+					<g class={`role ${r.id}`}>
+						<polygon points={poly(r.id)} class="area" />
+						<g class="dots" set:html={dots(r.id)} />
+					</g>
+				))
+			}
+			<g class="axis-labels">
+				{labels.map((l) => (
+					<text text-anchor={l.anchor}>
+						<tspan x={l.x} y={l.y1}>{l.a.lines[0]}</tspan>
+						<tspan x={l.x} y={l.y2}>{l.a.lines[1]}</tspan>
+					</text>
+				))}
+			</g>
+			<g class="legend">
+				{legend.map(({ r, x, y }) => (
+					<g class={`role ${r.id}`}>
+						<line x1={x - 18} y1={y - 4} x2={x - 4} y2={y - 4} class="key" />
+						<g class="dots" set:html={marker(r.id, x - 11, y - 4)} />
+						<text x={x} y={y}>{r.name}</text>
+					</g>
+				))}
+			</g>
+		</svg>
+		<figcaption>Rings mark scores 1 to 5, from the center out. A bigger shape means the role leans harder on more of these skills; the shapes differ in where they reach.</figcaption>
+	</figure>
+
+	<h2 id="the-numbers">The same numbers in a table</h2>
+	<div class="tc-table">
+		<table>
+			<caption>Score from 1 to 5 for each skill and role</caption>
+			<thead>
+				<tr>
+					<th scope="col">Skill</th>
+					{ROLES.map((r) => <th scope="col"><abbr title={r.name}>{r.short}</abbr></th>)}
+				</tr>
+			</thead>
+			<tbody>
+				{
+					AXES.map((a) => (
+						<tr>
+							<th scope="row">{a.name}</th>
+							{ROLES.map((r) => <td>{SCORES[r.id][a.id].score}</td>)}
+						</tr>
+					))
+				}
+			</tbody>
+		</table>
+	</div>
+	<p class="tc-abbr">DA: Data Analyst. DE: Data Engineer. DS: Data Scientist. ML: ML / AI Engineer.</p>
+	<ul class="tc-scale">
+		{SCALE.map(([n, t]) => <li><span class="n">{n}</span> {t}</li>)}
+	</ul>
+
+	<h2 id="where-the-scores-come-from">Where the scores come from</h2>
+	<p>
+		Each score starts from the strongest direct evidence for that skill and role, and is then checked against the other sources. Where
+		they disagree, the score takes the lower value. The sources:
+	</p>
+	<ul class="tc-ev">
+		{
+			EVIDENCE.map((e) => (
+				<li>
+					<span class="tag">[{e.tag}]</span>{' '}
+					{e.issue !== null ? <a href={issue(e.issue)}>Research issue #{e.issue}</a> : <span>Curriculum map</span>}: {e.text}
+				</li>
+			))
+		}
+	</ul>
+	<p>The reasons behind every cell are below. Open a skill to read them.</p>
+	{
+		AXES.map((a) => (
+			<details class="tc-why">
+				<summary>{a.name}</summary>
+				<p class="about">{a.about}</p>
+				<dl>
+					{ROLES.map((r) => (
+						<>
+							<dt>
+								{r.name}: {SCORES[r.id][a.id].score}
+							</dt>
+							<dd>{SCORES[r.id][a.id].why}</dd>
+						</>
+					))}
+				</dl>
+			</details>
+		))
+	}
+</div>
+
+<style>
+	.tc {
+		--tc-da: #0072b2;
+		--tc-de: #00805f;
+		--tc-ds: #c2338a;
+		--tc-ml: #8a7300;
+		margin-top: 8px;
+	}
+	:global(:root:not([data-theme='light'])) .tc {
+		--tc-da: #4aa8e8;
+		--tc-de: #2ec99d;
+		--tc-ds: #f06ab5;
+		--tc-ml: #d4b82a;
+	}
+	.tc a {
+		color: var(--sl-color-white);
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.tc a:focus-visible,
+	.tc summary:focus-visible {
+		outline: 2px solid var(--fg);
+		outline-offset: 3px;
+	}
+	.tc-fig {
+		margin: 0 0 24px;
+	}
+	svg {
+		display: block;
+		width: 100%;
+		max-width: 460px;
+		height: auto;
+		margin: 0 auto;
+		font-family: var(--font-sans);
+		font-size: 11.5px;
+		fill: var(--fg);
+	}
+	.grid line,
+	.ring {
+		stroke: var(--dim);
+		stroke-width: 1;
+	}
+	.ring.outer {
+		stroke: var(--mute);
+	}
+	.axis-labels text,
+	.legend text {
+		fill: var(--fg);
+	}
+	.area {
+		fill-opacity: 0.07;
+		stroke-width: 2;
+		stroke-linejoin: round;
+	}
+	.da {
+		--c: var(--tc-da);
+	}
+	.de {
+		--c: var(--tc-de);
+	}
+	.ds {
+		--c: var(--tc-ds);
+	}
+	.ml {
+		--c: var(--tc-ml);
+	}
+	.role .area {
+		fill: var(--c, var(--fg));
+		stroke: var(--c, var(--fg));
+	}
+	.role .dots :global(*) {
+		fill: var(--c, var(--fg));
+		stroke: var(--bg);
+		stroke-width: 1;
+	}
+	.de .area {
+		stroke-dasharray: 7 3;
+	}
+	.ds .area {
+		stroke-dasharray: 2 3;
+	}
+	.ml .area {
+		stroke-dasharray: 9 3 2 3;
+	}
+	.key {
+		stroke: var(--c, var(--fg));
+		stroke-width: 2;
+	}
+	.de .key {
+		stroke-dasharray: 5 2;
+	}
+	.ds .key {
+		stroke-dasharray: 2 2;
+	}
+	.ml .key {
+		stroke-dasharray: 6 2 2 2;
+	}
+	figcaption {
+		margin-top: 8px;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-sm);
+	}
+	.tc-table {
+		margin: 12px 0 0;
+		overflow-x: auto;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-family: var(--font-mono);
+		font-size: var(--sl-text-xs);
+	}
+	caption {
+		margin-bottom: 8px;
+		color: var(--sl-color-gray-3);
+		font-family: var(--font-sans);
+		font-size: var(--sl-text-sm);
+		text-align: left;
+	}
+	th,
+	td {
+		padding: 8px 6px;
+		border-bottom: 1px solid var(--line);
+		text-align: left;
+		vertical-align: top;
+	}
+	td {
+		text-align: center;
+	}
+	thead th {
+		color: var(--sl-color-gray-3);
+		font-weight: 500;
+		text-align: center;
+	}
+	thead th:first-child {
+		text-align: left;
+	}
+	abbr {
+		text-decoration: none;
+	}
+	tbody th {
+		color: var(--sl-color-white);
+		font-weight: 500;
+		font-family: var(--font-sans);
+		font-size: var(--sl-text-sm);
+	}
+	.tc-abbr {
+		margin: 8px 0 0;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-sm);
+	}
+	.tc-scale {
+		margin: 12px 0 0;
+		padding: 0;
+		list-style: none;
+		font-size: var(--sl-text-sm);
+	}
+	.tc-scale li {
+		margin: 2px 0;
+	}
+	.tc-scale .n,
+	.tag {
+		font-family: var(--font-mono);
+		color: var(--sl-color-gray-3);
+	}
+	.tc-ev {
+		padding-left: 1.2em;
+	}
+	.tc-why {
+		margin: 8px 0;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+	}
+	.tc-why summary {
+		min-height: 44px;
+		padding: 10px 14px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+	}
+	.tc-why[open] summary {
+		border-bottom: 1px solid var(--line);
+	}
+	.tc-why .about,
+	.tc-why dl {
+		margin: 0;
+		padding: 10px 14px 0;
+		font-size: var(--sl-text-sm);
+	}
+	.tc-why .about {
+		color: var(--sl-color-gray-3);
+	}
+	.tc-why dl {
+		padding-bottom: 10px;
+	}
+	.tc-why dt {
+		margin-top: 10px;
+		font-weight: 600;
+	}
+	.tc-why dd {
+		margin: 2px 0 0;
+		color: var(--sl-color-gray-2);
+	}
+</style>

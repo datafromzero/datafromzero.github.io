@@ -28,8 +28,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
-- **Curriculum (D29, D32, D40, D45):** 166 lessons in 8 stages (Excel and SQL published, the rest `status: draft`, never deployed):
-  Excel 22, SQL 35, Python 27, core 25, Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
+- **Curriculum (D29, D32, D40, D45, D49):** 177 lessons in 8 stages (Excel and SQL published, the rest `status: draft`, never deployed):
+  Excel 22, SQL 35, Python 27, core 36 (five parts, D49), Data Analyst 13, Data Engineer 20, Data Scientist 12, ML Engineer 12.
   The map is `research/curriculum/06-curriculum-map.yaml`; lesson frontmatter is the source of truth.
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
 - **Open issues and PRs:** issue #41 (Excel checks in the real apps, Sheets copy links).
@@ -76,7 +76,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
    learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected
    result per exercise, and what "same result" means for row order) before it is built.
-6. **Release `v1.0.0`** when the four core stages (109 lessons, D40, D45) are published; then enable Zenodo (SPEC §9, §14).
+6. **Release `v1.0.0`** when the four core stages (120 lessons, D40, D45, D49) are published; then enable Zenodo (SPEC §9, §14).
 
 - **Python stage restructure (D45, 2026-11-19, from issue #61):** 27 lessons in `src/content/docs/python/` (all `.mdx`, all draft), in the new order of
   `research/curriculum/06-curriculum-map.yaml` (origin tag per lesson, the 2 awareness boxes, the draft-to-new compression). Cut `comprehensions`; renamed
@@ -146,6 +146,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   learner's laptop (VS Code, Git, uv) with Codespaces as fallback. Proposed by the lead, not yet decided: the core as five parts of about 4 hours each
   (statistics, engineering tools, data systems, decisions and the AI era, a project built part by part), a skip check at the start of each part,
   about 34 lessons, a data ethics and governance lesson (needs research), the DSA gym after the tracks.
+
+- **Advanced core (D49, D50, 2026-11-20):** 36 draft stubs in five parts (orders 10 to 70, 80 to 150, 160 to 220, 230 to 310, 320 to 360), each part with a skip check and a project step (TODO notes are in the stubs). Part 4 is the D48 laptop block. Eleven new stubs have sources from issues #71 to #73 and no text yet. Notes for later: CI/CD, inheritance authorship and validation libraries belong to the DE, DS and ML tracks; Docker builds to DE and ML (awareness box only in the cloud lesson); the DSA practice gym (issue #73) is planned after the tracks exist, nothing built; showing the five parts on `/start/` needs a `part` schema field (CONTRACT change), TODO. `/choose-your-track/` is built (scores in `src/data/track-skills.ts`); the owner may adjust any score.
 
 ## Open items and owner decisions still pending
 
