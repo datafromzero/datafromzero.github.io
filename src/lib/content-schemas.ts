@@ -32,6 +32,8 @@ const translated_from_version = z
 export const LessonSchema = z.object({
 	id,
 	title: z.string().min(1),
+	/** Short name for the sidebar and the course list, one line (SPEC D47). Required when a published title is longer. */
+	short_title: z.string().min(1).max(24, 'must be at most 24 characters').optional(),
 	description: z.string().min(1).max(160, 'must be at most 160 characters'),
 	stage: z.enum(STAGES),
 	order: z.number().int(),

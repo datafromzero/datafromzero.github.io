@@ -7,6 +7,7 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Short lesson names in the sidebar (SPEC D47, owner decision, 2026-11-20): an optional `short_title` frontmatter field, at most 24 characters, is the one-line name of a lesson in the sidebar and in the bottom bar's Course list (for example P9 *Files and tables* for *Reading files and tables: paths, CSV, JSON and Excel*); the full title stays on the page and shows as the sidebar tooltip. Every published Excel, SQL and Python lesson whose title is longer than 26 characters now has one, and `npm run check:lessons` keeps it that way. URLs are unchanged.
 - Python stage, lessons 14 to 18 published (owner approval, 2026-11-20): sorting and grouping (with a CSS split-apply-combine animation), merging safely with `validate=` and `indicator=True`, missing values, types and duplicates, dates and monthly periods, and cleaning text columns, including the NFC/NFD trap on the accented café names of D46. Each has a Colab notebook on cafe-sales. Owner checks moved to issue #76.
 - Python stage, third batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the five lessons stay drafts and
   are not on the site): *Grouping and aggregating* (opens with `sort_values` and the trap that blanks sort last in both directions, then `groupby` as split,

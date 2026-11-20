@@ -6,6 +6,7 @@
  *   - a bare `$` inside an inline SVG (use &#36;)
  *   - `datasets:` naming a folder that does not exist in datasets/
  *   - a placeholder line left in a written lesson (`XX`, `TBD`, `TODO` outside a TODO(owner) note)
+ *   - a published lesson whose title is longer than 26 characters without a one-line `short_title` (D47)
  * Code spans, fenced code and SVG text (which shows data values as they are) are ignored for the spelling check.
  * Lessons that are still unwritten stubs are skipped: their planned datasets may not exist yet.
  */
@@ -33,6 +34,9 @@ for (const stage of STAGES) {
 
 		const fm = text.match(/^---\n([\s\S]*?)\n---/);
 		if (fm) {
+			const title = (fm[1].match(/^title:\s*(.+)$/m)?.[1] ?? '').trim().replace(/^(['"])(.*)\1$/, '$2');
+			if (/^status:\s*published\s*$/m.test(fm[1]) && title.length > 26 && !/^short_title:/m.test(fm[1]))
+				report(file, 1, `title is ${title.length} characters: add a short_title of at most 24 for the sidebar (D47)`);
 			const block = fm[1].match(/^datasets:\s*\n((?:\s+-\s+.+\n?)+)/m);
 			const inline = fm[1].match(/^datasets:\s*\[(.*)\]/m);
 			const names = block
