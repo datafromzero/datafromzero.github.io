@@ -228,7 +228,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
-- The sidebar group of the site pages (About, Changelog, Cite, License, Privacy) is now called "About this site" instead of "Project", so learners do not take it for the case-study projects of the career tracks (owner request, 2026-11-20).
+- The sidebar group of the site pages (About, Changelog, Cite, License, Privacy) is now called "About this site" instead of "Project" (also the accessible name of the footer link group), so learners do not take it for the case-study projects of the career tracks (owner request, 2026-11-20).
 - About page (owner request): the story no longer names a course platform ("a few SQL and Python courses on bootcamp
   sites").
 - Consent (SPEC §11, owner request): the banner is now a glass card like the one on johnha.info, with a cookie icon,
