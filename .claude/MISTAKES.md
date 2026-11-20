@@ -465,6 +465,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   gap| (0.794), and NumPy's `binomial` draws for large n differ between 2.1 and 2.5 (a false-alarm rate of 0.053 against 0.065 at n = 5,000). → **Do not show two
   tools' p-values side by side as one number unless their two-sided rules are the same; state the seed beside a simulated number, run the notebook on a second NumPy, and
   write "about" (or "near 5 percent") in the prose where the versions differ.**
+- 2026-11-20 — C8 printed simulated rates to three decimals from 2,000 runs (0.549, 0.989), but the standard error of a rate near 0.5 over 2,000 runs is about 0.011, so the
+  last digits were noise, and a "false-alarm rate" over 500 experiments (23.8 percent) was good to about two points. → **A simulated rate printed to three decimals needs at
+  least 20,000 runs; with fewer, print two decimals. State the runs, the seed and the assumptions (1 real test in 10, a lift of exactly 2 points) beside a derived share such as
+  "55 percent of significant results are real".**
 
 ## Agents and reviews
 

@@ -4,7 +4,7 @@
 // interval around it, drawn so that 0 lies outside the interval (a clear difference); the picture says nothing about a p-value.
 // 8 s loop of 8 phases: 1 the two piles; 2 the two means as dashed lines and the arrow for the gap; 3 holds; 4 the overlap is shaded gray; 5 holds; 6 the
 // difference axis with 0 and the interval; 7 holds; 8 the three labels: p, size, interval.
-// Colors by meaning, the same in C5 to C9: green = the first group, purple = the second group, ochre = 0 (no difference), blue = the estimate and its interval.
+// Colors by meaning, the same in C5 to C9: green = the first group, purple = the second group, ochre = 0 (no difference), blue = the estimate (the gap) and its interval.
 import { anim, tint } from '../lib/step-animation.mjs';
 
 const BASE = 150;
@@ -30,18 +30,18 @@ export default function make({ id = 'tgp' } = {}) {
 		loop: { cycle: 8 },
 		title: 'Two piles, the gap between their means, and an interval around the gap',
 		desc:
-			'Two bell-shaped piles side by side, group A in green and group B in purple, overlapping in the middle. Dashed lines mark the two means and an arrow between them is labeled gap. The overlap of the piles is shaded gray. Below, a second line shows the difference between the groups: an ochre mark at 0, a blue dot for the gap and a blue bar for the interval around it, which does not touch 0. Three labels name what to report: the p-value, the size and the interval.',
-		caption: 'Two groups give two piles. The gap between their means is the effect; how much the piles overlap shows how big it is next to the spread; an interval around the gap shows how sure you are.',
+			'Two bell-shaped piles side by side, group A in green and group B in purple, overlapping in the middle. Dashed lines mark the two means and an arrow between them is labeled gap. The overlap of the piles is shaded gray. Below, a second line shows the difference between the groups: an ochre mark at 0, a blue dot for the gap and a blue bar for the interval around it. Three labels name what to report: the p-value, the size and the interval.',
+		caption: 'Two groups give two piles. The gap between their means is what you test; how much the piles overlap shows how big it is next to the spread; an interval around the gap shows how sure you are.',
 		phases: [
 			[1, 'Two groups, two piles', { role: 'grp', key: 'Each group has its own pile of values: a center and a spread.', changes: [['+', 'group A and group B']] }],
-			[2, 'The gap between the means', { role: 'out', key: 'The effect is the gap between the two means, in the units of the data.', changes: [['+', 'the gap']] }],
+			[2, 'The gap between the means', { role: 'src', key: 'The gap between the means is what you compare; with random assignment it estimates the effect.', changes: [['+', 'the gap']] }],
 			[4, 'The overlap next to the gap', { role: 'mat', key: 'The more the piles overlap, the smaller the gap is next to the spread: Cohen’s d measures that.', changes: [['+', 'the overlap']] }],
 			[6, 'An interval around the gap', { role: 'src', key: 'The interval says which gaps the data do not rule out: look at where 0 sits in it.', changes: [['+', 'a difference line, 0, an interval']] }],
 			[8, 'Report all three', { role: 'out', key: 'Report the p-value, the size and the interval together: none of the three can stand in for the others.', changes: [['+', 'three things to report']] }],
 		],
 		counters: [
 			{ label: 'groups', role: 'grp', values: [[1, 2]] },
-			{ label: 'means', role: 'out', values: [[2, 2]] },
+			{ label: 'means', role: 'src', values: [[2, 2]] },
 			{ label: 'interval', role: 'src', values: [[6, 1]] },
 		],
 	});
@@ -58,8 +58,8 @@ export default function make({ id = 'tgp' } = {}) {
 	// the means and the gap
 	a.path(`M${A} ${BASE}V${BASE - H - 12}`, 's-grp dsh', { in: 2 });
 	a.path(`M${B} ${BASE}V${BASE - H - 12}`, 's-mat dsh', { in: 2 });
-	a.arrow(A + 3, 62, B - 3, 62, 's-out', { in: 2, draw: true });
-	a.arrow(B - 3, 62, A + 3, 62, 's-out', { in: 2, draw: true });
+	a.arrow(A + 3, 62, B - 3, 62, 's-src', { in: 2, draw: true });
+	a.arrow(B - 3, 62, A + 3, 62, 's-src', { in: 2, draw: true });
 	a.text((A + B) / 2, 52, 'gap', 'f10 b', { in: 2 }, 'm');
 	a.text(A, BASE + 16, 'mean A', 'f10 mu', { in: 2 }, 'm');
 	a.text(B, BASE + 16, 'mean B', 'f10 mu', { in: 2 }, 'm');
