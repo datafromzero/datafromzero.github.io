@@ -21,16 +21,20 @@ function stageLessons(stage: string, includeDrafts: boolean): Link[] {
 		.filter((f) => /\.mdx?$/.test(f) && !/^index\.mdx?$/.test(f))
 		.map((f) => {
 			const fm = readFileSync(join(dir, f), 'utf8').match(/^---\n([\s\S]*?)\n---/);
-			const data = fm ? (parse(fm[1]) as { title?: string; order?: number; status?: string }) : {};
+			const data = fm ? (parse(fm[1]) as { title?: string; short_title?: string; order?: number; status?: string }) : {};
 			return { slug: f.replace(/\.mdx?$/, ''), ...data };
 		})
 		.filter((l) => typeof l.order === 'number' && l.title && (l.status === 'published' || (includeDrafts && l.status === 'draft')))
 		.sort((a, b) => a.order! - b.order!)
 		// The code is drawn by CSS from `data-code` (tokens.css) in its own mono column, so a wrapped title stays
-		// aligned and screen readers still hear it first through the accessible label.
+		// aligned and screen readers still hear it first through the accessible label. The row shows the one-line
+		// `short_title` when the lesson has one (D47); the full title is the hover tooltip.
 		.map((l) => {
 			const code = lessonCode(stage, l.order!)!;
-			return { label: l.title!, link: `/${stage}/${l.slug}/`, attrs: { 'data-code': code, 'aria-label': `${code} ${l.title}` } };
+			const label = l.short_title ?? l.title!;
+			const attrs: Record<string, string> = { 'data-code': code, 'aria-label': `${code} ${label}` };
+			if (l.short_title) attrs.title = l.title!;
+			return { label, link: `/${stage}/${l.slug}/`, attrs };
 		});
 }
 
@@ -56,7 +60,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 		},
 		...stages,
 		{
-			label: 'Project',
+			label: 'About this site',
 			collapsed: true,
 			items: [
 				{ label: 'About', link: '/about/' },

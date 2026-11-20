@@ -48,6 +48,8 @@ export function lessonCode(stage: string, order: number): string | undefined {
 export interface MapLesson {
 	id: string;
 	title: string;
+	/** One-line name for lists (D47); falls back to the title. */
+	short_title?: string;
 	stage: string;
 	order: number;
 	href: string;
@@ -59,6 +61,8 @@ export interface RoadmapLesson {
 	id: string;
 	code: string;
 	title: string;
+	/** One-line name for lists (D47): the short title when there is one, else the title. */
+	label: string;
 	href: string;
 	/** Codes of the prerequisites that are on the roadmap (other stages included), in the frontmatter order. */
 	needs: string[];
@@ -94,6 +98,7 @@ export function groupRoadmap(lessons: MapLesson[], landings: ReadonlySet<string>
 				id: l.id,
 				code: codeOf.get(l.id)!,
 				title: l.title,
+				label: l.short_title ?? l.title,
 				href: l.href,
 				needs: l.prerequisites.filter((p) => codeOf.has(p)).map((p) => codeOf.get(p)!),
 			})),

@@ -312,6 +312,8 @@ reviewer ticks them one by one.
 - No links to other lessons' URLs while they are drafts: name them by title.
 - American English (gray, color, canceled). Frontmatter: change only `sources`, `datasets` and the body unless the
   brief says otherwise; keep `status: draft`.
+- A title longer than 26 characters gets a `short_title` of at most 24 (D47): the one-line sidebar name, 2–4 words,
+  naming the tool or idea (`Files and tables`, `LAG, LEAD, moving avg`), never a different meaning from the title.
 
 ## Files per lesson
 
