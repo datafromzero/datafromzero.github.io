@@ -4,7 +4,7 @@ title: Readable code, reading docs and classes
 short_title: Readable code, classes
 description: Add type hints and docstrings, run ruff, read a library class from its documentation and write one small dataclass.
 stage: core
-order: 300
+order: 290
 level: intermediate
 duration: 30
 objectives:
@@ -29,7 +29,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Part 4 of 5 ends here (SPEC D49): finish with the project step on cafe-sales, the project becomes a tested repository: a project layout, pinned environment, tests on known-answer tables, logging and a config file, pushed to GitHub.
+TODO(owner): Part 4 of 6 ends here (SPEC D49): finish with the project step on cafe-sales, the project becomes a tested repository: a project layout, pinned environment, tests on known-answer tables, logging and a config file, pushed to GitHub.
 
 ## Warm-up
 

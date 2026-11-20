@@ -4,7 +4,7 @@ title: 'A real Python project: modules, packages and arguments'
 short_title: A real Python project
 description: Split a script into modules and a package, give it a main entry point and let it take a file and a date as arguments.
 stage: core
-order: 250
+order: 240
 level: intermediate
 duration: 30
 objectives:

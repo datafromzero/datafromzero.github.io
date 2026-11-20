@@ -3,7 +3,7 @@ id: core-git-branches-and-pull-requests
 title: 'Git: branches, pull requests and review'
 description: Work on a branch, open a pull request, read a review comment and merge cleanly.
 stage: core
-order: 310
+order: 300
 level: beginner
 duration: 25
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://git-scm.com/book/en/v2
 status: draft
 ---
+
+TODO(owner): Part 5 of 6, Teamwork, scale and the platform (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 6.
 
 ## Warm-up
 

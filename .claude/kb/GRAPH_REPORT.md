@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1266 nodes, 1361 edges, 145 communities (600 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 186, content-type 5, decision 50, dependency 25, design-section 15, doc 33, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 420, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 230, template 2, token 12.
-- Edges: defines 230, imports 50, mentions 767, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
+- 1319 nodes, 1380 edges, 145 communities (644 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 203, content-type 5, decision 50, dependency 25, design-section 15, doc 36, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 447, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 236, template 2, token 12.
+- Edges: defines 236, imports 50, mentions 780, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -23,7 +23,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 8 | `src/components/content/OpenInColab.astro` | component | 29 | src/components/content/OpenInColab.astro:1 |
 | 9 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 10 | `agent:LESSON-STANDARD` | agent | 27 | .claude/agents/LESSON-STANDARD.md:1 |
-| 11 | `S6` Authoring components | spec-section | 25 | SPEC.md:269 |
+| 11 | `S6` Authoring components | spec-section | 26 | SPEC.md:269 |
 | 12 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 13 | `design/README.md` | doc | 23 | design/README.md:1 |
 | 14 | `D44` Stage cheatsheets; a math blo… | decision | 22 | SPEC.md:71 |
@@ -34,15 +34,15 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (88): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx
-- **C2 HANDOFF.md** (19): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; CLAUDE.md; research/curriculum/07-curriculum-rationale.md
-- **C3 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C4 Tech stack** (15): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
-- **C5 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C6 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C7 track-skills.ts** (14): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
+- **C2 track-skills.ts** (20): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
+- **C3 HANDOFF.md** (19): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; CLAUDE.md; research/curriculum/07-curriculum-rationale.md
+- **C4 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
+- **C5 Tech stack** (17): S2 Tech stack; S3 URL contract; S1 Decision record; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C8 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
-- **C9 sync-research-issues.mjs** (11): scripts/sync-research-issues.mjs; research/issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi.md; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md
-- **C10 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
+- **C9 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
+- **C10 sync-research-issues.mjs** (10): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
 - **C11 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C12 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
 
@@ -52,13 +52,13 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C80 to C77, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C98 to C8, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C32 to C69, src/scripts/run-sql.ts:2)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C33 to C69, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C132 to C129, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C15, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C40, design/README.md:181)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C3 to C15, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C41, design/README.md:181)
 - `M7` -mentions-> `D34` (C51 to C24, CLAUDE.md:65)
 - `M8` -mentions-> `D24` (C73 to C15, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C123 to C2, scripts/check-placeholders.mjs:2)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C123 to C3, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C50 to C51, src/lib/repo-files.ts:4)
 - `DG6` -mentions-> `DG2` (C71 to C26, design/README.md:226)
 - `M6` -mentions-> `D27` (C54 to C52, CLAUDE.md:62)
@@ -115,8 +115,8 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D46 | Accented menu names for the text-… | A new companion dataset `datasets/cafe-menu-accents/` (v1, one CSV of… | SPEC.md:73 §7 |
 | D47 | Short lesson names in lists | An optional `short_title` (at most 24 characters) is the lesson's one… | SPEC.md:74 |
 | D48 | Where the advanced core's enginee… | The learner's own laptop first, GitHub Codespaces as the fallback (ow… | SPEC.md:75 |
-| D49 | Advanced core shape | 36 lessons in five parts of about four hours each, with one project t… | SPEC.md:76 §5 |
-| D50 | Choose your track | A page at `/choose-your-track/` after the core: a plain statement tha… | SPEC.md:77 |
+| D49 | Advanced core shape | 43 lessons in six parts of about four hours each, with one project th… | SPEC.md:76 §5 |
+| D50 | Choose your track | A page at `/choose-your-track/` after the core: what a track is, a li… | SPEC.md:77 §2 §4 |
 
 ## CONTRACT sections
 
@@ -135,7 +135,7 @@ term: id — file:line
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
 - slug: `S3.2` — SPEC.md:129
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:98
-- dataset: `R:issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi#1-the-10-most-useful-findings:10-the-vietnamese-lane-is-empty-and-our-dataset-holds-a-lesson-nobody-else-can-teach` — research/issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi.md:49
+- dataset: `R:issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy#7-planted-error-exercises-on-the-caf-dataset-recommendation` — research/issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy.md:117
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
 - consent: `src/components/project/Consent.astro` — src/components/project/Consent.astro:1
 - analytics: `R9` — CLAUDE.md:40
@@ -159,7 +159,7 @@ term: id — file:line
 - sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:12
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
 - katex: `pkg:katex` — package.json:51
-- math: `src/styles/math.css` — src/styles/math.css:1
+- math: `src/data/track-skills.ts#MATH` — src/data/track-skills.ts:126
 - mdx: `pkg:@astrojs/mdx` — package.json:36
 - auto-import: `pkg:astro-auto-import` — package.json:49
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1

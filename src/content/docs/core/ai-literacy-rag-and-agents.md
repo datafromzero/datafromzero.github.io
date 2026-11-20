@@ -3,13 +3,13 @@ id: core-ai-literacy-rag-and-agents
 title: 'RAG and agents: what they are and how to judge them'
 description: Explain retrieval-augmented generation and agents in plain terms, and judge such a product by correctness, citations and refusals.
 stage: core
-order: 360
+order: 430
 level: intermediate
-duration: 30
+duration: 25
 objectives:
   - Describe the retrieve, ground, answer flow of a RAG system
   - Tell a workflow from an agent
-  - List three failure modes of an AI answer system
+  - Say why grounding in retrieved documents reduces fabrication but does not remove it
   - Evaluate an answer for correctness, citation correctness and refusal behavior
   - Say when SQL or a plain prompt beats RAG
 prerequisites:
@@ -17,6 +17,7 @@ prerequisites:
   - core-trust-but-verify-ai-output
   - python-ai-assisted-code
   - python-apis-and-web-data
+  - core-what-stays-human
 reviewed: 2026-11-16
 sources:
   - title: Lewis et al., Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (arXiv)
@@ -25,12 +26,14 @@ sources:
     url: https://www.nist.gov/itl/ai-risk-management-framework
   - title: OWASP Top 10 for Large Language Model Applications
     url: https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - title: Magesh et al., Hallucination-free? Assessing the reliability of leading AI legal research tools (Journal of Empirical Legal Studies, 2025)
+    url: https://doi.org/10.1111/jels.12413
 status: draft
 ---
 
-TODO(owner): Part 5 of 5 ends here (SPEC D49): finish with the project step on cafe-sales, the project README and the final memo, then Choose your track (/choose-your-track/).
+TODO(owner): Part 6 of 6 ends here (SPEC D49): finish with the project step on cafe-sales: one AI-assisted analysis of a cafe question with its context pack, a verification log (accept, revise or reject for every AI output), the project README and the final memo; then Choose your track (/choose-your-track/).
 
-TODO(owner): Fold in data ethics: never paste personal data into a tool; who is responsible for a wrong answer. Then link to Choose your track (/choose-your-track/).
+TODO(owner): Never paste personal data into a tool. The core teaches judging AI output; building agents, RAG pipelines and evaluation harnesses belongs to the ML Engineer and Data Engineer tracks.
 
 ## Warm-up
 

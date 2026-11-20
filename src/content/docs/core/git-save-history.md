@@ -3,7 +3,7 @@ id: core-git-save-history
 title: 'Git: saving a history of your work'
 description: 'Track a project folder with Git: stage, commit with a clear message, read the history and undo a mistake.'
 stage: core
-order: 240
+order: 230
 level: beginner
 duration: 25
 objectives:

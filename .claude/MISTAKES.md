@@ -167,6 +167,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-19 — Generated notebooks used readable cell ids (`c000`), and `nbstripout --verify` failed because it renumbers ids to
   `0`, `1`, `2`. → **Write notebook cell ids as sequential strings from `0`; run `npm run check:notebooks` (needs `nbstripout`)
   before committing notebooks.**
+- 2026-11-20 — A stub-writing script broke three schema rules in one pass (an unquoted colon in a `description`, seven objectives, a
+  `short_title` of 25 characters) and an apostrophe ended a single-quoted TypeScript string. → **Frontmatter written by a script goes
+  through one quoting helper for every value; check the limits before writing (objectives 2 to 5, description at most 160, short
+  title at most 24) and run `npm run build` right after the script.**
 
 ## Datasets and generated files
 

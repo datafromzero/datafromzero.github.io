@@ -4,7 +4,7 @@ title: Your laptop setup and the terminal
 short_title: Laptop setup, terminal
 description: Install VS Code, Git and uv on your own laptop, prove the setup with a check script, and use the terminal for files, paths and running scripts.
 stage: core
-order: 230
+order: 220
 level: beginner
 duration: 40
 objectives:
@@ -30,7 +30,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Part 4 of 5, Engineering on your laptop (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 5.
+TODO(owner): Part 4 of 6, Engineering on your laptop (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 5.
 
 TODO(owner): Fallback path and the check_environment.py script are decided in SPEC D48; the lesson text and the template repository are written later.
 

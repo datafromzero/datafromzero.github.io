@@ -4,7 +4,7 @@ title: 'A feel for scale: what is cheap and what is slow'
 short_title: A feel for scale
 description: Measure why a dict or set lookup beats a list scan, and recognize the other common structures, without formal Big-O.
 stage: core
-order: 190
+order: 320
 level: intermediate
 duration: 25
 objectives:

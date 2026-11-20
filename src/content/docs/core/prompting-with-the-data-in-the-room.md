@@ -4,7 +4,7 @@ title: Prompting with the data in the room
 short_title: Prompting with the data
 description: Give an AI assistant the schema, the grain and sample rows, and see why the same question prompted bare gets a wrong answer.
 stage: core
-order: 340
+order: 370
 level: intermediate
 duration: 30
 objectives:
@@ -12,6 +12,7 @@ objectives:
   - State an output contract and ask for a plan before code
   - Judge a plan by its join keys, cardinality and grain
   - Never paste personal data into a prompt
+  - Keep the context pack as a standing file in the project and update it when the data changes
 prerequisites:
   - python-ai-assisted-code
   - core-grain-facts-and-dimensions
@@ -25,6 +26,8 @@ sources:
     url: https://platform.openai.com/docs/guides/prompt-engineering
   - title: 'DeepLearning.AI: ChatGPT Prompt Engineering for Developers'
     url: https://www.deeplearning.ai/short-courses/chatgpt-prompt-engineering-for-developers/
+  - title: 'MIT, The Missing Semester of Your CS Education (2026): agentic coding'
+    url: https://missing.csail.mit.edu/2026/agentic-coding/
 status: draft
 ---
 

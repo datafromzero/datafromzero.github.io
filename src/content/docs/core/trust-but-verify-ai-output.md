@@ -2,16 +2,17 @@
 id: core-trust-but-verify-ai-output
 title: 'Trust, but verify: checking AI output'
 short_title: Trust, but verify
-description: Run an eight-point checklist on AI-written data code and catch a fan-out join, a dropped null and a made-up function.
+description: 'Check AI-written data code: predict, count rows around joins and filters, reconcile a total, confirm every function, then accept, revise or reject.'
 stage: core
-order: 350
+order: 380
 level: intermediate
-duration: 30
+duration: 45
 objectives:
   - Predict the shape and a few values before running AI-written code
   - Check row counts and nulls before and after every filter and join
   - Reconcile one headline total a second way
   - Confirm every function the AI used exists in the library documentation
+  - 'End every AI task with an explicit decision: accept, revise or reject'
 prerequisites:
   - core-prompting-with-the-data-in-the-room
   - core-testing-with-pytest
@@ -25,6 +26,8 @@ sources:
     url: https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/
   - title: 'NIST AI 600-1: Generative AI Profile'
     url: https://www.nist.gov/itl/ai-risk-management-framework
+  - title: OECD and European Commission, AI Literacy Framework (2025 draft, 2026)
+    url: https://ailiteracyframework.org/
 status: draft
 ---
 

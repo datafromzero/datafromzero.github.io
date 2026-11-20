@@ -4,7 +4,7 @@ title: 'When it breaks: errors, retries and debugging'
 short_title: Errors and debugging
 description: Read a traceback, catch specific errors, retry a flaky step, and find a bug with the editor debugger.
 stage: core
-order: 270
+order: 260
 level: intermediate
 duration: 30
 objectives:

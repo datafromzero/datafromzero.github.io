@@ -4,7 +4,7 @@ title: 'Data beyond tables: nested JSON, events and formats'
 short_title: Data beyond tables
 description: Read nested JSON and event data, choose between the two format pairs, and flatten, explode or normalize it back into tables.
 stage: core
-order: 180
+order: 310
 level: intermediate
 duration: 30
 objectives:
