@@ -7,6 +7,7 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Python stage complete: lessons 24 to 27 published (owner approval, 2026-11-20): your own Python setup (environments, `python -m pip` and `%pip`, pinned requirements), the capstone *Cafe quarterly pack* (Q2 report with `concat`, an `assert` against a second route, an honest chart and a written note), from notebook to a runnable script, and using an AI assistant for Python with checks. All 27 Python lessons are now live. Owner checks moved to issue #83.
 - Python stage, fifth and last batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the four lessons stay drafts and
   are not on the site): *Your own Python setup: environments and pip* (an environment as a folder with its own Python, `python -m pip` and `%pip` installing into one
   named Python, a `requirements.txt` with pins, and printing the versions a notebook runs on; everything runs from the notebook, the terminal commands are text only, and the
