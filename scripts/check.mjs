@@ -17,11 +17,16 @@ const steps = [
 	['fixture tests (valid builds, invalid fails)', 'npm', ['run', '--silent', 'test:fixtures']],
 	['notebooks have no outputs (nbstripout)', 'npm', ['run', '--silent', 'check:notebooks']],
 	['Python cheatsheet patterns run on the cafe-sales data (skipped without pandas)', 'npm', ['run', '--silent', 'check:cheatsheet-python']],
+	['app-events dataset matches its generator and its planted quirks (skipped without Python 3)', 'npm', ['run', '--silent', 'check:app-events'], 'python3'],
 ];
 
 const failed = [];
-for (const [name, cmd, args] of steps) {
+for (const [name, cmd, args, needs] of steps) {
 	console.log(`\n=== ${name} ===`);
+	if (needs && spawnSync(needs, ['--version']).error) {
+		console.log(`skipped: ${needs} is not installed`);
+		continue;
+	}
 	const r = spawnSync(cmd, args, { stdio: 'inherit' });
 	if (r.status !== 0) failed.push(name);
 }

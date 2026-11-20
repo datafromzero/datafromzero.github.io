@@ -77,6 +77,7 @@ WEEKDAY_FACTOR = [1.00, 1.05, 1.05, 1.00, 0.90, 0.75, 0.80]  # Monday first
 MONTH_START_FACTOR = 1.3  # days 1 to 3 of a month
 CAMPAIGN = (date(2026, 4, 13), date(2026, 6, 7))  # a paid-social campaign: extra signups, all from paid_social
 CAMPAIGN_EXTRA_PER_DAY = 55
+CLEAN_BASELINE_FROM = date(2026, 3, 9)  # the first signup day after paywall_v2 ended: from here to April 12 nothing but welcome_tips (null) runs
 
 ACTIVE_DAYS = 1.8  # mean number of later days a person opens the app, before multiplying by their activity
 EXPENSES_PER_VISIT = 1.0
@@ -574,6 +575,7 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
     outage_ids = {e[0] for e in events if OUTAGE[0] <= e[2] < OUTAGE[1]}
     f["outage_events"] = len(outage_ids)
     f["late_events"] = sum(1 for e, s in zip(events, lag) if s >= 3600 and e[0] not in outage_ids)
+    f["late_filter_all"] = sum(1 for s in lag if s >= 3600)  # the plain filter, which also catches outage events
     f["future_dated_events"] = sum(1 for s in lag if s < 0)
     keys = Counter((e[1], e[2], e[3], e[4]) for e in events)
     f["duplicate_events_extra"] = sum(n - 1 for n in keys.values())
@@ -635,7 +637,8 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
 
     # the mix shift
     periods = {
-        "before": (FIRST_DAY, CAMPAIGN[0] - timedelta(days=1)),
+        "before": (CLEAN_BASELINE_FROM, CAMPAIGN[0] - timedelta(days=1)),
+        "before_all": (FIRST_DAY, CAMPAIGN[0] - timedelta(days=1)),  # also holds the paywall_v2 variant, which lifts it
         "during": CAMPAIGN,
         "after": (CAMPAIGN[1] + timedelta(days=1), LAST_DAY - timedelta(days=CONVERSION_DAYS)),
     }
@@ -652,6 +655,10 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
             "by_channel": {c: sum(v) / len(v) for c, v in sorted(by.items())},
             "by_channel_counts": {c: (sum(v), len(v)) for c, v in sorted(by.items())},
         }
+    paywall_variant = {r[0] for r in assignments if r[1] == "paywall_v2" and r[2] == "variant"}
+    without_variant = [conv14[r[0]] for r in matured if periods["before_all"][0] <= r[1] <= periods["before_all"][1]
+                       and r[0] not in paywall_variant]
+    f["mix"]["before_all_without_paywall_variant"] = sum(without_variant) / len(without_variant)
     during = f["mix"]["during"]
     f["mix"]["during_with_before_rates"] = sum(
         size / during["n"] * f["mix"]["before"]["by_channel"][c] for c, (_, size) in during["by_channel_counts"].items()
@@ -667,6 +674,10 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
     }
     f["platform_by_channel"] = {
         c: {p: sum(v) / len(v) for (cc, p), v in sorted(cells.items()) if cc == c} for c in CHANNELS
+    }
+    f["ios_vs_web_p"] = {
+        c: z_test(sum(cells[(c, "web")]), len(cells[(c, "web")]), sum(cells[(c, "ios")]), len(cells[(c, "ios")]))[1]
+        for c in CHANNELS if (c, "web") in cells
     }
     f["platform_by_channel_n"] = {c: {p: len(v) for (cc, p), v in sorted(cells.items()) if cc == c} for c in CHANNELS}
 
@@ -695,11 +706,12 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
                            low_conversion=sum(low) / len(low))
     ios = [float(eng14[r[0]]) for r in matured if signup_platform[r[0]] == "ios"]
     android = [float(eng14[r[0]]) for r in matured if signup_platform[r[0]] == "android"]
+    web = [float(eng14[r[0]]) for r in matured if signup_platform[r[0]] == "web"]
     mean = lambda v: sum(v) / len(v)
     var = lambda v: sum((x - mean(v)) ** 2 for x in v) / (len(v) - 1)
     t = (mean(ios) - mean(android)) / math.sqrt(var(ios) / len(ios) + var(android) / len(android))
     pooled_sd = math.sqrt((var(ios) * (len(ios) - 1) + var(android) * (len(android) - 1)) / (len(ios) + len(android) - 2))
-    f["ios_vs_android_activity"] = {"ios": mean(ios), "android": mean(android), "z": t,
+    f["ios_vs_android_activity"] = {"ios": mean(ios), "android": mean(android), "web": mean(web), "z": t,
                                     "p": math.erfc(abs(t) / math.sqrt(2)), "d": (mean(ios) - mean(android)) / pooled_sd}
 
     # a US holiday: visits of people in north_america on Memorial Day against the Mondays around it
@@ -881,7 +893,12 @@ def verify(tables: dict[str, Table], truth: dict, f: dict, pages: dict[str, dict
 
     # the mix shift, the reversal, the confounder
     mix = f["mix"]
+    check(EXPERIMENTS["paywall_v2"][1] < CLEAN_BASELINE_FROM, "the clean baseline window overlaps paywall_v2")
     check(mix["before"]["conversion"] - mix["during"]["conversion"] > 0.02, "the mix shift does not lower conversion")
+    check(mix["before_all"]["conversion"] - mix["before_all_without_paywall_variant"] > 0.004,
+          "the paywall_v2 variant does not lift the January to April baseline")
+    check(abs(mix["during_with_before_rates"] - mix["during"]["conversion"]) < 0.01,
+          "the mix does not explain the fall from the clean baseline")
     check(mix["during"]["paid_social_share"] > 3 * mix["before"]["paid_social_share"], "the campaign adds too few signups")
     check(all(abs(mix["during"]["by_channel"][c] - mix["before"]["by_channel"][c]) < 0.03 for c in CHANNELS),
           "a channel's own conversion moved during the campaign")
@@ -893,6 +910,10 @@ def verify(tables: dict[str, Table], truth: dict, f: dict, pages: dict[str, dict
     eng = f["engagement"]
     check(eng["r_overall"] > 0.05 and all(abs(r) < 0.05 for r in eng["r_within_channel"].values()),
           "engagement is not correlated with conversion overall and flat inside channels")
+    significant = [c for c, p in f["ios_vs_web_p"].items() if p < 0.05]
+    check(significant == ["referral"], "ios against web inside a channel is significant somewhere other than referral only")
+    act = f["ios_vs_android_activity"]
+    check(act["web"] > act["ios"] > act["android"], "mean activity is not web, then ios, then android")
     check(f["ios_vs_android_activity"]["p"] < 0.001 and f["ios_vs_android_activity"]["d"] < 0.2,
           "ios against android activity is not tiny but significant")
 
@@ -939,8 +960,9 @@ def readme_claims(f: dict) -> list[str]:
     claims += [f"p = {p:.3f}" for _, p in e2["segments_significant"]["hits"]]
     claims += [f"{e3['srm_p']:.4f}", n(f["crashed_users"]), pct(e3["expected_rate"]["control"]), pct(e3["expected_rate"]["variant"])]
     mix = f["mix"]
-    periods = ("before", "during", "after")
+    periods = ("before", "before_all", "during", "after")
     claims += [pct(mix[k]["conversion"]) for k in periods] + [pct(mix[k]["paid_social_share"]) for k in periods]
+    claims += [pct(mix["before_all_without_paywall_variant"]), n(mix["before_all"]["n"])]
     claims += [pct(v) for c in CHANNELS for v in (mix["before"]["by_channel"][c], mix["during"]["by_channel"][c])]
     claims += [pct(mix["during_with_before_rates"]), n(mix["before"]["n"]), n(mix["during"]["n"]), n(mix["after"]["n"])]
     claims += [n(v) for v in f["users_by_channel"].values()] + [n(f["plan_at_signup"]["plus"])]
@@ -949,7 +971,10 @@ def readme_claims(f: dict) -> list[str]:
     eng = f["engagement"]
     claims += [f"{eng['r_overall']:.2f}", pct(eng["high_conversion"]), pct(eng["low_conversion"]), pct(eng["high_share"])]
     act = f["ios_vs_android_activity"]
-    claims += [f"{act['ios']:.2f}", f"{act['android']:.2f}", f"{act['d']:.2f}"]
+    claims += [f"{act['ios']:.2f}", f"{act['android']:.2f}", f"{act['web']:.2f}", f"{act['d']:.2f}"]
+    claims += [n(f["late_filter_all"]), n(f["late_filter_all"] - f["late_events"])]
+    claims += [f"{p:.3f}" for p in f["ios_vs_web_p"].values()]
+    claims += [str(SEED)] + [str(EXPERIMENTS[name][2]) for name in EXPERIMENTS]
     ended = f["subscriptions_ended"] / f["subscriptions_distinct"]
     claims += [pct(f["conversion_overall"]), pct(1 - f["conversion_overall"]), pct(ended), pct(1 - ended)]
     claims += [n(v) for v in f["june_active_people"].values()]
