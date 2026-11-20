@@ -93,15 +93,17 @@ TOUCH_RATE = 0.03  # subscriptions with a nightly re-sync row that changed nothi
 DUPLICATE_ROW_RATE = 0.025  # subscription rows written twice by a retried load
 
 EXPERIMENTS = {
-    # name: (first signup day, last signup day, salt of the fair-coin labels). The salts of welcome_tips and signup_flow_v2
-    # were picked from a few hundred and a few dozen candidates, so that the labels tell the lesson story (the interim
-    # p-value of welcome_tips dips under 0.05 in week two and ends near 0.8; the broken test of signup_flow_v2 looks like a win).
-    # The truth does not depend on the salt.
-    "paywall_v2": (date(2026, 1, 12), date(2026, 3, 8), 1),
+    # name: (first signup day, last signup day, salt of the fair-coin labels). The salts were picked from a few dozen to a
+    # few hundred candidates, so that the labels tell the lesson story (paywall_v2 shows a clearly larger lift in week one;
+    # the interim p-value of welcome_tips dips under 0.05 in week two and ends near 0.8; the broken test of signup_flow_v2
+    # looks like a win). The truth does not depend on the salt.
+    "paywall_v2": (date(2026, 1, 12), date(2026, 3, 8), 17),
     "welcome_tips": (date(2026, 3, 16), date(2026, 4, 26), 350),
     "signup_flow_v2": (date(2026, 5, 4), date(2026, 6, 7), 3),
 }
-PAYWALL_LIFT = 1.20  # paywall_v2 multiplies the chance of buying after seeing the paywall
+PAYWALL_LIFT = 1.20  # paywall_v2 multiplies the chance of buying after seeing the paywall (the steady lift)
+NOVELTY_EXTRA = 0.50  # a novelty effect: people who sign up on day 0 of paywall_v2 get 0.50 more on top of the steady lift,
+NOVELTY_DECAY_DAYS = 6.0  # and the extra decays as exp(-day / 6): about 1.52 on average in the first week, 1.21 by day 28
 PAYWALL_FIRST_MONTH_CANCEL = 1.30  # and its buyers cancel a little more at the first renewal
 CONVERSION_DAYS = 14
 
@@ -110,6 +112,8 @@ DUPLICATE_EVENT_RATE = 0.006
 FUTURE_DATED_EVENTS = 30  # a phone clock that runs 1 to 5 hours ahead
 OUTAGE = (datetime(2026, 3, 17, 14), datetime(2026, 3, 17, 20))  # the collector was down; events arrived from 20:00 on
 RENAME_DAY = date(2026, 5, 18)  # the iOS app renames view_paywall to paywall_viewed
+HOLIDAY = date(2026, 5, 25)  # Memorial Day, a US public holiday (a Monday)
+HOLIDAY_SKIP = 0.5  # on that day half of the visits of north_america people do not happen
 DELETED_USERS = 40
 NO_EVENT_USERS = 10
 
@@ -232,6 +236,12 @@ VIEW_SAME_DAY = 0.4
 VIEW_MEAN_DAYS = 3.0
 
 
+def paywall_lift(day: int) -> float:
+    """The multiplier on the chance of buying after a view for a paywall_v2 variant user who signed up `day` days after the
+    experiment started: the steady 1.20 plus a novelty extra that fades."""
+    return PAYWALL_LIFT + NOVELTY_EXTRA * math.exp(-day / NOVELTY_DECAY_DAYS)
+
+
 def simulate_user(u: User, arm: tuple[str, str] | None) -> Sim:
     rng = random.Random(f"{SEED}:user:{u.user_id}")
     ch = CHANNELS[u.channel]
@@ -250,7 +260,7 @@ def simulate_user(u: User, arm: tuple[str, str] | None) -> Sim:
 
     buy = ch["buy"] * PLATFORM_BUY[u.platform] * (OLD_ANDROID_BUY if u.old_android else 1.0)
     if arm == ("paywall_v2", "variant"):
-        buy *= PAYWALL_LIFT
+        buy *= paywall_lift((u.signup_date - EXPERIMENTS["paywall_v2"][0]).days)
     buy = min(0.9, buy)
     in14 = (1 - LATE_VIEWER_SHARE) * (1 - (1 - VIEW_SAME_DAY) * math.exp(-CONVERSION_DAYS / VIEW_MEAN_DAYS))
     expected14 = ch["plus_signup"] + (1 - ch["plus_signup"]) * ch["view"] * in14 * buy
@@ -291,6 +301,8 @@ def simulate_user(u: User, arm: tuple[str, str] | None) -> Sim:
         k = 1 + int(rng.expovariate(1 / 9) if rng.random() < 0.75 else rng.expovariate(1 / 45))
         day = u.signup_date + timedelta(days=k)
         if day > LAST_DAY or (day.weekday() >= 5 and rng.random() < 0.25):
+            continue
+        if day == HOLIDAY and u.region == "north_america" and rng.random() < HOLIDAY_SKIP:
             continue
         visit = at(day, u.region, rng)
         add(visit, "session_start", device())
@@ -552,6 +564,7 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
     f: dict = {"rows": {name: len(rows) for name, (_, rows) in tables.items()}}
     user_ids = {r[0] for r in users}
     channel = {r[0]: r[2] for r in users}
+    region = {r[0]: r[3] for r in users}
     f["users_by_channel"] = dict(Counter(channel.values()))
     f["plan_at_signup"] = dict(Counter(r[4] for r in users))
 
@@ -689,9 +702,22 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
     f["ios_vs_android_activity"] = {"ios": mean(ios), "android": mean(android), "z": t,
                                     "p": math.erfc(abs(t) / math.sqrt(2)), "d": (mean(ios) - mean(android)) / pooled_sd}
 
+    # a US holiday: visits of people in north_america on Memorial Day against the Mondays around it
+    mondays = [HOLIDAY + timedelta(days=k) for k in (-14, -7, 7, 14)]
+    visits = {"holiday": Counter(), "other_mondays": Counter()}
+    for e in events:
+        if e[3] == "session_start" and e[1] in region:
+            group = "holiday" if e[2].date() == HOLIDAY else "other_mondays" if e[2].date() in mondays else None
+            if group:
+                visits[group][region[e[1]] == "north_america"] += 1
+    f["holiday"] = {
+        "north_america": (visits["holiday"][True], visits["other_mondays"][True] / len(mondays)),
+        "elsewhere": (visits["holiday"][False], visits["other_mondays"][False] / len(mondays)),
+    }
+
     # experiments
     f["experiments"] = {}
-    region = {r[0]: r[3] for r in users}
+    f["lift_curve"] = {day: paywall_lift(day) for day in (0, 3, 6, 7, 14, 28, 55)}
     first_sub_of = {}
     for sid in sorted(latest):
         first_sub_of.setdefault(latest[sid][1], latest[sid])
@@ -717,6 +743,15 @@ def measure(tables: dict[str, Table], truth: dict, pages: dict[str, dict]) -> di
                     early[r[2]].append(s[4] is not None and (s[4] - s[3]).days <= 30)
             d["early_cancel"] = {a: (sum(v), len(v)) for a, v in early.items()}
             d["early_cancel_p"] = z_test(*d["early_cancel"]["control"], *d["early_cancel"]["variant"])[1]
+            d["novelty"] = {}
+            for label, in_group in (("first_week", lambda r: (r[3].date() - first).days < 7),
+                                    ("later_weeks", lambda r: (r[3].date() - first).days >= 7)):
+                g = {a: [r for r in arms[a] if in_group(r)] for a in arms}
+                gx = {a: sum(r[4] for r in v) for a, v in g.items()}
+                gn = {a: len(v) for a, v in g.items()}
+                gz, gp = z_test(gx["control"], gn["control"], gx["variant"], gn["variant"])
+                d["novelty"][label] = {"n": gn, "rate": {a: gx[a] / gn[a] for a in gn}, "p": gp,
+                                       "expected": {a: sum(truth["expected14"][r[0]] for r in g[a]) / gn[a] for a in gn}}
         if name == "welcome_tips":
             d["path"] = peeking_path(rows)
             d["segments_significant"] = significant_segments(rows, channel, signup_platform, region)
@@ -832,6 +867,13 @@ def verify(tables: dict[str, Table], truth: dict, f: dict, pages: dict[str, dict
     e1, e2, e3 = (f["experiments"][n] for n in EXPERIMENTS)
     check(e1["p"] < 0.05 and e1["rate"]["variant"] > e1["rate"]["control"], "paywall_v2 does not show its lift")
     check(e1["srm_p"] > 0.05 and e2["srm_p"] > 0.05, "a clean experiment fails the sample-ratio check")
+    week1, later = e1["novelty"]["first_week"], e1["novelty"]["later_weeks"]
+    week1_diff = week1["rate"]["variant"] - week1["rate"]["control"]
+    later_diff = later["rate"]["variant"] - later["rate"]["control"]
+    check(later["p"] < 0.05 and week1_diff > 2 * later_diff > 0, "paywall_v2 does not show a larger lift in week one")
+    north_america, elsewhere = f["holiday"]["north_america"], f["holiday"]["elsewhere"]
+    check(north_america[0] < 0.7 * north_america[1] and elsewhere[0] > 0.75 * elsewhere[1],
+          "Memorial Day does not dip for north_america only")
     check(e2["path"]["first_look_below_0_05"] is not None and 10 <= e2["path"]["day_number"] <= 30 and e2["path"]["final_p"] > 0.5,
           "welcome_tips does not show an early dip below 0.05 that ends high")
     check(e3["srm_p"] < 0.001, "signup_flow_v2 does not fail the sample-ratio check")
@@ -879,6 +921,14 @@ def readme_claims(f: dict) -> list[str]:
     for e in (e1, e2, e3):
         claims += [n(e["n"]["control"]), n(e["n"]["variant"]), pct(e["rate"]["control"]), pct(e["rate"]["variant"]),
                    f"{e['p']:.3f}"]
+    novelty = e1["novelty"]
+    for part in novelty.values():
+        claims += [n(part["n"]["control"]), n(part["n"]["variant"]), pct(part["rate"]["control"]), pct(part["rate"]["variant"]),
+                   f"{part['p']:.3f}", pct(part["expected"]["control"]), pct(part["expected"]["variant"])]
+    claims += [f"{v:.2f}" for v in f["lift_curve"].values()]
+    holiday = f["holiday"]
+    claims += [n(holiday["north_america"][0]), f"{holiday['north_america'][1]:.1f}", n(holiday["elsewhere"][0]),
+               f"{holiday['elsewhere'][1]:.1f}"]
     claims += [pct(e1["expected_rate"]["control"]), pct(e1["expected_rate"]["variant"]),
                f"{e1['early_cancel']['control'][0]} of {e1['early_cancel']['control'][1]}",
                f"{e1['early_cancel']['variant'][0]} of {e1['early_cancel']['variant'][1]}", f"{e1['early_cancel_p']:.3f}"]
@@ -996,6 +1046,23 @@ def stale_pages(files: dict[str, str]) -> list[str]:
     return sorted(str(p.relative_to(OUT)) for p in found if str(p.relative_to(OUT)) not in files)
 
 
+def docs_problems(tables: dict[str, Table], facts: dict) -> list[str]:
+    """schema.yaml and README.md must quote the row counts and measured figures of the data."""
+    problems = []
+    schema, readme = DATASET / "schema.yaml", DATASET / "README.md"
+    if not schema.is_file() or not readme.is_file():
+        return ["schema.yaml or README.md is missing"]
+    declared = {m[1]: int(m[2]) for m in re.finditer(r"- name: (\w+)\n    file: \S+\n    rows: (\d+)", schema.read_text())}
+    declared |= {f"api {m[1]}": int(m[2]) for m in re.finditer(r"- \{ name: (\w+), first_page: \S+, rows: (\d+)", schema.read_text())}
+    actual = {name: len(rows) for name, (_, rows) in tables.items()}
+    actual |= {f"api {name}": api["rows"] for name, api in facts["api"].items()}
+    problems += [f"schema.yaml says {declared.get(k)} rows for {k}, the data has {v}" for k, v in actual.items() if declared.get(k) != v]
+    stale = sorted({c for c in readme_claims(facts) if c not in readme.read_text()})
+    if stale:
+        problems.append(f"README.md does not quote these measured figures: {', '.join(stale)}")
+    return problems
+
+
 def main() -> None:
     tables, truth = build()
     pages = api_pages(tables)
@@ -1004,20 +1071,6 @@ def main() -> None:
     if "--facts" in sys.argv:
         print(json.dumps(facts, indent=2, default=str))
         return
-    schema = DATASET / "schema.yaml"
-    if schema.is_file():
-        declared = {m[1]: int(m[2]) for m in re.finditer(r"- name: (\w+)\n    file: \S+\n    rows: (\d+)", schema.read_text())}
-        wrong = [f"{name} has {len(rows)} rows, schema.yaml says {declared.get(name)}"
-                 for name, (_, rows) in tables.items() if declared.get(name) != len(rows)]
-        if wrong:
-            raise SystemExit("schema.yaml row counts differ: " + "; ".join(wrong))
-    readme = DATASET / "README.md"
-    if readme.is_file():
-        stale = sorted({c for c in readme_claims(facts) if c not in readme.read_text()})
-        if stale:
-            raise SystemExit(f"README.md does not quote these measured figures: {', '.join(stale)}")
-    elif "--check" in sys.argv:
-        raise SystemExit("README.md is missing")
     files = {f"{name}.csv": to_csv(h, rows) for name, (h, rows) in tables.items()}
     files[f"{DATASET.name}.sql"] = to_sql(tables)
     for path, page in pages.items():
@@ -1027,6 +1080,9 @@ def main() -> None:
         bad += stale_pages(files)
         if bad:
             raise SystemExit(f"app-events v1 differs from the generator: {', '.join(bad)}")
+        problems = docs_problems(tables, facts)
+        if problems:
+            raise SystemExit("\n".join(problems))
         print("app-events v1 matches the generator.")
         return
     for stale in stale_pages(files):
@@ -1038,6 +1094,9 @@ def main() -> None:
     to_xlsx(tables, OUT / "app-events.xlsx")
     for name, (_, rows) in tables.items():
         print(f"{name}: {len(rows)} rows")
+    problems = docs_problems(tables, facts)
+    if problems:
+        raise SystemExit("\n".join(problems))
 
 
 if __name__ == "__main__":
