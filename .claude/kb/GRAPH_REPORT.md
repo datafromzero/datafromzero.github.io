@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1318 nodes, 1390 edges, 145 communities (641 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 203, content-type 5, decision 50, dependency 25, design-section 15, doc 36, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 447, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 235, template 2, token 12.
-- Edges: defines 235, imports 50, mentions 782, overrides 6, references 27, runs 11, specified-by 4, uses 239, uses-token 31, validated-by 5.
+- 1324 nodes, 1396 edges, 148 communities (641 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 203, content-type 5, decision 50, dependency 25, design-section 15, doc 36, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 447, rule 10, script 119, skill 1, spec-section 25, starlight-component 6, style 7, symbol 238, template 2, token 12.
+- Edges: defines 238, imports 50, mentions 785, overrides 6, references 27, runs 11, specified-by 4, uses 239, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,7 +15,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `src/components/content/Solution.astro` | component | 89 | src/components/content/Solution.astro:1 |
 | 2 | `src/components/content/Exercise.astro` | component | 88 | src/components/content/Exercise.astro:1 |
-| 3 | `D41` Lesson step-by-step figures | decision | 50 | SPEC.md:68 |
+| 3 | `D41` Lesson step-by-step figures | decision | 53 | SPEC.md:68 |
 | 4 | `.claude/HANDOFF.md` | doc | 47 | .claude/HANDOFF.md:1 |
 | 5 | `astro.config.mjs` | config | 41 | astro.config.mjs:1 |
 | 6 | `src/components/content/RunSQL.astro` | component | 38 | src/components/content/RunSQL.astro:1 |
@@ -51,14 +51,14 @@ Label propagation; each community is named by its top-degree node.
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
 - `ctype:career` -specified-by-> `S5.4` (C80 to C77, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C98 to C8, scripts/animations/concept-join.mjs:1)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C99 to C8, scripts/animations/concept-join.mjs:1)
 - `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C33 to C69, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C132 to C129, src/layouts/HomeLayout.astro:39)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C135 to C132, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C15, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C41, design/README.md:181)
 - `M7` -mentions-> `D34` (C51 to C24, CLAUDE.md:65)
 - `M8` -mentions-> `D24` (C73 to C15, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C123 to C2, scripts/check-placeholders.mjs:2)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C126 to C2, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C50 to C51, src/lib/repo-files.ts:4)
 - `DG6` -mentions-> `DG2` (C71 to C26, design/README.md:226)
 - `M6` -mentions-> `D27` (C54 to C52, CLAUDE.md:62)
