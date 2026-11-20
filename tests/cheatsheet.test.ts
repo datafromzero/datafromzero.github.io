@@ -99,10 +99,10 @@ describe('Python cheatsheet', () => {
 		const cited = new Set(entries.map((e) => e.lesson));
 		assert.deepEqual([...cited].sort(), [...python.keys()].sort());
 	});
-	test('follows the data flow in eight parts that cover P1 to P27 once each', () => {
+	test('follows the data flow in seven parts that cover P1 to P27 once each', () => {
 		assert.deepEqual(
 			pythonCheatsheet.parts.map((p) => p.id),
-			['basics', 'load', 'shape', 'clean', 'reshape', 'charts', 'outside', 'ship'],
+			['basics', 'load', 'shape', 'clean', 'reshape', 'charts', 'ship'],
 		);
 		const ranges = pythonCheatsheet.parts.map((p) => (p.codes.includes('–') ? codeRange(p.codes) : [Number(p.codes.slice(1)), Number(p.codes.slice(1))]));
 		assert.equal(ranges[0][0], 1);

@@ -42,7 +42,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 - **Excel cheatsheet (D44, 2026-11-19):** `/excel/cheatsheet/` "Excel in a nutshell", data first (six parts in data-flow order, 24 cards, 3 drawings), from
   `src/data/cheatsheets/excel.ts` through the same component. Each card has a `next` (linked SQL lessons, pandas method names, no links to draft pages);
   `tests/cheatsheet.test.ts` checks that every formula is the lesson's own text and every SQL twin is published. No lesson states a duplicate-key trap for
-  lookups, so none is on a card. Python gets its page the same way once its lessons are published.
+  lookups, so none is on a card.
+- **Python cheatsheet (D44, 2026-11-20):** `/python/cheatsheet/` "Python in a nutshell", 27 cards (one per lesson P1–P27) in seven data-flow parts, 3 drawings (`split`, `merge`, `wide`), from
+  `src/data/cheatsheets/python.ts` through the same component. Cards may have a `twin` (linked SQL and Excel lessons); `tests/cheatsheet.test.ts` checks every lesson is cited once and every twin is
+  published. `npm run check:cheatsheet-python` runs every pattern on the cafe-sales data (needs pandas, numpy, openpyxl, matplotlib, seaborn; skips with a message without them; `$` lines are only
+  checked for existing). Python lessons now show the "Sum it up" footer link.
 
 - **Cheatsheet anchors and footer links (D44, 2026-11-19):** each card's id is its lesson code in lowercase (`#s8`; first card when a lesson has
   several); `LessonFooter.astro` shows "Sum it up: this lesson in the SQL cheatsheet →" from `cheatsheetLink` (`src/data/cheatsheets/index.ts`).

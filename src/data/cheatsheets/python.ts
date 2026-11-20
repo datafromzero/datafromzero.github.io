@@ -1,6 +1,6 @@
 /**
  * "Python in a nutshell" (SPEC D44, `/python/cheatsheet/`): one printable page for the Python stage. The parts follow the flow
- * of the data: Python basics, load and look, select, derive, group and merge, clean, reshape, charts, outside data, ship it.
+ * of the data: Python basics, load and look, select, derive, group and merge, clean, reshape, charts and outside data, ship it.
  * Every card is distilled from a published lesson in `src/content/docs/python/` (its big idea, its Common trap, its Remember
  * list), uses that lesson's cafe-sales tables and names (`orders`, `order_items`, `products`, `customers`, `stores`), and links
  * back to it. Nothing is added that a lesson does not teach.
@@ -81,7 +81,8 @@ prices[0:2]  # two items`,
 				},
 				{
 					lesson: 'dicts-and-sets',
-					code: `store_name_of = {1: "Old Town", 2: "Campus", 3: "Harbor"}
+					code: `store_name_of = {1: "Old Town",
+    2: "Campus", 3: "Harbor"}
 store_name_of.get(7, None)
 payments = {"card": 421, "cash": 91}
 for method, count in payments.items():
@@ -92,7 +93,8 @@ len(set(["card", "cash", "card"]))`,
 				},
 				{
 					lesson: 'functions-and-modules',
-					code: `def line_amount(quantity, unit_price, discount=0.0):
+					code: `def line_amount(quantity, unit_price,
+        discount=0.0):
     return quantity * unit_price - discount
 line_amount(2, 5.0, discount=0.5)`,
 					does: 'A function is a named recipe: the values you give it go in and one value comes back with return; a parameter with a default may be left out.',
@@ -170,8 +172,8 @@ work.loc[mask, "payment_method"] = "card"`,
 					lesson: 'pandas-derived-columns',
 					code: `price_of = dict(zip(products["product_id"],
     products["unit_price_usd"]))
-lines = order_items.assign(
-    price=order_items["product_id"].map(price_of))
+price = order_items["product_id"].map(price_of)
+lines = order_items.assign(price=price)
 lines = lines.assign(amount=lines["quantity"]
     * lines["price"] - lines["discount_usd"])
 lines["amount"].sum()`,
@@ -200,7 +202,7 @@ by_product.sort_values("sales", ascending=False)`,
     validate="many_to_one", indicator=True)
 with_price["_merge"].value_counts()
 len(with_price) == len(order_items)`,
-					does: 'A merge pairs the rows of two tables that share a key, and validate says in advance how many partners a key may have; count _merge and the rows afterwards.',
+					does: 'A merge pairs the rows of two tables that share a key, and validate says in advance how many partners a key may have.',
 					trap: 'A merge does not complain about a repeated key unless validate promises that it is unique, and the extra rows inflate every total.',
 					twin: { sql: [{ text: 'JOIN', lesson: 'inner-join' }, { text: 'LEFT JOIN', lesson: 'left-join-anti-join' }], excel: [{ text: 'XLOOKUP', lesson: 'xlookup' }] },
 				},
@@ -219,7 +221,7 @@ kept = orders.dropna(subset=["customer_id"])
 len(orders), len(kept)
 pd.read_csv(path, dtype={"customer_id": "Int64"})
 orders.drop_duplicates(subset=["order_id"])`,
-					does: 'A gap can be dropped, filled or kept, and each choice changes what the data says, so choose on purpose and count what changed; == cannot find a missing value.',
+					does: 'A gap can be dropped, filled or kept, and each choice changes what the data says: choose on purpose and count what changed.',
 					trap: 'A gap turns a column of whole numbers into decimals, and ids come out as 15.0.',
 					twin: { sql: [{ text: 'IS NULL, COALESCE', lesson: 'null-handling' }], excel: [{ text: 'a cleaning workflow', lesson: 'cleaning-workflow' }] },
 				},
@@ -233,7 +235,7 @@ q1 = orders[(orders["when"] >= "2026-01-01")
 monthly = (orders.set_index("when")
     .resample("MS")["order_id"].size())
 monthly - monthly.shift(1)`,
-					does: 'A date column is text until to_datetime reads it with a format you name; then you can cut it into parts, filter a range, group by month and compare with the month before.',
+					does: 'A date column is text until to_datetime reads it with a format you name; then cut it into parts, filter a range and group by month.',
 					trap: 'A range that ends on a date written alone leaves out the orders of that day after midnight; end it with < the next day.',
 					twin: { sql: [{ text: 'dates and time', lesson: 'dates-and-time' }], excel: [{ text: 'date functions', lesson: 'date-functions' }] },
 				},
@@ -271,16 +273,16 @@ sales.pivot_table(index="store_id",
 				{ figure: 'wide', lesson: 'pandas-reshape-wide-long' },
 				{
 					lesson: 'pandas-transform-rank-rolling',
-					code: `by_store = store_month.groupby("store_id")["amount"]
-store_month["store_total"] = by_store.transform("sum")
-store_month["share"] = (store_month["amount"]
-    / store_month["store_total"])
+					code: `by_store = (store_month
+    .groupby("store_id")["amount"])
+store_month["store_total"] = (
+    by_store.transform("sum"))
 store_month["prev"] = by_store.shift(1)
 per_customer["place"] = (per_customer
     .groupby("store_id")["orders"]
     .rank(method="min", ascending=False))
 by_store.rolling(3, min_periods=1).mean()`,
-					does: 'transform, rank, shift and rolling keep every row and write the group\'s result beside it, where sum() would shrink the table to one row for each group.',
+					does: 'transform, rank, shift and rolling keep every row and write the group\'s result beside it.',
 					trap: 'shift and rolling without a groupby slide across the borders between groups, so a group\'s first rows borrow from the group above.',
 					twin: { sql: [{ text: 'OVER', lesson: 'window-functions' }, { text: 'RANK', lesson: 'rank-top-n' }, { text: 'LAG', lesson: 'lag-lead-moving-windows' }] },
 				},
@@ -288,8 +290,8 @@ by_store.rolling(3, min_periods=1).mean()`,
 		},
 		{
 			id: 'charts',
-			title: 'Show it: charts',
-			codes: 'P21–P22',
+			title: 'Show it: charts and outside data',
+			codes: 'P21–P23',
 			items: [
 				{
 					lesson: 'charts-matplotlib',
@@ -300,7 +302,7 @@ ax.set_xlabel("Store")
 ax.set_ylabel("Sales (USD)")
 fig.savefig("sales_by_store.png", dpi=150)
 ax.get_ylim()[0]  # 0 for bars`,
-					does: 'A chart is a figure that holds axes, and the axes hold everything you can read or change; bars compare categories, a line follows time, and one chart carries one message.',
+					does: 'A chart is a figure that holds axes; bars compare categories, a line follows time, and one chart carries one message.',
 					trap: 'A bar chart on a cut axis, set_ylim(4000, 9500), which makes small differences look big.',
 					twin: { excel: [{ text: 'charts that tell the truth', lesson: 'charts-that-tell-the-truth' }] },
 				},
@@ -316,13 +318,6 @@ sns.histplot(lines["amount"], bins=10, ax=ax)`,
 					does: 'seaborn draws on the same matplotlib Axes as pandas and takes a whole table with the names of its columns; give it the totals you want drawn.',
 					trap: 'sns.barplot on raw rows draws averages, so the bars look like totals and are not.',
 				},
-			],
-		},
-		{
-			id: 'outside',
-			title: 'Bring in outside data',
-			codes: 'P23',
-			items: [
 				{
 					lesson: 'apis-and-web-data',
 					code: `response.ok
@@ -331,7 +326,7 @@ sql = ("SELECT COUNT(*) AS orders "
     "FROM orders WHERE store_id = ?")
 pd.read_sql(sql, con, params=(3,))`,
 					does: 'An API answers a request with a status code and JSON that becomes a table, and a database answers a query the same way; look at response.ok before response.json().',
-					trap: 'A value pasted into a query with an f-string becomes part of the SQL, so a typed 3 OR 1=1 counts every row; put ? in the query and pass the values in params.',
+					trap: 'A value pasted into a query with an f-string becomes part of the SQL, so a typed 3 OR 1=1 counts every row.',
 				},
 			],
 		},
@@ -345,15 +340,15 @@ pd.read_sql(sql, con, params=(3,))`,
 					code: `$ python -m pip install pandas==2.2.3
 $ python -m pip freeze
 print(sys.version_info[:2], pd.__version__)`,
-					does: 'A notebook gives the same answer on another computer only on the same Python with the same packages, so pin exact versions in requirements.txt and send it along.',
-					trap: 'Installing with the pip of one Python and importing in another: the install succeeds and the import still fails; python -m pip names the Python.',
+					does: 'A notebook gives the same answer on another computer only on the same Python and packages, so pin exact versions in requirements.txt.',
+					trap: 'Installing with the pip of one Python and importing in another: the install succeeds and the import still fails.',
 				},
 				{
 					lesson: 'cafe-quarterly-pack',
 					code: `stack = pd.concat(frames, ignore_index=True)
 assert len(stack) == 1800, "rows are missing"
-picked = order_items[
-    order_items["order_id"].isin(stack["order_id"])]
+picked = order_items[order_items["order_id"]
+    .isin(stack["order_id"])]
 assert len(lines) == len(picked)`,
 					does: 'A report is trustworthy when every step has a check you could run again: stack the tables, then assert the row count and a total against a second route.',
 					trap: 'Trusting a stacked table because its row count is right.',
@@ -362,27 +357,26 @@ assert len(lines) == len(picked)`,
 					lesson: 'notebook-to-script',
 					code: `import pandas as pd
 ORDER_FILE = "orders.csv"
-def orders_by_store(path):
-    orders = pd.read_csv(path)
-    return orders.groupby("store_id").size()
 def main():
-    print(orders_by_store(ORDER_FILE))
+    orders = pd.read_csv(ORDER_FILE)
+    print(orders.groupby("store_id").size())
 if __name__ == "__main__":
     main()
 $ python pack.py`,
-					does: 'A script is the steps of a notebook saved in a file: steps in functions, parameters in capitals at the top, main() under the __name__ line, one command to run.',
+					does: 'A script is the steps of a notebook saved in a file: steps in functions, parameters in capitals, main() under the __name__ line.',
 					trap: 'Assuming a script sees the notebook\'s variables: it runs in its own Python and has only its own lines and files.',
 				},
 				{
 					lesson: 'ai-assisted-code',
 					code: `def coffee_share(lines):
-    coffee = lines[lines["category"] == "coffee"]
-    return (coffee.groupby("store")["amount"].sum()
-        / lines.groupby("store")["amount"].sum())
+    c = lines[lines["category"] == "coffee"]
+    s = lines.groupby("store")["amount"].sum()
+    return c.groupby("store")["amount"].sum() / s
 tiny = lines.iloc[[0, 1, 2, 3, 4, 9]]
 hand = {"Campus": 0.768, "Old Town": 0.275}
-assert coffee_share(tiny).round(3).to_dict() == hand`,
-					does: 'An assistant\'s code is a draft: read it, name every number it divides by, test it on a tiny frame you worked by hand, then reconcile it on the real data.',
+got = coffee_share(tiny).round(3).to_dict()
+assert got == hand`,
+					does: 'An assistant\'s code is a draft: name every number it divides by, test it on a tiny frame worked by hand, then reconcile it on the real data.',
 					trap: 'Trusting a clear explanation: a generated explanation can be wrong too, and may lead people to trust a wrong answer.',
 					twin: { sql: [{ text: 'AI-assisted queries', lesson: 'ai-assisted-queries' }], excel: [{ text: 'AI draft and verify', lesson: 'ai-draft-and-verify' }] },
 				},
