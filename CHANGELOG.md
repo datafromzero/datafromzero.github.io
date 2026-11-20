@@ -7,6 +7,7 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Python stage, lessons 19 to 23 published (owner approval, 2026-11-20): wide and long tables (`melt`, two-key grouping, `pivot`, `pivot_table`), group-aware columns (`transform`, `rank`, `shift` in groups, `rolling`), honest charts with matplotlib and with seaborn (each chart the notebook's own SVG, inline, no JavaScript), and data from an API (the keyless Frankfurter rates, ECB) and from a database with `read_sql` and parameters. Owner checks moved to issue #80.
 - Short lesson names in the sidebar (SPEC D47, owner decision, 2026-11-20): an optional `short_title` frontmatter field, at most 24 characters, is the one-line name of a lesson in the sidebar and in the bottom bar's Course list (for example P9 *Files and tables* for *Reading files and tables: paths, CSV, JSON and Excel*); the full title stays on the page and shows as the sidebar tooltip. Every published Excel, SQL and Python lesson whose title is longer than 26 characters now has one, and `npm run check:lessons` keeps it that way, counting capitals as wider letters (S2, S13 and S24 still wrapped and were shortened). URLs are unchanged.
 - Python stage, fourth batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the five lessons stay drafts and
   are not on the site): *Reshaping: wide to long and back* (`melt`, grouping by two keys, `pivot` and why it refuses duplicates, `pivot_table` as the Excel
