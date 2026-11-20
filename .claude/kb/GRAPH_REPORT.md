@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1345 nodes, 1432 edges, 153 communities (647 isolated nodes).
+- 1345 nodes, 1433 edges, 153 communities (647 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 51, dependency 25, design-section 15, doc 37, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 457, rule 10, script 123, skill 1, spec-section 25, starlight-component 6, style 7, symbol 242, template 2, token 12.
-- Edges: defines 242, imports 50, mentions 803, overrides 6, references 27, runs 11, specified-by 4, uses 252, uses-token 32, validated-by 5.
+- Edges: defines 242, imports 50, mentions 804, overrides 6, references 27, runs 11, specified-by 4, uses 252, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -26,8 +26,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 11 | `agent:LESSON-STANDARD` | agent | 28 | .claude/agents/LESSON-STANDARD.md:1 |
 | 12 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 13 | `design/README.md` | doc | 23 | design/README.md:1 |
-| 14 | `D44` Stage cheatsheets; a math blo… | decision | 22 | SPEC.md:71 |
-| 15 | `src/lib/content-schemas.ts` | module | 22 | src/lib/content-schemas.ts:1 |
+| 14 | `.claude/MISTAKES.md` | doc | 22 | .claude/MISTAKES.md:1 |
+| 15 | `D44` Stage cheatsheets; a math blo… | decision | 22 | SPEC.md:71 |
 
 ## Communities
 
@@ -59,8 +59,8 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C41, design/README.md:181)
 - `M7` -mentions-> `D34` (C51 to C24, CLAUDE.md:65)
 - `M8` -mentions-> `D24` (C74 to C15, CLAUDE.md:66)
-- `scripts/check-lessons.mjs` -mentions-> `D51` (C53 to C71, scripts/check-lessons.mjs:64)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C131 to C2, scripts/check-placeholders.mjs:2)
+- `scripts/check-lessons.mjs` -mentions-> `D51` (C53 to C71, scripts/check-lessons.mjs:64)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C50 to C51, src/lib/repo-files.ts:4)
 
 ## Decisions (SPEC §1)
