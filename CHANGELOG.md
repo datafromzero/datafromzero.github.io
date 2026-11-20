@@ -257,6 +257,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
+- Lesson sources cite primary sources only (owner rule, 2026-11-20): the 27 Python lessons no longer list the team's research issue as a source, and `npm run check:lessons` now refuses a lesson source that points at this site's GitHub issues.
 - Three more figures fit their text inside the boxes (owner report from a phone, 2026-11-20): P27's four-step figure ("worked by hand" ran past its box), the tidy-table drawing of the Excel cheatsheet (the TOTAL row) and the S19 table header; a second scan for text outside a figure or on other text fixed E11 and E13 (a caption ran past the right edge), E17 (the marker 2 sat on the 2,500 axis label) and the P21 Exercise 2 chart (its title was wider than the chart; now *Average order: about the same in every store*). `scripts/check-figure-text.cjs` is the manual browser check that finds such labels.
 - Four lesson figures no longer let text touch or cross a box edge (owner report from a phone, 2026-11-20): P23 (the request and response labels sat on the notebook box), S5 (the long DOUBLE result), E14 (the timestamp) and E3 (the total).
 - The sidebar group of the site pages (About, Changelog, Cite, License, Privacy) is now called "About this site" instead of "Project" (also the accessible name of the footer link group), so learners do not take it for the case-study projects of the career tracks (owner request, 2026-11-20).
