@@ -185,6 +185,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — `strftime("%-d")` works only on glibc. → **Use portable formatting (`f"{day.day}"`).**
 - 2026-11-17 — Two batches reported different "total sales" (\$22,749.25 vs \$22,754.25). → **Every total names its
   rows: completed orders only, or all 1,800 including the canceled \$5.00 order.**
+- 2026-11-20 — The app-events README called January 1 to April 12 the baseline for the mix shift, but the `paywall_v2` variant
+  (2,713 people at 15.3%) sat inside it and lifted it by about 0.6 points, so the leftover was wrongly called noise. →
+  **Before calling a before/after baseline clean, check that no experiment or other planted effect sits inside the baseline
+  window, and say which window is clean.**
 
 ## Lessons (details in LESSON-STANDARD.md)
 
@@ -449,6 +453,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-20 — Two lessons quoted one quantity with two conventions (SD 8.61 dividing by n, 8.62 by n − 1) and a warm-up quoted
   the other lesson's number wrongly. → **When a quantity has two conventions, every lesson that prints it says which; a warm-up
   that quotes an earlier lesson uses the number that lesson printed.**
+- 2026-11-20 — Adding formulas to Part 1: C7 held the SD of all 1,800 orders fixed as if it were a sample SD, and C2's Idea gave the divisor of
+  `Series.std()` before a Predict asked whether `std()` and `np.std` agree. → **When a lesson prints a statistic computed on a population with a
+  sample formula, say so and keep the symbol convention (σ and N for populations, s and n − 1 for samples); never state a function's divisor in an
+  Idea that precedes a Predict about that function.**
 
 ## Agents and reviews
 
