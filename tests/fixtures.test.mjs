@@ -36,6 +36,7 @@ describe('valid fixtures', () => {
 		assert.ok(exists(join(sandbox, 'dist', 'reference', 'sql', 'inner-join', 'index.html')));
 		const joins = page('sql/sql-joins');
 		assert.match(joins, /<math/); // formulas render as MathML
+		assert.match(joins, /rate is <span class="katex"><math xmlns="[^"]+"><semantics>/); // inline $$…$$: no display attribute
 		assert.match(joins, /<math [^>]*display="block"/); // a $$ block is display math
 		assert.match(joins, /<annotation encoding="application\/x-tex">r = \\frac\{m\}\{n\}/); // TeX source kept for readers
 		assert.ok(!joins.includes('katex.min.css') && !joins.includes('KaTeX_')); // no KaTeX CSS or fonts

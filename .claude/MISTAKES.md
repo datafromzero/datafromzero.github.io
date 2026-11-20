@@ -45,6 +45,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-20 — KaTeX shipped a red `span.katex-error` for bad TeX and only warned. → **A build-time renderer that falls back on error (KaTeX, a highlighter, an image tool) must be made to fail the build, with an invalid fixture, because a fallback that only warns ships broken output to readers.** (`src/lib/rehype-math-errors.ts`, fixture `math-tex-error`.)
 - 2026-11-19 — The step buttons 1 2 3 4 of every concept animation lost their bottom edge (owner, on a phone): the shared
   `.sa-sb` rule draws `border-bottom: 4px solid var(--c)`, and concept buttons carry no clause class, so `--c` was unset
   and the whole bottom border dropped. → **A rule that uses a custom property either gives it a fallback

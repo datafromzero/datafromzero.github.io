@@ -1,0 +1,22 @@
+---
+id: excel-extra
+title: Fixture excel-extra
+description: Fixture lesson used by the automated tests; it is never deployed.
+stage: excel
+order: 30
+level: beginner
+duration: 10
+objectives:
+  - Explain the fixture idea
+  - Apply the fixture idea
+prerequisites: [excel-formulas]
+reviewed: 2026-11-01
+sources:
+  - title: Fixture source
+    url: https://example.com/source
+status: published
+---
+
+## Broken formula
+
+A formula that never closes: $$\frac{a$$

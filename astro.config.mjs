@@ -8,6 +8,7 @@ import AutoImport from 'astro-auto-import';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
+import { rehypeMathErrors } from './src/lib/rehype-math-errors.ts';
 import { redirects } from './src/redirects.ts';
 import { OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
@@ -34,7 +35,7 @@ export default defineConfig({
 		// `unified()` keeps the remark/rehype pipeline that these plugins need.
 		processor: unified({
 			remarkPlugins: [[remarkMath, { singleDollarTextMath: false }], remarkContentRules],
-			rehypePlugins: [[rehypeKatex, { output: 'mathml' }]],
+			rehypePlugins: [[rehypeKatex, { output: 'mathml' }], rehypeMathErrors],
 		}),
 	},
 	integrations: [
