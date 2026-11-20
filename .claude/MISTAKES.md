@@ -45,6 +45,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-20 — KaTeX shipped a red `span.katex-error` for bad TeX and only warned. → **A build-time renderer that falls back on error (KaTeX, a highlighter, an image tool) must be made to fail the build, with an invalid fixture, because a fallback that only warns ships broken output to readers.** (`src/lib/rehype-math-errors.ts`, fixture `math-tex-error`.)
 - 2026-11-19 — The step buttons 1 2 3 4 of every concept animation lost their bottom edge (owner, on a phone): the shared
   `.sa-sb` rule draws `border-bottom: 4px solid var(--c)`, and concept buttons carry no clause class, so `--c` was unset
   and the whole bottom border dropped. → **A rule that uses a custom property either gives it a fallback
@@ -216,7 +217,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — A lesson used functions taught later without the prerequisite. → **Add the prerequisite when a lesson
   relies on another lesson's skill.**
 - 2026-11-17 — "greyed" in a lesson. → **American English; grep for -our, -ise, grey, cancelled.**
-- 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.**
+- 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.** (Since D51, 2026-11-20, a single `$` is plain text and only `$$…$$` is math; `&#36;` in SVG still applies.)
 
 - 2026-11-18 — The SQL model lesson draft had 3,372 body words for a 20-minute lesson (about twice the Excel model).
   → **Count body words before reporting; a 20-minute lesson is at most about 2,200 words including exercises, and the

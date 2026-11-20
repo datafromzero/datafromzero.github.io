@@ -8,6 +8,7 @@ import AutoImport from 'astro-auto-import';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
+import { rehypeMathErrors } from './src/lib/rehype-math-errors.ts';
 import { redirects } from './src/redirects.ts';
 import { OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
@@ -30,11 +31,11 @@ export default defineConfig({
 	// SPEC D27: Astro's JS prefetch script is off; Speculation Rules (a JSON block in <head>) replace it.
 	prefetch: false,
 	markdown: {
-		// SPEC §2 / §6: formulas in $…$ and $$…$$, rendered to MathML only (no KaTeX CSS, fonts or JS).
+		// SPEC D51 / §6: formulas in $$…$$ only (a single $ stays money), rendered to MathML only (no KaTeX CSS, fonts or JS).
 		// `unified()` keeps the remark/rehype pipeline that these plugins need.
 		processor: unified({
-			remarkPlugins: [remarkMath, remarkContentRules],
-			rehypePlugins: [[rehypeKatex, { output: 'mathml' }]],
+			remarkPlugins: [[remarkMath, { singleDollarTextMath: false }], remarkContentRules],
+			rehypePlugins: [[rehypeKatex, { output: 'mathml' }], rehypeMathErrors],
 		}),
 	},
 	integrations: [
