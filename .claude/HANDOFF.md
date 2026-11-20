@@ -141,8 +141,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   of reshape and chart is unit 3) and writes no cleaned-CSV or twin-notebook companions; P26 grows one file, `pack.py`, in four versions; P27 shows only assistant text written by
   the lesson, labeled as such, and no claim about how a model behaves beyond two NIST AI 600-1 sentences. Still open for the owner: edits and approval of every lesson text, and
   a Colab run of P24 to P26 (`python -m venv` and `ensurepip`, `%pip`, `%%writefile` and `!python` there, and the pins on Colab's Python).
-- **Planned, not part of any batch (owner request, 2026-11-20):** a "Python for engineers" block in the advanced core, to be discussed with the owner after a Muse research
-  issue arrives.
+- **Advanced core redesign (in discussion with the owner, 2026-11-20):** research issues #71 (engineering block), #72 (AI era, data beyond tables,
+  infrastructure awareness) and #73 (DSA literacy plus a practice gym) are in `research/issues/`. Decided: D48, the engineering lessons run on the
+  learner's laptop (VS Code, Git, uv) with Codespaces as fallback. Proposed by the lead, not yet decided: the core as five parts of about 4 hours each
+  (statistics, engineering tools, data systems, decisions and the AI era, a project built part by part), a skip check at the start of each part,
+  about 34 lessons, a data ethics and governance lesson (needs research), the DSA gym after the tracks.
 
 ## Open items and owner decisions still pending
 
