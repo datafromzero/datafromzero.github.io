@@ -433,6 +433,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-20 — Published lessons already print every monthly order count, the Q1 and Q2 totals and the March count of completed orders, so the first choices for exercise answers (257 orders, 8,775.25)
   were taken. → **Grep each exercise answer, and the numbers of its wrong answer, across `python`, `sql` and `excel` before writing the exercise; pick another store, month or measure when it appears.**
 
+- 2026-11-20 — Batch 5 again let Ideas state a Predict's answer and let an Idea or Common-trap line state Exercise 3's flaw. → Before finishing, read every Idea, Match/Diverge, figure `<desc>` and Remember line against both the Predicts that follow and the three exercises' flaws; move any outcome or mechanism into the Why after the reveal.
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
