@@ -415,6 +415,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-20 — Seaborn's default error bar is a random bootstrap, so the same chart cell drew a slightly different picture on every run and the SVGs differed between pandas
   versions. → **Fix every random draw a chart depends on (`seed=`), then run the notebook on both pandas versions and compare the saved SVG files byte for byte.**
 
+- 2026-11-20 — Figures inside a reveal (P21) and a figure's <desc> (P21, P22) gave the next Predict's answer. → A figure placed inside a reveal, and every figure's <desc>, must not show or describe the answer to any later Predict (title, label, ratio); check each figure against all Predicts that follow it. Generated charts: pass seaborn saturation=1 and draw error bars in currentColor.
+- 2026-11-20 — Review of batch 4 found Why lines with wrong facts (store 1 has places 1, 2 and 2, not one customer for each of 1, 2 and 3; Harbor has five customers with 9 orders, not three), an exercise answer already printed in two lessons, an exercise fix already in a unit's Idea, and `Expected:` printed twice because the instruction text and the helper both added it. → **Recompute every number a sentence states from the data, not from the first rows printed; the exercise helper adds `Expected:` and the write-in note, so the instruction text never repeats them.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
