@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1156 nodes, 1310 edges, 144 communities (513 isolated nodes).
-- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 47, dependency 25, design-section 15, doc 30, i18n 6, layout 1, module 21, npm-script 20, page 4, research-section 348, rule 10, script 114, skill 1, spec-section 25, starlight-component 6, style 7, symbol 217, template 2, token 12.
-- Edges: defines 217, imports 49, mentions 730, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
+- 1231 nodes, 1322 edges, 143 communities (585 isolated nodes).
+- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 47, dependency 25, design-section 15, doc 33, i18n 6, layout 1, module 21, npm-script 20, page 4, research-section 419, rule 10, script 115, skill 1, spec-section 25, starlight-component 6, style 7, symbol 217, template 2, token 12.
+- Edges: defines 217, imports 49, mentions 742, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -36,32 +36,32 @@ Label propagation; each community is named by its top-degree node.
 - **C1 Solution** (88): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx
 - **C2 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C3 HANDOFF.md** (17): .claude/HANDOFF.md; D42 In-page SQL runner; D32 Four career branches; CLAUDE.md; research/curriculum/07-curriculum-rationale.md; S14 Content production (replaces migr…
-- **C4 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C5 cheatsheet.ts** (14): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C6 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
-- **C7 sync-research-issues.mjs** (11): scripts/sync-research-issues.mjs; research/issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi.md; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md
+- **C4 Tech stack** (15): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C5 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
+- **C6 cheatsheet.ts** (14): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C7 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
 - **C8 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
-- **C9 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C10 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
-- **C11 sql-editor.ts** (10): src/scripts/sql-editor.ts; pkg:@codemirror/autocomplete; pkg:@codemirror/commands; pkg:@codemirror/lang-sql; pkg:@codemirror/language; pkg:@codemirror/state
-- **C12 sql-runtime.ts** (10): src/scripts/sql-runtime.ts; pkg:@duckdb/duckdb-wasm; src/scripts/sql-runtime.ts#Progress; src/scripts/sql-runtime.ts#Result; src/scripts/sql-runtime.ts#ready; src/scripts/sql-runtime.ts#resetData
+- **C9 sync-research-issues.mjs** (10): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
+- **C10 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C11 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
+- **C12 sql-editor.ts** (10): src/scripts/sql-editor.ts; pkg:@codemirror/autocomplete; pkg:@codemirror/commands; pkg:@codemirror/lang-sql; pkg:@codemirror/language; pkg:@codemirror/state
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C78 to C75, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C96 to C6, scripts/animations/concept-join.mjs:1)
-- `src/pages/sql/cheatsheet.astro` -mentions-> `src/data/cheatsheets/sql.ts` (C20 to C129, src/pages/sql/cheatsheet.astro:3)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C31 to C67, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C131 to C127, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C3 to C13, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C39, design/README.md:181)
+- `ctype:career` -specified-by-> `S5.4` (C77 to C74, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C95 to C7, scripts/animations/concept-join.mjs:1)
+- `src/pages/sql/cheatsheet.astro` -mentions-> `src/data/cheatsheets/sql.ts` (C20 to C128, src/pages/sql/cheatsheet.astro:3)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C32 to C66, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C130 to C126, src/layouts/HomeLayout.astro:39)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C3 to C14, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C40, design/README.md:181)
 - `M7` -mentions-> `D34` (C50 to C24, CLAUDE.md:65)
-- `M8` -mentions-> `D24` (C71 to C13, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C121 to C3, scripts/check-placeholders.mjs:2)
+- `M8` -mentions-> `D24` (C70 to C14, CLAUDE.md:66)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C120 to C3, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C49 to C50, src/lib/repo-files.ts:4)
-- `DG6` -mentions-> `DG2` (C69 to C25, design/README.md:226)
+- `DG6` -mentions-> `DG2` (C68 to C25, design/README.md:226)
 
 ## Decisions (SPEC §1)
 
