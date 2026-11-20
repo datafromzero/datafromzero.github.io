@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1318 nodes, 1381 edges, 145 communities (644 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 203, content-type 5, decision 50, dependency 25, design-section 15, doc 36, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 447, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 235, template 2, token 12.
-- Edges: defines 235, imports 50, mentions 782, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
+- 1329 nodes, 1385 edges, 145 communities (654 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 203, content-type 5, decision 50, dependency 25, design-section 15, doc 37, i18n 6, layout 1, module 23, npm-script 21, page 5, research-section 457, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 235, template 2, token 12.
+- Edges: defines 235, imports 50, mentions 786, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -20,9 +20,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 5 | `astro.config.mjs` | config | 41 | astro.config.mjs:1 |
 | 6 | `src/components/content/RunSQL.astro` | component | 38 | src/components/content/RunSQL.astro:1 |
 | 7 | `D42` In-page SQL runner | decision | 29 | SPEC.md:69 |
-| 8 | `src/components/content/OpenInColab.astro` | component | 29 | src/components/content/OpenInColab.astro:1 |
-| 9 | `src/site.ts` | module | 29 | src/site.ts:1 |
-| 10 | `S6` Authoring components | spec-section | 28 | SPEC.md:269 |
+| 8 | `S6` Authoring components | spec-section | 29 | SPEC.md:269 |
+| 9 | `src/components/content/OpenInColab.astro` | component | 29 | src/components/content/OpenInColab.astro:1 |
+| 10 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 11 | `agent:LESSON-STANDARD` | agent | 27 | .claude/agents/LESSON-STANDARD.md:1 |
 | 12 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 13 | `design/README.md` | doc | 23 | design/README.md:1 |
@@ -186,8 +186,8 @@ term: id — file:line
 - footer: `src/components/starlight/Footer.astro` — src/components/starlight/Footer.astro:1
 - nvmrc: `.nvmrc` — .nvmrc:1
 - RunSQL: `src/components/content/RunSQL.astro` — src/components/content/RunSQL.astro:1
-- OpenInColab: `src/components/content/OpenInColab.astro` — src/components/content/OpenInColab.astro:1
 - Authoring components: `S6` — SPEC.md:269
+- OpenInColab: `src/components/content/OpenInColab.astro` — src/components/content/OpenInColab.astro:1
 - LESSON-STANDARD: `agent:LESSON-STANDARD` — .claude/agents/LESSON-STANDARD.md:1
 
 ## Suggested questions
