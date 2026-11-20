@@ -18,7 +18,16 @@ export const pythonCheatsheet: Cheatsheet = {
 	description: 'One page of Python and pandas patterns for data work, in the order of the data, each with its trap and its SQL and Excel twin. Prints on two sheets.',
 	intro:
 		'This is not a language reference. It follows your data: the Python you need first, then load it and look, select, derive, group and merge, clean it, reshape it, chart it, bring in outside data, and ship the work so it runs again. Each card gives a pattern from a lesson of the Python stage, the idea behind it, the common trap, and where it has a twin you met in SQL or Excel. Each card names its lesson (P12); open it to learn the idea. The page prints on A4, both sides, black on white.',
-	foot: 'From the free Python stage of datafromzero, datafromzero.github.io/python/ (content CC BY 4.0). Every pattern runs on the cafe-sales practice data, and every idea comes from a lesson.',
+	scope: {
+		text: 'This is Python for data work: notebooks, pandas and charts. Python as a programmer writes it (the terminal, projects, testing, classes) comes in the advanced core. For computer science in depth, use a good Python book or a free course such as',
+		links: [
+			{ label: 'CS50’s Introduction to Programming with Python (Harvard)', href: 'https://cs50.harvard.edu/python/' },
+			{ label: 'Google’s Python Class', href: 'https://developers.google.com/edu/python' },
+			{ label: 'courses on Coursera, many free to audit', href: 'https://www.coursera.org/' },
+			{ label: 'the DeepLearning.AI short courses', href: 'https://www.deeplearning.ai/short-courses/' },
+		],
+	},
+	foot: 'From the free Python stage of datafromzero, datafromzero.github.io/python/ (content CC BY 4.0). Every pattern runs on the cafe-sales practice data, and every idea comes from a lesson. This is Python for data; Python as a programmer comes in the advanced core, and computer science in depth in a book or a free course such as CS50.',
 	parts: [
 		{
 			id: 'basics',

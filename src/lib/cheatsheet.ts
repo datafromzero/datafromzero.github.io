@@ -58,6 +58,8 @@ export interface Cheatsheet {
 	description: string;
 	/** One or two sentences under the title. */
 	intro: string;
+	/** Optional scope note under the intro: what the sheet is not, with links for going further. */
+	scope?: { text: string; links: { label: string; href: string }[] };
 	parts: CheatPart[];
 	/** The line printed under the sheet (a source note). */
 	foot: string;
