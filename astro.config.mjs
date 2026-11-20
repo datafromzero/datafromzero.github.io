@@ -30,10 +30,10 @@ export default defineConfig({
 	// SPEC D27: Astro's JS prefetch script is off; Speculation Rules (a JSON block in <head>) replace it.
 	prefetch: false,
 	markdown: {
-		// SPEC §2 / §6: formulas in $…$ and $$…$$, rendered to MathML only (no KaTeX CSS, fonts or JS).
+		// SPEC D51 / §6: formulas in $$…$$ only (a single $ stays money), rendered to MathML only (no KaTeX CSS, fonts or JS).
 		// `unified()` keeps the remark/rehype pipeline that these plugins need.
 		processor: unified({
-			remarkPlugins: [remarkMath, remarkContentRules],
+			remarkPlugins: [[remarkMath, { singleDollarTextMath: false }], remarkContentRules],
 			rehypePlugins: [[rehypeKatex, { output: 'mathml' }]],
 		}),
 	},

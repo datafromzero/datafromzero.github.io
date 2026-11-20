@@ -216,7 +216,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-17 — A lesson used functions taught later without the prerequisite. → **Add the prerequisite when a lesson
   relies on another lesson's skill.**
 - 2026-11-17 — "greyed" in a lesson. → **American English; grep for -our, -ise, grey, cancelled.**
-- 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.**
+- 2026-11-17 — MDX read `$…$` as math and `*` in SVG text as emphasis. → **`\$` in prose, `&#36;` and `&#42;` in SVG.** (Since D51, 2026-11-20, a single `$` is plain text and only `$$…$$` is math; `&#36;` in SVG still applies.)
 
 - 2026-11-18 — The SQL model lesson draft had 3,372 body words for a 20-minute lesson (about twice the Excel model).
   → **Count body words before reporting; a 20-minute lesson is at most about 2,200 words including exercises, and the

@@ -61,6 +61,7 @@ for (const stage of STAGES) {
 
 		let inFence = false;
 		let inSvg = false;
+		let inMath = false; // a $$ display block (SPEC D51): TeX source is not prose
 		let inTodo = false;
 		lines.forEach((raw, i) => {
 			const n = i + 1;
@@ -69,6 +70,11 @@ for (const stage of STAGES) {
 				return;
 			}
 			if (inFence) return;
+			if (/^\s*\$\$\s*$/.test(raw)) {
+				inMath = !inMath;
+				return;
+			}
+			if (inMath) return;
 			if (/<svg\b/.test(raw)) inSvg = true;
 			if (inSvg && /\$/.test(raw.replace(/\\\$/g, ''))) report(file, n, 'bare $ inside an SVG; write &#36;');
 			if (/<\/svg>/.test(raw)) inSvg = false;
@@ -77,7 +83,7 @@ for (const stage of STAGES) {
 			if (/TODO\(owner\)/.test(raw)) inTodo = true;
 			if (raw.trim() === '') inTodo = false;
 
-			const prose = raw.replace(/`[^`]*`/g, '');
+			const prose = raw.replace(/`[^`]*`/g, '').replace(/\$\$.*?\$\$/g, '');
 			if (!inSvg && /^\s*(XX+|TBD)\s*$/i.test(raw)) report(file, n, `placeholder line "${raw.trim()}"; finish the text`);
 			if (!inSvg && !inTodo && /\bTODO\b(?!\(owner\))/.test(prose)) report(file, n, 'TODO outside a TODO(owner) note; finish the text or write TODO(owner)');
 			const m = !inSvg && prose.match(BRITISH);

@@ -76,7 +76,7 @@ function walk(node: MdxNode, insideExercise: boolean, file: string) {
 	if (node.type === 'heading' && hasInlineMath(node)) {
 		const line = node.position?.start.line;
 		throw new Error(
-			`${file}${line ? `:${line}` : ''}: math ($…$) is not allowed in headings; it breaks heading ids and the table of contents. Put the formula in the paragraph below the heading.`,
+			`${file}${line ? `:${line}` : ''}: math ($$…$$) is not allowed in headings; it breaks heading ids and the table of contents. Put the formula in the paragraph below the heading.`,
 		);
 	}
 	const inside = insideExercise || (isJsx(node) && node.name === 'Exercise');

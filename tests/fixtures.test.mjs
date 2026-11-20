@@ -34,7 +34,14 @@ describe('valid fixtures', () => {
 		assert.match(basics, /href="\/excel\/excel-formulas\/"/);
 		assert.ok(!page('sql/sql-joins').includes('Unlocks next'));
 		assert.ok(exists(join(sandbox, 'dist', 'reference', 'sql', 'inner-join', 'index.html')));
-		assert.match(page('sql/sql-joins'), /<math/); // formulas render as MathML
+		const joins = page('sql/sql-joins');
+		assert.match(joins, /<math/); // formulas render as MathML
+		assert.match(joins, /<math [^>]*display="block"/); // a $$ block is display math
+		assert.match(joins, /<annotation encoding="application\/x-tex">r = \\frac\{m\}\{n\}/); // TeX source kept for readers
+		assert.ok(!joins.includes('katex.min.css') && !joins.includes('KaTeX_')); // no KaTeX CSS or fonts
+		// D51: a single $ is money, never math ("$3.50 or $5" keeps both signs as text).
+		assert.match(joins, /costs \$3\.50 or \$5, and/);
+		assert.equal((joins.match(/<math/g) ?? []).length, 3); // one inline and two display formulas, nothing from the dollar amounts
 		// SPEC D44: the cheatsheet exists and its own content ships no script.
 		const sheet = page('sql/cheatsheet');
 		assert.match(sheet, /SQL in a nutshell/);

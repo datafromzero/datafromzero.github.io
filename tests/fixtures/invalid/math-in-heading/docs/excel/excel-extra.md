@@ -17,6 +17,6 @@ sources:
 status: published
 ---
 
-## Area $a^2$
+## Area $$a^2$$
 
 Text.

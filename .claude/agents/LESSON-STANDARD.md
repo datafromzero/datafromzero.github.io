@@ -306,7 +306,11 @@ reviewer ticks them one by one.
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,
   `Solution`, `Aside`, `OpenInColab`, `OpenInSheets`; no `Term` until glossary pages exist; no imports or scripts.
 - Exercise ids: `{lesson-id}-{n}`, permanent.
-- Dollar signs: `\$` in prose and tables, `&#36;` inside SVG; `*` inside SVG text: `&#42;`.
+- Dollar signs: a plain `$` in prose is money and stays text (`$3.50`; `\$` also works); inside SVG write `&#36;`; `*` inside SVG text: `&#42;`.
+- Math (SPEC D51): inline `$$r = m / n$$` on one line; display math as `$$`, the formula, `$$` on three separate lines (no blank line
+  inside; same in `.md` and `.mdx`). Use a formula only next to a words-first explanation, after the idea and a worked number from the
+  data; define every symbol in the sentence before or after it; one formula per idea; never in a heading. It renders to MathML at build time
+  (no JavaScript), so keep TeX plain: `\frac`, `\sum`, `\sqrt`, subscripts, `\text{…}` for words.
 - SVG: `<svg viewBox="0 0 360 H" width="360" role="img" aria-labelledby="…">` with `<title>` and `<desc>`,
   `fill="currentColor"`, grid lines by `stroke-opacity`, no `style` attribute, no CSS variables, unique ids per page.
 - No links to other lessons' URLs while they are drafts: name them by title.
