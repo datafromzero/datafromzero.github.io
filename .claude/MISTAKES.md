@@ -376,6 +376,17 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   was the finished function of a unit, and two exercise answers (150 customers, 55 Harbor cash orders) already stood in published lessons. →
   **An exercise's fix must not already appear as code in a unit of the same lesson on the same data, and an exercise answer must not already appear in
   an earlier published lesson; grep answer numbers and function bodies across `python/*.mdx` before finishing.**
+- 2026-11-20 — Drafting Python batch 3: a lesson's big-idea figure showed the very values that a later Predict asked for (a column printed as `100.0`
+  before the unit that asks how the ids print), an exercise starter called `merge(how=None)` and would have raised in Run all, an objective with `: ` in it broke the
+  frontmatter and stopped the dev server, and `dt.dayofweek` and the `"M"` frequency are deprecated or removed in pandas 3.1. → **Before finishing, read every figure
+  against every Predict of its lesson (draw a raw file line if a table would print the answer); a starter assigns `name = None  # replace None: ...` and never calls a
+  function with `None`; quote any frontmatter string that contains `: `, and open each lesson in `astro dev` before reporting; use `day_name()` and `"MS"`, and run every
+  notebook on pandas 3.x and 2.2.x.**
+- 2026-11-20 — A concept animation copied from `concept-group-by` got a dashed frame at its top-left corner, where the generated step label sits, so the label ran through the
+  frame on the printed page. → **Anything added to a copied spec stays clear of the step-label zone (top-left, up to about 150 px wide); read the printed final frame, not only
+  the builder's output.**
+- 2026-11-20 — The P18 notebook and the first reveal of its NFC unit contain text in NFD on purpose. → **A file that must keep NFD (the menu text in the notebook, one reveal
+  block) is checked with `unicodedata.normalize` before the commit, and no formatter or editor may normalize it; the lesson page names this in its `TODO(owner)` paragraph.**
 
 ## Agents and reviews
 

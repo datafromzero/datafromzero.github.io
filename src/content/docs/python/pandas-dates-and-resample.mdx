@@ -5,24 +5,29 @@ description: Parse text into dates with an explicit format, filter by date range
 stage: python
 order: 170
 level: intermediate
-duration: 30
+duration: 35
 objectives:
-  - Parse a text column into dates with to_datetime and an explicit format
-  - Use the dt accessor to get month and weekday
-  - Filter by a date range and generate one with date_range
-  - Roll up values by month with resample or groupby
-  - Compare each period with the previous one using shift
+  - Parse a text column into dates with to_datetime and an explicit format, and count the dates that fail
+  - Use the dt accessor for the parts of a date, and filter by a date range without losing the last day
+  - Roll the rows up by month with resample, and say what it does with a month that has no rows
+  - Compare each month with the previous one using shift
 prerequisites:
   - python-pandas-missing-data-and-types
   - sql-dates-and-time
+  - sql-lag-lead-moving-windows
+  - excel-date-functions
 datasets:
   - cafe-sales
 notebook: notebooks/python/python-pandas-dates-and-resample.ipynb
 reviewed: 2026-11-16
 sources:
-  - title: 'pandas documentation: Time series / date functionality'
+  - title: 'pandas documentation: Time series / date functionality (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/timeseries.html
-  - title: 'Python documentation: datetime module'
+  - title: 'pandas documentation: to_datetime (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
+  - title: 'pandas documentation: DataFrame.resample (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.resample.html
+  - title: 'Python documentation: datetime module, format codes (accessed 2026-11-20)'
     url: https://docs.python.org/3/library/datetime.html
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
@@ -31,119 +36,346 @@ status: draft
 
 TODO(owner): Set `reviewed` and `status` when you publish this lesson.
 
-TODO(owner): Adds date_range and shift (issue section 2, item 17). The shift bridge is revisited with groups in transform-rank-rolling.
+TODO(owner): Team draft (owner request under D24, 2026-11-19); edit it. To keep four ideas the lesson drops `date_range` (an objective of the stub) and `groupby` on a period with `to_period`; time zones stay awareness only: unit 2 shows that `when` has none (`dt.tz`) and the Why quotes the pandas page, but `tz_localize` and `tz_convert` are not taught, and the owner decides whether a later lesson takes them. `dayofweek` is not used, because pandas 3.1 deprecates `dt.dayofweek` in favor of `day_of_week`; the lesson uses `day_name()`. Month-start frequency `"MS"` is used because `"M"` was renamed in pandas 2.2 and removed in pandas 3. The data cell has no setup change: unit 1 adds the column `when` to `orders`, and later units and exercises use it, so Run all from the top matters. The typed dates of unit 1 and Exercise 3 are small lists, not cafe-sales data. Every count names its rows: all 1,800 orders, the canceled order included.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> How many orders did the cafes take in each month, and did the count go up or down from the month before?
+
+The time of an order is in the file as text, and a text does not know that it is a date:
+
+| order_id | ordered_at |
+|---:|---|
+| 1001 | 2026-01-01 08:02:00 |
+| 1002 | 2026-01-01 15:38:00 |
+| 1003 | 2026-01-01 15:47:00 |
+
+By the end of this page you will turn the text into dates, filter a range of days, count the orders of each month and set each month beside the one before.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Working with dates and time* (S11), `date_trunc('month', ordered_at)` with a `GROUP BY` counted the orders of each month, and in *Dates as numbers* (E11) a date was a number that a format made readable. `resample("MS")` is the pandas twin of the first, and `to_datetime` is what makes the second true in pandas. The previous month of *Comparing to the previous row: LAG, LEAD and moving averages* (S16) is `shift`.
+
+**Diverge.** A `GROUP BY` month returns only the months that have rows, and *Complete time series and recursive CTEs* (S27) built a date spine to fill the rest. What `resample` returns for a month with no rows is the second check of unit 3.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Dates as numbers* (E11), what is a date to Excel, and what is text that only looks like a date?
+
+   <details>
+   <summary>answer</summary>
+
+   A date is a number, a count of days, that a format makes readable. Text that looks like a date is only text: it cannot be sorted by time or subtracted until it is converted.
+
+   </details>
+
+2. In *Working with dates and time* (S11), write the expression that cuts the timestamp `ordered_at` to its month.
+
+   <details>
+   <summary>answer</summary>
+
+   `date_trunc('month', ordered_at)`. Every timestamp of a month gives the first day of that month, so a `GROUP BY` on it counts a month.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+A date column is text until `to_datetime` reads it with a format you name. Then it can be cut into parts, filtered by range, grouped by period and compared with the period before.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 178" width="360" role="img" aria-labelledby="dt-fig-title dt-fig-desc">
+<title id="dt-fig-title">Text becomes a date, and a date has parts</title>
+<desc id="dt-fig-desc">The text 2026-01-01 08:02:00, the ordered_at of order 1001, is shaded as plain text. An arrow labeled to_datetime leads to the same value as a date. Five arrows lead from the date to its parts: year 2026, month 1, day 1, weekday Thursday and hour 8.</desc>
+<defs>
+<marker id="dt-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="10" y="22" width="170" height="26" fill="currentColor" fill-opacity="0.07" /><rect x="10" y="82" width="170" height="26" fill="currentColor" fill-opacity="0.14" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="22" width="170" height="26" rx="3" /><rect x="10" y="82" width="170" height="26" rx="3" />
+<rect x="10" y="128" width="62" height="44" rx="3" /><rect x="78" y="128" width="62" height="44" rx="3" /><rect x="146" y="128" width="62" height="44" rx="3" /><rect x="214" y="128" width="62" height="44" rx="3" /><rect x="282" y="128" width="62" height="44" rx="3" />
+<path d="M95 110 V118 M41 118 H313" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.75">
+<path d="M95 50 V78" marker-end="url(#dt-arrow)" />
+<path d="M41 118 V124" marker-end="url(#dt-arrow)" /><path d="M109 118 V124" marker-end="url(#dt-arrow)" /><path d="M177 118 V124" marker-end="url(#dt-arrow)" /><path d="M245 118 V124" marker-end="url(#dt-arrow)" /><path d="M313 118 V124" marker-end="url(#dt-arrow)" />
+</g>
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="10" y="14">ordered_at, as read: text</text><text x="106" y="68">to_datetime</text><text x="190" y="100">the same moment, as a date</text>
+</g>
+<g fill="currentColor" font-size="12" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="18" y="40">2026-01-01 08:02:00</text><text x="18" y="100" font-weight="600">2026-01-01 08:02:00</text>
+</g>
+<g fill="currentColor" font-size="10" font-weight="600" text-anchor="middle">
+<text x="41" y="143">year</text><text x="109" y="143">month</text><text x="177" y="143">day</text><text x="245" y="143">weekday</text><text x="313" y="143">hour</text>
+</g>
+<g fill="currentColor" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="41" y="162">2026</text><text x="109" y="162">1</text><text x="177" y="162">1</text><text x="313" y="162">8</text>
+</g>
+<g fill="currentColor" font-size="10" text-anchor="middle">
+<text x="245" y="162">Thursday</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 4 new ideas: `to_datetime`, the `dt` parts and date ranges, `resample`, and `shift`. The last unit only checks them. Unit 1 adds the column `when` to `orders`, and the later units use it.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. to_datetime: name the format
 
-### 1. Parse with an explicit format
+**Idea.** `pd.to_datetime(column, format="...")` reads text as dates. The format says which part is which: `%Y` is the year, `%m` the month, `%d` the day, `%H:%M:%S` the time (the codes of Python's `datetime` page). Name it, because a text such as `03/04/2026` can be the 3rd of April or the 4th of March, and a guess can be wrong without a sign.
 
-TODO(owner): day and month order is ambiguous; errors=coerce silently makes NaT; count NaT before and after (beginner trap 5).
+**Try it.** The order times, read with their format:
 
-<Exercise id="python-pandas-dates-and-resample-1">
+```python
+orders = orders.assign(when=pd.to_datetime(orders["ordered_at"], format="%Y-%m-%d %H:%M:%S"))
+print(orders["when"].min(), orders["when"].max())
+print(orders["when"].isna().sum())
+```
 
-**Trap slot, beginner trap 5 of 10: date parsing: day and month order is ambiguous.** Notebook: Exercise 1, Orders placed in April.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** `ordered_at` is text. What are the first and the last order times after the conversion, and how many dates are missing?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+2026-01-01 08:02:00 2026-06-30 16:30:00
+0
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* the first order is on January 1 and the last on June 30, and no date is missing, because every text fitted the format. Now three dates typed by hand, day first, as a bakery supplier writes them (a small list typed here, not cafe-sales data). With `errors="coerce"`, a text that does not fit becomes `NaT`, the missing date, instead of an error:
 
-TODO(owner): half-solution.
+```python
+typed = pd.Series(["03/04/2026", "13/04/2026", "05/11/2026"])
+as_days = pd.to_datetime(typed, format="%d/%m/%Y")
+as_months = pd.to_datetime(typed, format="%m/%d/%Y", errors="coerce")
+print(as_days.dt.month.tolist())
+print(as_months.isna().sum())
+```
+
+**Predict:** read day first, which month does each text give? Read month first, with `errors="coerce"`, how many dates are missing?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[4, 4, 11]
+1
+```
 
 </details>
 
-<Solution>
+*Why:* day first the months are 4, 4 and 11. Month first, the second text asked for month 13, which does not exist, so `coerce` turned it into `NaT` and printed nothing: one date vanished, and the first and third were read as other dates. Name the format, and count the missing dates after every parse.
 
-TODO(owner): solution and the known answer.
+### 2. dt and date ranges: parts, and the last day
 
-</Solution>
+**Idea.** The `dt` accessor opens the parts of a date column: `dt.month`, `dt.hour`, `dt.day_name()`. A date also compares with a text date, which pandas reads as midnight at the start of that day. A timestamp can also carry a time zone.
 
-</Exercise>
+**Try it.** The orders of each weekday, and the time zone of `when`:
 
-### 2. The dt accessor
+```python
+weekday = orders["when"].dt.day_name()
+print(weekday.value_counts())
+print(orders["when"].dt.tz)
+```
 
-TODO(owner): month, weekday.
+**Predict:** which day of the week has the most orders, and which the fewest? Does `when` carry a time zone?
 
-### 3. Filter by a date range
+<details>
+<summary>Reveal the result</summary>
 
-TODO(owner): and generate a range with date_range.
+```text
+when
+Saturday     340
+Sunday       315
+Monday       249
+Wednesday    232
+Friday       230
+Tuesday      223
+Thursday     211
+Name: count, dtype: int64
+None
+```
 
-### 4. Roll up by month
+</details>
 
-TODO(owner): resample or groupby; time zones are awareness only.
+*Why:* Saturday leads and Thursday is last. `None` says that no time zone is attached: by default pandas objects are time zone unaware, the pandas page says, and the hours are the till's own local times. Now a range of days. A colleague keeps January to March with the last day written out:
 
-### 5. Check: shift is LAG
+```python
+first_quarter = orders[(orders["when"] >= "2026-01-01") & (orders["when"] <= "2026-03-31")]
+whole_quarter = orders[(orders["when"] >= "2026-01-01") & (orders["when"] < "2026-04-01")]
+print(len(first_quarter), len(whole_quarter))
+```
 
-TODO(owner): shift completes the SQL window bridge, the pandas twin of LAG and LEAD.
+**Predict:** how many orders does each version keep?
 
-## Remember
+<details>
+<summary>Reveal the result</summary>
 
-Draft: the owner writes this section.
+```text
+710 718
+```
+
+</details>
+
+*Why:* 710 against 718. `"2026-03-31"` means midnight at the start of March 31, so every order of that day after 00:00 is cut off, eight of them. As in S11, ask for the rows before the first moment of the next day: `< "2026-04-01"`. A range that ends on a date and a day that is not complete is a common way to lose rows.
+
+### 3. resample: one row for each month
+
+**Idea.** `resample("MS")` groups a table by calendar month, `"MS"` for the month start, and it needs the dates as the index, so `set_index("when")` comes first. It is the `date_trunc` and `GROUP BY` of S11 in one call, and it puts the months in time order.
+
+**Try it.** The orders of each month:
+
+```python
+monthly = orders.set_index("when").resample("MS")["order_id"].size()
+print(monthly)
+print(monthly.sum())
+```
+
+**Predict:** how many rows will `monthly` have, and will its numbers add up to 1,800?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+when
+2026-01-01    242
+2026-02-01    218
+2026-03-01    258
+2026-04-01    349
+2026-05-01    380
+2026-06-01    353
+Freq: MS, Name: order_id, dtype: int64
+1800
+```
+
+</details>
+
+*Why:* six months, January to June, and the counts add up to the 1,800 orders. The counts rise from April, when Harbor opened. Now a month with no rows. Customer 5 ordered in January, April, May and June, and not in February or March:
+
+```python
+one = orders[orders["customer_id"] == 5]
+by_resample = one.set_index("when").resample("MS")["order_id"].size()
+by_month = one.groupby(one["when"].dt.month).size()
+print(by_resample.tolist())
+print(by_month.to_dict())
+```
+
+**Predict:** what will each version list for the months in which customer 5 did not order?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[1, 0, 0, 3, 1, 1]
+{1: 1, 4: 3, 5: 1, 6: 1}
+```
+
+</details>
+
+*Why:* `resample` lists every month from the first order to the last, and writes 0 for February and March. `groupby` on the month number lists only the four months that have rows, as `GROUP BY` did in S11. If the answer needs every month, use `resample`, or fill the gaps yourself as S27 did.
+
+### 4. shift: the month before
+
+**Idea.** `series.shift(1)` moves every value down one place, so each month sits beside the month before it. `monthly - monthly.shift(1)` is then the change from the previous month. It is the `LAG` of S16, and it needs the rows in time order, which `resample` gives.
+
+**Try it.** The change in the orders from month to month:
+
+```python
+change = monthly - monthly.shift(1)
+print(change.tolist())
+```
+
+**Predict:** what will the first value be, and in which month did the orders grow the most?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[nan, -24.0, 40.0, 91.0, 31.0, -27.0]
+```
+
+</details>
+
+*Why:* the first value is `nan`: January has no month before it, as `LAG` gave `NULL` in S16. The biggest rise, 91 orders, is April, when Harbor opened. The values are decimals because the `nan` is a float, as in lesson P16.
+
+### 5. Check: two routes to the same months
+
+A result is trusted more when a second route gives it. Write down what you expect, then run the cell.
+
+```python
+by_number = orders.groupby(orders["when"].dt.month).size()
+print(by_number.tolist() == monthly.tolist())
+```
+
+**Predict:** do `groupby` on the month number and `resample` give the same six counts?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+True
+```
+
+</details>
+
+*Why:* `True`: the two routes agree, because all six months have orders, so neither route has a gap to fill. Had a month been empty, the two would have disagreed, as in unit 3.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: date parsing: day and month order is ambiguous.
+- `to_datetime(column, format="...")` turns text into dates. Name the format, and count the `NaT` after.
+- `dt.month`, `dt.hour` and `dt.day_name()` open the parts of a date.
+- Filter a range with `>=` the first day and `<` the day after the last. A date written alone means midnight.
+- `resample("MS")` gives one row for each month, and a row of 0 for a month with no rows. `groupby` gives only months that have rows.
+- `shift(1)` puts the previous month beside this one.
+
+**Common trap:** `errors="coerce"` and a wrong format turn dates into `NaT` without a message, and `<= "last day"` drops that day's orders.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-dates-and-resample-1">
 
-<Exercise id="python-pandas-dates-and-resample-2">
+**How many orders did the cafes take from January 1 to May 31, both days included?** Replace the first `None` with the orders in that range, using the column `when` of unit 1, then set `answer_1` to the number of rows. Expected: one whole number.
 
-**Finish it.** Notebook: Exercise 2.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+first_five = None  # replace None: the orders of when from "2026-01-01" to "2026-05-31", both days included
+answer_1 = None  # then set answer_1 to the number of rows of first_five
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 2 keeps a range of days. A date written alone means the start of that day, so how should the range end?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+first_five = orders[(orders["when"] >= "2026-01-01") & (orders["when"] < ...)]
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+first_five = orders[(orders["when"] >= "2026-01-01") & (orders["when"] < "2026-06-01")]
+answer_1 = len(first_five)
+```
+
+The answer is 1447: 242, 218, 258, 349 and 380 orders for January to May. Ending the range with `<= "2026-05-31"` gives 1434, because the orders of May 31 after midnight are cut off, and the check cell says so.
 
 </Solution>
 
@@ -151,31 +383,37 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-dates-and-resample-2">
 
-<Exercise id="python-pandas-dates-and-resample-3">
-
-**On your own.** Notebook: Exercise 3.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**What was the largest rise in the number of orders of Old Town (store 1) from one month to the next?** Before you start, say in one sentence what kind of number the answer is. Count the orders of store 1 for each month and compare each month with the one before. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one decimal number.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 3 counts the orders of each month and unit 4 compares a month with the one before. Which rows do you keep first?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A decimal, because the first month has no month before it, and a number smaller than the rise of all the cafes together."*
+
+```python
+old_town = orders[orders["store_id"] == ...]
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+old_town = orders[orders["store_id"] == 1]
+monthly_old_town = old_town.set_index("when").resample("MS")["order_id"].size()
+answer_2 = (monthly_old_town - monthly_old_town.shift(1)).max()
+```
+
+The answer is 30.0: Old Town had 103 orders in February and 133 in March. Without the filter on the store the largest rise is 91, April for all cafes together, and the check cell says so. The answer is a decimal because the `nan` of the first month makes the whole column decimals.
 
 </Solution>
 
@@ -183,36 +421,56 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: `to_datetime` is called with `errors="coerce"` and the wrong format. What does it return for a text that does not fit, and how do you notice?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-pandas-dates-and-resample-4">
+   `NaT`, the missing date, and no message. You notice only if you count: `isna().sum()` after the parse.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 4.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-pandas-dates-and-resample-3">
+
+**Spot the flaw.** The bakery's supplier writes delivery dates day first. A colleague parses them and counts the deliveries in March, and the answer looks too small. Fix the line, then set `answer_3 = (parsed.dt.month == 3).sum()`. Expected: one whole number.
+
+```python
+deliveries = pd.Series(["02/03/2026", "15/03/2026", "28/03/2026", "03/03/2026", "04/04/2026"])  # day/month/year, typed at the back door
+parsed = pd.to_datetime(deliveries, format="%m/%d/%Y", errors="coerce")  # the colleague's line
+answer_3 = None  # fix the line above, then set answer_3 = (parsed.dt.month == 3).sum()
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Print `parsed.isna().sum()`. Two of the five dates are missing. Compare the order of the parts in the text with the order in `format`.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+parsed = pd.to_datetime(deliveries, format=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+deliveries = pd.Series(["02/03/2026", "15/03/2026", "28/03/2026", "03/03/2026", "04/04/2026"])
+parsed = pd.to_datetime(deliveries, format="%d/%m/%Y")
+answer_3 = (parsed.dt.month == 3).sum()
+```
+
+The answer is 4: 2, 3, 15 and 28 March. Read month first with `coerce`, the dates of the 15th and the 28th became `NaT`, the 2nd was read as February, and only the 3rd, the same in both orders, counted as March: 1. The check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can turn text into dates with a named format and count the ones that fail, use the parts of a date, filter a range without losing its last day, count by month with `resample` and compare with the month before with `shift`.*
+Test: Exercise python-pandas-dates-and-resample-2, done from the notebook without opening the hints.
+
+The pattern to remember: **name the format, count the `NaT`, end a range before the next day, then resample.** The next lesson, *Cleaning text columns* (P18), cleans the text columns that dates and names come in.

@@ -1,20 +1,21 @@
 ---
 id: python-pandas-groupby-aggregate
 title: Grouping and aggregating
-description: Split rows into groups, apply several statistics at once and combine the result, the pandas form of GROUP BY and a pivot.
+description: Sort a table, then split rows into groups, apply several named statistics and combine the result, the pandas form of GROUP BY.
 stage: python
 order: 140
 level: beginner
-duration: 30
+duration: 35
 objectives:
+  - Sort a table by one column, highest first, and say where missing values go
   - Explain groupby as split, apply and combine
   - Compute several named aggregates in one pass
-  - Group by more than one column
-  - Build the same summary with pivot_table
-  - Verify a grouped total against the ungrouped total
+  - Tell size from count, and check that the group totals add up to the table's total
 prerequisites:
   - python-pandas-select-and-filter
   - python-pandas-derived-columns
+  - sql-select-sort-limit
+  - sql-aggregate-functions
   - sql-group-by-having
   - excel-pivottables-build
 datasets:
@@ -22,12 +23,14 @@ datasets:
 notebook: notebooks/python/python-pandas-groupby-aggregate.ipynb
 reviewed: 2026-11-16
 sources:
-  - title: 'pandas documentation: Group by (split-apply-combine)'
+  - title: 'pandas documentation: Group by: split-apply-combine (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/groupby.html
-  - title: 'pandas documentation: Reshaping and pivot tables'
-    url: https://pandas.pydata.org/docs/user_guide/reshaping.html
-  - title: 'pandas documentation: Comparison with SQL'
+  - title: 'pandas documentation: DataFrame.sort_values (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sort_values.html
+  - title: 'pandas documentation: Comparison with SQL (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_sql.html
+  - title: 'Microsoft Support: Sort data in a range or table (accessed 2026-11-20)'
+    url: https://support.microsoft.com/en-us/office/sort-data-in-a-range-or-table-62d0b95d-2a90-4610-a6ae-2e545c4a4654
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
 status: draft
@@ -35,203 +38,408 @@ status: draft
 
 TODO(owner): Set `reviewed` and `status` when you publish this lesson.
 
-TODO(owner): Carries four bridge traps (issue section 3, traps 4, 5, 11 and 12). Derived columns moved ahead of this lesson, so sales amounts can be computed first.
+TODO(owner): Team draft (owner request under D24, 2026-11-19); edit it. Unit 1 opens with `sort_values` (owner-approved placement from issue #74, which is not among the synced research issues), then `groupby` through three doors: the PivotTable recall of the Warm-up, split-apply-combine as the big idea, and `value_counts()` shown to be a groupby in Exercise 1. To keep four ideas the lesson drops two objectives of the stub, grouping by more than one column and `pivot_table`; the owner decides which lesson takes them (the reshaping lesson is the natural home of `pivot_table`). Bridge trap 11 (an all-missing sum is 0) and the fact that `value_counts()` also hides missing values are left out for the same reason. `dropna=False` is named in the Why of unit 2, not run, so Exercise 1 stays the application. Every number names its rows: all 1,800 orders and all 3,287 lines, the canceled order and the extra-zero line of order 2075 included. The Excel claim of unit 1 (blank cells sort last in both directions) rests on the Microsoft Support page in `sources`; the DuckDB twin (`ORDER BY referred_by DESC` also puts the blanks last) was run, not cited. The concept figure is the new spec `scripts/animations/concept-split-apply-combine.mjs`, a copy of `concept-group-by` without HAVING, pasted by hand because `scripts/refresh-concept-figures.mjs` only reads the SQL lessons.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> Which products brought in the most money, and how many orders did each cafe take?
+
+The two lines of order 1107 hold an amount each, and an order holds a store:
+
+| order_item_id | order_id | product_id | amount |
+|---:|---:|---:|---:|
+| 5192 | 1107 | 5 | 9.50 |
+| 5193 | 1107 | 4 | 4.00 |
+
+| order_id | store_id |
+|---:|---:|
+| 1001 | 2 |
+| 1002 | 1 |
+| 1003 | 2 |
+
+The tables have one row for each line and one row for each order, and the owner wants one row for each product and one row for each cafe. By the end of this page you will sort, group and add up, then check the totals against numbers you already know.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *GROUP BY and HAVING* (S8), `SELECT store_id, COUNT(*) FROM orders GROUP BY store_id` gave one row for each store. `orders.groupby("store_id").size()` gives the same rows, as a PivotTable with the store in Rows does (*Summarize with a PivotTable*, E15). The `ORDER BY ... DESC` of *SELECT, ORDER BY and LIMIT* (S2) is `sort_values(..., ascending=False)`.
+
+**Diverge.** In S8, `GROUP BY customer_id` made 146 groups: 145 customers and one group for the walk-in order, whose customer id is blank. What `groupby` does with a blank key is the second check of unit 2.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Summarize with a PivotTable* (E15), which field did you drag to Rows, and which to Values, to count the orders of each store?
+
+   <details>
+   <summary>answer</summary>
+
+   The store to Rows, and the order id to Values, summarized as a count. The PivotTable made one row for each store.
+
+   </details>
+
+2. In *New columns from old: assign, map and apply* (P13), write the line that makes the `amount` column of `lines` from `quantity`, `price` and `discount_usd`.
+
+   <details>
+   <summary>answer</summary>
+
+   `lines = lines.assign(amount=lines["quantity"] * lines["price"] - lines["discount_usd"])`. The arithmetic works on whole columns at once.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+`groupby` splits the rows into one group for each key, applies a calculation to each group, and combines the results into a new table.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="sac-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="sac" id="sac-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="sac" id="sac-r1" aria-label="Step 1 of 4: Six rows, each with a key" />
+<input class="sa-r r2 o4" type="radio" name="sac" id="sac-r2" aria-label="Step 2 of 4: Split: rows go to their group" />
+<input class="sa-r r3 o5" type="radio" name="sac" id="sac-r3" aria-label="Step 3 of 4: Apply: a count for each group" />
+<input class="sa-r r4 o8" type="radio" name="sac" id="sac-r4" aria-label="Step 4 of 4: Combine: a new table" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>rows</small><span><i class="w1 tmp hl">6</i><i class="w7 d2">6</i></span></span><span class="sa-n c-grp"><small>groups</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">1</i><i class="w1 d3 tmp hl">2</i><i class="w1 d4 tmp hl">3</i><i class="w4 d5">3</i></span></span><span class="sa-n c-out"><small>counts</small><span><i class="w4 tmp">—</i><i class="w1 d5 tmp hl">3</i><i class="w3 d6">3</i></span></span><span class="sa-n c-src"><small>table</small><span><i class="w5 tmp">—</i><i class="w3 d6 hl">3 rows</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 224" width="360" role="img" aria-labelledby="sac-t sac-d">
+<title id="sac-t">groupby splits rows into groups, applies a calculation to each group and combines the results</title>
+<desc id="sac-d">Six rows, Row 1 to Row 6, each tagged with a key: A, B, A, C, B, A. The A rows slide into group A, the B rows into group B and the C row into group C. Each group then becomes one row holding its count: A 3 rows, B 2 rows, C 1 row. A dashed frame around the three result rows marks the new table.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Six rows, each with a key</text>
+<text class="f10 b w3 d2 tmp" x="10" y="29">2 · Split: rows go to their group</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">3 · Apply: a count for each group</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · Combine: a new table</text>
+<text class="f11 b" x="10" y="14">Split, apply, combine</text>
+<rect class="bx dsh" x="10" y="40" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="70" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="100" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="130" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="160" width="64" height="24" rx="6" />
+<rect class="bx dsh" x="10" y="190" width="64" height="24" rx="6" />
+<rect class="bx" x="110" y="30" width="236" height="44" rx="8" />
+<text class="f14 b w6 d3" x="116" y="56">A</text>
+<rect class="bx" x="110" y="90" width="236" height="44" rx="8" />
+<text class="f14 b w5 d4" x="116" y="116">B</text>
+<rect class="bx" x="110" y="150" width="236" height="44" rx="8" />
+<text class="f14 b w4 d5" x="116" y="176">C</text>
+<g class="w4 tmp"><g class="mv m2 x12 y0"><g><rect class="f-grp k1" x="10" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="56">Row 1 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x12 y3"><g><rect class="f-grp k2" x="10" y="70" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="86">Row 2 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2 x19 yn6"><g><rect class="f-grp k1" x="10" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="116">Row 3 · A</text></g></g></g>
+<g class="w4 tmp"><g class="mv m4 x12 y3"><g><rect class="f-grp k4" x="10" y="130" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="146">Row 4 · C</text></g></g></g>
+<g class="w4 tmp"><g class="mv m3 x19 yn6"><g><rect class="f-grp k2" x="10" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="176">Row 5 · B</text></g></g></g>
+<g class="w4 tmp"><g class="mv m2a x26 y0"><g class="w8"><g class="mv m2b x0 yn15"><g><rect class="f-grp k1" x="10" y="190" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="206">Row 6 · A</text></g></g></g></g></g>
+<g class="w4 d5"><rect class="f-out k3" x="130" y="40" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="56">3 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="36" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="100" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="116">2 rows</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="96" width="72" height="32" rx="8" />
+<g class="w4 d5"><rect class="f-out k3" x="130" y="160" width="64" height="24" rx="6" /><text class="f11 m" x="162" y="176">1 row</text></g>
+<rect class="s-out u2 d5 tmp" x="126" y="156" width="72" height="32" rx="8" />
+<rect class="s-src u3 d6" x="130" y="38" width="64" height="28" rx="8" />
+<rect class="s-src u3 d6" x="130" y="98" width="64" height="28" rx="8" />
+<rect class="s-src u3 d6" x="130" y="158" width="64" height="28" rx="8" />
+<text class="f10 b w3 d6" x="250" y="14">new table</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="sac-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="sac-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="sac-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="sac-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="sac-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="sac-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="sac-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="sac-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="sac-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="sac-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="sac-r1">1</label><label class="sa-sb sb2" for="sac-r2">2</label><label class="sa-sb sb3" for="sac-r3">3</label><label class="sa-sb sb4" for="sac-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Every row carries a key; rows with the same key will end up in the same group.<span class="sa-chs"><span class="sa-ch pl">6 rows, each with a key</span></span></div>
+<div class="c-grp w3 d2 tmp">Split: groupby gives each key its own group and sends the rows to it.<span class="sa-chs"><span class="sa-ch pl">3 groups: A, B, C</span><span class="sa-ch ch">rows moved into groups</span></span></div>
+<div class="c-out w1 d5 tmp">Apply: one calculation, here a count, runs on each group on its own.<span class="sa-chs"><span class="sa-ch mi">6 rows folded into 3</span><span class="sa-ch pl">a count for each group</span></span></div>
+<div class="c-src w3 d6">Combine: the results of all groups form a new table with one row per key.<span class="sa-chs"><span class="sa-ch pl">1 new table of 3 rows</span></span></div>
+</div>
+<p class="ca-cap">groupby splits the rows into one group per key, applies a calculation to each group, and combines the results into a new table with one row per key.</p>
+<ol class="sa-steps">
+<li>Six rows, each with a key</li>
+<li>Split: rows go to their group</li>
+<li>Apply: a count for each group</li>
+<li>Combine: a new table</li>
+</ol>
+</figure>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 4 new ideas: `sort_values`, `groupby`, named aggregation, and `size` against `count`. The last unit only checks them. The setup cell made `lines`, the order lines of lesson P13 with their price and amount.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. sort_values, and where the blanks go
 
-### 1. One group per store
+**Idea.** `table.sort_values("column")` returns the table with its rows in a new order, lowest first. `ascending=False` puts the highest first. The old table keeps its order, and each row keeps its row label.
 
-TODO(owner): split, apply, combine; size; named aggregates; there is no HAVING (aggregate first, then filter) and no WITH (one named DataFrame per CTE).
+**Try it.** The three dearest products:
 
-### 2. Count rows or count values
+```python
+dearest = products.sort_values("unit_price_usd", ascending=False)
+print(dearest[["product_name", "unit_price_usd"]].head(3))
+print(products["product_id"].head(3).tolist(), dearest["product_id"].head(3).tolist())
+```
 
-TODO(owner): `COUNT(*)` against `COUNT(col)`: size() against count() (bridge trap 12); value_counts hides missing values too (bridge trap 5).
-
-<Exercise id="python-pandas-groupby-aggregate-1">
-
-**Trap slot, bridge trap 12 of 12: `COUNT(col)` against `COUNT(*)`.** Notebook: Exercise 1, Orders per store, two ways.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** which three products come first, and does `products` itself change its order?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+           product_name  unit_price_usd
+14      Turkey Sandwich            9.25
+13        Avocado Toast            8.50
+15  Pumpkin Spice Latte            5.50
+[1, 2, 3] [15, 14, 16]
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* the three dearest are the Turkey Sandwich, the Avocado Toast and the Pumpkin Spice Latte. The numbers on the left are row labels, and they traveled with their rows (14, 13, 15). `products` still starts with products 1, 2 and 3: `sort_values` returned a new table. Now a column with blanks. `referred_by` holds the id of the customer who referred a customer, and it is blank for most customers:
 
-TODO(owner): half-solution.
+```python
+by_referrer = customers.sort_values("referred_by", ascending=False)
+print(by_referrer["referred_by"].head(3).tolist())
+print(by_referrer["referred_by"].tail(3).tolist())
+```
+
+**Predict:** sorted from the highest, are the first three values numbers or blanks, and the last three?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[117.0, 106.0, 88.0]
+[nan, nan, nan]
+```
 
 </details>
 
-<Solution>
+*Why:* the blanks, shown as `nan`, came last, although the sort was descending. A descending sort does not bring them to the top. Excel does the same: its sort puts blank cells last, in ascending and in descending order (*Sort data in a range or table*, Microsoft Support). To see the blanks first, `sort_values` has a parameter called `na_position`, and the pandas page for `sort_values` gives its default as `'last'`. Count the blanks before you read a sorted table, so that you know what is waiting at the bottom.
 
-TODO(owner): solution and the known answer.
+### 2. groupby: split, apply, combine
 
-</Solution>
+**Idea.** `table.groupby("key")` splits the rows into one group for each different value of the key. A calculation then runs on each group, and the results come back as a new table with one row for each group. `.size()` is the calculation that counts the rows of a group, the `COUNT(*)` of S8.
 
-</Exercise>
+**Try it.** The orders of each cafe:
 
-<Exercise id="python-pandas-groupby-aggregate-2">
+```python
+per_store = orders.groupby("store_id").size()
+print(per_store)
+print(per_store.sum(), len(orders))
+```
 
-**Trap slot, bridge trap 5 of 12: value_counts hides missing values too.** Notebook: Exercise 2, Customers by referrer.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** how many rows will `per_store` have, and will its numbers add up to the rows of `orders`?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+store_id
+1    729
+2    716
+3    355
+dtype: int64
+1800 1800
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* one row for each store, ordered by store id, and the three counts add up to the 1,800 rows of `orders`: every order sits in exactly one group. Now the key with a blank, the customer of each order:
 
-TODO(owner): half-solution.
+```python
+per_customer = orders.groupby("customer_id").size()
+print(len(per_customer), per_customer.sum())
+```
+
+**Predict:** the walk-in order has a blank `customer_id`. How many groups will there be, and will their sizes add up to 1,800?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+145 1799
+```
 
 </details>
 
-<Solution>
+*Why:* 145 groups hold 1,799 orders. The walk-in order is in no group: by default, pandas leaves out the rows whose key is blank. The pandas page on groupby says that any group of blank keys will be dropped, and that the `dropna` parameter, `True` by default, is what decides it. Where S8 counted 146 groups, with one for the blank, pandas counts 145 and says nothing. A grouped result that does not add up to the table is the first thing to look for.
 
-TODO(owner): solution and the known answer.
+### 3. agg: several named results in one pass
 
-</Solution>
+**Idea.** `.agg(name=("column", "function"))` runs several calculations on each group at once. Each keyword is the name of a result column, and each value says which column to use and which function to apply: `"sum"`, `"mean"`, `"min"`, `"max"`, `"size"`. It is the several aggregates of one `SELECT` in S7, with a name for each result column.
 
-</Exercise>
+**Try it.** One row for each product, with its units, its sales and its lines:
 
-### 3. Groups that vanish
+```python
+by_product = lines.groupby("product_id").agg(
+    units=("quantity", "sum"),
+    sales=("amount", "sum"),
+    n_lines=("order_item_id", "size"),
+)
+print(by_product.shape)
+print(by_product.head(3))
+```
 
-TODO(owner): groupby drops missing group keys by default; totals stop reconciling (bridge trap 4, the most dangerous one).
-
-<Exercise id="python-pandas-groupby-aggregate-3">
-
-**Trap slot, bridge trap 4 of 12: groupby drops missing group keys.** Notebook: Exercise 3, Orders per customer.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** how many rows and columns will `by_product` have? The `products` table has 16 products.
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+(15, 3)
+            units   sales  n_lines
+product_id                        
+1             286   855.0      192
+2             430  1498.0      293
+3             653  2927.0      420
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* 15 rows and 3 columns. A group exists only for a key that is in the data, and the Pumpkin Spice Latte, product 16, was never sold. The three result columns carry the names given in `agg`. Now the question of the owner, which product comes first by sales:
 
-TODO(owner): half-solution.
+```python
+ranked = by_product.sort_values("sales", ascending=False)
+print(ranked.head(3))
+```
+
+**Predict:** which three product ids come first when the products are sorted by sales, highest first?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+            units    sales  n_lines
+product_id                         
+3             653  2927.00      420
+4             472  2115.50      305
+15            213  1968.75      125
+```
 
 </details>
 
-<Solution>
+*Why:* products 3, 4 and 15 lead. The Turkey Sandwich, product 15, is third although it has only 125 lines, because each line is dear. Sorting the result of a `groupby` is the pandas form of `GROUP BY` followed by `ORDER BY`, and the sort is the last step.
 
-TODO(owner): solution and the known answer.
+### 4. size counts rows, count counts values
 
-</Solution>
+**Idea.** `size` counts the rows of each group. `count` counts the values that are not blank, one column at a time. They are the `COUNT(*)` and the `COUNT(column)` of *Counting and summing: aggregate functions* (S7), under two names. The pandas page on SQL says why it uses `size()` where SQL counts rows: `count()` goes column by column and counts the records that are not null.
 
-</Exercise>
+**Try it.** The rows and the known customers of each payment method:
 
-### 4. Aggregates skip missing values
+```python
+by_method = orders.groupby("payment_method").agg(
+    orders=("order_id", "size"),
+    with_customer=("customer_id", "count"),
+)
+print(by_method)
+print(by_method["orders"] - by_method["with_customer"])
+```
 
-TODO(owner): an all-missing sum is 0, not NULL (bridge trap 11).
-
-<Exercise id="python-pandas-groupby-aggregate-4">
-
-**Trap slot, bridge trap 11 of 12: aggregates skip missing values, and an all-missing sum is 0.** Notebook: Exercise 4, Orders with no recorded discount.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** the walk-in order has no customer id. For which payment method will the two numbers differ, and by how much?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+                orders  with_customer
+payment_method                       
+card              1001           1001
+cash               253            253
+mobile             546            545
+payment_method
+card      0
+cash      0
+mobile    1
+dtype: int64
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* the walk-in order was paid by mobile, so mobile has 546 orders and 545 customer ids, and the other two methods have none missing. `size` counted the order, and `count` skipped its blank. Choose by the question: `size` for how many rows, `count` for how many values are there.
 
-TODO(owner): half-solution.
+### 5. Check: the groups add up
+
+Write down what you expect, then run the cell. The groups are the products of unit 3.
+
+```python
+print(by_product["sales"].sum(), lines["amount"].sum())
+print(by_product["n_lines"].sum(), len(lines))
+```
+
+**Predict:** do the totals of the 15 groups equal the totals of the whole table?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+22754.25 22754.25
+3287 3287
+```
 
 </details>
 
-<Solution>
-
-TODO(owner): solution and the known answer.
-
-</Solution>
-
-</Exercise>
-
-### 5. Check that the groups add up
-
-TODO(owner): reconcile the grouped total with the plain total; the same summary with pivot_table; groupby.filter when the original rows are needed back.
-
-## Remember
-
-Draft: the owner writes this section.
+*Why:* the same control total as in *New columns from old: assign, map and apply* (P13), *Summarize with a PivotTable* (E15) and *Counting and summing: aggregate functions* (S7): all 3,287 lines, the canceled order and the extra-zero line included. This time every line has a product, so no key is blank and the groups lose nothing. In unit 2 they did, and the check was what showed it.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: `COUNT(col)` against `COUNT(*)`; value_counts hides missing values too; groupby drops missing group keys; aggregates skip missing values, and an all-missing sum is 0.
+- `sort_values("column", ascending=False)` returns a new, sorted table. Blank values go last in both directions, unless `na_position` says otherwise.
+- `groupby("key")` splits the rows into groups, runs a calculation on each group and combines the results into one row for each group.
+- `agg(name=("column", "function"))` gives several named results in one pass.
+- `size` counts rows, `count` counts values that are not blank.
+- Check the groups against the table: the sizes of the groups must add up to its rows.
+
+**Common trap:** rows with a blank key are left out of a `groupby` without a message, so the groups can add up to less than the table.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-groupby-aggregate-1">
 
-<Exercise id="python-pandas-groupby-aggregate-5">
+**What share of the 1,800 orders did the ten busiest customers place?** `by_customer` counts the orders of each customer with `value_counts()`. Replace the first `None` with the same counts made with `groupby` and `size`, then set `answer_1` to the share, a number between 0 and 1. Expected: one decimal number between 0 and 1.
 
-**Finish it.** Notebook: Exercise 5.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+by_customer = orders["customer_id"].value_counts()  # given: the orders of each customer
+sizes = None  # replace None: the same counts made with groupby and size
+answer_1 = None  # then set answer_1 to the orders of the 10 busiest customers, divided by the 1,800 orders of the table
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+A groupby of one column with `size()` gives the same counts as `value_counts()`. Unit 2 shows what the sizes add up to.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+sizes = orders.groupby("customer_id").size()
+ten_busiest = sizes.sort_values(ascending=False).head(10)
+answer_1 = ten_busiest.sum() / ...
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+sizes = orders.groupby("customer_id").size()
+ten_busiest = sizes.sort_values(ascending=False).head(10)
+answer_1 = ten_busiest.sum() / len(orders)
+```
+
+The answer is 0.1489: the ten busiest customers placed 268 of the 1,800 orders. `value_counts()` and `groupby(...).size()` hold the same counts, and only the order of their rows can differ. Dividing by `sizes.sum()`, 1799, gives 0.1490: the walk-in order is in no group, as in unit 2, and the check cell says so.
 
 </Solution>
 
@@ -239,31 +447,39 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-groupby-aggregate-2">
 
-<Exercise id="python-pandas-groupby-aggregate-6">
-
-**On your own.** Notebook: Exercise 6.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**For each city of the customers, what share of the customers were referred by another customer? Report the highest share.** Before you start, say in one sentence what kind of number the answer is. Make one table with `groupby` and `agg`: the customers of each city and the referred customers of each city. The answer is the highest share. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one decimal number between 0 and 1.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 4 counts the rows of a group with one function and the values that are not blank with another. A customer who was not referred has a blank `referred_by`.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A decimal between 0 and 1: a share, so below one half here."*
+
+```python
+by_city = customers.groupby("city").agg(customers=("customer_id", "size"), referred=("referred_by", ...))
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+by_city = customers.groupby("city").agg(
+    customers=("customer_id", "size"),
+    referred=("referred_by", "count"),
+)
+answer_2 = (by_city["referred"] / by_city["customers"]).max()
+```
+
+The answer is 0.3261: Berkeley, where 15 of the 46 customers were referred. Counting `referred_by` with `size` counts every customer, so every share is exactly 1, and the check cell says so.
 
 </Solution>
 
@@ -271,36 +487,54 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: a group holds a blank in one column. What do `size` and `count` give for that group?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-pandas-groupby-aggregate-7">
+   `size` counts every row of the group, the row with the blank included. `count` counts only the values that are not blank in that column, so it gives one less.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 7.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-pandas-groupby-aggregate-3">
+
+**Spot the flaw.** A colleague wants the customers who have no referrer at the top of the table, to review them. After sorting from the highest, the top rows all have a referrer. Fix the line, then set `answer_3` to the number of the first 10 rows that have no referrer. Expected: one whole number.
+
+```python
+review = customers.sort_values("referred_by", ascending=False)  # the colleague's line
+answer_3 = None  # fix the line above, then set answer_3 = review.head(10)["referred_by"].isna().sum()
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 1 names the parameter that moves the blanks. The pandas page for `sort_values` says what its default is.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+review = customers.sort_values("referred_by", ascending=False, na_position=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+review = customers.sort_values("referred_by", ascending=False, na_position="first")
+answer_3 = review.head(10)["referred_by"].isna().sum()
+```
+
+The answer is 10: all of the first 10 rows now have a blank. The colleague's line left `na_position` at its default, `'last'`, so the 120 blanks sat at the bottom and none of the first 10 rows had one; the check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can sort a table and say where its blanks go, group it with `groupby` and several named aggregates, tell `size` from `count`, and check that the groups add up to the table.*
+Test: Exercise python-pandas-groupby-aggregate-2, done from the notebook without opening the hints.
+
+The pattern to remember: **sort, group, then reconcile the groups with the whole table.** The next lesson, *Merging tables safely* (P15), brings two tables together and checks the row count in the same way.

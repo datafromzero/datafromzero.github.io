@@ -107,6 +107,18 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   Colab gives a new notebook today (its published package list names 2.2.3 and says it may be stale) and whether `openpyxl` is installed there, plus edits and
   approval of every lesson text.
 
+- **Python batch 3 (2026-11-20, team drafts for the owner to edit, D24, all still `status: draft`):** `pandas-groupby-aggregate` (P14, opens with `sort_values` and the
+  blanks-sort-last trap, owner-approved placement from issue #74), `pandas-merge-and-validate` (P15), `pandas-missing-data-and-types` (P16), `pandas-dates-and-resample` (P17) and
+  `pandas-text-cleaning` (P18) are written in full with their notebooks, three exercises each (the blank-cell Exercise 2, one plausible wrong answer rejected per exercise)
+  and one figure each; P14 uses a new CSS-only concept animation (`scripts/animations/concept-split-apply-combine.mjs`, pasted by hand because
+  `scripts/refresh-concept-figures.mjs` reads only the SQL lessons). Every notebook was run from the top on pandas 3.1.1 (real `v0.1.0` URLs) and 2.2.3 with identical
+  outputs. Choices the owner may reverse: P14 drops grouping by two keys and `pivot_table`; P15 drops `concat`, `suffixes` and the trap that blank keys match each other;
+  P16 drops `to_numeric` and the median fill; P17 drops `date_range` and time zones beyond awareness; P18 drops the recoding with a mapping. P18 reads no file for the D46
+  menu: the data cell holds the 48 lines of `menu_accents.csv` as pasted text, because the dataset is newer than the `v0.1.0` tag; when the owner creates the first tag that
+  contains it, replace that text by one `read_csv` from the tag. Still open for the owner: edits and approval of every lesson text.
+- **Planned, not part of any batch (owner request, 2026-11-20):** a "Python for engineers" block in the advanced core, to be discussed with the owner after a Muse research
+  issue arrives.
+
 ## Open items and owner decisions still pending
 
 - **Google Analytics:** on since 2026-11-17 (`G-0TNDBK1ZJX`, retention 2 months, consent first). If the owner changes

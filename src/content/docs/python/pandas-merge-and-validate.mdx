@@ -5,25 +5,27 @@ description: Merge two DataFrames, predict the row count first, and use validate
 stage: python
 order: 150
 level: intermediate
-duration: 30
+duration: 35
 objectives:
-  - State the expected relationship between two tables before merging
-  - Choose inner, left, right or outer in merge()
-  - Use validate and indicator to audit the result
-  - Predict the output row count and explain any difference
-  - Stack files with concat
+  - State how many partners a key may have on each side and write it in validate before merging
+  - Choose inner, left or outer in merge, and predict the row count before the run
+  - Use indicator to see where each row of a merged table came from
+  - Spot a many-to-many merge by its row count, and by the total it inflates
 prerequisites:
   - python-pandas-groupby-aggregate
+  - python-pandas-derived-columns
+  - sql-inner-join
+  - sql-left-join-anti-join
   - sql-join-fanout
 datasets:
   - cafe-sales
 notebook: notebooks/python/python-pandas-merge-and-validate.ipynb
 reviewed: 2026-11-16
 sources:
-  - title: 'pandas documentation: Merge, join, concatenate and compare'
+  - title: 'pandas documentation: Merge, join, concatenate and compare (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/merging.html
-  - title: 'pandas documentation: Comparison with SQL'
-    url: https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_sql.html
+  - title: 'pandas documentation: DataFrame.merge (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
 status: draft
@@ -31,175 +33,331 @@ status: draft
 
 TODO(owner): Set `reviewed` and `status` when you publish this lesson.
 
-TODO(owner): Merge validation is a deliberate differentiator: taught by none of the five syllabi; validate= and indicator= become house rules (issue section 2, item 15).
+TODO(owner): Team draft (owner request under D24, 2026-11-19); edit it. Rule 10 of the Python teaching rules holds from the first merge: every merge writes `validate=`, the expected row count is predicted before the run, and `indicator=True` shows where rows came from. VLOOKUP's twin was `map` in the derived-columns lesson; this lesson diverges to `merge` and says so in the Aside. To keep four ideas the lesson drops `concat` (stacking files, an objective of the stub), the `suffixes` rename of overlapping columns (bridge trap 10) and the trap that blank keys match each other in pandas (bridge trap 1); the owner decides where they go. The row counts name their rows: 1,800 orders, 3,287 lines and 150 customers, the canceled order and the extra-zero line included. The promo and special lists of units 4 and the third exercise are small tables typed in the cell, not cafe-sales data; the text says so. The error text printed in units 1 and 4 is the first line of the pandas message, which is the same on pandas 3.1.1 and 2.2.3 (the full message also lists the repeated keys).
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> Attach the name of its store to every order, and tell me which customers have no orders and which orders have no customer.
+
+The first three orders hold a store number, and the store names live in another table:
+
+| order_id | customer_id | store_id |
+|---:|---:|---:|
+| 1001 | 15 | 2 |
+| 1002 | 46 | 1 |
+| 1003 | 61 | 2 |
+
+| store_id | store_name |
+|---:|---|
+| 1 | Old Town |
+| 2 | Campus |
+| 3 | Harbor |
+
+The two tables share a key, `store_id`, and a merge uses it to bring the rows together. By the end of this page you will merge three times, say how many rows to expect before each run, and read where every row of the result came from.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *INNER JOIN: pairing rows on a key* (S19), `JOIN ... ON` paired the rows that had the same key, and `LEFT JOIN` (S20) also kept the rows without a partner. `orders.merge(stores, on="store_id")` pairs rows the same way, and `how="left"` is the `LEFT JOIN`.
+
+**Diverge.** `map`, the twin of VLOOKUP in *New columns from old: assign, map and apply* (P13), gives one value for each row and never adds rows. A merge can add rows, as *Join fan-out: aggregate before you join* (S21) showed in SQL, and pandas does not say so unless you ask. Unit 4 shows what happens.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Join fan-out: aggregate before you join* (S21), what happened to a row of one table when its key appeared three times in the other?
+
+   <details>
+   <summary>answer</summary>
+
+   The join made one result row for each match, so the row appeared three times, and a `SUM` of its column counted it three times.
+
+   </details>
+
+2. In *New columns from old: assign, map and apply* (P13), write the line that looks up the price of each order line with `map`, from the dictionary `price_of`.
+
+   <details>
+   <summary>answer</summary>
+
+   `order_items["product_id"].map(price_of)`. It gives one price for each line, and `NaN` for a product that the dictionary lacks.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+A merge pairs the rows of two tables that share a key, and `validate` says in advance how many partners a key may have.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 250" width="360" role="img" aria-labelledby="mg-fig-title mg-fig-desc">
+<title id="mg-fig-title">A merge pairs rows on a key, and the indicator says where each row came from</title>
+<desc id="mg-fig-desc">A miniature of two tables. The products table has two rows, product 15 Turkey Sandwich and product 16 Pumpkin Spice Latte. The order_items table has two lines, 5005 and 5016, both for product 15. Arrows pair product 15 with both lines. The merged table below, made with how left and indicator true, has three rows: product 15 with line 5005, marked both; product 15 with line 5016, marked both; and product 16 with no line, NaN, marked left_only. The left_only row and the _merge column are shaded.</desc>
+<defs>
+<marker id="mg-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="10" y="22" width="170" height="24" fill="currentColor" fill-opacity="0.07" /><rect x="214" y="22" width="136" height="24" fill="currentColor" fill-opacity="0.07" />
+<rect x="10" y="124" width="340" height="24" fill="currentColor" fill-opacity="0.07" />
+<rect x="264" y="148" width="86" height="72" fill="currentColor" fill-opacity="0.07" /><rect x="10" y="196" width="340" height="24" fill="currentColor" fill-opacity="0.14" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="22" width="170" height="72" /><path d="M10 46 H180 M10 70 H180 M72 22 V94" />
+<rect x="214" y="22" width="136" height="72" /><path d="M214 46 H350 M214 70 H350 M290 22 V94" />
+<rect x="10" y="124" width="340" height="96" /><path d="M10 148 H350 M10 172 H350 M10 196 H350 M72 124 V220 M190 124 V220 M264 124 V220" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.75">
+<path d="M184 58 H210" marker-end="url(#mg-arrow)" /><path d="M184 58 L210 82" marker-end="url(#mg-arrow)" /><path d="M180 98 V108" marker-end="url(#mg-arrow)" />
+</g>
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="10" y="14">products</text><text x="214" y="14">order_items</text><text x="10" y="120">the merged table: how left, indicator true</text>
+</g>
+<g fill="currentColor" font-size="10" font-weight="600" text-anchor="middle">
+<text x="41" y="38">product_id</text><text x="126" y="38">product_name</text><text x="252" y="38">order_item_id</text><text x="320" y="38">product_id</text>
+<text x="41" y="140">product_id</text><text x="131" y="140">product_name</text><text x="227" y="140">order_item_id</text><text x="307" y="140">_merge</text>
+</g>
+<g fill="currentColor" font-size="10" text-anchor="middle">
+<text x="126" y="62">Turkey Sandwich</text><text x="126" y="86">Pumpkin Spice Latte</text>
+<text x="131" y="164">Turkey Sandwich</text><text x="131" y="188">Turkey Sandwich</text><text x="131" y="212">Pumpkin Spice Latte</text>
+</g>
+<g fill="currentColor" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="41" y="62">15</text><text x="41" y="86">16</text>
+<text x="252" y="62">5005</text><text x="320" y="62">15</text><text x="252" y="86">5016</text><text x="320" y="86">15</text>
+<text x="41" y="164">15</text><text x="41" y="188">15</text><text x="41" y="212">16</text>
+<text x="227" y="164">5005</text><text x="227" y="188">5016</text><text x="227" y="212" fill-opacity="0.7">NaN</text>
+<text x="307" y="164" font-weight="600">both</text><text x="307" y="188" font-weight="600">both</text><text x="307" y="212" font-weight="600">left_only</text>
+</g>
+<g fill="currentColor" font-size="11" fill-opacity="0.85">
+<text x="190" y="107">merge</text>
+</g>
+<g fill="currentColor" font-size="11">
+<text x="10" y="240">Product 15 found two lines. Product 16 found none.</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 4 new ideas: `merge` with `validate`, `how`, `indicator`, and the many-to-many merge. The last unit only checks them. The setup cell made `lines`, the order lines of lesson P13 with their price and amount.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. merge, and validate what you expect
 
-### 1. Predict the rows before you merge
+**Idea.** `left.merge(right, on="key", validate="many_to_one")` pairs each row of `left` with the row of `right` that has the same key and adds the columns of `right`. `validate` is a promise about the keys: `"many_to_one"` says that each key is unique in `right`, so a row of `left` finds at most one partner. Write the promise, and the number of rows you expect, before you run it.
 
-TODO(owner): state the expected relationship between the two tables first.
+**Try it.** Each order gets its store:
 
-### 2. Choose how
+```python
+orders_stores = orders.merge(stores, on="store_id", validate="many_to_one")
+print(orders.shape, stores.shape, orders_stores.shape)
+```
 
-TODO(owner): inner, left, right, outer, and cross.
-
-### 3. Missing keys match each other
-
-TODO(owner): in SQL a NULL key never joins; in merge, missing keys on both sides pair up (bridge trap 1).
-
-<Exercise id="python-pandas-merge-and-validate-1">
-
-**Trap slot, bridge trap 1 of 12: missing join keys match each other.** Notebook: Exercise 1, Share a referrer.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** each order has one store. How many rows and columns will `orders_stores` have? `orders` has 6 columns, `stores` has 4, and the key is in both.
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+(1800, 6) (3, 4) (1800, 9)
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* 1,800 rows, the rows of `orders`, because each order found exactly one store, and 9 columns: 6 and 4, with the key counted once. With `many_to_one` the rows of the left table are the number to expect. A wrong promise:
 
-TODO(owner): half-solution.
+```python
+try:
+    orders.merge(stores, on="store_id", validate="one_to_one")
+except pd.errors.MergeError as error:
+    print(error.args[0].split("\n")[0])
+```
+
+**Predict:** `one_to_one` says that every key is unique on both sides, but a store appears many times in `orders`. Does `merge` return a smaller table, print a warning, or stop?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+Merge keys are not unique in left dataset; not a one-to-one merge
+```
 
 </details>
 
-<Solution>
+*Why:* it stopped with a `MergeError`, and the message says which side repeats its keys. The pandas page for `merge` lists the four promises: `"one_to_one"` checks both tables, `"one_to_many"` the left one, `"many_to_one"` the right one, and `"many_to_many"` is allowed and checks nothing. A merge that stops is better than one that runs and returns the wrong rows.
 
-TODO(owner): solution and the known answer.
+### 2. how: what happens to a row with no partner
 
-</Solution>
+**Idea.** `how` decides what a merge does with the rows that have no partner. `"inner"`, the default, keeps only the rows whose key is in both tables. `"left"` keeps every row of the left table and fills the columns of the right table with `NaN` where there is no partner. `"outer"` keeps the unmatched rows of both tables. They are the `INNER JOIN` and the `LEFT JOIN` of S19 and S20, and the pandas page for `merge` calls `"left"` similar to a SQL left outer join.
 
-</Exercise>
+**Try it.** Each customer with their orders, one customer to many orders:
 
-### 4. Fan-out and validate
+```python
+inner = customers.merge(orders, on="customer_id", how="inner", validate="one_to_many")
+left = customers.merge(orders, on="customer_id", how="left", validate="one_to_many")
+print(len(customers), len(orders))
+print(len(inner), len(left))
+```
 
-TODO(owner): duplicate keys multiply rows and nothing warns; validate= on every merge with an expected cardinality (bridge trap 6).
-
-<Exercise id="python-pandas-merge-and-validate-2">
-
-**Trap slot, bridge trap 6 of 12: join fan-out is silent.** Notebook: Exercise 2, Orders and their lines.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** `orders` holds one walk-in order with no customer id, and some customers have never ordered. Will `inner` have 1,800 rows? Which of `inner` and `left` has more rows?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+150 1800
+1799 1804
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* `inner` has 1,799 rows, one for each order that has a customer: the walk-in order found no partner and was left out. `left` has 1,804: those 1,799, plus one row for each customer without an order, whose order columns are `NaN`. The row counts differ because `how` decides what happens to the unmatched rows, and the walk-in order is lost in both.
 
-TODO(owner): half-solution.
+### 3. indicator: where each row came from
+
+**Idea.** `indicator=True` adds a column called `_merge` that says where each row of the result came from: `"both"` when the key was in both tables, `"left_only"` or `"right_only"` when it was in one. It is the margin column of the picture above, and it turns the unmatched rows into something you can count.
+
+**Try it.** An outer merge keeps the unmatched rows of both tables:
+
+```python
+audit = customers.merge(orders, on="customer_id", how="outer", validate="one_to_many", indicator=True)
+print(audit["_merge"].value_counts())
+print(len(audit))
+```
+
+**Predict:** how many rows of `audit` are `both`, how many `left_only` and how many `right_only`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+_merge
+both          1799
+left_only        5
+right_only       1
+Name: count, dtype: int64
+1805
+```
 
 </details>
 
-<Solution>
+*Why:* 1,799 rows are `both`, the orders with a customer. The 5 `left_only` rows are customers who never ordered. The 1 `right_only` row is the walk-in order, whose blank customer id found no customer. The three add up to the 1,805 rows, and each one has a reason. Read the `_merge` counts before you use a merged table: they say what was lost.
 
-TODO(owner): solution and the known answer.
+### 4. many to many: the rows that multiply
 
-</Solution>
+**Idea.** When a key repeats in both tables, a merge pairs every row of one with every row of the other: a key that appears 3 times on the left and 2 times on the right gives 6 rows. The pandas guide calls it the Cartesian product of the rows that share the key. It is the fan-out of S21. The promise `"many_to_many"` is allowed and checks nothing, so no error appears.
 
-</Exercise>
+**Try it.** A small promo list typed here, not cafe-sales data: Latte, product 3, has two promotions, and Mocha, product 5, has one. Latte has 420 order lines.
 
-### 5. Provenance: indicator, suffixes, concat
+```python
+promo = pd.DataFrame({"product_id": [3, 3, 5], "promo": ["student", "staff", "student"]})
+with_promo = order_items.merge(promo, on="product_id", how="left", validate="many_to_many")
+print(len(order_items), len(with_promo))
+```
 
-TODO(owner): indicator= when provenance matters; overlapping columns are silently renamed `_x` and `_y` (bridge trap 10); concat is UNION ALL.
-
-<Exercise id="python-pandas-merge-and-validate-3">
-
-**Trap slot, bridge trap 10 of 12: overlapping columns are silently renamed `_x` and `_y`.** Notebook: Exercise 3, Orders, customers and stores.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** each Latte line meets both Latte rows of `promo`, and each other line finds one row or none. How many rows will `with_promo` have?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+3287 3707
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* 3,707 rows: 3,287 plus 420, because every Latte line appears twice. Nothing stopped and nothing was printed. A sum over the merged table now counts those lines twice:
 
-TODO(owner): half-solution.
+```python
+priced = lines.merge(promo, on="product_id", how="left", validate="many_to_many")
+print(priced["amount"].sum(), lines["amount"].sum())
+```
+
+**Predict:** do the two totals agree? The second is the control total of the order lines.
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+25681.25 22754.25
+```
 
 </details>
 
-<Solution>
+*Why:* they differ: the total of the merged table is 2,927.00 too big, which is the sales of all the Latte lines, counted a second time. The row count was the warning, and the control total confirmed it. This is why a merge starts with a promise and an expected number of rows: with `validate="many_to_one"` on `promo`, pandas would have stopped as in unit 1.
 
-TODO(owner): solution and the known answer.
+### 5. Check: a merge instead of map
 
-</Solution>
+The price of each line, by merge this time, where lesson P13 used `map`. Write down what you expect, then run the cell.
 
-</Exercise>
+```python
+with_price = order_items.merge(products[["product_id", "unit_price_usd"]], on="product_id", how="left", validate="many_to_one")
+amount = with_price["quantity"] * with_price["unit_price_usd"] - with_price["discount_usd"]
+print(len(with_price), len(order_items))
+print(amount.sum())
+```
 
-## Remember
+**Predict:** is the row count unchanged, and what do the amounts add up to?
 
-Draft: the owner writes this section.
+<details>
+<summary>Reveal the result</summary>
+
+```text
+3287 3287
+22754.25
+```
+
+</details>
+
+*Why:* 3,287 rows, as many as before, and the total of lesson P13, *Summarize with a PivotTable* (E15) and *Counting and summing: aggregate functions* (S7): all lines, the canceled order and the extra-zero line included. `map` and `merge` reach the same price. `merge` brings in as many columns as you list, and it is the tool to use when the other table is a table.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: missing join keys match each other; join fan-out is silent; overlapping columns are silently renamed `_x` and `_y`.
+- Write `validate` on every merge, and the number of rows you expect before you run it.
+- `how="inner"` keeps rows with a partner in both tables, `"left"` keeps all the left rows, `"outer"` keeps everything.
+- `indicator=True` adds `_merge`: `both`, `left_only` or `right_only`. Count it.
+- A key that repeats on both sides multiplies the rows, and `"many_to_many"` checks nothing.
+- After the merge, compare the row count and a total with what you knew.
+
+**Common trap:** a merge does not complain about a repeated key unless `validate` promises that it is unique, and the extra rows inflate every total.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-merge-and-validate-1">
 
-<Exercise id="python-pandas-merge-and-validate-4">
+**How many orders were placed by customers who live in Oakland?** Replace the first `None` with `orders` merged with `customer_city`: choose how the orders without a customer are kept, and write the promise the keys make. Then set `answer_1` to the number of rows of `with_city` whose city is Oakland. Expected: one whole number.
 
-**Finish it.** Notebook: Exercise 4.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+customer_city = customers[["customer_id", "city"]]
+with_city = None  # replace None: orders merged with customer_city on customer_id, with how and validate chosen
+answer_1 = None  # then set answer_1 to the number of rows of with_city whose city is "Oakland"
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Each order has one customer, so the customers are the right side and each key is unique there. Unit 2 says what `how` does with an order that has no customer.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+with_city = orders.merge(customer_city, on="customer_id", how=..., validate=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+customer_city = customers[["customer_id", "city"]]
+with_city = orders.merge(customer_city, on="customer_id", how="left", validate="many_to_one")
+answer_1 = (with_city["city"] == "Oakland").sum()
+```
+
+The answer is 689: with `how="left"` all 1,800 rows of `orders` are kept, and 689 of them belong to Oakland customers. The 44 Oakland customers have many orders each, so counting customers gives 44, and the check cell says so.
 
 </Solution>
 
@@ -207,31 +365,36 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-merge-and-validate-2">
 
-<Exercise id="python-pandas-merge-and-validate-5">
-
-**On your own.** Notebook: Exercise 5.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**How many order lines were rung up on orders paid in cash?** Before you start, say in one sentence how many rows the merged table should have, and why. Merge the order lines with the payment method of their order, with a promise in `validate`, then count. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one whole number.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+The table of lines has one row for each line, and each line belongs to one order. Which table holds the payment method, and which side repeats its keys?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A whole number larger than the number of cash orders, because an order can have several lines."*
+
+```python
+line_orders = order_items.merge(orders[["order_id", "payment_method"]], on="order_id", how=..., validate=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+line_orders = order_items.merge(orders[["order_id", "payment_method"]], on="order_id", how="left", validate="many_to_one")
+answer_2 = (line_orders["payment_method"] == "cash").sum()
+```
+
+The answer is 453: the 3,287 lines keep their rows (many lines, one order each), and 453 of them belong to cash orders. Counting `orders` alone gives 253, the number of cash orders, and the check cell says so.
 
 </Solution>
 
@@ -239,36 +402,58 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: you merge `orders` with a table that lists each store once. Which promise do you write in `validate`, and what does pandas do if the promise is false?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-pandas-merge-and-validate-6">
+   `"many_to_one"`: each key is unique in the right table. If a store appears twice there, `merge` stops with a `MergeError` and returns nothing.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 6.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-pandas-merge-and-validate-3">
+
+**Spot the flaw.** A colleague attaches this week's specials to the order lines and counts the lines that are on special. The Blueberry Muffin, product 11, is listed twice because a 2 for 1 offer was canceled in March and never removed. Fix the lines so that every line is counted once, with a promise in `validate`, then set `answer_3` to the number of lines on special. Expected: one whole number.
+
+```python
+special = pd.DataFrame({"product_id": [10, 11, 11], "special": ["half price", "half price", "2 for 1"]})
+on_special = order_items.merge(special, on="product_id", how="left")  # the colleague's line
+answer_3 = None  # fix the lines above, then set answer_3 = the number of rows of on_special whose special is not blank
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Compare `len(on_special)` with `len(order_items)`. A left merge with a table whose keys are unique keeps the rows of the left table.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+special = special[special["special"] != ...]
+on_special = order_items.merge(special, on="product_id", how="left", validate=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+special = pd.DataFrame({"product_id": [10, 11, 11], "special": ["half price", "half price", "2 for 1"]})
+special = special[special["special"] != "2 for 1"]
+on_special = order_items.merge(special, on="product_id", how="left", validate="many_to_one")
+answer_3 = on_special["special"].notna().sum()
+```
+
+The answer is 531: 307 lines of product 10 and 224 of product 11, each counted once. The colleague's merge gave 755, because the 224 Blueberry Muffin lines met two rows of `special`; the check cell says so. With `validate="many_to_one"` the colleague's merge would have stopped.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can write the promise a merge should keep and the row count I expect, choose `how`, read `_merge` from `indicator`, and tell from the row count and a total that a merge multiplied rows.*
+Test: Exercise python-pandas-merge-and-validate-2, done from the notebook without opening the hints.
+
+The pattern to remember: **promise, predict the rows, merge, then read the row count and `_merge`.** The next lesson, *Missing values, types and duplicates* (P16), cleans what a merge and a groupby have shown to be missing.
