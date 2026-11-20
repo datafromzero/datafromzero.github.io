@@ -4,7 +4,7 @@ title: Environments and dependencies, for real
 short_title: Environments, for real
 description: Create a project environment with uv, record its dependencies, and rebuild it on a clean machine.
 stage: core
-order: 270
+order: 260
 level: intermediate
 duration: 30
 objectives:

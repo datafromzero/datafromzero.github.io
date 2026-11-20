@@ -11,6 +11,7 @@ objectives:
   - Separate measures from descriptive attributes
   - Tell a fact table from a dimension table
   - Explain how a wrong grain breaks every number
+  - 'Read an entity-relationship diagram of the cafe data: entities, keys and one-to-many links'
 prerequisites:
   - sql-normalization
   - sql-join-fanout
@@ -26,6 +27,8 @@ sources:
     url: https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/pl-300
 status: draft
 ---
+
+TODO(owner): Domain and data modeling (owner request, 2026-11-20, from the CS 5200 syllabus): start from a conceptual model of the cafe business, then draw it as an entity-relationship diagram (entities, primary and foreign keys, one-to-many) before any table; reading ER diagrams is needed by all four roles. Database internals (storage, query processing, transactions and recovery, architectures, stored procedures, relational algebra) go to a Data Engineer track module, pending a research issue.
 
 TODO(owner): Part 3 of 5, Shapes of data (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 4.
 

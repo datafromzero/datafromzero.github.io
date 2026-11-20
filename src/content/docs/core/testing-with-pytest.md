@@ -4,7 +4,7 @@ title: Testing on known answers with pytest
 short_title: Testing with pytest
 description: Write assertions and pytest tests on small known-answer cafe tables, and catch a deliberately broken transform.
 stage: core
-order: 290
+order: 280
 level: intermediate
 duration: 30
 objectives:

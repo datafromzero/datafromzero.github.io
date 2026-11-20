@@ -4,7 +4,7 @@ title: Logging, configuration and secrets
 short_title: Logging, config, secrets
 description: Replace print with logging, move paths and thresholds into configuration, and keep secrets out of code and out of Git.
 stage: core
-order: 300
+order: 290
 level: intermediate
 duration: 30
 objectives:

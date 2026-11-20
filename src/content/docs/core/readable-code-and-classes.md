@@ -4,7 +4,7 @@ title: Readable code, reading docs and classes
 short_title: Readable code, classes
 description: Add type hints and docstrings, run ruff, read a library class from its documentation and write one small dataclass.
 stage: core
-order: 310
+order: 300
 level: intermediate
 duration: 30
 objectives:

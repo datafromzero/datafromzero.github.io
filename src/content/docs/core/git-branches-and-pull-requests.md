@@ -3,7 +3,7 @@ id: core-git-branches-and-pull-requests
 title: 'Git: branches, pull requests and review'
 description: Work on a branch, open a pull request, read a review comment and merge cleanly.
 stage: core
-order: 250
+order: 310
 level: beginner
 duration: 25
 objectives:
