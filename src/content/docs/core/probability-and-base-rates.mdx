@@ -1,0 +1,433 @@
+---
+id: core-probability-and-base-rates
+title: Probability, conditional probability and base rates
+description: 'Reason about chance with natural frequencies: independent events, conditional probability read both ways, and Bayes with base rates first.'
+stage: core
+order: 40
+level: intermediate
+duration: 30
+objectives:
+  - Compute the probability of an event and of two independent events
+  - Read P(A given B) and P(B given A) as different questions
+  - Update a belief with Bayes using a table of 1,000 people
+  - Explain base-rate neglect with an example
+prerequisites:
+  - core-distributions-and-outliers
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-probability-and-base-rates.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Seeing Theory: Basic probability (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/basic-probability/index.html
+  - title: 'Seeing Theory: Compound probability (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/compound-probability/index.html
+  - title: 'Seeing Theory: Bayesian inference (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/bayesian-inference/index.html
+  - title: 'OpenIntro Statistics, chapter 3: Probability (free textbook, accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'Gigerenzer, G. and Hoffrage, U. (1995). How to improve Bayesian reasoning without instruction: Frequency formats. Psychological Review, 102(4), 684-704 (record and abstract opened 2026-11-20)'
+    url: https://doi.org/10.1037/0033-295x.102.4.684
+status: draft
+---
+
+## The question
+
+The owner asks two things:
+
+> Are gold customers more likely to shop at Harbor than at the other stores? And when my till script flags an order as a possible keying mistake, how likely is it that the flag is right?
+
+The first rows of the orders that belong to a customer, with the customer's tier:
+
+| order_id | customer_id | store_id | payment_method | loyalty_tier |
+|---:|---:|---:|---|---|
+| 1001 | 15 | 2 | mobile | silver |
+| 1002 | 46 | 1 | mobile | bronze |
+| 1003 | 61 | 2 | mobile | bronze |
+| 1004 | 40 | 1 | mobile | silver |
+
+By the end you can answer both with counts, and say why a check that is right 9 times in 10 can still be wrong most of the time.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Center and spread: mean, median and standard deviation* (C2), write the pandas line for the share of cash orders in `sales`.
+
+   <details>
+   <summary>answer</summary>
+
+   `(sales["payment_method"] == "cash").mean()`. A share is the mean of a column of True and False.
+
+   </details>
+
+2. In *Distributions, z-scores and outliers* (C3), what does a z-score of 2 say?
+
+   <details>
+   <summary>answer</summary>
+
+   The value lies 2 standard deviations above the mean.
+
+   </details>
+
+## The big idea
+
+Every probability in this lesson is a share of rows, and conditioning means shrinking the table to the rows where something is true and taking the share again.
+
+<svg viewBox="0 0 360 192" width="360" role="img" aria-labelledby="c4-idea-t c4-idea-d">
+<title id="c4-idea-t">One table, two different conditional probabilities</title>
+<desc id="c4-idea-d">A two by two table with columns B and not B and rows A and not A. The row A and the column B are shaded, so the cell A and B is darkest. P(B given A) reads along the row of A. P(A given B) reads down the column of B.</desc>
+<rect x="110" y="52" width="110" height="44" fill="currentColor" fill-opacity="0.26" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="220" y="52" width="110" height="44" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="110" y="96" width="110" height="44" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="220" y="96" width="110" height="44" fill="currentColor" fill-opacity="0.10" stroke="currentColor" stroke-opacity="0.5" />
+<g fill="currentColor">
+<text x="165" y="78" text-anchor="middle" font-size="11">A and B</text>
+<text x="275" y="78" text-anchor="middle" font-size="11">A, not B</text>
+<text x="165" y="122" text-anchor="middle" font-size="11">not A, B</text>
+<text x="275" y="122" text-anchor="middle" font-size="11">neither</text>
+<text x="165" y="44" text-anchor="middle" font-size="12" font-weight="600">B</text><text x="275" y="44" text-anchor="middle" font-size="12" font-weight="600">not B</text>
+<text x="100" y="78" text-anchor="end" font-size="12" font-weight="600">A</text><text x="100" y="122" text-anchor="end" font-size="12" font-weight="600">not A</text>
+<text x="10" y="164" font-size="10.5">P(B given A): the row of A, A and B out of the row.</text>
+<text x="10" y="180" font-size="10.5">P(A given B): the column of B, A and B out of the column.</text>
+</g>
+</svg>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: probability as a share and independence, conditional probability read both ways, Bayes with a table of 1,000, and base-rate neglect. The Data cell of the notebook builds `known`, the 1,799 orders that belong to a customer, with the customer's `loyalty_tier`; `orders` still holds all 1,800.
+
+<OpenInColab />
+
+### 1. Probability as a share, and independence
+
+**Idea.** The *probability* of an event is a number from 0 (impossible) to 1 (certain) for how likely it is; in a table it is the share of rows where the event is true. Two events are *independent* when knowing one tells you nothing about the other. For independent events the probability of both is the product of the two probabilities, the Multiplication Rule of OpenIntro. In a table the product is only close to the real share, because a sample wobbles.
+
+**Try it.** Payment by card and an order at Old Town, as shares of all 1,800 orders:
+
+```python
+card = orders["payment_method"] == "card"
+old_town = orders["store_id"] == 1
+print(round(card.mean(), 3), round(old_town.mean(), 3))
+print(round(card.mean() * old_town.mean(), 3), round((card & old_town).mean(), 3))
+```
+
+**Predict:** the share of orders paid by card is about 0.56 and the share taken at Old Town is about 0.41. If the payment method and the store told you nothing about each other, what share of all orders would be card orders at Old Town? Will the real share be close?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.556 0.405
+0.225 0.234
+```
+
+</details>
+
+*Why:* the product of the two shares is 0.225 and the real share is 0.234: close, as independent events predict. Here the payment method tells you little about the store.
+
+### 2. Conditional probability, read both ways
+
+**Idea.** The *conditional probability* P(A given B) is the probability of A among the rows where B is true: shrink the table to B, then take the share (Seeing Theory describes this as shrinking the sample space to one event). P(A given B) and P(B given A) have the same numerator, the rows where both hold, and different denominators, so they are different questions.
+
+**Try it.** Among the orders of customers, gold customers and Harbor:
+
+```python
+gold = known["loyalty_tier"] == "gold"
+harbor = known["store_id"] == 3
+both = int((gold & harbor).sum())
+print(both, int(harbor.sum()), int(gold.sum()))
+print(round(both / harbor.sum(), 3), round(both / gold.sum(), 3))
+```
+
+**Predict:** among the orders of customers, what share of the Harbor orders belong to gold customers, and what share of the gold customers' orders were taken at Harbor? Which share is larger?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+56 355 173
+0.158 0.324
+```
+
+</details>
+
+*Why:* the same 56 orders are divided by 355 Harbor orders in the first share and by 173 gold orders in the second. About 16 percent of Harbor orders are gold; about 32 percent of gold orders were at Harbor. Swapping the two answers the wrong question.
+
+### 3. Bayes with a table of 1,000
+
+**Idea.** Count cases instead of juggling probabilities: build a table for 1,000 cases, split them by how common the thing is, then by how the check behaves on each group, and read the answer off the table. Gigerenzer and Hoffrage found that Bayesian problems are easier in such *natural frequencies* than in probabilities. *Bayes' theorem* is the same table relabeled: P(A given B) = P(B given A) × P(A) ÷ P(B) (OpenIntro).
+
+**Try it.** A made-up scenario: a check flags orders that may hold a keying mistake.
+
+```python
+n = 1000
+mistakes = 20  # made up: 2 in 100 orders hold a keying mistake
+caught = 18  # made up: the check flags 9 in 10 of them
+false_alarms = 49  # made up: and 5 in 100 of the 980 correct orders
+table = pd.DataFrame({"flagged": [caught, false_alarms], "not flagged": [mistakes - caught, n - mistakes - false_alarms]}, index=["mistake", "correct"])
+print(table)
+print(caught + false_alarms, round(caught / (caught + false_alarms), 3))
+```
+
+**Predict:** suppose 2 orders in 100 hold a keying mistake, the check flags 9 in 10 of the mistakes, and it also flags 5 in 100 of the correct orders. Of 1,000 orders, how many are flagged, and what share of the flagged orders are real mistakes? Guess before you run: about 9 in 10, about half, or about 1 in 4?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+         flagged  not flagged
+mistake       18            2
+correct       49          931
+67 0.269
+```
+
+<figure>
+<svg viewBox="0 0 360 192" width="360" role="img" aria-labelledby="c4-table-t c4-table-d">
+<title id="c4-table-t">A made-up table of 1,000 orders: mistakes and flags</title>
+<desc id="c4-table-d">A table of 1,000 made-up orders. Mistake: 18 flagged and 2 not flagged, 20 in all. Correct: 49 flagged and 931 not flagged, 980 in all. Flagged in all: 67; not flagged in all: 933.</desc>
+<rect x="96" y="40" width="82" height="32" fill="currentColor" fill-opacity="0.16" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="96" y="72" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="96" y="104" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="178" y="40" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="178" y="72" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="178" y="104" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="260" y="40" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="260" y="72" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<rect x="260" y="104" width="82" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<g fill="currentColor">
+<text x="137" y="32" text-anchor="middle" font-size="11" font-weight="600">flagged</text>
+<text x="137" y="60" text-anchor="middle" font-size="12" font-weight="600">18</text>
+<text x="137" y="92" text-anchor="middle" font-size="12">49</text>
+<text x="137" y="124" text-anchor="middle" font-size="12">67</text>
+<text x="219" y="32" text-anchor="middle" font-size="11" font-weight="600">not flagged</text>
+<text x="219" y="60" text-anchor="middle" font-size="12">2</text>
+<text x="219" y="92" text-anchor="middle" font-size="12">931</text>
+<text x="219" y="124" text-anchor="middle" font-size="12">933</text>
+<text x="301" y="32" text-anchor="middle" font-size="11" font-weight="600">all</text>
+<text x="301" y="60" text-anchor="middle" font-size="12">20</text>
+<text x="301" y="92" text-anchor="middle" font-size="12">980</text>
+<text x="301" y="124" text-anchor="middle" font-size="12">1,000</text>
+<text x="88" y="60" text-anchor="end" font-size="11" font-weight="600">mistake</text>
+<text x="88" y="92" text-anchor="end" font-size="11" font-weight="600">correct</text>
+<text x="88" y="124" text-anchor="end" font-size="11" font-weight="600">all</text>
+<text x="10" y="164" font-size="10.5">Of the 67 flagged orders, 18 are real mistakes.</text>
+<text x="10" y="180" font-size="10.5">Of the 20 mistakes, 18 are flagged.</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* of 67 flagged orders only 18 are real, about 1 in 4, although the check catches 9 mistakes in 10. The false alarms outnumber the hits because correct orders outnumber mistakes 49 to 1.
+
+**Try it.** The same share by the formula, and the formula on the real orders:
+
+```python
+p_mistake, p_flag_given_mistake, p_flag_given_correct = 0.02, 0.90, 0.05
+p_flag = p_flag_given_mistake * p_mistake + p_flag_given_correct * (1 - p_mistake)
+print(round(p_flag_given_mistake * p_mistake / p_flag, 3))
+p_harbor_given_gold, p_gold, p_harbor = both / gold.sum(), gold.mean(), harbor.mean()
+print(round(p_harbor_given_gold * p_gold / p_harbor, 3))
+```
+
+**Predict:** Bayes' theorem relabels the same table: P(mistake given flag) = P(flag given mistake) × P(mistake) ÷ P(flag). Will it give the same share as the table? And will it give back the share of Harbor orders that belong to gold customers from unit 2, from the other direction?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.269
+0.158
+```
+
+</details>
+
+*Why:* the formula gives 0.269 again, and on the real orders it turns the share of gold orders at Harbor back into the share of Harbor orders that are gold. P(flag) adds the two ways to be flagged, the 18 hits and the 49 false alarms.
+
+### 4. Base-rate neglect
+
+**Idea.** The *base rate* is how common the thing is before any check. *Base-rate neglect* is answering "how likely is it, given a flag?" from the check's accuracy alone and ignoring the base rate. The same check gives very different answers when the base rate changes; in the Seeing Theory demo of Bayes' theorem the prior is the disease's incidence in the population.
+
+**Try it.** One check, three base rates, the last one computed from the data:
+
+```python
+def real_share(base_rate, hit=0.90, false_alarm=0.05):
+    return hit * base_rate / (hit * base_rate + false_alarm * (1 - base_rate))
+
+print(round(real_share(0.02), 3), round(real_share(0.20), 3), round(real_share(1 / len(order_items)), 4))
+```
+
+**Predict:** the check never changes: it flags 9 in 10 mistakes and 5 in 100 correct orders. Only how common the mistakes are changes. What share of the flagged orders are real mistakes when 2 in 100 orders hold one, when 20 in 100 do, and at the real rate of the data, one line in 3,287 with an extra zero?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.269 0.818 0.0054
+```
+
+</details>
+
+*Why:* 0.269 at 2 in 100, 0.818 at 20 in 100, and 0.0054 at the real rate: about 1 flag in 185 would be real. The hit rate and the false-alarm rate are made up; the base rate is computed from the 3,287 lines. A check for a rare thing needs a very low false-alarm rate before a flag means much.
+
+<Aside type="tip" title="Remember">
+
+- A probability is a share of rows; for independent events the shares multiply, only approximately in a sample.
+- P(A given B) shrinks the table to B; P(B given A) is another question with another denominator.
+- Build the table of 1,000 first, then read off the share you want.
+- A positive result for a rare thing is mostly false alarms unless the check is very accurate.
+
+**Common trap:** quoting the check's hit rate as the chance that a flag is real.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-probability-and-base-rates-1">
+
+**What share of the Old Town orders, store 1, were paid by mobile?** Use all 1,800 rows of `orders`. Put the share in `answer_1` as a number between 0 and 1, rounded to 3 decimals. Expected: `answer_1` is a number between 0 and 1.
+
+```python
+old_town_orders = orders[orders["store_id"] == 1]  # given: the Old Town orders
+# find the share of them paid by mobile, and set answer_1
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+The share is out of the Old Town orders, so the denominator is the number of Old Town orders.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+old_town_orders = orders[orders["store_id"] == 1]
+answer_1 = round(float((old_town_orders["payment_method"] == ...).mean()), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+old_town_orders = orders[orders["store_id"] == 1]
+answer_1 = round(float((old_town_orders["payment_method"] == "mobile").mean()), 3)
+```
+
+217 of the 729 Old Town orders, 0.298. The other direction, the share of the 546 mobile orders that were taken at Old Town, is 0.397, a different question with a different denominator; the check cell reports it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-probability-and-base-rates-2">
+
+**A made-up check on loyalty cards.** Suppose 5 cards in 100 are copies. The check flags 8 in 10 of the copies and 1 in 10 of the genuine cards. Before you start, say in one sentence what the result looks like: a count and a share. Build the table for 1,000 cards, then put in `answer_2` the number of flagged cards and the share of the flagged cards that are copies, rounded to 3 decimals, as a list in that order. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of a whole number and a share.
+
+<details>
+<summary>Hint</summary>
+
+Start from 1,000 cards: how many are copies, how many genuine, and how many of each group are flagged?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A count in the low hundreds and a share well under one half."*
+
+```python
+cards = 1000
+copies = 50
+genuine = cards - copies
+copies_flagged = ...
+genuine_flagged = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+cards = 1000
+copies = 50
+genuine = cards - copies
+copies_flagged = 40
+genuine_flagged = 95
+flagged = copies_flagged + genuine_flagged
+answer_2 = [flagged, round(copies_flagged / flagged, 3)]
+```
+
+50 copies and 950 genuine cards; the check flags 40 copies and 95 genuine ones, 135 in all, and 40 of 135 is 0.296. Only about 3 flagged cards in 10 are copies, although the check catches 8 copies in 10. The check cell reports 0.8, the share of copies that are flagged.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a test is right 9 times in 10 on people who have a condition and wrong 5 times in 100 on people who do not. Why can a positive result still be probably wrong?
+
+   <details>
+   <summary>answer</summary>
+
+   If the condition is rare, the many people without it produce more false positives than the few people with it produce true positives. Check the base rate.
+
+   </details>
+
+<Exercise id="core-probability-and-base-rates-3">
+
+**Spot the flaw.** A colleague predicts the number of orders by gold customers taken at Campus, store 2, by multiplying the share of gold orders by the share of Campus orders, among the 1,799 orders of `known`, and by 1,799. Count the real orders by gold customers at Campus and set `answer_3` to the colleague's prediction, rounded to a whole number, and the real count, in that order. Expected: `answer_3` is a list of two whole numbers.
+
+```python
+gold_share = (known["loyalty_tier"] == "gold").mean()
+campus_share = (known["store_id"] == 2).mean()
+predicted = round(gold_share * campus_share * len(known))  # the colleague's prediction
+real = predicted  # replace with the real count, which the colleague never looked at
+answer_3 = [predicted, real]
+```
+
+<details>
+<summary>Hint</summary>
+
+Filter `known` on both conditions and count the rows.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+real = int(((known["loyalty_tier"] == "gold") & (known["store_id"] == ...)).sum())
+```
+
+</details>
+
+<Solution>
+
+```python
+gold_share = (known["loyalty_tier"] == "gold").mean()
+campus_share = (known["store_id"] == 2).mean()
+predicted = round(gold_share * campus_share * len(known))
+real = int(((known["loyalty_tier"] == "gold") & (known["store_id"] == 2)).sum())
+answer_3 = [predicted, real]
+```
+
+The multiplication rule predicts 69 orders, and the data holds 31. Multiplying the two shares is right only when the two events are independent; here the gold customers' orders are not spread over the stores like all orders, so the prediction is more than twice the real count. The check cell reports the prediction twice.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can compute the probability of an event and of two independent events, read P(A given B) and P(B given A) as different questions, answer a Bayes question from a table of 1,000, and explain base-rate neglect.*
+Test: Exercise core-probability-and-base-rates-2, done from the notebook without opening the hints.
+
+The pattern to remember: **build the table of 1,000, then read off the share you want.** The next lesson, *Samples and the ways they mislead* (C5), asks how far the rows you have can speak for the rows you do not.
+
+TODO(owner): set `reviewed` to the day you approve this draft, and open the notebook in Colab once to run it from the top. The curriculum map asks for expected value as one worked example; it is not among the objectives and would not fit in 30 minutes, so it is left out. The made-up rates of units 3 and 4 and of Exercise 2 are labeled as made up on the page; only the base rate of unit 4 and the shares of units 1 and 2 come from the data.

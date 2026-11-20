@@ -1,0 +1,548 @@
+---
+id: core-center-and-spread
+title: 'Center and spread: mean, median and standard deviation'
+description: Summarize a column with its center and spread, and see when the mean misleads and the median does not.
+stage: core
+order: 20
+level: beginner
+duration: 25
+objectives:
+  - Compute mean, median and mode and say when each misleads
+  - Compute range, IQR and standard deviation
+  - Read percentiles and a box plot
+  - Write a two-sentence plain-language summary of a column
+prerequisites:
+  - core-study-design-and-data-types
+  - python-charts
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-center-and-spread.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'OpenIntro Statistics, chapter 2: Summarizing data (free textbook, accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'Seeing Theory: Basic probability (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/basic-probability/index.html
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 1.3.5.1 Measures of location (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 1.3.5.6 Measures of scale (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/eda/section3/eda356.htm
+  - title: 'Matplotlib documentation: matplotlib.axes.Axes.boxplot (accessed 2026-11-20)'
+    url: https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.boxplot.html
+  - title: 'pandas documentation: pandas.Series.std (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.std.html
+status: draft
+---
+
+## The question
+
+The owner asks:
+
+> What does a typical order cost, and how much do orders differ from one another?
+
+The total of an order is its lines added up. The first completed orders, from 1,799 in all:
+
+| order_id | store_id | ordered_at | total |
+|---:|---:|---|---:|
+| 1001 | 2 | 2026-01-01 08:02:00 | 14.00 |
+| 1002 | 1 | 2026-01-01 15:38:00 | 12.50 |
+| 1003 | 2 | 2026-01-01 15:47:00 | 12.50 |
+| 1004 | 1 | 2026-01-01 16:18:00 | 6.50 |
+
+By the end you can answer in two sentences, and say which of your numbers one odd order can move.
+
+<Aside type="note" title="You already know this">
+
+**Match.** `=AVERAGE(...)` in *Your first formulas* (E2), `AVG(...)` in *Counting and summing: aggregate functions* (S7) and `Series.mean()` give the same number: the mean.
+
+**Diverge.** Two tools can both say standard deviation and not agree. Unit 2 shows where.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Data types, units and how data was collected* (C1), a colleague averages `quantity` in `order_items` and calls it the average order size. What is wrong?
+
+   <details>
+   <summary>answer</summary>
+
+   One row of `order_items` is a line, not an order. Add up the quantities of each order first, then average over orders.
+
+   </details>
+
+2. In *Grouping and aggregating* (P14), write the pandas line that adds up a column `amount` for each `order_id`.
+
+   <details>
+   <summary>answer</summary>
+
+   `lines.groupby("order_id")["amount"].sum()`.
+
+   </details>
+
+## The big idea
+
+A column needs two numbers, one for where its values sit and one for how far they stray, and you choose both so that one odd value cannot move them much.
+
+## Learn by doing
+
+About 25 minutes, 3 new ideas: three centers, three spreads, percentiles with the box plot. Unit 4 puts them into words and teaches nothing new. The Data cell of the notebook builds `sales`, one row for each completed order, and `totals`, the order totals in dollars.
+
+<OpenInColab />
+
+### 1. Three centers
+
+**Idea.** The *mean* is the sum divided by the count. The *median* is the middle value once the column is sorted. The *mode* is the value that occurs most often (NIST calls all three "typical values").
+
+**Try it.** The three centers of all the totals:
+
+```python
+print(round(totals.mean(), 2), totals.median(), totals.mode().tolist())
+```
+
+**Predict:** will the mean of the order totals be above or below the median? And what is the mode?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12.65 11.75 [4.5]
+```
+
+</details>
+
+*Why:* the mean is above the median, and the mode, 4.5, is the single most common total and says nothing about the rest. Orders are bounded below by one cheap item and stretched above by big orders, so the long tail is on the right.
+
+**Try it.** The 11 orders of May 1 hold one of 197.00, the line of 20 units that the dataset README says should read 2. Drop that order:
+
+```python
+day = sales.loc[sales["ordered_at"].str.startswith("2026-05-01"), "total"]
+rest = day.drop(day.idxmax())
+print(len(day), round(day.mean(), 2), day.median())
+print(round(rest.mean(), 2), rest.median())
+print(round(totals.mean() - totals.drop(totals.idxmax()).mean(), 2), totals.median(), totals.drop(totals.idxmax()).median())
+```
+
+**Predict:** how far do the mean and the median of the day move when the order is dropped? And how far do the mean and the median of all 1,799 orders move when the same order is dropped?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+11 27.77 12.75
+10.85 11.125
+0.1 11.75 11.75
+```
+
+<figure>
+<svg viewBox="0 0 360 256" width="360" role="img" aria-labelledby="c2-strip-t c2-strip-d">
+<title id="c2-strip-t">One extra-zero order drags the mean of a day, not the median</title>
+<desc id="c2-strip-d">Two dot plots of order totals on the same axis from 0 to 200 dollars. The first holds the 11 orders of May 1: ten dots between 3 and 19 and one at 197. Its mean line sits far right of its median line. The second holds the same day without the 197 order: the mean and median lines almost coincide.</desc>
+<g fill="currentColor"><text x="10" y="14" font-size="11" font-weight="600">May 1, all 11 orders</text><text x="10" y="29" font-size="11">mean 27.77, median 12.75</text></g>
+<path d="M40.4 40 V86" stroke="#ad9100" stroke-width="2.5" fill="none" />
+<path d="M64.4 40 V86" stroke="#d6479a" stroke-width="2.5" stroke-dasharray="5 3" fill="none" />
+<circle cx="25.2" cy="76" r="3.5" fill="#0072b2" />
+<circle cx="26.8" cy="68" r="3.5" fill="#0072b2" />
+<circle cx="31.2" cy="60" r="3.5" fill="#0072b2" />
+<circle cx="34.8" cy="76" r="3.5" fill="#0072b2" />
+<circle cx="35.2" cy="68" r="3.5" fill="#0072b2" />
+<circle cx="40.4" cy="60" r="3.5" fill="#0072b2" />
+<circle cx="41.6" cy="52" r="3.5" fill="#0072b2" />
+<circle cx="42" cy="44" r="3.5" fill="#0072b2" />
+<circle cx="46.8" cy="76" r="3.5" fill="#0072b2" />
+<circle cx="49.6" cy="68" r="3.5" fill="#0072b2" />
+<circle cx="335.2" cy="76" r="3.5" fill="#0072b2" />
+<path d="M20 86 H340.0" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M20 86 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M100 86 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M180 86 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M260 86 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M340 86 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<g fill="currentColor"><text x="343.2" y="62" text-anchor="end" font-size="10">197.00</text></g>
+<g fill="currentColor"><text x="10" y="126" font-size="11" font-weight="600">May 1 without the order of 197.00</text><text x="10" y="141" font-size="11">mean 10.85, median 11.125</text></g>
+<path d="M37.8 152 V198" stroke="#ad9100" stroke-width="2.5" fill="none" />
+<path d="M37.4 152 V198" stroke="#d6479a" stroke-width="2.5" stroke-dasharray="5 3" fill="none" />
+<circle cx="25.2" cy="188" r="3.5" fill="#0072b2" />
+<circle cx="26.8" cy="180" r="3.5" fill="#0072b2" />
+<circle cx="31.2" cy="172" r="3.5" fill="#0072b2" />
+<circle cx="34.8" cy="188" r="3.5" fill="#0072b2" />
+<circle cx="35.2" cy="180" r="3.5" fill="#0072b2" />
+<circle cx="40.4" cy="172" r="3.5" fill="#0072b2" />
+<circle cx="41.6" cy="164" r="3.5" fill="#0072b2" />
+<circle cx="42" cy="156" r="3.5" fill="#0072b2" />
+<circle cx="46.8" cy="188" r="3.5" fill="#0072b2" />
+<circle cx="49.6" cy="180" r="3.5" fill="#0072b2" />
+<path d="M20 198 H340.0" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M20 198 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M100 198 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M180 198 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M260 198 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M340 198 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<g fill="currentColor"><text x="20" y="216" text-anchor="middle" font-size="10">0</text></g>
+<g fill="currentColor"><text x="100" y="216" text-anchor="middle" font-size="10">50</text></g>
+<g fill="currentColor"><text x="180" y="216" text-anchor="middle" font-size="10">100</text></g>
+<g fill="currentColor"><text x="260" y="216" text-anchor="middle" font-size="10">150</text></g>
+<g fill="currentColor"><text x="340" y="216" text-anchor="middle" font-size="10">200</text></g>
+<g fill="currentColor"><text x="180" y="230" text-anchor="middle" font-size="10">order total in dollars</text></g>
+<path d="M10 244 H34" stroke="#ad9100" stroke-width="2.5" fill="none" /><g fill="currentColor"><text x="40" y="248" font-size="10.5">median</text></g>
+<path d="M100 244 H124" stroke="#d6479a" stroke-width="2.5" stroke-dasharray="5 3" fill="none" /><g fill="currentColor"><text x="130" y="248" font-size="10.5">mean</text></g>
+<circle cx="190" cy="244" r="3.5" fill="#0072b2" /><g fill="currentColor"><text x="198" y="248" font-size="10.5">one order</text></g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* one order more than doubles the mean of that day and moves the median by under 2 dollars. Extreme values pull the mean toward the tail and leave the median alone, because the median depends on the order of the values, not on their size (NIST). Across 1,799 orders one row can do little to the mean: it moves by 0.10, and the median stays at 11.75.
+
+### 2. Three spreads
+
+**Idea.** The *range* is the largest value minus the smallest. The *quartiles* cut the sorted column into four equal parts; the *IQR* (interquartile range) is the third quartile minus the first, the width of the middle half. The *standard deviation* is the square root of the average squared distance from the mean, and pandas divides the sum of squares by n − 1, as NIST does for a sample (Seeing Theory gives the variance the same way for a random variable).
+
+**Try it.** The three spreads of all the totals:
+
+```python
+q1, q3 = totals.quantile(0.25), totals.quantile(0.75)
+print(totals.max() - totals.min(), q3 - q1, round(totals.std(), 2))
+```
+
+**Predict:** what are the range, the IQR and the standard deviation of the 1,799 totals?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+194.0 9.5 8.62
+```
+
+</details>
+
+**Try it.** The same three, without the order of 197.00:
+
+```python
+rest = totals.drop(totals.idxmax())
+r1, r3 = rest.quantile(0.25), rest.quantile(0.75)
+print(rest.max() - rest.min(), r3 - r1, round(rest.std(), 2))
+```
+
+**Predict:** which of the three barely moves?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+65.25 9.5 7.44
+```
+
+</details>
+
+*Why:* the IQR did not move: it looks only at the middle half. The range looks at two values and moved the most; the standard deviation squares every distance, so it follows the extremes too.
+
+**Try it.** pandas and NumPy each have a standard deviation:
+
+```python
+print(round(day.std(), 2), round(np.std(day), 2))
+print(round(totals.std(), 4), round(np.std(totals), 4))
+```
+
+**Predict:** on the 11 orders of May 1, will `day.std()` and `np.std(day)` agree? And on all 1,799 orders?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+56.33 53.71
+8.6161 8.6137
+```
+
+</details>
+
+*Why:* pandas divides by n − 1, NumPy by n unless you pass `ddof=1`; the pandas page on `std` says `ddof=0` gives NumPy's behavior. The gap is large for 11 orders and small for 1,799. Use `Series.std()` for the rows of a sample; *Samples and the ways they mislead* (C5) says why n − 1.
+
+### 3. Percentiles and the box plot
+
+**Idea.** A *percentile* is a value with that share of the sorted column at or below it, so the 25th percentile has a quarter of the values at or below it. The quartiles are the 25th, 50th and 75th percentiles. A *box plot* draws a box from the first to the third quartile with a line at the median; its whiskers reach the most extreme values within 1.5 × IQR beyond the box, and each value past the whiskers is a dot (Tukey's rule, the default of matplotlib and the one OpenIntro describes).
+
+**Try it.** Five percentiles of the totals:
+
+```python
+print(totals.quantile([0.1, 0.25, 0.5, 0.75, 0.9]).tolist())
+```
+
+**Predict:** what are the 10th, 25th, 50th, 75th and 90th percentiles of the totals?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[4.0, 7.0, 11.75, 16.5, 22.5]
+```
+
+</details>
+
+**Try it.** Draw the box plot, and count the dots above the fence at the 75th percentile plus 1.5 times the IQR:
+
+```python
+fence = q3 + 1.5 * (q3 - q1)
+fig, ax = plt.subplots()
+bp = ax.boxplot(totals)
+ax.set_title("Order totals, January to June 2026")
+ax.set_ylabel("Order total (USD)")
+print(fence, len(bp["fliers"][0].get_ydata()), (totals > fence).sum())
+```
+
+**Predict:** where is the fence, and how many dots will there be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+30.75 50 50
+```
+
+<figure>
+<svg viewBox="0 0 360 186" width="360" role="img" aria-labelledby="c2-box-t c2-box-d">
+<title id="c2-box-t">Box plot of the 1,799 order totals</title>
+<desc id="c2-box-d">A horizontal box plot of order totals from 0 to 45 dollars. The box runs from 7.00 to 16.50 with the median line at 11.75. The whiskers reach 3.00 and 30.75. A dashed line marks the fence at 30.75, and 47 dots lie above it; 3 more orders lie beyond the right edge.</desc>
+<path d="M20 100 H340" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M20 100 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" /><g fill="currentColor"><text x="20" y="116" text-anchor="middle" font-size="10">0</text></g>
+<path d="M91.1 100 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" /><g fill="currentColor"><text x="91.1" y="116" text-anchor="middle" font-size="10">10</text></g>
+<path d="M162.2 100 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" /><g fill="currentColor"><text x="162.2" y="116" text-anchor="middle" font-size="10">20</text></g>
+<path d="M233.3 100 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" /><g fill="currentColor"><text x="233.3" y="116" text-anchor="middle" font-size="10">30</text></g>
+<path d="M304.4 100 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" /><g fill="currentColor"><text x="304.4" y="116" text-anchor="middle" font-size="10">40</text></g>
+<g fill="currentColor"><text x="180" y="130" text-anchor="middle" font-size="10">order total in dollars</text></g>
+<rect x="69.8" y="46" width="67.6" height="30" fill="#0072b2" fill-opacity="0.2" stroke="currentColor" stroke-opacity="0.7" />
+<path d="M103.6 46 V76" stroke="#ad9100" stroke-width="3" fill="none" />
+<path d="M41.3 61.0 H69.8 M137.3 61.0 H238.7 M41.3 55.0 v12 M238.7 55.0 v12" stroke="currentColor" stroke-opacity="0.7" fill="none" />
+<path d="M238.7 34 V94" stroke="#d6479a" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<circle cx="240.4" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="240.4" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="242.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="242.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="242.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="242.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="244" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="244" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="245.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="245.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="247.6" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="247.6" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="249.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="249.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="249.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="252.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="252.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="252.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="256.4" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="256.4" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="258.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="258.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="261.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="261.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="265.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="265.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="265.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="267.1" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="268.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="268.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="274.2" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="276" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="277.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="277.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="279.6" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="281.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="281.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="281.3" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="283.1" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="284.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="292" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="293.8" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="295.6" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="300.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="315.1" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="316.9" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<circle cx="324" cy="61.0" r="3" fill="#0072b2" fill-opacity="0.45" />
+<g fill="currentColor"><text x="69.8" y="41" text-anchor="middle" font-size="10">7.00</text><text x="103.6" y="41" text-anchor="middle" font-size="10">11.75</text><text x="137.3" y="41" text-anchor="middle" font-size="10">16.50</text><text x="238.7" y="28" text-anchor="middle" font-size="10">fence 30.75</text></g>
+<g fill="currentColor"><text x="10" y="148" font-size="10.5">Box: the middle half, Q1 to Q3. Gold line: the median.</text><text x="10" y="163" font-size="10.5">Whiskers: 3.00 to 30.75. Dots: the 47 orders above the fence</text><text x="10" y="178" font-size="10.5">and under 45 dollars; 3 more, up to 197.00, are off the edge.</text></g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* half of the orders cost between 7.00 and 16.50, and a quarter cost 7.00 or less. The 50 dots are the orders above 30.75, and the dots drawn by matplotlib and the count of `(totals > fence)` agree. A dot means unusual for this column, not wrong.
+
+### 4. Say it in two sentences
+
+**Idea.** Report a skewed column by its median and the middle half, then say why the mean differs and what deserves a check. One sentence for the center and spread, one for the shape.
+
+**Try it.** Write the summary from variables, so that every number comes from a cell:
+
+```python
+q1, med, q3 = totals.quantile([0.25, 0.5, 0.75])
+summary = (f"Half of the {len(totals):,} completed orders cost between {q1:.2f} and {q3:.2f} dollars, and the middle order costs {med:.2f}. "
+           f"The mean, {totals.mean():.2f}, sits above the median because a few large orders pull it up; the largest, {totals.max():.2f}, is worth a check.")
+print(summary)
+```
+
+**Predict:** which two numbers will the summary give for the center and the spread of a column like this one?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+Half of the 1,799 completed orders cost between 7.00 and 16.50 dollars, and the middle order costs 11.75. The mean, 12.65, sits above the median because a few large orders pull it up; the largest, 197.00, is worth a check.
+```
+
+</details>
+
+*Why:* the median and the two quartiles describe the typical order; the mean is named, with its reason. The largest order is flagged, not deleted: *Distributions, z-scores and outliers* (C3) investigates it.
+
+<Aside type="tip" title="Remember">
+
+- The mean follows extreme values; the median does not.
+- The range and the standard deviation lean on the extremes; the IQR measures the middle half.
+- `Series.std()` divides by n − 1, `np.std` by n.
+- A box plot shows the middle half; a dot beyond 1.5 × IQR is unusual, not wrong.
+- For a skewed column, give the median with the quartiles, and say why the mean differs.
+
+**Common trap:** reporting the mean of a skewed column alone.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-center-and-spread-1">
+
+**What is the 90th percentile of the order totals at Campus, store 2?** That is the total that 9 in 10 Campus orders do not exceed. Put the dollars in `answer_1`, rounded to 2 decimals. Expected: `answer_1` is a number in dollars.
+
+```python
+campus = sales[sales["store_id"] == 2]["total"]  # given: the totals of the Campus orders
+# find the 90th percentile of campus, and set answer_1
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+`quantile` takes a fraction between 0 and 1, not a percent.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+campus = sales[sales["store_id"] == 2]["total"]
+answer_1 = round(float(campus.quantile(...)), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+campus = sales[sales["store_id"] == 2]["total"]
+answer_1 = round(float(campus.quantile(0.9)), 2)
+```
+
+22.75 dollars: nine in ten Campus orders are 22.75 or less. `quantile(0.5)` would be the median, 11.50, which the check cell reports if you pass the wrong fraction.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-center-and-spread-2">
+
+**How many Harbor orders are unusually large for Harbor?** Before you start, say in one sentence what the result looks like: one whole number. Use the fence of the box plot: the 75th percentile of the Harbor totals plus 1.5 times the IQR of the Harbor totals, and count the Harbor orders above it. Harbor is store 3. Put the count in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a whole number.
+
+<details>
+<summary>Hint</summary>
+
+Take the Harbor totals first; every number after that, the quartiles, the fence and the count, comes from them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One whole number, smaller than the 50 orders above the fence for all three stores."*
+
+```python
+harbor = sales[sales["store_id"] == 3]["total"]
+h1, h3 = harbor.quantile(0.25), harbor.quantile(0.75)
+fence_harbor = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+harbor = sales[sales["store_id"] == 3]["total"]
+h1, h3 = harbor.quantile(0.25), harbor.quantile(0.75)
+fence_harbor = h3 + 1.5 * (h3 - h1)
+answer_2 = int((harbor > fence_harbor).sum())
+```
+
+Harbor's quartiles are 7.50 and 17.00, so its fence is 31.25, a little above the 30.75 of all orders together; 10 of the 355 Harbor orders are above it. Counting the orders of all three stores above that fence gives 44, which the check cell reports.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: an order of 197.00 joins a day of ten orders that cost about 11 dollars each. Which of the mean and the median moves a lot, and which of the range, the IQR and the standard deviation barely moves?
+
+   <details>
+   <summary>answer</summary>
+
+   The mean moves a lot and the median little. The IQR barely moves; the range and the standard deviation follow the extreme order.
+
+   </details>
+
+<Exercise id="core-center-and-spread-3">
+
+**Spot the flaw.** A colleague reports the share of cash orders for the whole chain as the mean of the three store shares, because each store's share is already computed (a share is the mean of a column of True and False). Set `answer_3` to the share of cash orders among all 1,799 completed orders in `sales`, as a number between 0 and 1, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 1.
+
+```python
+store_shares = sales.groupby("store_id")["payment_method"].apply(lambda s: (s == "cash").mean())  # the colleague's three store shares
+answer_3 = round(float(store_shares.mean()), 3)  # the colleague's average of them
+```
+
+<details>
+<summary>Hint</summary>
+
+Harbor took about half as many orders as each of the other two stores. An average of three shares counts a Harbor order twice as heavily.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float((sales["payment_method"] == ...).mean()), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = round(float((sales["payment_method"] == "cash").mean()), 3)
+```
+
+0.140: 252 of the 1,799 orders were paid in cash. The mean of the three store shares is 0.143, because Harbor, with 355 orders, counts as much as Old Town with 729 or Campus with 715. The check cell reports it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can compute the mean, median, mode, range, IQR and standard deviation of a column, read a box plot, and write two sentences that say why the mean and the median differ.*
+Test: Exercise core-center-and-spread-2, done from the notebook without opening the hints.
+
+The pattern to remember: **give a center and a spread together, and say which of them one odd value can move.** The next lesson, *Distributions, z-scores and outliers* (C3), looks at the whole shape of the column and at the order of 197.00.
+
+TODO(owner): set `reviewed` to the day you approve this draft, and open the notebook in Colab once to run it from the top. The mean of a skewed column is said to sit above the median because the tail is on the right; that follows NIST's description of skewed distributions and the histogram of the next lesson, and no page states it for order totals.
