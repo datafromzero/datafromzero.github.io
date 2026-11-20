@@ -7,6 +7,18 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Python stage, fifth and last batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the four lessons stay drafts and
+  are not on the site): *Your own Python setup: environments and pip* (an environment as a folder with its own Python, `python -m pip` and `%pip` installing into one
+  named Python, a `requirements.txt` with pins, and printing the versions a notebook runs on; everything runs from the notebook, the terminal commands are text only, and the
+  separate "Python for engineers" block of the advanced core is left to the owner), *Capstone: the cafe quarterly pack* (April to June on the cafe data: `concat` for
+  stacking monthly files, `assert` against a second route after each step, one table and one honest chart, and a note written with f-strings so that every number comes
+  from a variable, including the extra-zero line of order 2075 as recorded and corrected; placement of `concat` from issue #76), *From notebook to a runnable script*
+  (`%%writefile` and `!python`, functions under a main block, parameters at the top, a loop over the monthly files that writes one output) and *Using an AI assistant for Python,
+  with checks* (a prompt with the columns, the grain and three rows, reading a draft first, a tiny frame worked by hand, a second route and a note of the checks; every
+  assistant text on the page is labeled as written for the lesson, and the only claims about generative AI are two sentences of NIST AI 600-1; the stage ends with a Polars
+  awareness box). Each lesson has a notebook with free hints, known-answer checks and one plausible wrong answer rejected for each of its three exercises. Every notebook
+  was run from the top on pandas 3.1.1 with the data read from the real `v0.1.0` URLs and on pandas 2.2.3; the only outputs that differ between the two are the two
+  lines of the environment lesson that print the notebook's own pandas.
 - Python stage, lessons 19 to 23 published (owner approval, 2026-11-20): wide and long tables (`melt`, two-key grouping, `pivot`, `pivot_table`), group-aware columns (`transform`, `rank`, `shift` in groups, `rolling`), honest charts with matplotlib and with seaborn (each chart the notebook's own SVG, inline, no JavaScript), and data from an API (the keyless Frankfurter rates, ECB) and from a database with `read_sql` and parameters. Owner checks moved to issue #80.
 - Short lesson names in the sidebar (SPEC D47, owner decision, 2026-11-20): an optional `short_title` frontmatter field, at most 24 characters, is the one-line name of a lesson in the sidebar and in the bottom bar's Course list (for example P9 *Files and tables* for *Reading files and tables: paths, CSV, JSON and Excel*); the full title stays on the page and shows as the sidebar tooltip. Every published Excel, SQL and Python lesson whose title is longer than 26 characters now has one, and `npm run check:lessons` keeps it that way, counting capitals as wider letters (S2, S13 and S24 still wrapped and were shortened). URLs are unchanged.
 - Python stage, fourth batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the five lessons stay drafts and

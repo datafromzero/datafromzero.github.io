@@ -419,6 +419,19 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-20 — Review of batch 4 found Why lines with wrong facts (store 1 has places 1, 2 and 2, not one customer for each of 1, 2 and 3; Harbor has five customers with 9 orders, not three), an exercise answer already printed in two lessons, an exercise fix already in a unit's Idea, and `Expected:` printed twice because the instruction text and the helper both added it. → **Recompute every number a sentence states from the data, not from the first rows printed; the exercise helper adds `Expected:` and the write-in note, so the instruction text never repeats them.**
 
 - 2026-11-20 — The owner saw labels overlapping box edges in the P23 figure on a phone ("request" sat on the notebook box), and a scan found three more figures whose text ran past its box (S5 `3.8000000000000003`, E14 `2026-01-01 08:02`, E3 `22749.25`). → **Every hand-drawn figure is rendered and looked at before it ships, and the text of each label fits inside its box with a few pixels to spare: leave at least 60 viewBox units between boxes that carry arrow labels, and measure long values (a monospace digit is about 0.6 × the font size wide). Chips inside step animations are not a problem.**
+- 2026-11-20 — Drafting Python batch 5: the sample rows of a lesson's "question" table were first typed from memory (wrong stores and times), a Predict asked for the number of lines of `pip freeze`
+  (7, but 6 once `python-dateutil` stopped needing `six`), a figure said the notebook has "variables of its own" before the Predict that asks about them, a chart legend covered the June bars, and
+  `DataFrame.equals` said False for two tables with the same numbers (`dt.month` is 32-bit, `read_csv` gives 64-bit). → **Paste every sample table from `head()` of the real file, never type it;
+  never predict a count that depends on the dependency list of a third-party package (print a boolean and the pinned lines, and give the day in the Why); a figure before a unit shows only inputs
+  (no "its own", no "separate"); put a chart legend beside the bars; compare numbers with `to_numpy().tolist()` when two tables may differ in number type.**
+- 2026-11-20 — Notebook cells that start a shell line (`!`) differ from print output: their lines end in CR LF, tracebacks and pip notices arrive colored and with temporary paths, and `%pip` adds its own
+  restart note. → **Strip CR in the harness, set `NO_COLOR`, `PYTHON_COLORS=0` and `PIP_DISABLE_PIP_VERSION_CHECK=1` in the setup cell, keep only the last line of an error, and keep the `%pip` note in
+  the reveal (it is real output).**
+- 2026-11-20 — The first build of batch 5 failed in `astro dev` because two descriptions were over 160 characters and two prerequisites named a lesson id that does not exist (`python-files-and-tables`;
+  the id is `python-files-csv-json`). → **Take prerequisite ids from the `id:` lines of the lessons, not from titles or slugs; count `description` before building; start `astro dev` before reporting
+  (it prints the validation errors that `npm run check:lessons` does not).**
+- 2026-11-20 — Published lessons already print every monthly order count, the Q1 and Q2 totals and the March count of completed orders, so the first choices for exercise answers (257 orders, 8,775.25)
+  were taken. → **Grep each exercise answer, and the numbers of its wrong answer, across `python`, `sql` and `excel` before writing the exercise; pick another store, month or measure when it appears.**
 
 ## Agents and reviews
 

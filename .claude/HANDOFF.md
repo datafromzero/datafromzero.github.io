@@ -127,6 +127,16 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   group total (no numeric column of cafe-sales has blanks to fill), and drops `cumsum` and `expanding`; P21 drops histogram, scatter and `subplots` (the fifth chart type stays
   open); P22 keeps one of the one-line charts (`histplot`); P23 drops pagination, `json_normalize`, `read_html` and a key-keeping demo. Still open for the owner: edits and
   approval of every lesson text, the direction of the Frankfurter `rate` (marked `TODO(owner)` in P23), and a Colab run of P23.
+- **Python batch 5 (2026-11-20, the last of the Python stage, team drafts for the owner to edit, D24, all still `status: draft`):** `environments-and-pip` (P24),
+  `cafe-quarterly-pack` (P25, capstone, Q2 April to June, `concat` placement from issue #76), `notebook-to-script` (P26) and `ai-assisted-code` (P27, ends with the Polars
+  awareness box) are written in full with their notebooks and three exercises each (one plausible wrong answer rejected per exercise). Every notebook was run from the top
+  on pandas 3.1.1 (real `v0.1.0` URLs) and 2.2.3; the only outputs that differ between the two are the two P24 lines that print the notebook's own pandas, named in its Why. The
+  monthly files of P25 and P26 are cut from `orders.csv` by the setup cell (the datasets have no real monthly files). Choices the owner may reverse: P24 runs everything
+  with `!` and `%pip`, shows terminal commands as text and leaves the terminal, Python versions, conda, uv and packaging to the later "Python for engineers" block (do not
+  pre-empt it); P25 covers Q2 (Harbor trades the whole quarter), keeps order 2075 as recorded with the corrected reading beside it, has three new ideas in four units (the replay
+  of reshape and chart is unit 3) and writes no cleaned-CSV or twin-notebook companions; P26 grows one file, `pack.py`, in four versions; P27 shows only assistant text written by
+  the lesson, labeled as such, and no claim about how a model behaves beyond two NIST AI 600-1 sentences. Still open for the owner: edits and approval of every lesson text, and
+  a Colab run of P24 to P26 (`python -m venv` and `ensurepip`, `%pip`, `%%writefile` and `!python` there, and the pins on Colab's Python).
 - **Planned, not part of any batch (owner request, 2026-11-20):** a "Python for engineers" block in the advanced core, to be discussed with the owner after a Muse research
   issue arrives.
 
