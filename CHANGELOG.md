@@ -240,6 +240,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
+- Four lesson figures no longer let text touch or cross a box edge (owner report from a phone, 2026-11-20): P23 (the request and response labels sat on the notebook box), S5 (the long DOUBLE result), E14 (the timestamp) and E3 (the total).
 - The sidebar group of the site pages (About, Changelog, Cite, License, Privacy) is now called "About this site" instead of "Project" (also the accessible name of the footer link group), so learners do not take it for the case-study projects of the career tracks (owner request, 2026-11-20).
 - About page (owner request): the story no longer names a course platform ("a few SQL and Python courses on bootcamp
   sites").
