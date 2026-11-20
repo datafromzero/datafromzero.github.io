@@ -1,0 +1,880 @@
+---
+id: core-correlation-and-causation
+title: Correlation is not causation
+short_title: Correlation vs causation
+description: Read a correlation, name the three rival explanations, spot Simpson's paradox and know what earns causal language.
+stage: core
+order: 100
+level: intermediate
+duration: 35
+objectives:
+  - Compute and read a correlation coefficient and its limits
+  - 'List the three rival explanations: reverse causation, confounder and coincidence'
+  - Find a confounder in a supplied dataset
+  - Explain Simpson's paradox with a reversal in grouped data
+  - Say what evidence earns causal language
+prerequisites:
+  - core-distributions-and-outliers
+  - core-sampling-and-bias
+  - python-pandas-groupby-aggregate
+  - core-hypothesis-testing
+datasets:
+  - app-events
+notebook: notebooks/core/core-correlation-and-causation.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 1.3.3.26 Scatter plot (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/eda/section3/eda33q.htm
+  - title: 'SciPy documentation: scipy.stats.pearsonr (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.pearsonr.html
+  - title: 'pandas documentation: pandas.Series.corr (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.corr.html
+  - title: 'SciPy documentation: scipy.stats.chi2_contingency (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
+status: draft
+---
+
+TODO(owner): This is a team draft (SPEC D24), written because the owner asked for one; edit it and approve it. The `reviewed` date is a placeholder: set it when you publish. *Hypothesis tests and p-values, honestly* (C8) and *Designing an A/B test* (C14) are named by title and not linked, because they are drafts: add the links when they are published.
+
+## The question
+
+The product lead of a budgeting app says:
+
+> People who are active in their first week buy Plus more often. Let's get everyone active in week one.
+
+Can you trust that? Take the 20,177 people who signed up by June 16, so that each of them has had 14 days to buy. A person's *first-week events* are the visits (`session_start`) and the expenses (`add_expense`) in the 7 days after signup. Call a person *engaged* with 5 or more.
+
+| in the first week | people | bought within 14 days |
+|---|---:|---:|
+| engaged | 3,697 | 16.5% |
+| not engaged | 16,480 | 11.0% |
+
+By the end you can say how strong that link is, which three explanations compete with "engagement makes people buy", and what it would take to use those words. Rows that a client retry wrote twice (the dataset README lists them) are counted; dropping them moves this table by under 0.2 points.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Data types, units and how data was collected*](/core/study-design-and-data-types/) (C1) you named a third thing that could explain a gap between cafes. This lesson finds one in data.
+
+**Diverge.** A gap you can see is not yet a cause you can name. Unit 3 shows what happens to the gap above once a third column is held fixed.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Grouping and aggregating*](/python/pandas-groupby-aggregate/) (P14), write the pandas line that gives the share who bought in each channel from a table `people` with a 0/1 column `bought` and a column `channel`.
+
+   <details>
+   <summary>answer</summary>
+
+   `people.groupby("channel")["bought"].mean()`. The mean of a column of 0 and 1 is the share of ones.
+
+   </details>
+
+2. In [*Distributions, z-scores and outliers*](/core/distributions-and-outliers/) (C3), one point lies far from all the others. Do you delete it?
+
+   <details>
+   <summary>answer</summary>
+
+   Not at once: find out where it came from, and delete or correct it only on evidence. Unit 1 shows how much one point can matter.
+
+   </details>
+
+## The big idea
+
+A correlation says that two columns move together along a straight line, and nothing about why.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="cqd-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="cqd" id="cqd-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="cqd" id="cqd-r1" aria-label="Step 1 of 4: Dots with an x and a y" />
+<input class="sa-r r2 o3" type="radio" name="cqd" id="cqd-r2" aria-label="Step 2 of 4: Cross lines at the two means" />
+<input class="sa-r r3 o5" type="radio" name="cqd" id="cqd-r3" aria-label="Step 3 of 4: Each dot gets a plus or a minus" />
+<input class="sa-r r4 o8" type="radio" name="cqd" id="cqd-r4" aria-label="Step 4 of 4: Mostly plus: r is positive" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>dots</small><span><i class="w1 tmp hl">12</i><i class="w7 d2">12</i></span></span><span class="sa-n c-src"><small>plus</small><span><i class="w3 tmp">—</i><i class="w2 d4 tmp hl">10</i><i class="w3 d6">10</i></span></span><span class="sa-n c-flt"><small>minus</small><span><i class="w3 tmp">—</i><i class="w2 d4 tmp hl">2</i><i class="w3 d6">2</i></span></span><span class="sa-n c-out"><small>r</small><span><i class="w5 tmp">—</i><i class="w3 d6 hl">0.63</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 244" width="360" role="img" aria-labelledby="cqd-t cqd-d">
+<title id="cqd-t">The correlation coefficient adds up the signs of how far each dot is from the two means</title>
+<desc id="cqd-d">Twelve dots with an x and a y. Two dashed lines mark the mean of x and the mean of y and cut the picture into four corners. Ten dots, above both means or below both, turn blue and get a plus; two dots, in the other corners, turn red and get a minus. The text says 10 plus, 2 minus, then mostly plus, so r is 0.63.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Dots with an x and a y</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Cross lines at the two means</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · Each dot gets a plus or a minus</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · Mostly plus: r is positive</text>
+<text class="f11 b" x="10" y="14">Correlation, a made-up miniature</text>
+<path class="bx" d="M40 190H340M40 190V60" />
+<text class="f10 mu m" x="190" y="216">x: the first column</text>
+<text class="f10 mu" x="46" y="58">y</text>
+<text class="f14 b m w5 d4" x="328" y="67.8">+</text>
+<text class="f14 b m w5 d4" x="58" y="182.2">+</text>
+<text class="f14 b m w5 d4" x="58" y="67.8">−</text>
+<text class="f14 b m w5 d4" x="328" y="182.2">−</text>
+<path class="ln dsh dr p7 d2" pathLength="1" d="M190.51000000000002 60V190" />
+<path class="ln dsh dr p7 d2" pathLength="1" d="M40 130.629H340" />
+<text class="f10 m w7 d2" x="190.51" y="54">mean of x</text>
+<text class="f10 e w7 d2" x="338" y="125.63">mean of y</text>
+<circle class="f-ord k4 w3 tmp" cx="70" cy="164" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="94" cy="174.4" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="118" cy="145.8" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="142" cy="156.2" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="172" cy="143.2" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="214" cy="114.6" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="232" cy="104.2" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="256" cy="119.8" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="280" cy="83.4" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="310" cy="99" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="100" cy="112" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="298" cy="151" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="70" cy="164" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="94" cy="174.4" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="118" cy="145.8" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="142" cy="156.2" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="172" cy="143.2" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="214" cy="114.6" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="232" cy="104.2" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="256" cy="119.8" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="280" cy="83.4" r="4.5" />
+<circle class="f-src k4 w5 d4" cx="310" cy="99" r="4.5" />
+<circle class="f-flt k4 w5 d4" cx="100" cy="112" r="4.5" />
+<circle class="f-flt k4 w5 d4" cx="298" cy="151" r="4.5" />
+<text class="f11 b m w1 d6 tmp" x="190" y="238">10 plus, 2 minus</text>
+<text class="f11 b m w2 d7" x="190" y="238">mostly plus, so r is positive: r = 0.63</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="cqd-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="cqd-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="cqd-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="cqd-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="cqd-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="cqd-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="cqd-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="cqd-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="cqd-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="cqd-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="cqd-r1">1</label><label class="sa-sb sb2" for="cqd-r2">2</label><label class="sa-sb sb3" for="cqd-r3">3</label><label class="sa-sb sb4" for="cqd-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Each dot is one case with two values: a place left to right (x) and a place up and down (y).<span class="sa-chs"><span class="sa-ch pl">12 dots</span></span></div>
+<div class="c-out w2 d2 tmp">The two mean lines cut the picture into four corners; a dot’s distances from the means decide its corner.<span class="sa-chs"><span class="sa-ch pl">2 mean lines</span></span></div>
+<div class="c-src w2 d4 tmp">Both distances above, or both below, give a plus; one above and one below gives a minus.<span class="sa-chs"><span class="sa-ch pl">10 plus</span><span class="sa-ch pl">2 minus</span></span></div>
+<div class="c-out w3 d6">r adds up all the signed distances and scales the sum to fit between −1 and 1.<span class="sa-chs"><span class="sa-ch pl">r = 0.63</span></span></div>
+</div>
+<p class="ca-cap">A made-up miniature: 12 dots. A dot above both means or below both counts a plus, one in another corner a minus; r adds the distances and scales the sum.</p>
+<ol class="sa-steps">
+<li>Dots with an x and a y</li>
+<li>Cross lines at the two means</li>
+<li>Each dot gets a plus or a minus</li>
+<li>Mostly plus: r is positive</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 5 new ideas: the correlation coefficient and its limits, three rival explanations, a confounder, Simpson's paradox, and what earns causal language. The Data cell of the notebook builds `people`, one row for each of the 20,177 people, with `bought` (0 or 1), `events7` (events in the first week) and `engaged` (0 or 1), and keeps `ev`, the events of these people.
+
+<OpenInColab />
+
+### 1. One number for a scatter
+
+**Idea.** The *correlation coefficient*, written $$r$$, is one number between −1 and 1 for how closely two columns follow a straight line. Its sign is the direction, its size is how tightly the points hug the line, and 0 means no straight-line link. It has no units, and swapping the two columns does not change it. pandas computes it with `Series.corr` (the Pearson method by default); SciPy's page for it says it "measures the linear relationship between two datasets".
+
+**Try it.** The correlation of first-week events with buying, and the pieces it is made of:
+
+```python
+x, y = people["events7"], people["bought"]
+print(round(x.corr(y), 3))
+dx, dy = x - x.mean(), y - y.mean()
+print(round((dx * dy).sum(), 2), round((dx ** 2).sum(), 2), round((dy ** 2).sum(), 2))
+print(round(x.mean(), 2), round(y.mean(), 2))
+```
+
+**Predict:** r runs from −1 to 1. Will the correlation between a person's events in the first week and buying be close to 0, around 0.5 or close to 1?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.078
+1646.64 210510.46 2135.07
+2.58 0.12
+```
+
+</details>
+
+*Why:* r is 0.078, close to 0: a faint straight-line link, although engaged people buy 5.5 points more often. The gap compares two groups; r asks how closely every person's count and buying follow one line, and only 0.12 of the people bought. A weak r is not proof of no effect, and a strong one is not proof of one.
+
+In symbols, with $$n$$ people, $$x_i$$ the first-week events of person $$i$$, $$y_i$$ equal to 1 if the person bought and 0 if not, and $$\bar{x}$$ and $$\bar{y}$$ the two means (2.58 events and 0.12, the share who bought):
+
+$$
+r = \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum_{i=1}^{n}(x_i - \bar{x})^2 \cdot \sum_{i=1}^{n}(y_i - \bar{y})^2}}
+$$
+
+The top adds each person's distance from the x mean times their distance from the y mean: a plus on the same side of both means, a minus on opposite sides (the corners of the picture above). The bottom scales the sum to fit between −1 and 1. For the 20,177 people the three sums are 1,646.64, 210,510.46 and 2,135.07:
+
+$$
+r = \frac{1{,}646.64}{\sqrt{210{,}510.46 \times 2{,}135.07}} \approx 0.078
+$$
+
+**Try it.** One number can hide a shape. Four made-up pictures of 12 points each:
+
+```python
+shapes = {
+    "A": (list(range(1, 13)), [4.5, 3.1, 4.7, 5.9, 3.8, 6.2, 4.9, 6.8, 7.8, 5.9, 7.8, 7.2]),
+    "B": (list(range(1, 13)), [1.0, 3.4, 5.5, 7.2, 8.6, 9.6, 10.3, 10.7, 10.7, 10.3, 9.7, 8.7]),
+    "C": (list(range(1, 13)), [3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 5.2]),
+    "D": ([3] * 11 + [12], [4.1, 4.9, 5.6, 6.2, 5.1, 6.9, 4.5, 5.9, 5.3, 6.5, 5.7, 9.2]),
+}
+for name, (a, b) in shapes.items():
+    print(name, f"{np.corrcoef(a, b)[0, 1]:.2f}")
+```
+
+**Predict:** Four small pictures, A to D, have 12 points each. A is a rising cloud, B a curve that rises and then falls, C a straight line with one stray point, D eleven points in a column and one far to the side. Which one has the highest r?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+A 0.80
+B 0.80
+C 0.80
+D 0.80
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 312" width="360" role="img" aria-labelledby="c10-shapes-t c10-shapes-d">
+<title id="c10-shapes-t">Four pictures with the same correlation</title>
+<desc id="c10-shapes-d">Four small scatter plots of 12 points each, A to D, every one labeled r = 0.80. A: points rise from left to right with scatter. B: points rise and then fall along a curve. C: eleven points on a straight line and one red point well below it at the right end. D: eleven points in one column and one red point far to the side and above. A dashed straight line is drawn through each set.</desc>
+<text class="f10 b" x="10" y="12">A: a rising cloud</text>
+<text class="f10 e" x="170" y="12">r = 0.80</text>
+<path class="bx" d="M16 124H166M16 24V124" />
+<path class="ln dsh" d="M27.54 89.09L154.46 54.97" />
+<circle class="f-src k4" cx="27.54" cy="83.09" r="3" />
+<circle class="f-src k4" cx="39.08" cy="95.82" r="3" />
+<circle class="f-src k4" cx="50.62" cy="81.27" r="3" />
+<circle class="f-src k4" cx="62.15" cy="70.36" r="3" />
+<circle class="f-src k4" cx="73.69" cy="89.45" r="3" />
+<circle class="f-src k4" cx="85.23" cy="67.64" r="3" />
+<circle class="f-src k4" cx="96.77" cy="79.45" r="3" />
+<circle class="f-src k4" cx="108.31" cy="62.18" r="3" />
+<circle class="f-src k4" cx="119.85" cy="53.09" r="3" />
+<circle class="f-src k4" cx="131.38" cy="70.36" r="3" />
+<circle class="f-src k4" cx="142.92" cy="53.09" r="3" />
+<circle class="f-src k4" cx="154.46" cy="58.55" r="3" />
+<text class="f10 b" x="190" y="12">B: a curve</text>
+<text class="f10 e" x="350" y="12">r = 0.80</text>
+<path class="bx" d="M196 124H346M196 24V124" />
+<path class="ln dsh" d="M207.54 86.38L334.46 16.62" />
+<circle class="f-src k4" cx="207.54" cy="114.91" r="3" />
+<circle class="f-src k4" cx="219.08" cy="93.09" r="3" />
+<circle class="f-src k4" cx="230.62" cy="74" r="3" />
+<circle class="f-src k4" cx="242.15" cy="58.55" r="3" />
+<circle class="f-src k4" cx="253.69" cy="45.82" r="3" />
+<circle class="f-src k4" cx="265.23" cy="36.73" r="3" />
+<circle class="f-src k4" cx="276.77" cy="30.36" r="3" />
+<circle class="f-src k4" cx="288.31" cy="26.73" r="3" />
+<circle class="f-src k4" cx="299.85" cy="26.73" r="3" />
+<circle class="f-src k4" cx="311.38" cy="30.36" r="3" />
+<circle class="f-src k4" cx="322.92" cy="35.82" r="3" />
+<circle class="f-src k4" cx="334.46" cy="44.91" r="3" />
+<text class="f10 b" x="10" y="162">C: a line and a stray</text>
+<text class="f10 e" x="170" y="162">r = 0.80</text>
+<path class="bx" d="M16 274H166M16 174V274" />
+<path class="ln dsh" d="M27.54 237.75L154.46 202.37" />
+<circle class="f-src k4" cx="27.54" cy="242.18" r="3" />
+<circle class="f-src k4" cx="39.08" cy="237.64" r="3" />
+<circle class="f-src k4" cx="50.62" cy="233.09" r="3" />
+<circle class="f-src k4" cx="62.15" cy="228.55" r="3" />
+<circle class="f-src k4" cx="73.69" cy="224" r="3" />
+<circle class="f-src k4" cx="85.23" cy="219.45" r="3" />
+<circle class="f-src k4" cx="96.77" cy="214.91" r="3" />
+<circle class="f-src k4" cx="108.31" cy="210.36" r="3" />
+<circle class="f-src k4" cx="119.85" cy="205.82" r="3" />
+<circle class="f-src k4" cx="131.38" cy="201.27" r="3" />
+<circle class="f-src k4" cx="142.92" cy="196.73" r="3" />
+<circle class="f-flt k4" cx="154.46" cy="226.73" r="3" />
+<text class="f10 b" x="190" y="162">D: one far point</text>
+<text class="f10 e" x="350" y="162">r = 0.80</text>
+<path class="bx" d="M196 274H346M196 174V274" />
+<path class="ln dsh" d="M213.31 229.41L340.23 188.5" />
+<circle class="f-src k4" cx="230.62" cy="236.73" r="3" />
+<circle class="f-src k4" cx="230.62" cy="229.45" r="3" />
+<circle class="f-src k4" cx="230.62" cy="223.09" r="3" />
+<circle class="f-src k4" cx="230.62" cy="217.64" r="3" />
+<circle class="f-src k4" cx="230.62" cy="227.64" r="3" />
+<circle class="f-src k4" cx="230.62" cy="211.27" r="3" />
+<circle class="f-src k4" cx="230.62" cy="233.09" r="3" />
+<circle class="f-src k4" cx="230.62" cy="220.36" r="3" />
+<circle class="f-src k4" cx="230.62" cy="225.82" r="3" />
+<circle class="f-src k4" cx="230.62" cy="214.91" r="3" />
+<circle class="f-src k4" cx="230.62" cy="222.18" r="3" />
+<circle class="f-flt k4" cx="334.46" cy="190.36" r="3" />
+<text class="f10 mu" x="10" y="300">Dashed: the straight line that r measures. Red: the odd point.</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* all four have r = 0.80, and only A is a cloud around a line. B is a curve: r sees only the straight-line part. In C one stray point brings eleven points that lie exactly on a line down to 0.80; in D one far point decides r alone, because the other eleven share one x. NIST's scatter-plot page asks of every scatter whether the link is non-linear and whether there are outliers, and SciPy's page for `pearsonr` shows y = |x|: r near 0 although y depends on x completely. Plot first, then compute r.
+
+### 2. Three rival explanations
+
+**Idea.** When two columns go together, three rivals compete with "the first causes the second". *Reverse causation*: the second causes the first. A *confounder*: a third thing drives both. *Coincidence*: chance. Each has a check.
+
+| Rival | In the app | A check |
+|---|---|---|
+| Reverse causation | The second column drives the first | Which came first? |
+| A confounder | Something about the person drives both | Compare inside the groups of that thing (unit 3) |
+| Coincidence | The pattern is luck | Does it show again in other people? |
+
+**Try it.** The clock. People who bought within 14 days: how much of their first-week activity came after the purchase?
+
+```python
+first_buy = ev[(ev["event_name"] == "purchase") & (ev["days"] <= 14)].groupby("user_id", as_index=False)["event_ts"].min().rename(columns={"event_ts": "buy_ts"})
+buyers_week1 = week1.merge(first_buy, on="user_id")  # the first-week events of the people who bought
+print(len(buyers_week1), round((buyers_week1["event_ts"] > buyers_week1["buy_ts"]).mean(), 3))
+```
+
+**Predict:** People who bought within 14 days made 7,898 visits and expenses in their first week. What share of them happened after the purchase: a few, about half or most?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+7898 0.555
+```
+
+</details>
+
+*Why:* 55.5% of the 7,898 first-week events of the buyers came after the purchase, so the first-week count mixes activity before and after buying. It cannot say which came first; count only events before the purchase to apply the clock.
+
+**Try it.** Chance. The same two columns for the referral people, cut into blocks of 30:
+
+```python
+referral = people[people["channel"] == "referral"].sort_values("user_id")
+block = np.arange(len(referral)) // 30  # blocks of 30 people, in signup order
+r_by_block = referral.groupby(block)[["events7", "bought"]].apply(lambda d: d["events7"].corr(d["bought"]) if len(d) == 30 else np.nan).dropna()
+print(len(r_by_block), round(r_by_block.min(), 2), round(r_by_block.max(), 2), int((r_by_block.abs() >= 0.3).sum()))
+```
+
+**Predict:** Cut the referral people into blocks of 30, in the order they signed up, and compute r between events7 and bought in every block. What will the largest r be, and in how many blocks will |r| reach 0.3 or more?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+116 -0.29 0.51 11
+```
+
+</details>
+
+*Why:* the same columns in the same channel give r from −0.29 to 0.51 between blocks, and 11 of the 116 blocks reach 0.3 either way. A correlation from a few dozen people is easy to get by luck, as the sampling lessons of Part 1 say about means. More people is the first check against coincidence. The last few people do not fill a block and are left out.
+
+### 3. Find the confounder
+
+**Idea.** A *confounder* is a third column tied to both columns of a correlation. To look for one, ask what might drive both, then compare inside its groups. The channel, how a person arrived, is a candidate: it is a column of `users`.
+
+**Try it.** Does the channel line up with both columns?
+
+```python
+by_channel = people.groupby("channel").agg(people=("user_id", "count"), engaged_pct=("engaged", "mean"), bought_pct=("bought", "mean"))
+by_channel[["engaged_pct", "bought_pct"]] = (by_channel[["engaged_pct", "bought_pct"]] * 100).round(1)
+print(by_channel.sort_values("bought_pct", ascending=False))
+```
+
+**Predict:** Which channel has the largest share of engaged people, and which has the highest share who bought? And which has the smallest of each?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+                people  engaged_pct  bought_pct
+channel                                        
+referral          3486         37.4        23.1
+organic_search    5263         21.9        14.5
+app_store         4256         18.4        10.5
+paid_search       2653         13.5         9.0
+paid_social       4519          2.2         3.9
+```
+
+</details>
+
+*Why:* the five channels come in the same order on both columns. Referral people are the most engaged (37.4%) and buy the most (23.1%); paid_social people are the least engaged (2.2%) and buy the least (3.9%).
+
+**Try it.** Now compare inside each channel:
+
+```python
+rates = people.pivot_table(index="channel", columns="engaged", values="bought", aggfunc="mean").mul(100).round(1)
+rates.columns = ["not engaged", "engaged"]
+rates["gap"] = (rates["engaged"] - rates["not engaged"]).round(1)
+print(rates.sort_values("not engaged", ascending=False))
+within = people.groupby("channel")[["events7", "bought"]].apply(lambda d: d["events7"].corr(d["bought"])).round(3)
+print(within.to_dict())
+```
+
+**Predict:** Inside each channel, will engaged people still buy about 5 points more often than the others? And what will r be inside each channel?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+                not engaged  engaged  gap
+channel                                  
+referral               22.7     23.9  1.2
+organic_search         14.4     14.8  0.4
+app_store              10.2     11.9  1.7
+paid_search             9.2      7.8 -1.4
+paid_social             3.8      5.9  2.1
+{'app_store': 0.031, 'organic_search': 0.012, 'paid_search': -0.017, 'paid_social': 0.016, 'referral': 0.008}
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 244" width="360" role="img" aria-labelledby="c10-channels-t c10-channels-d">
+<title id="c10-channels-t">Engaged against not engaged, overall and inside each channel</title>
+<desc id="c10-channels-d">A dot plot of the share who bought within 14 days, in percent. For each row, a green dot is the not engaged people and a purple dot the engaged people. everyone: 11.0 and 16.5. referral: 22.7 and 23.9. organic_search: 14.4 and 14.8. app_store: 10.2 and 11.9. paid_search: 9.2 and 7.8. paid_social: 3.8 and 5.9.</desc>
+<circle class="f-grp k4" cx="16" cy="14" r="4" />
+<text class="f10" x="25" y="18">not engaged</text>
+<circle class="f-mat k4" cx="110" cy="14" r="4" />
+<text class="f10" x="119" y="18">engaged (5 or more events)</text>
+<text class="f10 mu e" x="352" y="44">gap in points</text>
+<text class="f10" x="10" y="66">everyone</text>
+<path class="ln" d="M189 62H227.5" />
+<circle class="f-grp k4" cx="189" cy="62" r="4" />
+<circle class="f-mat k4" cx="227.5" cy="62" r="4" />
+<text class="f10 b e" x="352" y="66">+5.5</text>
+<text class="f10 e" x="181" y="66">11.0</text>
+<text class="f10" x="235.5" y="66">16.5</text>
+<text class="f10" x="10" y="98">referral</text>
+<path class="ln" d="M270.9 94H279.3" />
+<circle class="f-grp k4" cx="270.9" cy="94" r="4" />
+<circle class="f-mat k4" cx="279.3" cy="94" r="4" />
+<text class="f10 b e" x="352" y="98">+1.2</text>
+<text class="f10" x="10" y="122">organic_search</text>
+<path class="ln" d="M212.8 118H215.6" />
+<circle class="f-grp k4" cx="212.8" cy="118" r="4" />
+<circle class="f-mat k4" cx="215.6" cy="118" r="4" />
+<text class="f10 b e" x="352" y="122">+0.4</text>
+<text class="f10" x="10" y="146">app_store</text>
+<path class="ln" d="M183.4 142H195.3" />
+<circle class="f-grp k4" cx="183.4" cy="142" r="4" />
+<circle class="f-mat k4" cx="195.3" cy="142" r="4" />
+<text class="f10 b e" x="352" y="146">+1.7</text>
+<text class="f10" x="10" y="170">paid_search</text>
+<path class="ln" d="M166.6 166H176.4" />
+<circle class="f-grp k4" cx="176.4" cy="166" r="4" />
+<circle class="f-mat k4" cx="166.6" cy="166" r="4" />
+<text class="f10 b e" x="352" y="170">−1.4</text>
+<text class="f10" x="10" y="194">paid_social</text>
+<path class="ln" d="M138.6 190H153.3" />
+<circle class="f-grp k4" cx="138.6" cy="190" r="4" />
+<circle class="f-mat k4" cx="153.3" cy="190" r="4" />
+<text class="f10 b e" x="352" y="194">+2.1</text>
+<path class="bx" d="M10 76H352" />
+<path class="bx" d="M112.0 204H287.0" />
+<path class="bx" d="M112.0 204v4" />
+<text class="f10 mu m" x="112" y="220">0%</text>
+<path class="bx" d="M182.0 204v4" />
+<text class="f10 mu m" x="182" y="220">10%</text>
+<path class="bx" d="M252.0 204v4" />
+<text class="f10 mu m" x="252" y="220">20%</text>
+<text class="f10 mu m" x="199.5" y="234">share who bought within 14 days</text>
+</svg>
+</figure>
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="cfs-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="cfs" id="cfs-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="cfs" id="cfs-r1" aria-label="Step 1 of 4: Fifteen dots in one cloud" />
+<input class="sa-r r2 o3" type="radio" name="cfs" id="cfs-r2" aria-label="Step 2 of 4: A line through all of them" />
+<input class="sa-r r3 o5" type="radio" name="cfs" id="cfs-r3" aria-label="Step 3 of 4: Colored by a third thing" />
+<input class="sa-r r4 o8" type="radio" name="cfs" id="cfs-r4" aria-label="Step 4 of 4: A line inside each group" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>dots</small><span><i class="w1 tmp hl">15</i><i class="w7 d2">15</i></span></span><span class="sa-n c-grp"><small>groups</small><span><i class="w1 tmp hl">1</i><i class="w2 d2 tmp">1</i><i class="w2 d4 tmp hl">3</i><i class="w3 d6">3</i></span></span><span class="sa-n c-src"><small>lines</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">1</i><i class="w2 d4 tmp">1</i><i class="w3 d6 hl">4</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 236" width="360" role="img" aria-labelledby="cfs-t cfs-d">
+<title id="cfs-t">A line through the whole cloud can rise while the line inside every group is flat</title>
+<desc id="cfs-d">Fifteen dots in one cloud with a blue line rising through them. The dots take three colors, green, purple and magenta, and sit in three clumps along the line, labeled A, B and C. A short flat line is drawn inside each clump. The text says the rise comes from the groups.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Fifteen dots in one cloud</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · A line through all of them</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · Colored by a third thing</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · A line inside each group</text>
+<text class="f11 b" x="10" y="14">A third thing splits the cloud</text>
+<path class="bx" d="M40 50V196H340" />
+<text class="f10 mu" x="46" y="52">buys more ↑</text>
+<text class="f10 mu m" x="190" y="214">more first-week activity →</text>
+<path class="s-src dr p7 d2" pathLength="1" d="M50 176L330 64" />
+<path class="s-grp dr p3 d6" pathLength="1" d="M68 160H112" />
+<path class="s-mat dr p3 d6" pathLength="1" d="M168 120H212" />
+<path class="s-win dr p3 d6" pathLength="1" d="M268 80H312" />
+<circle class="f-ord k4 w3 tmp" cx="78" cy="164" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="84" cy="154" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="90" cy="168" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="96" cy="154" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="102" cy="164" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="178" cy="116" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="184" cy="126" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="190" cy="112" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="196" cy="126" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="202" cy="116" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="278" cy="84" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="284" cy="74" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="290" cy="88" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="296" cy="74" r="4.5" />
+<circle class="f-ord k4 w3 tmp" cx="302" cy="84" r="4.5" />
+<circle class="f-grp k4 w5 d4" cx="78" cy="164" r="4.5" />
+<circle class="f-grp k4 w5 d4" cx="84" cy="154" r="4.5" />
+<circle class="f-grp k4 w5 d4" cx="90" cy="168" r="4.5" />
+<circle class="f-grp k4 w5 d4" cx="96" cy="154" r="4.5" />
+<circle class="f-grp k4 w5 d4" cx="102" cy="164" r="4.5" />
+<circle class="f-mat k4 w5 d4" cx="178" cy="116" r="4.5" />
+<circle class="f-mat k4 w5 d4" cx="184" cy="126" r="4.5" />
+<circle class="f-mat k4 w5 d4" cx="190" cy="112" r="4.5" />
+<circle class="f-mat k4 w5 d4" cx="196" cy="126" r="4.5" />
+<circle class="f-mat k4 w5 d4" cx="202" cy="116" r="4.5" />
+<circle class="f-win k4 w5 d4" cx="278" cy="84" r="4.5" />
+<circle class="f-win k4 w5 d4" cx="284" cy="74" r="4.5" />
+<circle class="f-win k4 w5 d4" cx="290" cy="88" r="4.5" />
+<circle class="f-win k4 w5 d4" cx="296" cy="74" r="4.5" />
+<circle class="f-win k4 w5 d4" cx="302" cy="84" r="4.5" />
+<text class="f11 b m w4 d5" x="90" y="140">A</text>
+<text class="f11 b m w4 d5" x="190" y="100">B</text>
+<text class="f11 b m w4 d5" x="290" y="60">C</text>
+<text class="f10 m w2 d7" x="190" y="230">the rise comes from the groups</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="cfs-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="cfs-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="cfs-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="cfs-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="cfs-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="cfs-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="cfs-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="cfs-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="cfs-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="cfs-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="cfs-r1">1</label><label class="sa-sb sb2" for="cfs-r2">2</label><label class="sa-sb sb3" for="cfs-r3">3</label><label class="sa-sb sb4" for="cfs-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Each dot is a person: more activity to the right, more buying higher up.<span class="sa-chs"><span class="sa-ch pl">15 dots</span></span></div>
+<div class="c-src w2 d2 tmp">Through the whole cloud the line rises: more activity goes with more buying.<span class="sa-chs"><span class="sa-ch pl">1 rising line</span></span></div>
+<div class="c-grp w2 d4 tmp">A third thing, the group, sorts the dots into three clumps, and the clumps sit along the line.<span class="sa-chs"><span class="sa-ch ch">3 groups, 3 colors</span></span></div>
+<div class="c-mat w3 d6">Inside each group the line is flat: the rise came from which group a person is in.<span class="sa-chs"><span class="sa-ch pl">3 flat lines</span></span></div>
+</div>
+<p class="ca-cap">A made-up miniature: 15 people in three groups. The line through all of them rises; inside each group it is flat.</p>
+<ol class="sa-steps">
+<li>Fifteen dots in one cloud</li>
+<li>A line through all of them</li>
+<li>Colored by a third thing</li>
+<li>A line inside each group</li>
+</ol>
+</figure>
+
+</details>
+
+*Why:* inside every channel the gap is small, from −1.4 to 2.1 points against 5.5 for everyone, and r is between −0.017 and 0.031. The channel is tied to both columns, so it can make them move together with neither causing the other, and a gap that shrinks inside the groups was made by the groups. The channel mix made the 5.5 points: engaged people come mostly from channels that buy more whatever they do. That fits "engagement does not make people buy" but cannot prove it; in this dataset the truth is known: buying depends on the channel, the platform and a few other things, not on activity. A small leftover can remain when another third thing, such as the platform, is tied to both columns.
+
+### 4. Compare like with like
+
+**Idea.** A pooled comparison of two groups can mislead when the groups differ in their mix of a third thing. The check is the one of unit 3: compare the groups inside each subgroup, and set the two answers side by side.
+
+**Try it.** The platform of the signup event, overall:
+
+```python
+print(people.groupby("platform")["bought"].mean().mul(100).round(1).to_dict())
+```
+
+**Predict:** Which platform of the signup converts best overall: web, iOS or Android?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'android': 7.3, 'ios': 12.5, 'web': 16.3}
+```
+
+</details>
+
+**Try it.** Web against iOS inside each channel, with the people in each group and a p-value for the gap (the chance of a gap at least this big if the platforms did the same, from *Hypothesis tests and p-values, honestly* (C8)). `app_store` has no web people:
+
+```python
+cells = people.pivot_table(index="channel", columns="platform", values="bought", aggfunc="mean").mul(100).round(1)
+print(cells[["web", "ios"]])
+for c in ["organic_search", "paid_search", "paid_social", "referral"]:
+    d = people[people["channel"] == c]
+    table = pd.crosstab(d["platform"], d["bought"]).loc[["web", "ios"]]
+    print(c, table.sum(axis=1).tolist(), round(stats.chi2_contingency(table, correction=False)[1], 4))
+```
+
+**Predict:** Inside each channel that has web people, who converts better, web or iOS? And how many of the four gaps are larger than chance would give?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+platform         web   ios
+channel                   
+app_store        NaN  12.5
+organic_search  15.2  17.0
+paid_search      9.8  11.5
+paid_social      2.7   5.0
+referral        23.0  29.3
+organic_search [3388, 800] 0.2143
+paid_search [939, 918] 0.2221
+paid_social [226, 2276] 0.1197
+referral [1916, 850] 0.0004
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 220" width="360" role="img" aria-labelledby="c10-simpson-t c10-simpson-d">
+<title id="c10-simpson-t">Web against iOS, overall and inside each channel</title>
+<desc id="c10-simpson-d">A dot plot of the share who bought within 14 days, in percent: a green dot for web people and a purple dot for iOS people. everyone: web 16.3, iOS 12.5. organic_search: web 15.2, iOS 17.0. referral: web 23.0, iOS 29.3. paid_search: web 9.8, iOS 11.5. paid_social: web 2.7, iOS 5.0. Overall the web dot is to the right of the iOS dot; inside each of the four channels the iOS dot is to the right of the web dot.</desc>
+<circle class="f-grp k4" cx="16" cy="14" r="4" />
+<text class="f10" x="25" y="18">web</text>
+<circle class="f-mat k4" cx="64" cy="14" r="4" />
+<text class="f10" x="73" y="18">iOS</text>
+<text class="f10 mu e" x="352" y="44">who is ahead</text>
+<text class="f10" x="10" y="66">everyone</text>
+<path class="ln" d="M160.5 62H176.46" />
+<circle class="f-grp k4" cx="176.46" cy="62" r="4" />
+<circle class="f-mat k4" cx="160.5" cy="62" r="4" />
+<text class="f10 b e" x="352" y="66">web +3.8</text>
+<text class="f10 e" x="152.5" y="66">12.5</text>
+<text class="f10" x="184.46" y="66">16.3</text>
+<text class="f10" x="10" y="98">organic_search</text>
+<path class="ln" d="M171.84 94H179.4" />
+<circle class="f-grp k4" cx="171.84" cy="94" r="4" />
+<circle class="f-mat k4" cx="179.4" cy="94" r="4" />
+<text class="f10 b e" x="352" y="98">iOS +1.8 · p 0.2143</text>
+<text class="f10" x="10" y="122">referral</text>
+<path class="ln" d="M204.6 118H231.06" />
+<circle class="f-grp k4" cx="204.6" cy="118" r="4" />
+<circle class="f-mat k4" cx="231.06" cy="118" r="4" />
+<text class="f10 b e" x="352" y="122">iOS +6.3 · p 0.0004</text>
+<text class="f10" x="10" y="146">paid_search</text>
+<path class="ln" d="M149.16 142H156.3" />
+<circle class="f-grp k4" cx="149.16" cy="142" r="4" />
+<circle class="f-mat k4" cx="156.3" cy="142" r="4" />
+<text class="f10 b e" x="352" y="146">iOS +1.7 · p 0.2221</text>
+<text class="f10" x="10" y="170">paid_social</text>
+<path class="ln" d="M119.34 166H129" />
+<circle class="f-grp k4" cx="119.34" cy="166" r="4" />
+<circle class="f-mat k4" cx="129" cy="166" r="4" />
+<text class="f10 b e" x="352" y="170">iOS +2.3 · p 0.1197</text>
+<path class="bx" d="M10 76H352" />
+<path class="bx" d="M108.0 180H234.0" />
+<path class="bx" d="M108.0 180v4" />
+<text class="f10 mu m" x="108" y="196">0%</text>
+<path class="bx" d="M150.0 180v4" />
+<text class="f10 mu m" x="150" y="196">10%</text>
+<path class="bx" d="M192.0 180v4" />
+<text class="f10 mu m" x="192" y="196">20%</text>
+<path class="bx" d="M234.0 180v4" />
+<text class="f10 mu m" x="234" y="196">30%</text>
+<text class="f10 mu m" x="171" y="210">share who bought within 14 days</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* in all four channels the iOS rate is the higher one, so the overall order reverses. This is *Simpson's paradox*: a comparison that points one way for everyone together and the other way inside the subgroups. It needs two things: the two groups differ in their mix of subgroups (the next Try it), and the subgroups differ in the outcome. But only referral's gap is clearly larger than chance (p = 0.0004); the other three have p-values from 0.12 to 0.22. The reversal of the order is the paradox; "iOS is better in organic search" is not a finding. The dataset was built with a real iOS advantage (a buy chance 1.25 times as high once a person sees the paywall): the data shows its direction in four channels and clearly supports it in one.
+
+**Try it.** Where do the web and iOS people come from?
+
+```python
+mix = pd.crosstab(people["platform"], people["channel"], normalize="index").mul(100).round(1)
+print(mix.loc[["web", "ios"]])
+```
+
+**Predict:** Which two channels hold most of the web people, and which two hold most of the iOS people?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+channel   app_store  organic_search  paid_search  paid_social  referral
+platform                                                               
+web             0.0            52.4         14.5          3.5      29.6
+ios            32.7            11.1         12.8         31.6      11.8
+```
+
+</details>
+
+*Why:* 82.0% of the web people come through organic search and referral, which convert at 14.5% and 23.1%, and 64.3% of the iOS people through the app store and paid social, which convert at 10.5% and 3.9% (the table of unit 3). The overall comparison put two different crowds side by side. The like-with-like check is Exercise 2.
+
+### 5. What earns causal language
+
+**Idea.** Words such as "causes", "raises" and "because of" are earned by a design, not by a number. The strongest is a coin toss that assigns the groups. Without it, say "goes with" and name the rivals that are still open. An A/B test is that design; *Designing an A/B test* (C14) builds one.
+
+**Try it.** The `paywall_v2` test gave each new person, by a coin, the old paywall (control) or a redesign (variant). Compare the two groups:
+
+```python
+paywall = assignments[assignments["experiment"] == "paywall_v2"].merge(people[["user_id", "channel"]], on="user_id", validate="one_to_one")
+print(pd.crosstab(paywall["variant"], paywall["channel"], normalize="index").mul(100).round(1))
+print(paywall.groupby("variant")["converted"].mean().mul(100).round(1).to_dict())
+```
+
+**Predict:** In the paywall_v2 test, a coin put each new person in the control or the variant group. Will the channel mix of the two groups differ by more than a point or two?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+channel  app_store  organic_search  paid_search  paid_social  referral
+variant                                                               
+control       25.5            29.1         15.3         10.1      20.0
+variant       23.7            30.3         15.4         10.2      20.3
+{'control': 12.7, 'variant': 15.3}
+```
+
+</details>
+
+*Why:* the coin made the groups alike: the largest difference in channel share is 1.8 points (app_store: 25.5 and 23.7), and a coin makes the groups alike in expectation, including in things nobody recorded; here the recorded channel mix agrees. So the 2.6-point gap between 12.7% and 15.3% is unlikely to come from the channel or any other trait of the people: it is the new paywall or chance, which the A/B lessons tell apart. Engaged against not engaged is different: nobody assigned it, the people chose.
+
+<Aside type="tip" title="Remember">
+
+- A correlation $$r$$ measures the straight-line part only, and one point can decide it: plot first, then compute.
+- Three rivals to "A causes B": reverse causation, a confounder, coincidence. Check each; a timing check counts only what came before the outcome.
+- Compare inside the groups of the third thing: a gap that vanishes there was made by the groups.
+- A comparison can flip inside the subgroups (Simpson): compare like with like, and ask how big each gap is next to chance.
+- Causal words need a design, ideally a coin. Otherwise write "goes with".
+
+**Common trap:** reading "engaged people buy more" as "engagement makes people buy".
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-correlation-and-causation-1">
+
+**Is `region` a confounder of the same link?** Take the people of Europe and compare the share who bought among the engaged and among the others. Put the gap, engaged minus others, in percentage points rounded to 1 decimal in `answer_1`. Expected: `answer_1` is a number in percentage points.
+
+```python
+europe = people[people["region"] == "europe"]  # given: the people of Europe
+# the share who bought among the engaged and among the others, in percent; set answer_1 to the gap in points
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+Group `europe` by `engaged` and take the mean of `bought`; the gap is the difference of two means.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+europe = people[people["region"] == "europe"]
+shares = europe.groupby("engaged")["bought"].mean() * ...
+answer_1 = round(float(shares[1] - shares[0]), 1)
+```
+
+</details>
+
+<Solution>
+
+```python
+europe = people[people["region"] == "europe"]
+shares = europe.groupby("engaged")["bought"].mean() * 100
+answer_1 = round(float(shares[1] - shares[0]), 1)
+```
+
+5.2 points, close to the 5.5 of all 20,177 people. Knowing a person's region does not explain the gap, because region is not tied to both columns (the dataset README says it changes nothing). A confounder must be tied to both sides. The check cell reports 5.5 if you forget to filter to Europe.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-correlation-and-causation-2">
+
+**What conversion would iOS people have if they came through the channels in the same shares as web people?** Before you start, say in one sentence what the result looks like: one percentage. Weight the iOS conversion of each channel by the share of all web people who came through it, add the four products, and put the percentage rounded to 1 decimal in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a percentage, a number between 0 and 100.
+
+<details>
+<summary>Hint</summary>
+
+Two pieces: the share of web people in each channel (`value_counts(normalize=True)`), and the iOS conversion of each channel (a groupby). Multiply them channel by channel.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One percentage, higher than the plain iOS rate of unit 4."*
+
+```python
+web_mix = people[people["platform"] == "web"]["channel"].value_counts(normalize=True)
+ios_rates = people[people["platform"] == "ios"].groupby("channel")["bought"].mean()
+answer_2 = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+web_mix = people[people["platform"] == "web"]["channel"].value_counts(normalize=True)
+ios_rates = people[people["platform"] == "ios"].groupby("channel")["bought"].mean()
+answer_2 = round(float((web_mix * ios_rates.loc[web_mix.index]).sum() * 100), 1)
+```
+
+19.4%, against 16.3% for web people: with the same channel mix iOS is ahead, which reverses the overall order. `app_store` has no web people, so it drops out of the weights. The check cell reports the plain iOS rate, 12.5%, or the web rate, 16.3%, if you give one of those.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a correlation of 0.6 shows up between two columns. Name the three rival explanations of "the first causes the second" and one check for each.
+
+   <details>
+   <summary>answer</summary>
+
+   Reverse causation (which came first?), a confounder (compare inside the groups of the third thing), coincidence (look at more people).
+
+   </details>
+
+<Exercise id="core-correlation-and-causation-3">
+
+**Spot the flaw.** A colleague wants the correlation between being engaged and buying, and computes it on the five channels: the share engaged and the share who bought, one pair for each channel. Fix the last line so that the correlation is computed over the 20,177 people, `engaged` against `bought`, and set `answer_3` to it rounded to 3 decimals. Expected: `answer_3` is a number between −1 and 1.
+
+```python
+by_channel_means = people.groupby("channel")[["engaged", "bought"]].mean()  # one row for each channel: five rows
+answer_3 = round(float(by_channel_means["engaged"].corr(by_channel_means["bought"])), 3)  # the colleague's number
+```
+
+<details>
+<summary>Hint</summary>
+
+The colleague's table has five rows. How many rows does the question need?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float(people[...].corr(people[...])), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = round(float(people["engaged"].corr(people["bought"])), 3)
+```
+
+0.065 over the 20,177 people. The correlation of the five channel averages is 0.991, because averages hide the spread inside each channel: it says something about channels, not about people. The check cell reports it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can compute and read a correlation coefficient, name the three rival explanations, find a confounder by comparing inside groups, spot a reversal like Simpson's, and say what earns causal language.*
+Test: Exercise core-correlation-and-causation-2, done from the notebook without opening the hints.
+
+The pattern to remember: **before you say why, compare inside the groups of every third thing that could drive both columns.** The next lesson, *Regression as a thinking tool* (C11), turns that move into a method: a line, and a second variable held fixed.

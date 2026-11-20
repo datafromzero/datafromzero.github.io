@@ -458,6 +458,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   sample formula, say so and keep the symbol convention (σ and N for populations, s and n − 1 for samples); never state a function's divisor in an
   Idea that precedes a Predict about that function.**
 
+- 2026-11-20 — Drafting C10, a reverse-causation illustration was built from timing (55.5% of the buyers' first-week events came after the purchase) and the Why said buying may have caused some of the activity, although the dataset README says Plus does not change visits; the figure is a timing artifact (buyers buy early, a median 0.49 days after signup). → **A reverse-causation illustration built from timing (how much activity falls after the outcome) must say only that the measure cannot separate direction; never suggest the outcome drove the activity when the dataset truth says otherwise.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks

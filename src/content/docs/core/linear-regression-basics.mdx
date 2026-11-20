@@ -1,0 +1,949 @@
+---
+id: core-linear-regression-basics
+title: Regression as a thinking tool
+short_title: Regression as a tool
+description: Fit a line to data, read slope, intercept and residuals, and use R-squared and extrapolation warnings honestly.
+stage: core
+order: 110
+level: intermediate
+duration: 35
+objectives:
+  - Read the slope and intercept of a fitted line in the units of the data
+  - Compute residuals and say what they show
+  - Interpret R-squared without overclaiming
+  - 'Add a second variable and read a coefficient as "holding the other fixed"'
+  - Explain why extrapolating is risky
+prerequisites:
+  - core-correlation-and-causation
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-linear-regression-basics.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 4.1.4.1 Linear least squares regression (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd141.htm
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 4.4.4 How can I tell if a model fits my data? (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/pmd/section4/pmd44.htm
+  - title: 'NumPy documentation: numpy.polyfit (accessed 2026-11-20)'
+    url: https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
+  - title: 'NumPy documentation: numpy.linalg.lstsq (accessed 2026-11-20)'
+    url: https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html
+  - title: 'SciPy documentation: scipy.stats.linregress (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.linregress.html
+status: draft
+---
+
+TODO(owner): This is a team draft (SPEC D24), written because the owner asked for one; edit it and approve it. The `reviewed` date is a placeholder: set it when you publish. The stub listed the statsmodels page as a source; the draft fits every line with NumPy (`polyfit` and `lstsq`), the library the Python stage teaches in its vectorization lesson, although neither function is taught there and each is introduced here in one sentence, so the statsmodels page was dropped; say if you want one `statsmodels` table at the end.
+
+## The question
+
+The owner of the cafes asks:
+
+> When an order has one more item in it, how many dollars does its total grow by? And what can that tell us about orders we have not seen?
+
+An order's *units* are the sum of the quantities of its lines; its total is in dollars. The first completed orders, from 1,799 in all:
+
+| order_id | units | total |
+|---:|---:|---:|
+| 1001 | 4 | 14.00 |
+| 1002 | 2 | 12.50 |
+| 1003 | 3 | 12.50 |
+| 1004 | 2 | 6.50 |
+
+By the end you can read a fitted line in dollars, say what its misses show, say what R² means and does not, hold a second thing fixed, and say where a line stops being safe.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Correlation is not causation* (C10) you compared a gap inside each channel. A line with a second variable makes that comparison for you: its coefficient is read holding the other variable fixed.
+
+**Diverge.** A line is fitted to the rows you have. Unit 5 shows what it does where it has no rows.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Correlation is not causation* (C10), write the pandas line for the correlation between two columns `a` and `b` of a table `df`.
+
+   <details>
+   <summary>answer</summary>
+
+   `df["a"].corr(df["b"])`.
+
+   </details>
+
+2. In C10, engaged people bought more, and the channel explained the gap. What is the channel called there?
+
+   <details>
+   <summary>answer</summary>
+
+   A confounder: a third column tied to both columns. Comparing inside each channel removed the gap.
+
+   </details>
+
+## The big idea
+
+The best line is the one whose misses, squared and added up, are smallest.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="lsq-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="lsq" id="lsq-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="lsq" id="lsq-r1" aria-label="Step 1 of 4: Eight dots, each with an x and a y" />
+<input class="sa-r r2 o3" type="radio" name="lsq" id="lsq-r2" aria-label="Step 2 of 4: A flat line misses by a lot" />
+<input class="sa-r r3 o5" type="radio" name="lsq" id="lsq-r3" aria-label="Step 3 of 4: Right tilt, but too high" />
+<input class="sa-r r4 o8" type="radio" name="lsq" id="lsq-r4" aria-label="Step 4 of 4: The least squares line" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>dots</small><span><i class="w1 tmp hl">8</i><i class="w7 d2">8</i></span></span><span class="sa-n c-flt"><small>sticks</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">8</i><i class="w5 d4">8</i></span></span><span class="sa-n c-out"><small>squares</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">36.0</i><i class="w2 d4 tmp hl">21.8</i><i class="w3 d6 hl">3.8</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 244" width="360" role="img" aria-labelledby="lsq-t lsq-d">
+<title id="lsq-t">The least squares line is the line whose squared sticks add up to the smallest sum</title>
+<desc id="lsq-d">Eight dots rising from left to right. A blue flat line is drawn with a red stick from each dot to the line, and the sum of squared sticks reads 36.0. A tilted line that sits too high replaces it and the sum reads 21.8. The least squares line replaces that and the sticks are short; the sum reads 3.8, the smallest.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Eight dots, each with an x and a y</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · A flat line misses by a lot</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · Right tilt, but too high</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · The least squares line</text>
+<text class="f11 b" x="10" y="14">A line, its sticks and their squares</text>
+<text class="f11 w2 d2 tmp" x="10" y="48">sum of squared sticks: 36.0</text>
+<text class="f11 w2 d4 tmp" x="10" y="48">sum of squared sticks: 21.8</text>
+<text class="f11 w3 d6" x="10" y="48">sum of squared sticks: 3.8, the least</text>
+<path class="bx" d="M40 62V196H340" />
+<text class="f10 mu m" x="190" y="216">x</text>
+<text class="f10 mu" x="46" y="72">y</text>
+<path class="s-flt dr p2 d2 tmp" pathLength="1" d="M73 170V128.5625M106 150.5V128.5625M139 157V128.5625M172 124.5V128.5625M205 131V128.5625M238 98.5V128.5625M271 111.5V128.5625M304 85.5V128.5625" />
+<path class="s-src dr p2 d2 tmp" pathLength="1" d="M53.2 128.5625L323.8 128.5625" />
+<path class="s-flt dr p2 d4 tmp" pathLength="1" d="M73 170V148.875M106 150.5V137.5M139 157V126.125M172 124.5V114.75M205 131V103.375M238 98.5V92M271 111.5V80.625M304 85.5V69.25" />
+<path class="s-src dr p2 d4 tmp" pathLength="1" d="M53.2 155.7L323.8 62.42500000000001" />
+<path class="s-flt dr p3 d6" pathLength="1" d="M73 170V168.375M106 150.5V157M139 157V145.625M172 124.5V134.25M205 131V122.875M238 98.5V111.5M271 111.5V100.125M304 85.5V88.75" />
+<path class="s-src dr p3 d6" pathLength="1" d="M53.2 175.2L323.8 81.92500000000001" />
+<circle class="f-src k4" cx="73" cy="170" r="4.5" />
+<circle class="f-src k4" cx="106" cy="150.5" r="4.5" />
+<circle class="f-src k4" cx="139" cy="157" r="4.5" />
+<circle class="f-src k4" cx="172" cy="124.5" r="4.5" />
+<circle class="f-src k4" cx="205" cy="131" r="4.5" />
+<circle class="f-src k4" cx="238" cy="98.5" r="4.5" />
+<circle class="f-src k4" cx="271" cy="111.5" r="4.5" />
+<circle class="f-src k4" cx="304" cy="85.5" r="4.5" />
+<path class="s-src" d="M10 226h22" />
+<text class="f10" x="38" y="230">line</text>
+<path class="s-flt" d="M76 226h22" />
+<text class="f10" x="104" y="230">stick</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="lsq-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="lsq-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="lsq-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="lsq-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="lsq-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="lsq-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="lsq-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="lsq-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="lsq-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="lsq-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="lsq-r1">1</label><label class="sa-sb sb2" for="lsq-r2">2</label><label class="sa-sb sb3" for="lsq-r3">3</label><label class="sa-sb sb4" for="lsq-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Each dot is one case with an x and a y; a fitted line predicts y from x.<span class="sa-chs"><span class="sa-ch pl">8 dots</span></span></div>
+<div class="c-flt w2 d2 tmp">A stick is the gap between a dot and the line: what the line gets wrong for that case.<span class="sa-chs"><span class="sa-ch pl">1 line, 8 sticks</span></span></div>
+<div class="c-flt w2 d4 tmp">Squaring each stick and adding them gives one score for a line; a smaller score is a better fit.<span class="sa-chs"><span class="sa-ch ch">squares: 36.0 to 21.8</span></span></div>
+<div class="c-out w3 d6">The least squares line has the smallest total of squared sticks of all straight lines.<span class="sa-chs"><span class="sa-ch ch">squares: 21.8 to 3.8</span></span></div>
+</div>
+<p class="ca-cap">A made-up miniature: eight dots and three lines. A stick is the gap from a dot up or down to the line; the best line has the smallest sum of squared sticks.</p>
+<ol class="sa-steps">
+<li>Eight dots, each with an x and a y</li>
+<li>A flat line misses by a lot</li>
+<li>Right tilt, but too high</li>
+<li>The least squares line</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 5 new ideas: a line in the units of the data, residuals, R², a second variable, extrapolation. The Data cell of the notebook builds `sales`, one row for each of the 1,799 completed orders with `total`, `units`, `food_units` and `bakery_units`, and `lines`, one row for each order line.
+
+<OpenInColab />
+
+### 1. A line in the units of the data
+
+**Idea.** A *fitted line* predicts y from x. Its *slope* is how much the prediction rises when x rises by 1, in units of y per unit of x. Its *intercept* is the prediction at x = 0, in units of y. *Least squares* picks the line whose squared misses add up to the smallest sum (NIST: it minimizes "the sum of the squared deviations between the data and the model"). NumPy's `polyfit(x, y, 1)` fits it and returns the slope first.
+
+**Try it.** Fit the total of an order on its units, over all 1,799 completed orders:
+
+```python
+units, total = sales["units"], sales["total"]
+slope, intercept = np.polyfit(units, total, 1)
+print(round(slope, 2), round(intercept, 2))
+print(round(intercept + slope * 3, 2), round(total[units == 3].mean(), 2), units.min())
+sxy = ((units - units.mean()) * (total - total.mean())).sum()
+sxx = ((units - units.mean()) ** 2).sum()
+print(round(sxy, 2), round(sxx, 2), round(units.mean(), 4), round(total.mean(), 4), round(sxy / sxx, 4))
+```
+
+**Predict:** Fit the line of the order total on the number of units, over all 1,799 orders. How many dollars will each extra unit add (the slope), and what total will the line give at 0 units (the intercept)?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+4.83 -1.22
+13.28 13.11 1
+21795.84 4509.04 2.8688 12.6455 4.8338
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 250" width="360" role="img" aria-labelledby="c11-fit-t c11-fit-d">
+<title id="c11-fit-t">Order total against units, with the fitted line</title>
+<desc id="c11-fit-d">A scatter of the totals of 1,798 orders against their units, from 1 to 9 units. The points rise from the lower left to the upper right, widening as the orders get bigger. Dot size is the number of orders with that total. A blue line through them rises 4.83 dollars per unit and crosses 0 units at -1.22 dollars. An arrow at the top right points off the chart to the order of 23 units and 197.00 dollars.</desc>
+<path class="bx" d="M46 196H340M46 196V28" />
+<text class="f10 mu e" x="41" y="199">0</text>
+<text class="f10 mu e" x="41" y="151">20</text>
+<path class="bx dsh" d="M46 148H340" />
+<text class="f10 mu e" x="41" y="103">40</text>
+<path class="bx dsh" d="M46 100H340" />
+<text class="f10 mu e" x="41" y="55">60</text>
+<path class="bx dsh" d="M46 52H340" />
+<path class="bx" d="M46 196v4" />
+<text class="f10 mu m" x="46" y="212">0</text>
+<path class="bx" d="M104.8 196v4" />
+<text class="f10 mu m" x="104.8" y="212">2</text>
+<path class="bx" d="M163.6 196v4" />
+<text class="f10 mu m" x="163.6" y="212">4</text>
+<path class="bx" d="M222.4 196v4" />
+<text class="f10 mu m" x="222.4" y="212">6</text>
+<path class="bx" d="M281.2 196v4" />
+<text class="f10 mu m" x="281.2" y="212">8</text>
+<path class="bx" d="M340 196v4" />
+<text class="f10 mu m" x="340" y="212">10</text>
+<circle class="f-src k2" cx="75.4" cy="188.8" r="3.8" />
+<circle class="f-src k2" cx="75.4" cy="188.2" r="4.75" />
+<circle class="f-src k2" cx="75.4" cy="187.6" r="5.44" />
+<circle class="f-src k2" cx="75.4" cy="187" r="4.19" />
+<circle class="f-src k2" cx="75.4" cy="186.4" r="2.95" />
+<circle class="f-src k2" cx="75.4" cy="185.8" r="3.89" />
+<circle class="f-src k2" cx="75.4" cy="185.2" r="5.6" />
+<circle class="f-src k2" cx="75.4" cy="184.6" r="4.78" />
+<circle class="f-src k2" cx="75.4" cy="184" r="3.46" />
+<circle class="f-src k2" cx="75.4" cy="176.8" r="2.24" />
+<circle class="f-src k2" cx="75.4" cy="175.6" r="3.4" />
+<circle class="f-src k2" cx="75.4" cy="175" r="2.05" />
+<circle class="f-src k2" cx="75.4" cy="173.8" r="3.4" />
+<circle class="f-src k2" cx="104.8" cy="181.6" r="2.95" />
+<circle class="f-src k2" cx="104.8" cy="181" r="2.24" />
+<circle class="f-src k2" cx="104.8" cy="180.4" r="4.15" />
+<circle class="f-src k2" cx="104.8" cy="179.8" r="3.16" />
+<circle class="f-src k2" cx="104.8" cy="179.2" r="4.37" />
+<circle class="f-src k2" cx="104.8" cy="178.6" r="2.79" />
+<circle class="f-src k2" cx="104.8" cy="178" r="4.19" />
+<circle class="f-src k2" cx="104.8" cy="177.4" r="3.85" />
+<circle class="f-src k2" cx="104.8" cy="176.8" r="4.11" />
+<circle class="f-src k2" cx="104.8" cy="176.2" r="3.8" />
+<circle class="f-src k2" cx="104.8" cy="175.6" r="3.89" />
+<circle class="f-src k2" cx="104.8" cy="175" r="3.09" />
+<circle class="f-src k2" cx="104.8" cy="174.4" r="4.94" />
+<circle class="f-src k2" cx="104.8" cy="173.8" r="3.51" />
+<circle class="f-src k2" cx="104.8" cy="173.2" r="4.02" />
+<circle class="f-src k2" cx="104.8" cy="172.6" r="2.24" />
+<circle class="f-src k2" cx="104.8" cy="172" r="3.09" />
+<circle class="f-src k2" cx="104.8" cy="168.4" r="2.05" />
+<circle class="f-src k2" cx="104.8" cy="167.8" r="2.5" />
+<circle class="f-src k2" cx="104.8" cy="167.2" r="2.61" />
+<circle class="f-src k2" cx="104.8" cy="166.6" r="2.24" />
+<circle class="f-src k2" cx="104.8" cy="166" r="2.61" />
+<circle class="f-src k2" cx="104.8" cy="165.4" r="2.7" />
+<circle class="f-src k2" cx="104.8" cy="164.8" r="2.7" />
+<circle class="f-src k2" cx="104.8" cy="164.2" r="2.38" />
+<circle class="f-src k2" cx="104.8" cy="163.6" r="2.05" />
+<circle class="f-src k2" cx="104.8" cy="163" r="2.79" />
+<circle class="f-src k2" cx="104.8" cy="162.4" r="2.5" />
+<circle class="f-src k2" cx="104.8" cy="161.8" r="2.24" />
+<circle class="f-src k2" cx="104.8" cy="155.2" r="2.7" />
+<circle class="f-src k2" cx="104.8" cy="151.6" r="2.87" />
+<circle class="f-src k2" cx="134.2" cy="175.6" r="2.24" />
+<circle class="f-src k2" cx="134.2" cy="174.4" r="2.7" />
+<circle class="f-src k2" cx="134.2" cy="173.8" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="173.2" r="2.5" />
+<circle class="f-src k2" cx="134.2" cy="172.6" r="3.61" />
+<circle class="f-src k2" cx="134.2" cy="172" r="2.79" />
+<circle class="f-src k2" cx="134.2" cy="171.4" r="3.34" />
+<circle class="f-src k2" cx="134.2" cy="170.8" r="3.28" />
+<circle class="f-src k2" cx="134.2" cy="170.2" r="3.46" />
+<circle class="f-src k2" cx="134.2" cy="169.6" r="3.46" />
+<circle class="f-src k2" cx="134.2" cy="169" r="3.22" />
+<circle class="f-src k2" cx="134.2" cy="168.4" r="3.66" />
+<circle class="f-src k2" cx="134.2" cy="167.8" r="3.16" />
+<circle class="f-src k2" cx="134.2" cy="167.2" r="3.46" />
+<circle class="f-src k2" cx="134.2" cy="166.6" r="3.61" />
+<circle class="f-src k2" cx="134.2" cy="166" r="3.85" />
+<circle class="f-src k2" cx="134.2" cy="165.4" r="3.85" />
+<circle class="f-src k2" cx="134.2" cy="164.8" r="3.61" />
+<circle class="f-src k2" cx="134.2" cy="164.2" r="3.16" />
+<circle class="f-src k2" cx="134.2" cy="163.6" r="4.55" />
+<circle class="f-src k2" cx="134.2" cy="163" r="3.22" />
+<circle class="f-src k2" cx="134.2" cy="162.4" r="3.16" />
+<circle class="f-src k2" cx="134.2" cy="161.8" r="3.28" />
+<circle class="f-src k2" cx="134.2" cy="161.2" r="2.61" />
+<circle class="f-src k2" cx="134.2" cy="160.6" r="2.61" />
+<circle class="f-src k2" cx="134.2" cy="160" r="2.7" />
+<circle class="f-src k2" cx="134.2" cy="159.4" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="158.8" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="158.2" r="2.24" />
+<circle class="f-src k2" cx="134.2" cy="157.6" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="157" r="2.38" />
+<circle class="f-src k2" cx="134.2" cy="156.4" r="2.61" />
+<circle class="f-src k2" cx="134.2" cy="155.8" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="155.2" r="2.38" />
+<circle class="f-src k2" cx="134.2" cy="154.6" r="2.38" />
+<circle class="f-src k2" cx="134.2" cy="154" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="153.4" r="2.38" />
+<circle class="f-src k2" cx="134.2" cy="152.2" r="2.5" />
+<circle class="f-src k2" cx="134.2" cy="151.6" r="2.24" />
+<circle class="f-src k2" cx="134.2" cy="149.8" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="147.4" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="146.8" r="2.5" />
+<circle class="f-src k2" cx="134.2" cy="144.4" r="2.5" />
+<circle class="f-src k2" cx="134.2" cy="143.8" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="143.2" r="2.38" />
+<circle class="f-src k2" cx="134.2" cy="142.6" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="140.2" r="2.24" />
+<circle class="f-src k2" cx="134.2" cy="134.8" r="2.24" />
+<circle class="f-src k2" cx="134.2" cy="133" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="131.2" r="2.05" />
+<circle class="f-src k2" cx="134.2" cy="129.4" r="2.38" />
+<circle class="f-src k2" cx="163.6" cy="167.2" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="166.6" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="166" r="2.5" />
+<circle class="f-src k2" cx="163.6" cy="165.4" r="2.7" />
+<circle class="f-src k2" cx="163.6" cy="164.8" r="2.61" />
+<circle class="f-src k2" cx="163.6" cy="164.2" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="163.6" r="2.95" />
+<circle class="f-src k2" cx="163.6" cy="163" r="2.79" />
+<circle class="f-src k2" cx="163.6" cy="162.4" r="3.22" />
+<circle class="f-src k2" cx="163.6" cy="161.8" r="2.87" />
+<circle class="f-src k2" cx="163.6" cy="161.2" r="3.02" />
+<circle class="f-src k2" cx="163.6" cy="160.6" r="2.87" />
+<circle class="f-src k2" cx="163.6" cy="160" r="3.16" />
+<circle class="f-src k2" cx="163.6" cy="159.4" r="3.16" />
+<circle class="f-src k2" cx="163.6" cy="158.8" r="3.8" />
+<circle class="f-src k2" cx="163.6" cy="158.2" r="2.79" />
+<circle class="f-src k2" cx="163.6" cy="157.6" r="3.28" />
+<circle class="f-src k2" cx="163.6" cy="157" r="2.79" />
+<circle class="f-src k2" cx="163.6" cy="156.4" r="3.02" />
+<circle class="f-src k2" cx="163.6" cy="155.8" r="2.95" />
+<circle class="f-src k2" cx="163.6" cy="155.2" r="3.22" />
+<circle class="f-src k2" cx="163.6" cy="154.6" r="3.34" />
+<circle class="f-src k2" cx="163.6" cy="154" r="2.5" />
+<circle class="f-src k2" cx="163.6" cy="153.4" r="2.7" />
+<circle class="f-src k2" cx="163.6" cy="152.8" r="3.02" />
+<circle class="f-src k2" cx="163.6" cy="152.2" r="3.02" />
+<circle class="f-src k2" cx="163.6" cy="151.6" r="3.16" />
+<circle class="f-src k2" cx="163.6" cy="151" r="2.5" />
+<circle class="f-src k2" cx="163.6" cy="150.4" r="2.61" />
+<circle class="f-src k2" cx="163.6" cy="149.8" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="149.2" r="2.5" />
+<circle class="f-src k2" cx="163.6" cy="148.6" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="145.6" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="143.2" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="142.6" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="140.2" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="139.6" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="138.4" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="137.2" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="136.6" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="136" r="2.61" />
+<circle class="f-src k2" cx="163.6" cy="134.8" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="133.6" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="133" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="132.4" r="2.38" />
+<circle class="f-src k2" cx="163.6" cy="130" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="129.4" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="128.2" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="127" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="124" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="123.4" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="122.2" r="2.24" />
+<circle class="f-src k2" cx="163.6" cy="121" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="120.4" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="119.2" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="118.6" r="2.05" />
+<circle class="f-src k2" cx="163.6" cy="112.6" r="2.05" />
+<circle class="f-src k2" cx="193" cy="158.8" r="2.05" />
+<circle class="f-src k2" cx="193" cy="158.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="157.6" r="2.24" />
+<circle class="f-src k2" cx="193" cy="157" r="2.05" />
+<circle class="f-src k2" cx="193" cy="156.4" r="2.5" />
+<circle class="f-src k2" cx="193" cy="155.8" r="2.61" />
+<circle class="f-src k2" cx="193" cy="155.2" r="2.5" />
+<circle class="f-src k2" cx="193" cy="154.6" r="2.24" />
+<circle class="f-src k2" cx="193" cy="154" r="2.05" />
+<circle class="f-src k2" cx="193" cy="152.8" r="2.95" />
+<circle class="f-src k2" cx="193" cy="152.2" r="2.7" />
+<circle class="f-src k2" cx="193" cy="151.6" r="2.61" />
+<circle class="f-src k2" cx="193" cy="151" r="2.24" />
+<circle class="f-src k2" cx="193" cy="150.4" r="3.02" />
+<circle class="f-src k2" cx="193" cy="149.8" r="2.38" />
+<circle class="f-src k2" cx="193" cy="149.2" r="2.7" />
+<circle class="f-src k2" cx="193" cy="148.6" r="2.05" />
+<circle class="f-src k2" cx="193" cy="148" r="2.7" />
+<circle class="f-src k2" cx="193" cy="147.4" r="2.5" />
+<circle class="f-src k2" cx="193" cy="146.8" r="2.5" />
+<circle class="f-src k2" cx="193" cy="146.2" r="2.79" />
+<circle class="f-src k2" cx="193" cy="145.6" r="2.61" />
+<circle class="f-src k2" cx="193" cy="145" r="2.61" />
+<circle class="f-src k2" cx="193" cy="144.4" r="2.5" />
+<circle class="f-src k2" cx="193" cy="143.8" r="2.79" />
+<circle class="f-src k2" cx="193" cy="143.2" r="2.87" />
+<circle class="f-src k2" cx="193" cy="142.6" r="2.24" />
+<circle class="f-src k2" cx="193" cy="142" r="2.79" />
+<circle class="f-src k2" cx="193" cy="141.4" r="2.24" />
+<circle class="f-src k2" cx="193" cy="140.8" r="2.79" />
+<circle class="f-src k2" cx="193" cy="140.2" r="3.02" />
+<circle class="f-src k2" cx="193" cy="139" r="2.24" />
+<circle class="f-src k2" cx="193" cy="137.8" r="2.05" />
+<circle class="f-src k2" cx="193" cy="137.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="136" r="2.24" />
+<circle class="f-src k2" cx="193" cy="135.4" r="2.05" />
+<circle class="f-src k2" cx="193" cy="134.8" r="2.05" />
+<circle class="f-src k2" cx="193" cy="131.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="130" r="2.24" />
+<circle class="f-src k2" cx="193" cy="126.4" r="2.24" />
+<circle class="f-src k2" cx="193" cy="125.8" r="2.05" />
+<circle class="f-src k2" cx="193" cy="121.6" r="2.05" />
+<circle class="f-src k2" cx="193" cy="121" r="2.05" />
+<circle class="f-src k2" cx="193" cy="120.4" r="2.05" />
+<circle class="f-src k2" cx="193" cy="119.8" r="2.05" />
+<circle class="f-src k2" cx="193" cy="119.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="118.6" r="2.05" />
+<circle class="f-src k2" cx="193" cy="117.4" r="2.05" />
+<circle class="f-src k2" cx="193" cy="116.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="115.6" r="2.05" />
+<circle class="f-src k2" cx="193" cy="114.4" r="2.05" />
+<circle class="f-src k2" cx="193" cy="113.2" r="2.05" />
+<circle class="f-src k2" cx="193" cy="107.8" r="2.24" />
+<circle class="f-src k2" cx="193" cy="106.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="147.4" r="2.38" />
+<circle class="f-src k2" cx="222.4" cy="145.6" r="2.61" />
+<circle class="f-src k2" cx="222.4" cy="145" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="144.4" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="143.8" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="142.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="141.4" r="2.38" />
+<circle class="f-src k2" cx="222.4" cy="140.8" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="140.2" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="139.6" r="2.5" />
+<circle class="f-src k2" cx="222.4" cy="139" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="138.4" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="137.8" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="137.2" r="2.38" />
+<circle class="f-src k2" cx="222.4" cy="136.6" r="2.38" />
+<circle class="f-src k2" cx="222.4" cy="136" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="135.4" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="134.8" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="133.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="132.4" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="131.8" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="131.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="130" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="129.4" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="128.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="127.6" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="125.8" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="122.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="121.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="121" r="2.24" />
+<circle class="f-src k2" cx="222.4" cy="119.8" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="117.4" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="113.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="112" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="110.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="109.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="109" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="108.4" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="107.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="104.2" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="103.6" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="103" r="2.05" />
+<circle class="f-src k2" cx="222.4" cy="96.4" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="135.4" r="2.24" />
+<circle class="f-src k2" cx="251.8" cy="134.2" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="130.6" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="130" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="129.4" r="2.24" />
+<circle class="f-src k2" cx="251.8" cy="128.2" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="127.6" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="127" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="125.8" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="123.4" r="2.24" />
+<circle class="f-src k2" cx="251.8" cy="122.2" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="117.4" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="116.2" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="115.6" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="101.2" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="95.8" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="93.4" r="2.05" />
+<circle class="f-src k2" cx="251.8" cy="74.8" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="128.8" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="122.8" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="118.6" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="114.4" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="113.2" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="112" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="109" r="2.05" />
+<circle class="f-src k2" cx="281.2" cy="107.8" r="2.05" />
+<circle class="f-src k2" cx="310.6" cy="32.2" r="2.05" />
+<path class="s-src" d="M57.76 194.29L340 83.01" />
+<path class="s-src" d="M57.76 20h18" />
+<text class="f10" x="81.76" y="24">line: total = −1.22 + 4.83 × units</text>
+<text class="f10 e" x="340" y="12">off the chart: 23 units, 197.00</text>
+<path class="s-flt" d="M300 19H348M341 16L348 19L341 22" />
+<text class="f10 mu m" x="193" y="228">units in the order</text>
+<text class="f10 mu m" x="193" y="242">dot size: number of orders with that total</text>
+<text class="f10 mu" x="41" y="14">total in dollars</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* each extra unit adds 4.83 dollars on average, and the line puts an order of 0 units at −1.22 dollars: not an order that exists (the smallest has 1 unit), only the place where the line crosses 0 units. For 3 units the line says 13.28 and the real 3-unit orders average 13.11: close, not equal, because a line gives an average, not each order.
+
+In symbols, the fitted line is $$\hat{y} = a + b\,x$$, where $$\hat{y}$$ ("y hat") is the predicted total in dollars, $$x$$ the units, $$b$$ the slope in dollars per unit and $$a$$ the intercept in dollars. Least squares gives them from the data, with $$x_i$$ and $$y_i$$ the units and the total of order $$i$$, $$n$$ orders, and $$\bar{x}$$ and $$\bar{y}$$ the means:
+
+$$
+\begin{gathered}
+b = \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}{\sum_{i=1}^{n}(x_i - \bar{x})^2} \\
+a = \bar{y} - b\,\bar{x}
+\end{gathered}
+$$
+
+The top of $$b$$ is the sum that made the correlation of C10 (units and dollars move together); the bottom is how much the units spread. With the sums and means printed above:
+
+$$
+\begin{gathered}
+b = \frac{21{,}795.84}{4{,}509.04} \approx 4.83 \\
+a = 12.6455 - 4.8338 \times 2.8688 \approx -1.22
+\end{gathered}
+$$
+
+### 2. Residuals
+
+**Idea.** A *residual* is the actual total minus the line's prediction, in dollars. A positive residual is an order that cost more than the line says. Residuals show what a line misses: a good fit leaves misses with no pattern, and a miss that stands out is an order to look at (NIST).
+
+**Try it.** The smallest and largest residual of this line, and what they add up to:
+
+```python
+residual = total - (intercept + slope * units)
+worst = sales.assign(residual=residual).sort_values("residual")
+print(round(residual.min(), 2), round(residual.max(), 2), abs(round(residual.sum(), 6)))
+top = worst.tail(1)
+print(top[["order_id", "store_id", "units", "total", "residual"]].round(2).to_string(index=False))
+print(round(float(intercept + slope * top["units"].iloc[0]), 2))
+```
+
+**Predict:** What are the smallest and the largest residual of this line, and what do all 1,799 residuals add up to?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+-9.45 87.04 0.0
+ order_id  store_id  units  total  residual
+     2075         1     23  197.0     87.04
+109.96
+```
+
+</details>
+
+*Why:* order 2075 misses by 87.04 dollars: 197.00 against a prediction of 109.96. It is the extra-zero order of the dataset README (a quantity of 20 where 2 was meant), the order of 197.00 that stood out in Part 1. The line over-predicts by at most 9.45 dollars (the smallest residual is −9.45). The residuals add up to 0.0: a line fitted by least squares with an intercept balances them that way, so a sum of zero says nothing about how good the fit is. We leave order 2075 out from here on: its units are a typing error.
+
+In symbols, the residual of order $$i$$ is $$e_i = y_i - \hat{y}_i$$, and least squares picks the line with the smallest $$\sum e_i^2$$. For order 2075, $$y_i$$ is 197.00 and $$\hat{y}_i$$ is 109.96, so $$e_i = 197.00 - 109.96 = 87.04$$.
+
+**Try it.** Leave that order out, fit again, and look at the misses by order size:
+
+```python
+clean = sales[sales["order_id"] != 2075]  # from here on: the 1,798 orders without order 2075
+slope2, intercept2 = np.polyfit(clean["units"], clean["total"], 1)
+print(len(clean), clean["units"].max(), round(slope2, 2), round(intercept2, 2))
+miss = clean["total"] - (intercept2 + slope2 * clean["units"])
+print(miss.groupby(clean["units"]).std().loc[1:8].round(2).to_dict())
+```
+
+**Predict:** Leave out order 2075, the extra-zero line that the dataset README documents (a quantity of 20 where 2 was meant), and fit again. Will the slope move by cents or by dollars, and will the intercept get closer to 0? And will the misses of the new line get larger or smaller for bigger orders?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1798 9 4.41 -0.05
+{1: 1.5, 2: 2.45, 3: 3.14, 4: 4.16, 5: 4.46, 6: 5.5, 7: 6.61, 8: 2.98}
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 226" width="360" role="img" aria-labelledby="c11-misses-t c11-misses-d">
+<title id="c11-misses-t">Misses of the line by order size</title>
+<desc id="c11-misses-d">For orders of 1 to 8 units, a vertical bar from the 10th to the 90th percentile of the misses, with a dot at the median, in dollars. The bars grow from about 2 dollars long at 1 unit to about 16 dollars at 7 units and are shorter again at 8 units, which has only 8 orders. The median stays slightly below 0 for every size.</desc>
+<path class="bx dsh" d="M46 112H336" />
+<path class="bx" d="M46 163.2V22.4" />
+<text class="f10 mu e" x="42" y="147">−5</text>
+<text class="f10 mu e" x="42" y="115">0</text>
+<text class="f10 mu e" x="42" y="83">5</text>
+<text class="f10 mu e" x="42" y="51">10</text>
+<path class="bx" d="M46 163.2H336" />
+<path class="s-src" d="M58 119.1V107.9" />
+<circle class="f-src k4" cx="58" cy="112.7" r="3.5" />
+<text class="f10 mu m" x="58" y="178.2">1</text>
+<path class="s-src" d="M94 125.89V87.17" />
+<circle class="f-src k4" cx="94" cy="115.33" r="3.5" />
+<text class="f10 mu m" x="94" y="178.2">2</text>
+<path class="s-src" d="M130 130.75V90.75" />
+<circle class="f-src k4" cx="130" cy="116.35" r="3.5" />
+<text class="f10 mu m" x="130" y="178.2">3</text>
+<path class="s-src" d="M166 136.58V67.78" />
+<circle class="f-src k4" cx="166" cy="120.58" r="3.5" />
+<text class="f10 mu m" x="166" y="178.2">4</text>
+<path class="s-src" d="M202 144V74.88" />
+<circle class="f-src k4" cx="202" cy="118.4" r="3.5" />
+<text class="f10 mu m" x="202" y="178.2">5</text>
+<path class="s-src" d="M238 146.62V49.82" />
+<circle class="f-src k4" cx="238" cy="121.82" r="3.5" />
+<text class="f10 mu m" x="238" y="178.2">6</text>
+<path class="s-src" d="M274 144.45V42.05" />
+<circle class="f-src k4" cx="274" cy="122.05" r="3.5" />
+<text class="f10 mu m" x="274" y="178.2">7</text>
+<path class="s-src" d="M310 147.07V104.51" />
+<circle class="f-src k4" cx="310" cy="118.27" r="3.5" />
+<text class="f10 mu m" x="310" y="178.2">8</text>
+<text class="f10 mu m" x="184" y="193.2">units in the order</text>
+<text class="f10 mu" x="46" y="12">miss in dollars: actual minus line</text>
+<text class="f10" x="322" y="121.27">median</text>
+<text class="f10" x="64" y="35.2">bar: 10th to 90th percentile</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* without order 2075 the slope falls from 4.83 to 4.41 and the intercept goes from −1.22 to −0.05, close to 0: an order of no items costs nothing, as it should. One order in 1,799 moved the slope by about 0.4 dollars per unit, because its 23 units are far from every other order (the next largest has 9) and the line bends toward a point far out. The misses of the new line grow with the size of the order: their standard deviation is 1.5 dollars at 1 unit, 4.16 at 4 and 6.61 at 7 (the 8-unit group has only 8 orders). NIST says that residuals that behave randomly suggest a good fit; these do not behave alike for small and big orders, so a prediction for a 1-unit order is far more certain than one for a 7-unit order.
+
+### 3. R-squared
+
+**Idea.** *R²* ("R squared") says how much of the spread of y around its mean the line accounts for: one minus the squared misses of the line divided by the squared distances of y from its mean. 0 means the line does no better than the mean, 1 means no misses. It has no units. For a line with one x it equals the square of the correlation $$r$$ of C10 (SciPy's page for `linregress` says that the square of `rvalue` is the coefficient of determination).
+
+**Try it.** R² for the 1,798 orders:
+
+```python
+ss_res = (miss ** 2).sum()
+ss_tot = ((clean["total"] - clean["total"].mean()) ** 2).sum()
+print(round(ss_res, 1), round(ss_tot, 1), round(1 - ss_res / ss_tot, 3))
+```
+
+**Predict:** R² compares the squared misses of the line with the squared distances from the mean total. Will it be close to 0.2, 0.5 or 0.8 for the 1,798 orders?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+19792.6 99474.0 0.801
+```
+
+</details>
+
+*Why:* 0.801: the line accounts for about 80% of the squared spread of the totals around their mean. It does not say that the line is 80% right, that units cause the total, or that the line suits every order; NIST warns that a high R² does not guarantee that the model fits the data well.
+
+In symbols, with $$e_i$$ the residuals and $$\bar{y}$$ the mean total:
+
+$$
+R^2 = 1 - \frac{\sum_{i=1}^{n} e_i^2}{\sum_{i=1}^{n}(y_i - \bar{y})^2} = 1 - \frac{19{,}792.6}{99{,}474.0} \approx 0.801
+$$
+
+**Try it.** The same line, fitted to small orders only:
+
+```python
+small = clean[clean["units"] <= 2]
+slope3, intercept3 = np.polyfit(small["units"], small["total"], 1)
+r2_small = np.corrcoef(small["units"], small["total"])[0, 1] ** 2
+print(len(small), round(slope3, 2), round(r2_small, 3))
+```
+
+**Predict:** Now fit the line only to orders of 1 or 2 units. Will the slope change a lot, and will R² stay the same?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+820 4.5 0.546
+```
+
+</details>
+
+*Why:* the slope barely moves (4.5 against 4.41), yet R² falls from 0.801 to 0.546. R² depends on how spread out x is in the sample as well as on the relationship: the same price rule looks "less explained" among small orders. Do not compare R² between samples with different ranges as if it measured the strength of one rule.
+
+### 4. Holding the other fixed
+
+**Idea.** A line can have more than one x: $$\hat{y} = a + b_1 x_1 + b_2 x_2$$. Each coefficient is read holding the other variable fixed: it is the change in the prediction when its own variable rises by 1 and the other stays where it is. NumPy's `linalg.lstsq` fits it from a table with a column of ones for the intercept.
+
+**Try it.** Add the units of food in the order as a second variable, $$x_2$$, next to the units $$x_1$$:
+
+```python
+X = np.column_stack([np.ones(len(clean)), clean["units"], clean["food_units"]])
+coef = np.linalg.lstsq(X, clean["total"], rcond=None)[0]
+print([round(float(c), 2) for c in coef])
+miss2 = clean["total"] - X @ coef
+print(round(1 - (miss2 ** 2).sum() / ss_tot, 3))
+print(round(float(coef @ [1, 3, 0]), 2), round(float(coef @ [1, 3, 1]), 2))
+```
+
+**Predict:** Add the units of food in the order as a second variable. Will the coefficient on units stay near 4.41 or move? And how many dollars will one more food unit add, holding the number of units fixed?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[-0.01, 4.0, 3.0]
+0.9
+11.99 14.99
+```
+
+</details>
+
+*Why:* the coefficients are −0.01 for the intercept, 4.00 for units and 3.00 for food units, and R² rises to 0.9 from 0.801. Holding the units fixed, one food unit in place of another kind of unit adds 3.00 dollars (a 3-unit order with no food unit is predicted at 11.99, with one food unit at 14.99). The slope of units fell from 4.41 to 4.00: food units are counted in the units too, so the first line gave the units credit for part of what food was doing.
+
+**Try it.** Look the coefficients up in the menu:
+
+```python
+paid = lines[lines["order_id"].isin(clean["order_id"])]
+is_food = paid["food_units"] > 0
+print(round(paid.loc[~is_food, "amount"].sum() / paid.loc[~is_food, "quantity"].sum(), 2), round(paid.loc[is_food, "amount"].sum() / paid.loc[is_food, "quantity"].sum(), 2))
+```
+
+**Predict:** Check the two coefficients against the menu: what does the average unit cost after discounts, for units that are not food and for units that are food?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+4.0 6.97
+```
+
+</details>
+
+*Why:* the average unit that is not food cost 4.0 dollars after discounts, as the coefficient says, and the average food unit 6.97, which is the 4.0 plus about 3: the fit found the menu again. A coefficient with a meaning like this one can be checked; most real ones cannot, which is why "holding the other fixed" describes the model and is not an experiment: the regression compares orders, it does not change them.
+
+### 5. Extrapolation
+
+**Idea.** *Extrapolating* is predicting for x values outside the range the line was fitted on. The line has to give some answer there.
+
+**Try it.** The running count of completed orders, day by day, with a line fitted to January 1 to March 31 only:
+
+```python
+daily = sales.groupby(sales["ordered_at"].str[:10]).size().reindex(pd.date_range("2026-01-01", "2026-06-30").strftime("%Y-%m-%d"), fill_value=0)
+running = daily.cumsum().to_numpy()
+day = np.arange(1, len(daily) + 1)
+q1 = day <= 90  # January 1 to March 31
+b_q1, a_q1 = np.polyfit(day[q1], running[q1], 1)
+r2_q1 = np.corrcoef(day[q1], running[q1])[0, 1] ** 2
+print(round(b_q1, 2), round(a_q1, 2), round(r2_q1, 4))
+print(round(a_q1 + b_q1 * 181), int(running[-1]))
+print(round(daily[:90].mean(), 2), round(daily[90:].mean(), 2))
+```
+
+**Predict:** Count the completed orders so far, day by day, and fit a line to January 1 to March 31 (days 1 to 90). Will R² be close to 0.2, 0.5 or 1? Then carry the line on to June 30 (day 181): will it land near the real count of 1,799?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+8.02 -10.49 0.9997
+1441 1799
+7.97 11.89
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 240" width="360" role="img" aria-labelledby="c11-running-t c11-running-d">
+<title id="c11-running-t">Running count of orders and a line fitted to January to March</title>
+<desc id="c11-running-d">A rising curve of completed orders so far, from day 1 (January 1) to day 181 (June 30), ending at 1,799. A straight line fitted to days 1 to 90 follows the curve closely up to day 90 and is then carried on as a dashed line that ends at 1,441 on day 181. A red bar at the right marks the gap of 358 orders. A dashed vertical line marks April 1, when the third cafe opened.</desc>
+<path class="bx" d="M40 190H310M40 190V22.04" />
+<text class="f10 mu e" x="35" y="193">0</text>
+<text class="f10 mu e" x="35" y="148.8">500</text>
+<path class="bx dsh" d="M40 145.8H310" />
+<text class="f10 mu e" x="35" y="104.6">1,000</text>
+<path class="bx dsh" d="M40 101.6H310" />
+<text class="f10 mu e" x="35" y="60.4">1,500</text>
+<path class="bx dsh" d="M40 57.4H310" />
+<path class="bx" d="M41.49 190v4" />
+<text class="f10 mu m" x="41.49" y="206">Jan 1</text>
+<path class="bx" d="M175.75 190v4" />
+<text class="f10 mu m" x="175.75" y="206">Apr 1</text>
+<path class="bx" d="M310 190v4" />
+<text class="f10 mu m" x="310" y="206">Jun 30</text>
+<path class="bx dsh" d="M175.75 190V92.76" />
+<text class="f10" x="180.75" y="182">April 1: Harbor opens</text>
+<path class="s-src" d="M41.49 189.65 L44.48 188.5 L47.46 186.91 L50.44 185.58 L53.43 184.52 L56.41 182.57 L59.39 181.43 L62.38 180.36 L65.36 179.22 L68.34 177.36 L71.33 176.03 L74.31 174.8 L77.29 173.12 L80.28 171.79 L83.26 170.55 L86.24 168.61 L89.23 167.19 L92.21 166.13 L95.19 164.81 L98.18 163.75 L101.16 162.51 L104.14 161.27 L107.13 159.59 L110.11 157.82 L113.09 156.41 L116.08 155.26 L119.06 153.58 L122.04 152.34 L125.03 151.1 L128.01 149.34 L130.99 147.92 L133.98 146.33 L136.96 145.09 L139.94 143.24 L142.93 142.18 L145.91 140.76 L148.9 139.08 L151.88 137.4 L154.86 135.99 L157.85 134.93 L160.83 133.34 L163.81 131.92 L166.8 130.33 L169.78 128.74 L172.76 127.32 L175.75 125.73 L178.73 123.97 L181.71 121.05 L184.7 119.19 L187.68 117.16 L190.66 114.95 L193.65 112.56 L196.63 110.62 L199.61 108.76 L202.6 106.2 L205.58 104.43 L208.56 102.66 L211.55 100.19 L214.53 98.15 L217.51 96.38 L220.5 94.79 L223.48 92.14 L226.46 90.55 L229.45 88.87 L232.43 86.66 L235.41 84.45 L238.4 82.42 L241.38 80.38 L244.36 77.64 L247.35 75.7 L250.33 73.58 L253.31 71.28 L256.3 68.54 L259.28 66.42 L262.27 64.65 L265.25 62.17 L268.23 59.96 L271.22 58.55 L274.2 56.52 L277.18 54.39 L280.17 52.71 L283.15 50.68 L286.13 48.03 L289.12 46 L292.1 44.14 L295.08 41.75 L298.07 39.28 L301.05 37.16 L304.03 35.74 L307.02 32.82 L310 30.97" />
+<path class="s-src dsh" d="M174.25 127.12L310 62.6" />
+<path class="s-flt" d="M314 62.62V30.97" />
+<text class="f10 b" x="318" y="34.97">1,799</text>
+<text class="f10 b" x="318" y="66.62">1,441</text>
+<path class="s-src" d="M50 18h18" />
+<text class="f10" x="74" y="22">orders so far (the data)</text>
+<path class="s-src dsh" d="M50 34h18" />
+<text class="f10" x="74" y="38">line fitted to Jan 1 to Mar 31, carried on</text>
+<path class="s-flt" d="M50 50h18" />
+<text class="f10" x="74" y="54">the miss on June 30: 358 orders</text>
+<text class="f10 mu m" x="174.25" y="220">day of the year, 2026</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* R² is 0.9997 and the line is still 358 orders short on June 30: it carried on at 8.02 orders a day, but from April 1 the chain had a third cafe, so the days grew from 7.97 orders on average in January to March to 11.89 from April on (Harbor opened on April 1, the dataset README). Nothing in the first three months could show it: R² describes the fit inside the range the line saw. NIST warns that linear models "may not be effective for extrapolating"; before you trust a prediction outside the data, ask what could change out there.
+
+<Aside type="tip" title="Remember">
+
+- The slope is in units of y per unit of x; the intercept can sit where no real case does.
+- A residual is actual minus predicted: look at the biggest one and at the pattern of all of them.
+- R² is the share of squared spread the line accounts for. It is not accuracy, not cause, and it moves with the range of x.
+- A coefficient read "holding the other fixed" describes the fit; the regression compares orders, it does not change them.
+- Do not carry a line beyond the data it saw.
+
+**Common trap:** reading a high R² or a clean coefficient as proof that the line is right outside the data, or that x causes y.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-linear-regression-basics-1">
+
+**How many dollars does each extra unit add to the total of a Campus order, store 2?** Fit the line of `total` on `units` to the Campus orders and put its slope, rounded to 2 decimals, in `answer_1`. Expected: `answer_1` is a number in dollars per unit.
+
+```python
+campus = clean[clean["store_id"] == 2]  # given: the Campus orders
+# fit the line of total on units for campus; set answer_1 to its slope, rounded to 2 decimals
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+`np.polyfit(x, y, 1)` returns two numbers: the slope, then the intercept.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+campus = clean[clean["store_id"] == 2]
+slope_c, intercept_c = np.polyfit(..., ..., 1)
+answer_1 = round(float(slope_c), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+campus = clean[clean["store_id"] == 2]
+slope_c, intercept_c = np.polyfit(campus["units"], campus["total"], 1)
+answer_1 = round(float(slope_c), 2)
+```
+
+4.52 dollars per unit at Campus, a little above the 4.41 of all stores together, so the stores do not add the same dollars per unit. The check cell reports the slope of all stores, or the intercept of Campus, if you give one of those.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-linear-regression-basics-2">
+
+**What does one more bakery unit do to an order's total, holding the number of units fixed?** Before you start, say in one sentence what the result looks like: one number in dollars. Fit the total on two variables, `units` and `bakery_units`, over the orders of `clean`, and put the coefficient of `bakery_units`, rounded to 2 decimals, in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a number in dollars.
+
+<details>
+<summary>Hint</summary>
+
+Build the table of the fit like the one of unit 4: a column of ones, then `units`, then `bakery_units`. The coefficients come back in that order.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One number in dollars, the third coefficient of the fit."*
+
+```python
+X = np.column_stack([np.ones(len(clean)), clean["units"], ...])
+coef = np.linalg.lstsq(X, clean["total"], rcond=None)[0]
+answer_2 = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+X = np.column_stack([np.ones(len(clean)), clean["units"], clean["bakery_units"]])
+coef = np.linalg.lstsq(X, clean["total"], rcond=None)[0]
+answer_2 = round(float(coef[2]), 2)
+```
+
+−1.28 dollars: among orders with the same number of units, one bakery unit instead of another kind of unit lowers the total by 1.28, because a bakery unit costs less than the average of the other units. The slope of the total on bakery units alone is +1.16, because orders with more bakery units also have more units: the sign flips once the units are held fixed, like the reversal in *Correlation is not causation* (C10). The check cell reports 1.16.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: say what the slope, the intercept and a residual each mean for the line of an order's total on its units, with their units of measure.
+
+   <details>
+   <summary>answer</summary>
+
+   The slope is the dollars that one more unit adds, on average. The intercept is the predicted total, in dollars, of an order with 0 units. A residual is an order's actual total minus the line's prediction, in dollars.
+
+   </details>
+
+<Exercise id="core-linear-regression-basics-3">
+
+**Spot the flaw.** A colleague wants the dollars that each extra unit adds at Harbor, store 3. The colleague fits the line the other way round, `units` on `total`, and divides 1 by its slope. Fix the code so that it fits `total` on `units`, and set `answer_3` to the slope, rounded to 2 decimals. Expected: `answer_3` is a number in dollars per unit.
+
+```python
+harbor = clean[clean["store_id"] == 3]  # the Harbor orders
+slope_back, intercept_back = np.polyfit(harbor["total"], harbor["units"], 1)  # the colleague fits units on total
+answer_3 = round(float(1 / slope_back), 2)  # and turns the slope upside down
+```
+
+<details>
+<summary>Hint</summary>
+
+A fitted line predicts the column on its left side from the column on its right side. Which column should be predicted here?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+harbor = clean[clean["store_id"] == 3]
+slope_h, intercept_h = np.polyfit(harbor[...], harbor[...], 1)
+answer_3 = round(float(slope_h), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+harbor = clean[clean["store_id"] == 3]
+slope_h, intercept_h = np.polyfit(harbor["units"], harbor["total"], 1)
+answer_3 = round(float(slope_h), 2)
+```
+
+4.37 dollars per unit at Harbor. The colleague's number is 5.69: the line of units on total is a different line, because it minimizes misses in units, not in dollars, and turning its slope upside down overshoots whenever the points do not lie exactly on a line. The check cell reports 5.69.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can fit a line, read its slope and intercept in the units of the data, compute and read its residuals, say what R² does and does not tell, read a coefficient as "holding the other fixed", and say why a line should not be carried beyond its data.*
+Test: Exercise core-linear-regression-basics-2, done from the notebook without opening the hints.
+
+The pattern to remember: **read the line in the units of the data, look at its misses, and stay inside the data it saw.** The next lesson, *Defining a metric before you compute it* (C12), starts the work of deciding what to measure before any of these tools is used.
