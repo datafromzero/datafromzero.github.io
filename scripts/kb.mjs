@@ -26,7 +26,7 @@ function walk(rel, out = []) {
 	const abs = join(ROOT, rel);
 	if (!existsSync(abs)) return out;
 	for (const name of readdirSync(abs).sort()) {
-		if (['node_modules', 'dist', '.astro', '.git', 'worktrees'].includes(name)) continue;
+		if (['node_modules', 'dist', '.astro', '.git', 'worktrees', '__pycache__', '.pytest_cache', '.venv'].includes(name)) continue;
 		const r = posix.join(rel, name);
 		if (statSync(join(ROOT, r)).isDirectory()) walk(r, out);
 		else out.push(r);

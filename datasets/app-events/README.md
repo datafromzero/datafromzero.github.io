@@ -45,8 +45,8 @@ https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/<tag>/data
 https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/<tag>/datasets/app-events/v1/api/events/page-001.json
 ```
 
-This dataset is newer than the pre-release tag `v0.1.0`, so a lesson links to it only after the owner creates the first
-tag that contains `datasets/app-events/`; `<tag>` is that tag. `v1/` never changes, so the links keep working.
+The first tag that contains this dataset is the pre-release `v0.2.0` (SPEC D39), so `<tag>` is `v0.2.0`. `v1/` never changes,
+so the links keep working after later tags.
 
 ## Columns
 

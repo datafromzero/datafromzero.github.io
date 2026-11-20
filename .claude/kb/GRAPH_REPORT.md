@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1350 nodes, 1443 edges, 154 communities (649 isolated nodes).
+- 1350 nodes, 1444 edges, 154 communities (649 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 37, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 457, rule 10, script 124, skill 1, spec-section 25, starlight-component 6, style 7, symbol 243, template 2, token 12.
-- Edges: defines 243, imports 50, mentions 812, overrides 6, references 28, runs 11, specified-by 4, uses 252, uses-token 32, validated-by 5.
+- Edges: defines 243, imports 50, mentions 813, overrides 6, references 28, runs 11, specified-by 4, uses 252, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -52,15 +52,15 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C81 to C78, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C101 to C8, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C33 to C69, src/scripts/run-sql.ts:2)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C69, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C140 to C137, src/layouts/HomeLayout.astro:39)
 - `src/styles/math.css` -uses-token-> `token:--fg` (C71 to C21, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C15, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C25 to C41, design/README.md:181)
-- `M7` -mentions-> `D34` (C51 to C25, CLAUDE.md:65)
+- `M7` -mentions-> `D34` (C50 to C25, CLAUDE.md:65)
 - `M8` -mentions-> `D24` (C74 to C15, CLAUDE.md:66)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C131 to C2, scripts/check-placeholders.mjs:2)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C50 to C51, src/lib/repo-files.ts:4)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C49 to C50, src/lib/repo-files.ts:4)
 - `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C71 to C143, SPEC.md:78)
 
 ## Decisions (SPEC §1)
