@@ -1,0 +1,541 @@
+---
+id: core-study-design-and-data-types
+title: Data types, units and how data was collected
+description: Tell categorical from numeric data, name the unit and grain of a dataset, and separate an observational study from an experiment.
+stage: core
+order: 10
+level: beginner
+duration: 20
+objectives:
+  - Classify a column as categorical or numeric, discrete or continuous
+  - State the unit of observation of a dataset
+  - Tell an observational study from an experiment
+  - Name a confounder that could explain an observed difference
+  - Say what in a table could identify a person, and why a pseudonymous id still counts
+prerequisites:
+  - python-pandas-groupby-aggregate
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-study-design-and-data-types.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'OpenIntro Statistics, chapter 1: Introduction to data (free textbook, accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'NIST SP 800-122: Guide to Protecting the Confidentiality of Personally Identifiable Information (PII), 2010 (accessed 2026-11-20)'
+    url: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-122.pdf
+  - title: 'Sweeney, L. (2000). Simple Demographics Often Identify People Uniquely. Carnegie Mellon University, Data Privacy Working Paper 3 (accessed 2026-11-20)'
+    url: https://dataprivacylab.org/projects/identifiability/paper1.pdf
+  - title: 'Seeing Theory (Brown University): a visual introduction to probability and statistics (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/
+status: draft
+---
+
+## Can you skip Part 1?
+
+Part 1, Statistics I, has seven lessons, C1 to C7, and ends with a descriptive report on the cafe data. Try these six questions without looking anything up; the numbers in questions 2, 4 and 6 are made up. If all six answers are right, go on to Part 2, which starts with *Hypothesis tests and p-values, honestly*. If not, start here.
+
+1. A cafe lets customers pick a window seat or a counter seat, and sees that window customers spend more. Is this an observational study or an experiment? Name one thing besides the seat that could explain the gap.
+
+   <details>
+   <summary>answer</summary>
+
+   Observational: nobody assigned the seats, the customers chose. Anything tied to both the seat and the spending could explain it, for example how long a customer stays.
+
+   </details>
+
+2. Five orders cost 4, 5, 6, 7 and 100 dollars. Which describes a typical order better, the mean or the median, and what are they?
+
+   <details>
+   <summary>answer</summary>
+
+   The median, 6 dollars. The mean, 24.40 dollars, is pulled up by the one order of 100.
+
+   </details>
+
+3. An order has a z-score of 3.5. What does that say, and what do you do before deleting it?
+
+   <details>
+   <summary>answer</summary>
+
+   It lies 3.5 standard deviations above the mean: unusual, not proof of an error. Investigate where it came from, write down what you found, and delete or correct it only on evidence.
+
+   </details>
+
+4. In a made-up case, 1 order in 100 holds a keying mistake. A check flags 9 in 10 of the mistakes and 1 in 10 of the correct orders. Of 1,000 orders, how many are flagged, and how many of those are real mistakes?
+
+   <details>
+   <summary>answer</summary>
+
+   108 flagged: 9 of the 10 mistakes and 99 of the 990 correct orders. Only 9 of the 108 are real, about 8 percent.
+
+   </details>
+
+5. A survey about service is handed only to customers who sit at a table. What is wrong with it, and who does it miss?
+
+   <details>
+   <summary>answer</summary>
+
+   It is a convenience sample, so it carries selection bias: take-away customers have no chance of answering.
+
+   </details>
+
+6. A 95 percent confidence interval for the mean order total, made from 400 orders, is 12.10 to 13.20 dollars. (a) Does it say that 95 percent of orders cost between those values? (b) An interval from 100 orders of the same cafe would be wider or narrower, and by about how much?
+
+   <details>
+   <summary>answer</summary>
+
+   (a) No. It is about the mean of all orders; single orders spread far wider. The 95 percent describes the method: about 95 of 100 such intervals contain the true mean. (b) Wider, about twice as wide: the interval shrinks with the square root of the sample size, and 400 is four times 100.
+
+   </details>
+
+## The question
+
+A friend reads the orders table and says: **Old Town is the bigger cafe. It took 729 orders and Harbor took 355.** Can you trust that sentence?
+
+| store | orders, January to June, all statuses |
+|---|---:|
+| Old Town | 729 |
+| Campus | 716 |
+| Harbor | 355 |
+
+By the end you can say what kind of data each column holds, what one row stands for, what the sentence can and cannot claim, and what in these tables could point to a person.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Readable queries with CTEs* (S13) you divided each store's orders by the days it was open. This lesson gives that move its name, and its limit.
+
+**Diverge.** SQL did the arithmetic; it cannot tell you how the data came to exist. Unit 3 shows what the way data was collected lets you claim.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Grouping and aggregating* (P14), write the pandas line that counts the orders of each store.
+
+   <details>
+   <summary>answer</summary>
+
+   `orders.groupby("store_id").size()`. `size` counts the rows of each group.
+
+   </details>
+
+2. The walk-in order has no `customer_id`. Does `orders["customer_id"].count()` give 1,800 or 1,799?
+
+   <details>
+   <summary>answer</summary>
+
+   1,799: `count` counts the values that are not blank.
+
+   </details>
+
+## The big idea
+
+Where data came from decides what you may claim from it: when nobody assigned the groups, a third thing can drive both sides of a comparison.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="cfd-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="cfd" id="cfd-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="cfd" id="cfd-r1" aria-label="Step 1 of 4: A group and a result" />
+<input class="sa-r r2 o3" type="radio" name="cfd" id="cfd-r2" aria-label="Step 2 of 4: The groups differ in the result" />
+<input class="sa-r r3 o6" type="radio" name="cfd" id="cfd-r3" aria-label="Step 3 of 4: A third thing is tied to both" />
+<input class="sa-r r4 o8" type="radio" name="cfd" id="cfd-r4" aria-label="Step 4 of 4: It can explain the gap by itself" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>boxes</small><span><i class="w1 tmp hl">2</i><i class="w2 d2 tmp">2</i><i class="w3 d4 tmp hl">3</i><i class="w2 d7">3</i></span></span><span class="sa-n c-mat"><small>arrows</small><span><i class="w1 tmp hl">1</i><i class="w3 d2 tmp">1</i><i class="w1 d5 tmp hl">2</i><i class="w1 d6 tmp hl">3</i><i class="w2 d7">3</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 232" width="360" role="img" aria-labelledby="cfd-t cfd-d">
+<title id="cfd-t">A third thing tied to both a group and a result can explain a gap between the groups</title>
+<desc id="cfd-d">Two boxes, group and result, joined by a dashed arrow. The group box holds two groups, A and B. The result box then shows a high result for A and a low result for B: a gap. A third box, a third thing, appears below, with an arrow to the group box and an arrow to the result box: it is tied to both, so it can explain the gap by itself.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A group and a result</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · The groups differ in the result</text>
+<text class="f10 b w3 d4 tmp" x="10" y="29">3 · A third thing is tied to both</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · It can explain the gap by itself</text>
+<text class="f11 b" x="10" y="14">A gap between groups, and a third thing</text>
+<g><rect class="s-grp" x="10" y="52" width="100" height="48" rx="6" /><text class="f11 b" x="20" y="69">group</text></g>
+<g><rect class="f-grp k2" x="60" y="70" width="20" height="22" rx="6" /><text class="f10 b m" x="70" y="85">A</text></g>
+<g><rect class="f-grp k2" x="84" y="70" width="20" height="22" rx="6" /><text class="f10 b m" x="94" y="85">B</text></g>
+<g><rect class="s-src" x="250" y="52" width="100" height="48" rx="6" /><text class="f11 b" x="260" y="69">result</text></g>
+<g class="w7 d2"><rect class="f-out k3" x="296" y="70" width="24" height="22" rx="6" /><text class="f10 b m" x="308" y="85">hi</text></g>
+<g class="w7 d2"><rect class="f-out k1" x="324" y="70" width="24" height="22" rx="6" /><text class="f10 b m" x="336" y="85">lo</text></g>
+<rect class="s-out u1 d2 tmp" x="247" y="49" width="106" height="54" rx="8" />
+<path class="ln dsh" d="M114 82L246 82M239.7 78.96L246 82L239.7 85.04" />
+<text class="f10 b m w1 tmp" x="180" y="74">cause?</text>
+<text class="f10 b m w2 d2 tmp" x="180" y="74">a gap</text>
+<text class="f10 b m w5 d4" x="180" y="74">a gap, but why?</text>
+<g class="w5 d4"><rect class="s-mat" x="110" y="150" width="140" height="48" rx="6" /><text class="f11 b" x="120" y="167">a third thing</text></g>
+<path class="s-mat dr p4 d5" pathLength="1" d="M150 148L78 104M81.79 109.88L78 104L84.97 104.69" />
+<path class="s-mat dr p3 d6" pathLength="1" d="M210 148L282 104M275.03 104.69L282 104L278.21 109.88" />
+<text class="f10 m w2 d7" x="180" y="220">tied to both, it can explain the gap</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="cfd-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="cfd-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="cfd-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="cfd-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="cfd-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="cfd-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="cfd-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="cfd-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="cfd-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="cfd-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="cfd-r1">1</label><label class="sa-sb sb2" for="cfd-r2">2</label><label class="sa-sb sb3" for="cfd-r3">3</label><label class="sa-sb sb4" for="cfd-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">A comparison starts with a group and a result.<span class="sa-chs"><span class="sa-ch pl">2 boxes, 1 question mark</span></span></div>
+<div class="c-out w2 d2 tmp">Group A has a high result and group B a low one: there is a gap.<span class="sa-chs"><span class="sa-ch pl">a gap between A and B</span></span></div>
+<div class="c-mat w3 d4 tmp">A third thing linked to both the group and the result can produce the gap without any help from the group.<span class="sa-chs"><span class="sa-ch pl">1 box, 2 arrows</span></span></div>
+<div class="c-mat w2 d7">A gap between groups is not evidence of cause until the third things are looked for.<span class="sa-chs"><span class="sa-ch ch">the arrow “cause?” is not settled</span></span></div>
+</div>
+<p class="ca-cap">A confounder is a third thing tied to both the groups and the result, so that it can explain a gap between the groups by itself.</p>
+<ol class="sa-steps">
+<li>A group and a result</li>
+<li>The groups differ in the result</li>
+<li>A third thing is tied to both</li>
+<li>It can explain the gap by itself</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 20 minutes, 4 new ideas: kinds of columns, the unit of observation, watching versus assigning, and personal data. Run each **Try it** in the notebook, cell by cell.
+
+<OpenInColab />
+
+### 1. Kinds of columns
+
+**Idea.** A column is *numeric* when adding and averaging its values means something, and *categorical* when its values are labels. Numeric columns are *discrete* when they count (whole-number jumps) and *continuous* when they measure; categorical ones can be ordered or not. The pandas type, the `dtype`, tells how a column is stored.
+
+**Try it.** Take an id and a count:
+
+```python
+print(orders["order_id"].dtype, orders["order_id"].mean())
+print(sorted(order_items["quantity"].unique().tolist()))
+```
+
+**Predict:** `order_id` is stored as a whole number. Will `mean()` run, and would the result tell you anything? Which values does `quantity` take?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+int64 1900.5
+[1, 2, 3, 20]
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 164" width="360" role="img" aria-labelledby="c1-qty-t c1-qty-d">
+<title id="c1-qty-t">Order lines by quantity</title>
+<desc id="c1-qty-d">Four bars for the lines of order_items with a quantity of 1, 2, 3 and 20: 1,911, 894, 481, 1 lines. Only whole numbers occur, with a jump from 3 to 20.</desc>
+<path class="bx" d="M44 122H332" />
+<path class="f-src k4" d="M50 122v-88a4 4 0 0 1 4 -4h48a4 4 0 0 1 4 4v88z" />
+<text class="f11 m" x="78" y="138">1</text>
+<path class="f-src k4" d="M122 122v-39.04a4 4 0 0 1 4 -4h48a4 4 0 0 1 4 4v39.04z" />
+<text class="f11 m" x="150" y="138">2</text>
+<path class="f-src k4" d="M194 122v-19.16a4 4 0 0 1 4 -4h48a4 4 0 0 1 4 4v19.16z" />
+<text class="f11 m" x="222" y="138">3</text>
+<rect class="f-flt k4" x="266" y="120" width="56" height="2" />
+<text class="f11 m" x="294" y="138">20</text>
+<text class="f11 b m" x="78" y="24">1,911</text>
+<text class="f11 b m" x="294" y="110">1 line</text>
+<text class="f10 m mu" x="188" y="156">units on a line</text>
+<text class="f10 e mu" x="350" y="14">number of lines</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* `mean()` runs on any number, but 1900.5 is only the middle of the id range, not a typical order: an id names a row, as an area code does in OpenIntro Statistics, a number that is not numeric. `quantity` takes 1, 2, 3 and 20, whole numbers with jumps, so it is a discrete count. The 20 is the line that the dataset README says should read 2; later lessons come back to it.
+
+### 2. What is one row?
+
+**Idea.** The *unit of observation* is what one row stands for. In `orders` it is an order, in `order_items` one line of an order, in `customers` one customer. OpenIntro calls a row a case or observational unit.
+
+**Try it.** Two averages of `quantity`:
+
+```python
+print(order_items["quantity"].mean().round(2))
+print(order_items.groupby("order_id")["quantity"].sum().mean().round(2))
+```
+
+**Predict:** both lines are called an average quantity. Will they be equal?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1.57
+2.87
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 156" width="360" role="img" aria-labelledby="c1-avg-t c1-avg-d">
+<title id="c1-avg-t">Two averages of quantity</title>
+<desc id="c1-avg-d">Two horizontal bars from zero: the average quantity per line is 1.57 over 3,287 lines, and per order 2.87 over 1,800 orders.</desc>
+<path class="f-src k4" d="M100 18h105.93a4 4 0 0 1 4 4v16a4 4 0 0 1 -4 4h-105.93z" />
+<text class="f11 b" x="10" y="31">per line</text><text class="f10 mu" x="10" y="44">3,287 lines</text>
+<text class="f11 b" x="217.93" y="34">1.57</text>
+<path class="f-src k4" d="M100 70h196.74a4 4 0 0 1 4 4v16a4 4 0 0 1 -4 4h-196.74z" />
+<text class="f11 b" x="10" y="83">per order</text><text class="f10 mu" x="10" y="96">1,800 orders</text>
+<text class="f11 b" x="308.74" y="86">2.87</text>
+<path class="bx" d="M100 114H310" />
+<path class="bx" d="M100 114v4" />
+<text class="f10 m mu" x="100" y="130">0</text>
+<path class="bx" d="M170 114v4" />
+<text class="f10 m mu" x="170" y="130">1</text>
+<path class="bx" d="M240 114v4" />
+<text class="f10 m mu" x="240" y="130">2</text>
+<path class="bx" d="M310 114v4" />
+<text class="f10 m mu" x="310" y="130">3</text>
+<text class="f10 m mu" x="205" y="146">average units of quantity</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* an average is an average over rows, so the unit decides what it means. The first averages over the 3,287 lines, the second over the 1,800 orders after adding up each order's lines. Say the unit in the sentence: units per line, or units per order.
+
+### 3. Watching or assigning
+
+**Idea.** In an *observational study* the data arise on their own and you only watch; it can show an association, not by itself a causal connection. In an *experiment* you assign the treatment, and assigning it at random is what lets you credit a difference to it. A *confounder* is a variable tied to both the explanatory and the response variable, so that it can explain a difference by itself. All of cafe-sales is observational.
+
+**Try it.** The table above counted the whole period. Count again from April 1 on, when all three stores were open:
+
+```python
+orders["month"] = pd.to_datetime(orders["ordered_at"]).dt.month
+named = orders.merge(stores[["store_id", "store_name"]], on="store_id", validate="many_to_one")
+print(named[named["month"] >= 4].groupby("store_name").size().to_dict())
+```
+
+**Predict:** the table counted every order from January to June. Now count only the orders from April 1 on. Will Old Town still be far ahead of Harbor?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'Campus': 362, 'Harbor': 355, 'Old Town': 365}
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 204" width="360" role="img" aria-labelledby="c1-bars-t c1-bars-d">
+<title id="c1-bars-t">Orders by store in two periods</title>
+<desc id="c1-bars-d">Two groups of three horizontal bars from zero. January to June: Old Town 729 orders, Campus 716, Harbor 355. April to June: Old Town 365, Campus 362, Harbor 355.</desc>
+<text class="f11 b" x="10" y="11">January to June</text>
+<path class="f-grp k3" d="M78 20h226a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-226z" />
+<text class="f11" x="10" y="35">Old Town</text><text class="f11 b e" x="300" y="35">729</text>
+<path class="f-grp k3" d="M78 44h221.9a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-221.9z" />
+<text class="f11" x="10" y="59">Campus</text><text class="f11 b e" x="295.9" y="59">716</text>
+<path class="f-grp k3" d="M78 68h108a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-108z" />
+<text class="f11" x="10" y="83">Harbor</text><text class="f11 b e" x="182" y="83">355</text>
+<text class="f11 b" x="10" y="119">April to June, all three stores open</text>
+<path class="f-grp k3" d="M78 128h111.16a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-111.16z" />
+<text class="f11" x="10" y="143">Old Town</text><text class="f11 b e" x="185.16" y="143">365</text>
+<path class="f-grp k3" d="M78 152h110.21a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-110.21z" />
+<text class="f11" x="10" y="167">Campus</text><text class="f11 b e" x="184.21" y="167">362</text>
+<path class="f-grp k3" d="M78 176h108a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h-108z" />
+<text class="f11" x="10" y="191">Harbor</text><text class="f11 b e" x="182" y="191">355</text>
+<path class="bx" d="M78 18V200" />
+</svg>
+</figure>
+
+</details>
+
+*Why:* Harbor opened on April 1, so the count of the table set six months against three. The months open were tied to the store and to the count at once: a confounder. An experiment (a made-up one: a coin flip decides each morning whether the till suggests a pastry) cuts that tie, because the coin does not care about the weekday, the weather or the store.
+
+### 4. What could identify a person?
+
+**Idea.** *Personally identifiable information* (PII) is information that can distinguish or trace a person, or that is linked or linkable to one (NIST SP 800-122). Removing the name is not enough: Sweeney found, in 1990 census data, that three ordinary fields, ZIP code, gender and date of birth, likely made 87 percent of the U.S. population unique. A `customer_id` is a *pseudonym*, a number that stands in for a name, so the table is pseudonymous, not anonymous: whoever holds the list that links ids to names can undo it, and the id ties all of a person's orders together.
+
+**Try it.** In `customers`, find those who are alone with their home city and signup date, and count their orders:
+
+```python
+same_city_and_day = customers.groupby(["city", "signup_date"])["customer_id"].transform("size")
+alone = customers[same_city_and_day == 1]
+exposed = orders[orders["customer_id"].isin(alone["customer_id"])]
+print(len(alone), len(exposed))
+```
+
+**Predict:** of the 150 customers, how many are the only one with their city and signup date? How many of the 1,800 orders belong to them?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+124 1483
+```
+
+<figure class="sa not-content">
+<svg class="sa-svg" viewBox="0 0 360 162" width="360" role="img" aria-labelledby="c1-unique-t c1-unique-d">
+<title id="c1-unique-t">Customers who can be singled out, and their orders</title>
+<desc id="c1-unique-d">Two horizontal bars each split in two. Customers: 124 of 150 are the only one with their home city and signup date. Orders: 1,483 of 1,800 belong to those customers.</desc>
+<path class="f-flt k3" d="M88 22h201.67v26h-201.67a4 4 0 0 1 -4 -4v-18a4 4 0 0 1 4 -4z" /><path class="f-src k3" d="M291.67 22h38.33a4 4 0 0 1 4 4v18a4 4 0 0 1 -4 4h-38.33v-26z" />
+<text class="f11 b" x="10" y="39">customers</text>
+<text class="f11 b" x="92" y="39">124</text><text class="f11 e" x="326" y="39">26</text>
+<path class="f-flt k3" d="M88 68h200.97v26h-200.97a4 4 0 0 1 -4 -4v-18a4 4 0 0 1 4 -4z" /><path class="f-src k3" d="M290.97 68h39.03a4 4 0 0 1 4 4v18a4 4 0 0 1 -4 4h-39.03v-26z" />
+<text class="f11 b" x="10" y="85">orders</text>
+<text class="f11 b" x="92" y="85">1,483</text><text class="f11 e" x="326" y="85">317</text>
+<rect class="f-flt k3" x="84" y="124" width="10" height="10" rx="2" /><text class="f10" x="100" y="133">alone with their city and signup date</text>
+<rect class="f-src k3" x="84" y="142" width="10" height="10" rx="2" /><text class="f10" x="100" y="151">shared with another customer</text>
+</svg>
+</figure>
+
+</details>
+
+*Why:* anyone who knows one of these customers' home city and signup day can pick out their id, and with it every order, each with a store and a minute. The data here is synthetic and describes no real person. A real cafe would tell customers at sign-up what it collects and why, ask for their consent where it applies, collect only what its questions need, as NIST advises (`referred_by` links people to each other), and keep the id-to-name list away from the analysts' copy. The OECD privacy principles that NIST lists say personal data should be obtained fairly and, where appropriate, with the person's knowledge or consent, and used only for the purposes stated. What the law requires depends on where the customers live; this lesson is not legal advice.
+
+<Aside type="tip" title="Remember">
+
+- Numeric means an average makes sense; an id stored as a number is a label.
+- Say what one row stands for before you average anything.
+- Only an assigned, randomized comparison can credit a difference to the treatment.
+- Look for a confounder before you explain a difference between groups.
+- A pseudonymous id is not anonymous; a few ordinary fields can single a person out.
+
+**Common trap:** calling a table anonymous because it has no names.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-study-design-and-data-types-1">
+
+**What is the average number of units in a Harbor order?** One row of `order_items` is a line, not an order. Use the lines of the orders taken at Harbor, store 3. Put the average in `answer_1`, rounded to 2 decimals. Expected: `answer_1` is a number.
+
+```python
+harbor_orders = orders[orders["store_id"] == 3]["order_id"]  # given: the ids of the Harbor orders
+harbor_lines = order_items[order_items["order_id"].isin(harbor_orders)]  # given: their lines
+# average the units over orders, not over lines, and set answer_1
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+Add up the quantities of each order first, then average the sums.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+harbor_orders = orders[orders["store_id"] == 3]["order_id"]
+harbor_lines = order_items[order_items["order_id"].isin(harbor_orders)]
+answer_1 = round(float(harbor_lines.groupby(...)["quantity"].sum()...), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+harbor_orders = orders[orders["store_id"] == 3]["order_id"]
+harbor_lines = order_items[order_items["order_id"].isin(harbor_orders)]
+answer_1 = round(float(harbor_lines.groupby("order_id")["quantity"].sum().mean()), 2)
+```
+
+2.93 units in a Harbor order, averaged over its 355 orders. The average over its 645 lines is 1.61 units for each line, which the check cell reports: the unit of observation changed from order to line.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-study-design-and-data-types-2">
+
+**Which of these four studies are experiments, and which are observational?** Before you start, say in one sentence what the result looks like: four words.
+
+- (a) A coin flip decides, for each day, whether the till suggests a pastry; the owner compares pastry sales on the two kinds of day.
+- (b) The owner compares the pastry sales of orders paid by mobile with those paid in cash.
+- (c) The owner reads last year's records to see whether gold customers visit more often than bronze ones.
+- (d) Half of the loyalty customers, chosen by drawing lots, get a free-cookie coupon, and the owner counts their visits next month against the others.
+
+Put one word for each study in `answer_2`, in the order a, b, c, d: `"experiment"` or `"observational"`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of four words.
+
+<details>
+<summary>Hint</summary>
+
+Ask of each study: did the owner assign the groups, or only watch which group each case fell into?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two of each kind."*
+
+```python
+answer_2 = ["experiment", ..., ..., ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_2 = ["experiment", "observational", "observational", "experiment"]
+```
+
+(a) and (d) are randomized experiments: the owner assigns the treatment, by a coin flip and by drawing lots. (b) and (c) are observational: the groups, payment method and tier, were there before the owner looked.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: Harbor took half as many orders as Old Town in the whole period. Name the confounder, and the one change to the count that removes it.
+
+   <details>
+   <summary>answer</summary>
+
+   The months open: Harbor opened on April 1. Count only the months when every store was open, or divide each store's orders by the days it was open.
+
+   </details>
+
+<Exercise id="core-study-design-and-data-types-3">
+
+**Spot the flaw.** A colleague wants to report the typical loyalty tier of the 150 customers. They number the tiers 1, 2 and 3 and write that the average customer sits between bronze and silver. Report the tiers in the way their kind allows: set `answer_3` to the share of customers in each tier, in the order bronze, silver, gold, each rounded to 2 decimals. Expected: `answer_3` is a list of three shares.
+
+```python
+tier_number = customers["loyalty_tier"].map({"bronze": 1, "silver": 2, "gold": 3})  # the colleague's numbers
+answer_3 = round(float(tier_number.mean()), 2)  # the colleague's average tier
+```
+
+<details>
+<summary>Hint</summary>
+
+A column of labels, even ordered ones, is summarized by counting: how many in each level, as a share of all.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+shares = customers["loyalty_tier"].value_counts(normalize=True)
+answer_3 = shares.reindex([...]).round(2).tolist()
+```
+
+</details>
+
+<Solution>
+
+```python
+shares = customers["loyalty_tier"].value_counts(normalize=True)
+answer_3 = shares.reindex(["bronze", "silver", "gold"]).round(2).tolist()
+```
+
+57 percent bronze, 33 percent silver and 10 percent gold. The numbers 1, 2 and 3 were only a code for ordered labels, and nothing says gold is three times bronze; the average of 1.53 came out of the code, not out of the customers, and the check cell reports it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say whether a column is numeric or categorical, name what one row stands for, tell an observational study from an experiment and name a confounder, and point out what in a table could identify a person.*
+Test: Exercise core-study-design-and-data-types-2, done from the notebook without opening the hints.
+
+The pattern to remember: **say what a row is, how the data arose, and who could be found in it, before you compute anything.** The next lesson, *Center and spread: mean, median and standard deviation* (C2), summarizes one column of order totals. To see the ideas of Part 1 drawn and interactive, Seeing Theory has a chapter each on basic probability, compound probability, distributions, frequentist inference and Bayesian inference.
+
+TODO(owner): set `reviewed` to the day you approve this draft, and open the notebook in Colab once to run it from the top. The consent sentences rest on the OECD principles as listed in NIST SP 800-122; the text of the EU and California privacy laws could not be opened for this draft, so no statute is quoted.
