@@ -1,0 +1,82 @@
+# app-events: machine-readable column definitions (SPEC §7). Human-readable version: README.md.
+name: app-events
+version: 1
+license: CC-BY-4.0
+synthetic: true
+timezone: UTC
+period: { start: 2026-01-01, end: 2026-06-30 }
+exported_at: 2026-07-01 00:00:00
+generator: scripts/build-app-events.py
+tables:
+  - name: users
+    file: v1/users.csv
+    rows: 21841
+    primary_key: user_id
+    columns:
+      - { name: user_id, type: integer, nullable: false }
+      - { name: signup_date, type: date, nullable: false }
+      - { name: channel, type: text, nullable: false, values: [organic_search, referral, app_store, paid_search, paid_social] }
+      - { name: region, type: text, nullable: false, values: [north_america, europe, latin_america, asia_pacific] }
+      - { name: plan_at_signup, type: text, nullable: false, values: [free, plus] }
+  - name: events
+    file: v1/events.csv
+    rows: 177379
+    primary_key: event_id
+    columns:
+      - { name: event_id, type: integer, nullable: false, note: numbered in the order events were received }
+      - { name: user_id, type: integer, nullable: false, references: users.user_id, note: 40 deleted accounts have no row in users }
+      - { name: event_ts, type: timestamp, nullable: false }
+      - { name: event_name, type: text, nullable: false, values: [signup_complete, onboarding_complete, session_start, add_expense, view_paywall, paywall_viewed, start_checkout, purchase, plus_feature_used, cancel_subscription] }
+      - { name: platform, type: text, nullable: false, values: [ios, android, web] }
+      - { name: received_at, type: timestamp, nullable: false }
+  - name: subscriptions
+    file: v1/subscriptions.csv
+    rows: 3840
+    primary_key: null
+    natural_key: subscription_id
+    note: one row per saved version of a subscription; the current state is the row with the latest updated_at
+    columns:
+      - { name: subscription_id, type: integer, nullable: false }
+      - { name: user_id, type: integer, nullable: false, references: users.user_id }
+      - { name: plan, type: text, nullable: false, values: [plus_monthly, plus_annual] }
+      - { name: started_on, type: date, nullable: false }
+      - { name: ended_on, type: date, nullable: true }
+      - { name: updated_at, type: timestamp, nullable: false }
+      - { name: cancel_reason, type: text, nullable: true, values: [too_expensive, not_using, missing_feature, found_alternative, other] }
+  - name: experiment_assignments
+    file: v1/experiment_assignments.csv
+    rows: 15868
+    primary_key: user_id
+    columns:
+      - { name: user_id, type: integer, nullable: false, references: users.user_id }
+      - { name: experiment, type: text, nullable: false, values: [paywall_v2, welcome_tips, signup_flow_v2] }
+      - { name: variant, type: text, nullable: false, values: [control, variant] }
+      - { name: assigned_at, type: timestamp, nullable: false }
+      - { name: converted, type: boolean, nullable: false, note: a purchase event within 14 days after assigned_at }
+api:
+  page_size: 1000
+  endpoints:
+    - { name: events, first_page: v1/api/events/page-001.json, rows: 18437, pages: 19, key: event_id, note: events received from 2026-06-16 on; page 7 repeats the last 3 rows of page 6 }
+    - { name: subscriptions, first_page: v1/api/subscriptions/page-001.json, rows: 3840, pages: 4, key: null, note: every subscription row }
+experiments:
+  - { name: paywall_v2, signups: [2026-01-12, 2026-03-08], true_effect: "buy chance after a paywall view x(1.20 + 0.50 * exp(-d / 6)) for a signup d days after the start (a novelty effect, steady x1.20); first-renewal cancel chance x1.30", sample_ratio_mismatch: false }
+  - { name: welcome_tips, signups: [2026-03-16, 2026-04-26], true_effect: none, sample_ratio_mismatch: false }
+  - { name: signup_flow_v2, signups: [2026-05-04, 2026-06-07], true_effect: none, sample_ratio_mismatch: true, cause: the new signup screen crashes on old Android before the assignment is written }
+quirks:
+  - repeated subscription rows (re-sync rows, exact copies, one row per change)
+  - late events (received_at long after event_ts)
+  - a collector outage on 2026-03-17 14:00 to 19:59
+  - duplicate events (same user, event_ts, event_name, platform)
+  - future-dated events (event_ts later than received_at)
+  - deleted accounts (events without a users row)
+  - users without any event
+  - an event renamed on iOS from 2026-05-18 (view_paywall to paywall_viewed)
+  - a channel mix shift from 2026-04-13 to 2026-06-07
+  - a confounder (channel drives engagement and conversion)
+  - a reversal (web beats iOS overall, iOS beats web in every channel)
+  - a no-effect experiment with a running p-value that dips under 0.05
+  - a real modest lift with a novelty effect (larger in week one) and a worse guardrail
+  - a one-day holiday dip (Memorial Day 2026-05-25, north_america visits), a labeled distractor
+  - a sample-ratio mismatch with a stated cause
+  - a leaky column (cancel_reason)
+  - unfinished follow-up for the latest signups and subscriptions

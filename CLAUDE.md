@@ -106,7 +106,7 @@ Use the Node version in `.nvmrc` (`nvm use`).
 - `npm run preview` — serve the production build locally
 - `npm run check` — every blocking gate locally: spelling, markdownlint, knowledge graph, build (schemas + links),
   prerequisite graph, unit and fixture tests, notebooks (skipped when none or `nbstripout` is missing)
-- Single gates: `npm run spell` · `lint:md` · `check:lessons` (mistakes-log rules) · `check:graph` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
+- Single gates: `npm run spell` · `lint:md` · `check:lessons` (mistakes-log rules) · `check:graph` · `check:app-events` · `check:kb` · `check:notebooks` · `test:unit` · `test:fixtures`
 - `npm run lighthouse` — builds the fixture site (`tests/fixtures/valid`) and runs Lighthouse CI (mobile, perf ≥ 90, a11y ≥ 95);
   Chrome from `CHROME_PATH`, else `/opt/pw-browsers/chromium` when present
 - `npm run review-report` — lessons whose `reviewed` date is older than 18 months
