@@ -31,7 +31,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Part 6 of 6 ends here (SPEC D49): finish with the project step on cafe-sales: one AI-assisted analysis of a cafe question with its context pack, a verification log (accept, revise or reject for every AI output), the project README and the final memo; then Choose your track (/choose-your-track/).
+TODO(owner): Part 6 of 6 ends here (SPEC D49): finish with the project step on cafe-sales: one AI-assisted analysis of a cafe question with its context pack, a verification log (accept, revise or reject for every AI output), the project README and the final memo; then the capstone (core-capstone-two-quiet-weeks), then Choose your track (/choose-your-track/).
 
 TODO(owner): Never paste personal data into a tool. The core teaches judging AI output; building agents, RAG pipelines and evaluation harnesses belongs to the ML Engineer and Data Engineer tracks.
 

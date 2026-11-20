@@ -1,7 +1,7 @@
 // Manual figure check, part 2: text outside its figure or on other text (390 px and 1280 px). Same usage as check-figure-text.cjs.
 const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
 const root = process.argv[2]; const pages = [];
-for (const st of ['excel','sql','python']) for (const d of fs.readdirSync(path.join(root, st))) { const f = path.join(root, st, d, 'index.html'); if (fs.existsSync(f)) pages.push(`/${st}/${d}/`); }
+for (const st of ["excel","sql","python","core"]) for (const d of fs.readdirSync(path.join(root, st))) { const f = path.join(root, st, d, 'index.html'); if (fs.existsSync(f)) pages.push(`/${st}/${d}/`); }
 pages.push('/choose-your-track/'); // the skills chart (SPEC D49)
 (async () => {
   const b = await chromium.launch();
