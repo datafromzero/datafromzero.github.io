@@ -1,0 +1,519 @@
+---
+id: core-capstone-two-quiet-weeks
+title: 'Capstone: the two quiet weeks'
+short_title: 'Capstone: quiet weeks'
+description: 'A real-data capstone with an open answer: pick two weeks for a bike-share refit, forecast the loss with a range, and log every check of your AI.'
+stage: core
+order: 440
+level: advanced
+duration: 240
+objectives:
+  - Turn a brief with several rules into one decision, and defend the chain of reasoning that leads to it
+  - Check a real dataset against its own documentation, and decide what each flaw changes
+  - Forecast from past years with a stated base year and a range built from named sources of uncertainty
+  - Keep a verification log that records, for every AI output you use, the check you ran and a verdict of accept, revise or reject
+  - Explain your analysis back in your own words and say what would change the decision
+prerequisites:
+  - core-ai-literacy-rag-and-agents
+  - core-confidence-intervals
+notebook: notebooks/core/core-capstone-two-quiet-weeks.ipynb
+reviewed: 2026-11-20
+sources:
+  - title: 'UCI Machine Learning Repository: Bike Sharing dataset page, license and variable list (accessed 2026-11-20)'
+    url: https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset
+  - title: 'Fanaee-T, H. (2013). Bike Sharing [Dataset]. UCI Machine Learning Repository (DOI, accessed 2026-11-20)'
+    url: https://doi.org/10.24432/C5W894
+  - title: 'Fanaee-T and Gama (2013). Event labeling combining ensemble detectors and background knowledge. Progress in Artificial Intelligence (accessed 2026-11-20)'
+    url: https://doi.org/10.1007/s13748-013-0040-3
+  - title: 'Capital Bikeshare: system data page, member types and the trips left out (accessed 2026-11-20)'
+    url: https://capitalbikeshare.com/system-data
+  - title: 'Perkins et al. (2024). The Artificial Intelligence Assessment Scale (AIAS), Journal of University Teaching and Learning Practice (accessed 2026-11-20)'
+    url: https://doi.org/10.53761/q3azde36
+  - title: 'Bearman et al. (2024). Developing evaluative judgement for a time of generative artificial intelligence, Assessment and Evaluation in Higher Education (accessed 2026-11-20)'
+    url: https://doi.org/10.1080/02602938.2024.2335321
+  - title: 'OECD and European Commission: AI Literacy Framework, the Engage with AI competencies (accessed 2026-11-20)'
+    url: https://ailiteracyframework.org/frameworks/
+  - title: 'Microsoft Learn: Power Query Text/CSV connector (accessed 2026-11-20)'
+    url: https://learn.microsoft.com/power-query/connectors/text-csv
+  - title: 'Microsoft Support: ISOWEEKNUM function (accessed 2026-11-20)'
+    url: https://support.microsoft.com/office/1c2d0afe-d25b-4ab1-8894-8d0520e90e0e
+  - title: 'DuckDB 2.0 documentation: CSV import overview (accessed 2026-11-20)'
+    url: https://duckdb.org/docs/2.0/data/csv/overview.html
+  - title: 'DuckDB 2.0 documentation: date part functions (accessed 2026-11-20)'
+    url: https://duckdb.org/docs/2.0/sql/functions/datepart.html
+  - title: 'pandas documentation: Series.dt.isocalendar (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.isocalendar.html
+  - title: 'pandas documentation: read_csv (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
+status: draft
+---
+
+TODO(owner): This is a team draft (SPEC D24), written because the owner asked for one; edit it and approve it. The `reviewed` date is a placeholder: set it when you publish.
+
+TODO(owner): SPEC D49 says "there is no separate capstone" in the advanced core. This lesson is a capstone, so D49 and the lesson counts (core 43, curriculum 194) need an amendment before it ships. It sits at order 440, after the last lesson of Part 6, which ends with the project step on cafe-sales.
+
+TODO(owner): The page says this is a Full AI task. In the published AI Assessment Scale, "Full AI" is level 5 and level 4 is "AI Task Completion, Human Evaluation"; the capstone takes level 5 and adds the evaluation duty of level 4. Check that this wording is what you want.
+
+## The question
+
+You run a city bike-share. Next year one third of your bikes must come off the street for two weeks in a row, for a safety refit. Which two weeks should you choose, how many rides and how much revenue will you lose, and what would change your mind?
+
+There is no single right answer. Several decisions earn full marks, and a decision with no reasoning behind it earns none.
+
+## How this capstone works
+
+**Time.** About 4 hours, 6 at most. At the 6-hour mark, stop and hand in what you have, and say what is missing.
+
+**Any tool.** Use Excel, SQL with DuckDB or Python, or mix them. The case is built so that each of them can solve it.
+
+**AI is allowed, at every step.** This is a Full AI task: the AI Assessment Scale (Perkins et al., 2024) uses that name for a task where AI may be used throughout. We add one duty that the scale puts on its level 4, "AI Task Completion, Human Evaluation": you evaluate what the AI gives you. Every AI output you use goes into a **verification log**, and the log is graded. Using AI is free. Using it without checking is what costs points.
+
+**What is graded.** The chain of reasoning from data to decision, not the number at the end. The rubric below has eight items. Judging an AI's output and judging its process are two different skills (Bearman et al., 2024); deliverable 6 grades the first and deliverable 7 the second.
+
+**Who marks it.** This site stores nothing and has no accounts. Mark yourself with the rubric, or give your files to a mentor or a study partner who will.
+
+**Suggested plan.**
+
+| Step | Minutes |
+|---|---:|
+| Read the brief twice; write the constraints in your own words | 15 |
+| Load the data and check it | 60 |
+| Build the table and the model | 45 |
+| Forecast, with ranges | 45 |
+| Chart | 15 |
+| Memo | 30 |
+| Log, explain-back, reflection | 30 |
+
+Fill the log while you work, not at the end.
+
+## The brief
+
+### The case
+
+**The operator, the refit and every number about them in this section are invented for this exercise.** The ride data are real: they come from Capital Bikeshare in Washington, DC, for 2011 and 2012.
+
+You are the data analyst at a city bike-share operator. A safety inspection finds that the bikes need a refit. Next year, one third of the bikes will be off the street for two consecutive weeks. The head of operations asks you for a recommendation: which two weeks, and what will it cost?
+
+Next year is 2013. The data end on December 31, 2012.
+
+### The rules of the case
+
+Treat these as facts. Where they leave a gap, you decide, and you say what you decided.
+
+1. **Weeks and window.** A week runs Monday to Sunday. The refit takes two consecutive weeks, both inside 2013, and the crew can work only between February 1 and November 30. Both weeks must fall entirely inside that period.
+2. **The event week.** The city's Riverfront Spring Festival runs Monday, March 25 to Sunday, March 31, 2013. No refit week may touch it.
+3. **The members' promise.** Members were promised "no more than one week of reduced service per season". A week belongs to the season in which its Monday falls. The seasons of 2013 begin on March 20, June 21, September 22 and December 21. A window whose two weeks fall in the same season breaks the promise. The operator may break it, but the head of operations wants any break named and priced in your memo. The case does not say what a break costs the brand: that is a judgment you make and state.
+4. **Revenue.** A casual (non-member) ride earns about 3 times a member ride. Count a registered ride as 1 revenue unit (RU) and a casual ride as 3 RU. In this case, "registered" means member.
+5. **How much is lost.** A pilot showed that taking a third of the bikes off the street loses about 20% of the rides that would otherwise have happened, because riders find another bike. Use 20%, the same share for casual and registered rides. You may show how your answer changes if the pilot was off.
+
+**Decide:** which two consecutive weeks; how many rides and how many RU the operator should expect to lose, with an honest range; and what would change your decision.
+
+The calendar of 2013 is not in the data. How you line up its weeks with 2011 and 2012 is part of your method, and so is the choice of year or years to forecast from.
+
+### The data
+
+The data are the *Bike Sharing* dataset of the UCI Machine Learning Repository. Download the zip from the [dataset page](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset). This site does not host it. The page states its license: "This dataset is licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license." You may use it freely if you give credit.
+
+Cite it like this: Fanaee-T, H. (2013). *Bike Sharing* [Dataset]. UCI Machine Learning Repository. [https://doi.org/10.24432/C5W894](https://doi.org/10.24432/C5W894). The Readme in the zip also asks that publications cite Fanaee-T and Gama, "Event labeling combining ensemble detectors and background knowledge", *Progress in Artificial Intelligence* (2013), [https://doi.org/10.1007/s13748-013-0040-3](https://doi.org/10.1007/s13748-013-0040-3).
+
+<OpenInColab />
+
+The notebook holds one Setup cell that downloads the zip from UCI and loads both files. It has no solutions.
+
+### What one row means
+
+`hour.csv` has one row for each hour of a date, 17,379 rows for 2011 and 2012. A row holds that hour's weather and the number of bikes rented in it, split into `casual` and `registered`, with `cnt` as the total. `day.csv` has one row for each of the 731 days.
+
+The Readme says the counts come from Capital Bikeshare's public data, which the author aggregated by hour and by day. The operator's own system-data page says its trip files leave out trips by staff, trips at test stations and trips under 60 seconds. So a "ride" in this file is a recorded trip, which may not be every trip a customer would call a ride.
+
+Read the Readme yourself: it is part of your data, and part of what you will check. The columns you are most likely to use:
+
+| Column | Meaning, from the Readme |
+|---|---|
+| `dteday` | the date |
+| `yr` | 0 for 2011, 1 for 2012 |
+| `hr` | hour of the day, 0 to 23 (`hour.csv` only) |
+| `holiday`, `workingday`, `weekday` | calendar flags; `weekday` 0 is Sunday in this file |
+| `weathersit` | weather category, 1 (clear) to 4 (heavy rain, ice or snow with fog) |
+| `temp`, `atemp`, `hum`, `windspeed` | temperature, "feeling" temperature, humidity and wind speed, each scaled by a divisor the Readme gives |
+| `casual`, `registered`, `cnt` | rides by non-members, by members, and in all |
+
+## Deliverables
+
+Hand in seven things. Keep each as short as it can be while staying honest.
+
+1. **A cleaned analysis table and a data-quality note.** The table has one row per unit you choose; say in one sentence what a row means. The note (half a page at most) lists each check you ran, what it found and what you did about it, including "left as it was, because".
+2. **One model or schema, and a one-line justification.** A schema is the shape of your table or tables and how they connect. A model is a statistical model. Either is fine: say why you chose this one and not another.
+3. **Three to five numbers with uncertainty.** Each has a unit, a range, and one sentence on what the range includes and what it leaves out. At least: the rides and the RU lost in your chosen window.
+4. **One honest chart.** The axis is labeled with units, a bar starts at zero, the uncertainty is drawn, and the title states the takeaway.
+5. **A one-page decision memo** for the head of operations, who has not seen the data: the decision, the evidence in a few lines, the risks, and what would change the decision.
+6. **A verification log.** One row for every AI output you used: what you asked, what it gave, the check you ran, accept, revise or reject, and why. The three verdicts come from the OECD and European Commission AI literacy framework, written for school education, which asks learners to "Evaluate whether AI outputs should be accepted, revised or rejected." If you use no AI at all, say so and log your own three riskiest steps with the same columns.
+7. **An explain-back paragraph and a reflection.** In about 150 words, in your own words, say how you got from the data to the decision and which one number you would defend, and why. In about 100 more, say where AI helped, where it failed or would have failed unchecked, and one thing you will check by hand from now on. If you cannot write the paragraph without looking at the AI's text, go back: you do not understand your own answer yet.
+
+The log can look like this. The row is an invented example in another domain, to show the form.
+
+| # | Asked | AI gave | My check | Verdict | Why |
+|---:|---|---|---|---|---|
+| 1 | A formula for monthly totals | A `SUMIFS` over a column called `revenue` | Compared the column names with the header row of my file | revise | The column is called `amount`; I fixed the name and re-ran it |
+
+## Tool notes
+
+These notes say how to start, not what to do.
+
+**Excel.** Use Get Data, then Text/CSV, to open the file in Power Query, where you can load it or transform it first (Microsoft Learn, Text/CSV connector; the menu words differ a little between Windows and Mac). Check that `dteday` arrives as a date. `ISOWEEKNUM(date)` returns the ISO week number of a date, with weeks that start on Monday. A PivotTable counts only the rows it is given, so it cannot show you hours that are not in the file: count rows per day yourself.
+
+**SQL (DuckDB).** `read_csv` works out the delimiter, the column names and the types for you. Check what it decided.
+
+```sql
+CREATE VIEW hour AS SELECT * FROM read_csv('hour.csv');
+CREATE VIEW day  AS SELECT * FROM read_csv('day.csv');
+
+SELECT count(*) AS hour_rows, min(dteday) AS first_day, max(dteday) AS last_day
+FROM hour;
+```
+
+The DuckDB date-part functions `isoyear(date)` and `week(date)` return the ISO year and the ISO week. Their documentation calls the second "ISO Week".
+
+**Python (pandas).** `pd.read_csv("hour.csv", parse_dates=["dteday"])` reads the file and parses the date column. `df["dteday"].dt.isocalendar()` returns a table with the ISO year, week and day of each date.
+
+```python
+import pandas as pd
+
+hour = pd.read_csv("hour.csv", parse_dates=["dteday"])
+iso = hour["dteday"].dt.isocalendar()
+print(hour.shape, iso.columns.tolist())
+```
+
+All three tools give the same answers if you give them the same definition of a week. Say which definition you used.
+
+## Rubric
+
+Eight items, scored 2 (full), 1 (partial) or 0 (none), 16 in all. The rubric grades the chain from data to decision. A submission can score 16 with any decision in the reference answer, or with another one that its reasoning supports.
+
+### 1. The decision is framed
+
+- **Full:** you restate the decision, who it is for and every rule of the case (window, event week, promise, revenue weight, loss share) in your own words, and you say which of them you treated as facts and which you assumed.
+- **Partial:** you restate the question but drop or blur a rule.
+- **None:** you start computing without saying what is being decided.
+
+### 2. Grain and model
+
+- **Full:** you say what one row means at each stage (hour, day, week), define a week, say how you lined up 2013 with 2011 and 2012, keep casual and registered apart until you compute revenue, and justify the table or model in one line.
+- **Partial:** a sound table, but the grain or the week alignment is unstated.
+- **None:** the numbers come from a table whose rows you cannot describe.
+
+### 3. Data checks
+
+- **Full:** you ran and reported at least four checks that could have changed a number, such as row counts against the documentation, missing hours, the Readme against the data, scaled columns, zeros that look like codes, and odd days. Each has an action, including "left as it was, because".
+- **Partial:** one or two checks, or checks with no action.
+- **None:** no checks are reported, or the note says the data were clean.
+
+### 4. The forecast basis
+
+- **Full:** you name the base year or years and why. You deal with the difference in level between 2011 and 2012, and you look inside your base weeks for storms and holidays that will not repeat on the same dates.
+- **Partial:** a base year is chosen but the level or the special weeks are not examined.
+- **None:** the years are pooled without saying so, or no basis is stated.
+
+### 5. Numbers and uncertainty
+
+- **Full:** three to five numbers with units (rides, RU), each with a range from a method someone else can repeat, and a sentence on what the range leaves out.
+- **Partial:** ranges exist but come from nothing you can explain, or the units are mixed.
+- **None:** single numbers, or a formula that does not fit the situation, such as an interval built from one year's daily counts and presented as the uncertainty of next year.
+
+### 6. The chart
+
+- **Full:** bars start at zero, the range is drawn, the axis has units, the title states the takeaway, and the chart makes one point.
+- **Partial:** readable, but a range or a unit is missing, or a cut axis is explained.
+- **None:** it misleads: a cut axis nobody mentions, two axes, no units.
+
+### 7. The decision and its trade-offs
+
+- **Full:** the decision follows from your numbers. You name the promise and the event week, you price the promise or its break, you separate what changes the numbers from what changes the decision, and you say what would change it.
+- **Partial:** a plausible decision, but a rule is unaddressed or "what would change it" is generic.
+- **None:** the decision does not follow from the evidence, or it breaks a rule without saying so.
+
+### 8. The log, the explain-back and the reflection
+
+- **Full:** every AI output that fed a result is logged with a check and a verdict with a reason; at least one verdict is revise or reject, or the log says honestly why none was needed; the explain-back is in your own words and names one number; the reflection is specific.
+- **Partial:** a log with verdicts but no reasons, or an explain-back that could describe any project.
+- **None:** no log, or a log of prompts with no checks.
+
+A total of 13 or more is strong. From 8 to 12 is solid with gaps: redo the items that scored 0 or 1. Below 8, read the reference answer's ground truth and redo the work, not the writing.
+
+## Self-check before you submit
+
+- Can you say what one row of each table you used means?
+- Do you know how many rows each file has, and did you count them yourself?
+- Did you compare at least one claim of the Readme with the data?
+- Did you read the scaled columns as their real units?
+- Did you check every day for 24 rows, and did you say what you assumed about the days that have fewer?
+- Does every rule of the case appear next to your chosen window, with a yes or a no?
+- Did you say which year or years your forecast comes from, and why?
+- Did you look inside the base weeks for a storm or a holiday?
+- Does every number in your memo have a unit and a range?
+- Does your range say what it leaves out?
+- Is the promise named and priced, or its break?
+- Does your memo say what would change the decision?
+- Does every AI output that fed a result have a row in the log with a reason?
+- Can you explain the whole chain without looking at the AI's text?
+
+## Reference answer
+
+Do the work first. The reference answer gives the ground truth, a worked decision, another decision that is just as defensible, and the traps that an AI assistant is likely to fall into on this case.
+
+<details>
+<summary>Open only after you finish</summary>
+
+### The ground truth
+
+Every number below was computed from `hour.csv` and `day.csv` with DuckDB 2.0.0 and checked in pandas. Your numbers can differ in the last digits if your conventions differ: aligning weeks by calendar date instead of ISO week moves the February window's 2012 count from 47,999 to 46,771 rides (-2.6%).
+
+**What the data say about themselves.**
+
+| Check | Result |
+|---|---|
+| Rows | `hour.csv` 17,379; `day.csv` 731. The UCI page says 17,389 instances and the Readme says 17379 for `hour.csv`. |
+| `cnt` against its parts | `cnt = casual + registered` in all 17,379 hour rows and all 731 day rows. |
+| Hours against days | For all 731 days, the day's `cnt` in `day.csv` equals the sum of that day's rows in `hour.csv`. |
+| Missing hours | 731 × 24 = 17,544 expected hours; 165 are missing (115 in 2011, 50 in 2012). 76 days have fewer than 24 rows; no day is absent. 98 of the 165 are hours 2 to 5 a.m. |
+| The thinnest days | 2012-10-29 has 1 row (hour 0, 22 rides) and 2012-10-30 has 11 rows (1,096 rides). The Readme names Hurricane Sandy for a search of the date 2012-10-30. The next thinnest day is 2011-01-27, with 8 rows. |
+| `season` | Season 1 covers January 1 to March 20 and December 21 to 31, with a mean temperature of 12.2 °C. The Readme calls it "springer"; the UCI page lists 1 as winter. The data agree with the page. |
+| Scaled columns | `temp` is °C divided by 41, so 0.5 is 20.5 °C. `atemp` is divided by 50, so 0.5 is 25 °C. `hum` is divided by 100 and `windspeed` by 67. |
+| Humidity zero | `hum` is 0 in 22 hours, all on 2011-03-10 (and in that day's row in `day.csv`). |
+| Wind zero | `windspeed` is 0 in 2,180 of 17,379 hours (12.5%). The smallest non-zero reading is 0.0896, which is 6.0 on the original scale, so nothing sits between 0 and 6. `day.csv` has no zero. |
+| Weather 4 | `weathersit` 4 occurs in 3 hours (2011-01-26, 2012-01-09, 2012-01-21) and in no day of `day.csv`. |
+| Growth | 2011: 1,243,103 rides; 2012: 2,049,576 (+65%). Casual: 247,252 and 372,765. Over both years, 18.8% of rides are casual. |
+| ISO weeks | The first two days of 2011 belong to ISO week 52 of 2010, and 2012-12-31 to ISO week 1 of 2013. Weeks 6 to 47, which matter here, are not affected. |
+
+Missing hours are not lost totals: both files agree on every day's total, so whatever happened to those hours happened before the data reached you. The pattern (mostly night hours, and storm days) fits hours with no rides, but nothing in the files says so. The right move is to state your assumption. Summing rides is safe either way; averaging `cnt` over hour rows is not, because it ignores the hours that are absent.
+
+**The conventions of this reference.** Weeks are ISO weeks, which start on Monday. In 2013, ISO week 6 begins on Monday, February 4, and ISO week 46 ends on Sunday, November 24, so there are 41 candidate windows (a window is named by its first week, 6 to 46). The festival week, March 25 to 31, is ISO week 13; it removes the windows that start in weeks 12 and 13, leaving 39. By the season rule, the windows whose two weeks fall in different seasons start on March 18, June 17 and September 16. The March one touches the festival, so two keep the promise: **June 17 to 30** and **September 16 to 29**. The forecast base is 2012 (reason below), the loss is 20% of rides, and RU is registered plus 3 × casual.
+
+<figure>
+<svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="tqw-w-title tqw-w-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="tqw-w-title">Weekly rides in 2011 and 2012</title>
+<desc id="tqw-w-desc">Rides per ISO week for the 52 weeks of 2011 and 2012. Both years rise from winter to a summer plateau and fall again; 2012 is higher in every month. The weeks a refit may use, February 4 to November 24, are shaded. The four lowest weeks inside the shaded part are the four weeks of February, in both years, and two dips in 2012 are marked: the week of Hurricane Sandy and the week of Thanksgiving.</desc>
+<rect x="70" y="50" width="246" height="150" fill="currentColor" fill-opacity="0.07" />
+<line x1="40" y1="200" x2="352" y2="200" stroke="currentColor" stroke-opacity="0.2" />
+<text x="36" y="203.5" text-anchor="end" font-size="10">0</text>
+<line x1="40" y1="150" x2="352" y2="150" stroke="currentColor" stroke-opacity="0.2" />
+<text x="36" y="153.5" text-anchor="end" font-size="10">20,000</text>
+<line x1="40" y1="100" x2="352" y2="100" stroke="currentColor" stroke-opacity="0.2" />
+<text x="36" y="103.5" text-anchor="end" font-size="10">40,000</text>
+<line x1="40" y1="50" x2="352" y2="50" stroke="currentColor" stroke-opacity="0.2" />
+<text x="36" y="53.5" text-anchor="end" font-size="10">60,000</text>
+<polyline points="43.0,176.5 49.0,177.4 55.0,178.1 61.0,180.8 67.0,174.3 73.0,172.0 79.0,163.3 85.0,169.7 91.0,170.6 97.0,167.4 103.0,155.3 109.0,162.1 115.0,161.5 121.0,155.8 127.0,153.8 133.0,138.3 139.0,125.8 145.0,126.1 151.0,124.3 157.0,120.3 163.0,118.4 169.0,118.5 175.0,120.7 181.0,116.1 187.0,115.9 193.0,111.9 199.0,114.5 205.0,113.7 211.0,131.5 217.0,124.8 223.0,124.5 229.0,121.6 235.0,123.1 241.0,126.4 247.0,114.6 253.0,140.4 259.0,121.3 265.0,124.6 271.0,129.9 277.0,116.2 283.0,127.7 289.0,127.7 295.0,142.2 301.0,131.2 307.0,133.9 313.0,139.7 319.0,156.6 325.0,137.1 331.0,150.0 337.0,142.4 343.0,157.9 349.0,162.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-opacity="0.75" stroke-dasharray="3 2" />
+<polyline points="43.0,145.3 49.0,149.3 55.0,154.1 61.0,135.4 67.0,134.0 73.0,144.2 79.0,135.8 85.0,134.1 91.0,134.5 97.0,122.0 103.0,95.6 109.0,94.8 115.0,99.4 121.0,89.8 127.0,93.1 133.0,102.7 139.0,107.9 145.0,91.4 151.0,90.3 157.0,85.4 163.0,94.2 169.0,85.3 175.0,74.0 181.0,78.1 187.0,89.5 193.0,87.2 199.0,94.4 205.0,79.8 211.0,90.9 217.0,75.6 223.0,78.4 229.0,80.7 235.0,79.5 241.0,81.1 247.0,78.3 253.0,80.2 259.0,62.4 265.0,73.2 271.0,67.6 277.0,85.1 283.0,79.6 289.0,78.2 295.0,76.7 301.0,128.1 307.0,98.3 313.0,106.8 319.0,131.7 325.0,112.2 331.0,105.6 337.0,110.1 343.0,133.3 349.0,173.2" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="70" y="50" width="12" height="150" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="150" y="64" font-size="11" font-weight="600">2012</text>
+<text x="215" y="152" font-size="11">2011 (dashed)</text>
+<text x="43.0" y="214" text-anchor="middle" font-size="9">Jan</text>
+<text x="73.0" y="214" text-anchor="middle" font-size="9">Feb</text>
+<text x="97.0" y="214" text-anchor="middle" font-size="9">Mar</text>
+<text x="121.0" y="214" text-anchor="middle" font-size="9">Apr</text>
+<text x="151.0" y="214" text-anchor="middle" font-size="9">May</text>
+<text x="175.0" y="214" text-anchor="middle" font-size="9">Jun</text>
+<text x="199.0" y="214" text-anchor="middle" font-size="9">Jul</text>
+<text x="229.0" y="214" text-anchor="middle" font-size="9">Aug</text>
+<text x="253.0" y="214" text-anchor="middle" font-size="9">Sep</text>
+<text x="283.0" y="214" text-anchor="middle" font-size="9">Oct</text>
+<text x="307.0" y="214" text-anchor="middle" font-size="9">Nov</text>
+<text x="331.0" y="214" text-anchor="middle" font-size="9">Dec</text>
+<line x1="40" y1="200" x2="352" y2="200" stroke="currentColor" stroke-opacity="0.8" />
+<text x="297" y="40" text-anchor="end" font-size="10">Sandy</text>
+<line x1="301.0" y1="34" x2="301.0" y2="124.1" stroke="currentColor" stroke-opacity="0.6" />
+<text x="352" y="24" text-anchor="end" font-size="10">Thanksgiving</text>
+<line x1="319.0" y1="28" x2="319.0" y2="127.7" stroke="currentColor" stroke-opacity="0.6" />
+<text x="72" y="40" font-size="10">first window</text>
+<line x1="76.0" y1="44" x2="76.0" y2="49" stroke="currentColor" stroke-opacity="0.6" />
+<text x="10" y="238" font-size="10.5">Shaded: weeks a refit may use (February 4 to November 24, 2013).</text>
+<text x="10" y="253" font-size="10.5">Boxed: the cheapest two weeks. Rides per ISO week.</text>
+</svg>
+</figure>
+
+The figure shows the three things the weekly picture settles. Both years have the same shape, and 2012 is higher everywhere. The four cheapest windows inside the shaded part are the four that start in February, in 2011 as well as in 2012. And two dips in 2012 have causes that will not repeat on the same dates: the week of October 29 (Sandy, 28,762 rides) and the week of November 19, which holds Thanksgiving (27,315 rides; Thanksgiving Day, November 22, 2012, has 2,425 rides). In 2013, Thanksgiving falls on November 28, after the last window.
+
+<details>
+<summary>All weeks, February to November, for both years</summary>
+
+Rides per ISO week from `hour.csv`. "Monday in 2013" is the date on which that ISO week starts in 2013.
+
+| ISO week | Monday in 2013 | Rides 2011 | Rides 2012 | RU 2012 | Casual share 2012 |
+|---:|---|---:|---:|---:|---:|
+| 6 | Feb 4 | 11,192 | 22,320 | 24,658 | 5% |
+| 7 | Feb 11 | 14,692 | 25,679 | 31,371 | 11% |
+| 8 | Feb 18 | 12,113 | 26,349 | 31,655 | 10% |
+| 9 | Feb 25 | 11,742 | 26,192 | 31,760 | 11% |
+| 10 | Mar 4 | 13,045 | 31,185 | 40,015 | 14% |
+| 11 | Mar 11 | 17,865 | 41,755 | 60,779 | 23% |
+| 12 | Mar 18 | 15,165 | 42,077 | 61,123 | 23% |
+| 13 | Mar 25 | 15,402 | 40,226 | 56,782 | 21% |
+| 14 | Apr 1 | 17,680 | 44,087 | 68,277 | 27% |
+| 15 | Apr 8 | 18,476 | 42,764 | 62,288 | 23% |
+| 16 | Apr 15 | 24,676 | 38,934 | 53,696 | 19% |
+| 17 | Apr 22 | 29,661 | 36,826 | 49,238 | 17% |
+| 18 | Apr 29 | 29,573 | 43,440 | 60,338 | 19% |
+| 19 | May 6 | 30,278 | 43,867 | 62,877 | 22% |
+| 20 | May 13 | 31,893 | 45,828 | 67,498 | 24% |
+| 21 | May 20 | 32,646 | 42,323 | 63,981 | 26% |
+| 22 | May 27 | 32,582 | 45,867 | 68,075 | 24% |
+| 23 | Jun 3 | 31,709 | 50,380 | 71,428 | 21% |
+| 24 | Jun 10 | 33,565 | 48,765 | 70,779 | 23% |
+| 25 | Jun 17 | 33,640 | 44,212 | 63,098 | 21% |
+| 26 | Jun 24 | 35,226 | 45,116 | 60,954 | 18% |
+| 27 | Jul 1 | 34,186 | 42,250 | 62,130 | 24% |
+| 28 | Jul 8 | 34,533 | 48,068 | 67,558 | 20% |
+| 29 | Jul 15 | 27,393 | 43,659 | 60,161 | 19% |
+| 30 | Jul 22 | 30,099 | 49,778 | 70,458 | 21% |
+| 31 | Jul 29 | 30,206 | 48,625 | 67,515 | 19% |
+| 32 | Aug 5 | 31,375 | 47,735 | 68,663 | 22% |
+| 33 | Aug 12 | 30,779 | 48,181 | 68,959 | 22% |
+| 34 | Aug 19 | 29,435 | 47,566 | 65,968 | 19% |
+| 35 | Aug 26 | 34,162 | 48,667 | 70,009 | 22% |
+| 36 | Sep 2 | 23,834 | 47,920 | 66,814 | 20% |
+| 37 | Sep 9 | 31,465 | 55,022 | 77,016 | 20% |
+| 38 | Sep 16 | 30,155 | 50,722 | 69,394 | 18% |
+| 39 | Sep 23 | 28,045 | 52,959 | 71,025 | 17% |
+| 40 | Sep 30 | 33,522 | 45,948 | 61,998 | 17% |
+| 41 | Oct 7 | 28,911 | 48,161 | 65,123 | 18% |
+| 42 | Oct 14 | 28,930 | 48,717 | 67,437 | 19% |
+| 43 | Oct 21 | 23,132 | 49,331 | 65,659 | 17% |
+| 44 | Oct 28 | 27,518 | 28,762 | 36,406 | 13% |
+| 45 | Nov 4 | 26,434 | 40,675 | 53,873 | 16% |
+| 46 | Nov 11 | 24,126 | 37,299 | 46,971 | 13% |
+| 47 | Nov 18 | 17,364 | 27,315 | 37,309 | 18% |
+
+</details>
+
+### The windows and what they cost
+
+The table uses the 2012 count for the same ISO weeks, a 20% loss, and the range explained next. Rides and RU lost are rounded to the nearest hundred.
+
+| Window in 2013 | Keeps the promise? | Rides in 2012 | RU in 2012 | Rides lost (range) | RU lost (range) |
+|---|---|---:|---:|---|---|
+| Feb 4 to 17 (weeks 6, 7) | no | 47,999 | 56,029 | 9,600 (7,400 to 14,200) | 11,200 (8,700 to 16,600) |
+| Feb 11 to 24 (7, 8) | no | 52,028 | 63,026 | 10,400 (8,100 to 15,400) | 12,600 (9,800 to 18,700) |
+| Nov 11 to 24 (46, 47), as recorded | no | 64,614 | 84,280 | 12,900 (10,000 to 19,200) | 16,900 (13,000 to 25,000) |
+| Nov 11 to 24, Thanksgiving week replaced | no | 74,598 | 93,942 | 14,900 (11,500 to 22,100) | 18,800 (14,500 to 27,800) |
+| Jun 17 to 30 (25, 26) | yes | 89,328 | 124,052 | 17,900 (13,800 to 26,500) | 24,800 (19,200 to 36,800) |
+| Sep 16 to 29 (38, 39) | yes | 103,681 | 140,419 | 20,700 (16,000 to 30,700) | 28,100 (21,700 to 41,600) |
+| Mar 18 to 31 (12, 13): touches the festival | yes | 82,303 | 117,905 | 16,500 (12,700 to 24,400) | 23,600 (18,300 to 34,900) |
+| Oct 28 to Nov 10 (44, 45): Sandy in the base | no | 69,437 | 90,279 | 13,900 (10,700 to 20,600) | 18,100 (14,000 to 26,800) |
+
+"Thanksgiving week replaced" uses 2012's week 46 twice (37,299 rides each), because the 2013 weeks 46 and 47 have no Thanksgiving. It is one of several fair repairs; say which you used.
+
+<figure>
+<svg viewBox="0 0 360 222" width="360" role="img" aria-labelledby="tqw-l-title tqw-l-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="tqw-l-title">Expected rides lost, four candidate windows, with ranges</title>
+<desc id="tqw-l-desc">Horizontal bars from zero showing the rides the operator should expect to lose in each of four windows, with a thin line for the plausible range. February 4 to 17 is lowest at about 9,600 rides (range 7,400 to 14,200) and breaks the members promise. November 11 to 24 is about 14,900 and breaks the promise. June 17 to 30 is about 17,900 and September 16 to 29 about 20,700; both keep the promise.</desc>
+<text x="10" y="18" font-size="11" font-weight="600">Feb 4 to 17</text>
+<text x="88" y="18" font-size="10">breaks the promise</text>
+<rect x="10" y="24" width="100.5" height="18" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="0.75" />
+<text x="16" y="37" font-size="10.5">9,600</text>
+<line x1="87.8" y1="33" x2="158.9" y2="33" stroke="currentColor" stroke-width="1" />
+<line x1="87.8" y1="29" x2="87.8" y2="37" stroke="currentColor" stroke-width="1" />
+<line x1="158.9" y1="29" x2="158.9" y2="37" stroke="currentColor" stroke-width="1" />
+<text x="10" y="62" font-size="11" font-weight="600">Nov 11 to 24</text>
+<text x="88" y="62" font-size="10">breaks the promise</text>
+<rect x="10" y="68" width="156.2" height="18" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="0.75" />
+<text x="16" y="81" font-size="10.5">14,900</text>
+<line x1="130.9" y1="77" x2="241.5" y2="77" stroke="currentColor" stroke-width="1" />
+<line x1="130.9" y1="73" x2="130.9" y2="81" stroke="currentColor" stroke-width="1" />
+<line x1="241.5" y1="73" x2="241.5" y2="81" stroke="currentColor" stroke-width="1" />
+<text x="10" y="106" font-size="11" font-weight="600">Jun 17 to 30</text>
+<text x="88" y="106" font-size="10">keeps the promise</text>
+<rect x="10" y="112" width="187.0" height="18" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="0.75" />
+<text x="16" y="125" font-size="10.5">17,900</text>
+<line x1="154.8" y1="121" x2="287.2" y2="121" stroke="currentColor" stroke-width="1" />
+<line x1="154.8" y1="117" x2="154.8" y2="125" stroke="currentColor" stroke-width="1" />
+<line x1="287.2" y1="117" x2="287.2" y2="125" stroke="currentColor" stroke-width="1" />
+<text x="10" y="150" font-size="11" font-weight="600">Sep 16 to 29</text>
+<text x="88" y="150" font-size="10">keeps the promise</text>
+<rect x="10" y="156" width="217.1" height="18" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="0.75" />
+<text x="16" y="169" font-size="10.5">20,700</text>
+<line x1="178.0" y1="165" x2="331.7" y2="165" stroke="currentColor" stroke-width="1" />
+<line x1="178.0" y1="161" x2="178.0" y2="169" stroke="currentColor" stroke-width="1" />
+<line x1="331.7" y1="161" x2="331.7" y2="169" stroke="currentColor" stroke-width="1" />
+<line x1="10" y1="180" x2="345" y2="180" stroke="currentColor" stroke-opacity="0.8" />
+<line x1="10.0" y1="180" x2="10.0" y2="184" stroke="currentColor" stroke-opacity="0.8" />
+<text x="10.0" y="195" text-anchor="start" font-size="9.5">0</text>
+<line x1="114.7" y1="180" x2="114.7" y2="184" stroke="currentColor" stroke-opacity="0.8" />
+<text x="114.7" y="195" text-anchor="middle" font-size="9.5">10,000</text>
+<line x1="219.4" y1="180" x2="219.4" y2="184" stroke="currentColor" stroke-opacity="0.8" />
+<text x="219.4" y="195" text-anchor="middle" font-size="9.5">20,000</text>
+<line x1="324.1" y1="180" x2="324.1" y2="184" stroke="currentColor" stroke-opacity="0.8" />
+<text x="324.1" y="195" text-anchor="middle" font-size="9.5">30,000</text>
+<text x="10" y="211" font-size="10">Rides lost in two weeks. Thin line: plausible range.</text>
+</svg>
+</figure>
+
+The figure draws four rows of the table with their ranges; its November row uses the base with Thanksgiving week replaced. Reading it together with the table:
+
+- **February 4 to 17 is the cheapest window** of all 41 in 2012, by rides and by RU. In 2011 the four cheapest windows are also the four that start in February (the cheapest of them starts on February 18, and the one of February 4 is third), so the choice of base year moves the order inside February but not the month.
+- **Casual weighting widens the gap, it does not reverse it.** Casual riders are 8.4% of the rides in the February window and 19.4% in the June one, so June costs 1.86 times the rides of February but 2.21 times the RU.
+- **The festival rule has a price.** Without it, March 18 to 31 would be the cheapest window that keeps the promise, at 16,500 rides against 17,900 for June.
+- **The promise has a price.** Keeping it with June 17 to 30 loses about 8,300 more rides than February (range 6,400 to 12,200) and about 13,600 more RU (range 10,500 to 20,200). With September it is 11,100 rides and 16,900 RU.
+
+### How the range is built
+
+The range is a planning range, not a 95% interval. It combines two things that a forecast from two years can say something about.
+
+1. **The level of 2013.** The data cannot say how long the growth of 2012 lasts; the system may have changed in ways the file does not show. We allow 2013 to be 10% below 2012 and up to 30% above it: the high end is half of the +65% of 2012. This is our choice, and a reader may choose another.
+2. **Weather and noise.** Compare each two-week window of 2012 that starts in weeks 7 to 44 with the average of the windows that start two weeks before and two weeks after it. The gap has a median of 5.6% and a 90th percentile of 14% (15% for 2011). We use ±14%.
+
+Multiplying the two gives factors of 0.90 × 0.86 = 0.774 at the low end and 1.30 × 1.14 = 1.482 at the high end. For the February window: 47,999 × 0.774 = 37,200 and 47,999 × 1.482 = 71,100 rides, so 20% of those is 7,400 to 14,200 rides lost. If the pilot's 20% were really 15% or 25%, every loss in the table would scale by 0.75 or 1.25.
+
+**Why 2012 and not an average of both years.** 2013 resembles 2012 much more than 2011: the whole of 2012 had 65% more rides, and pooling would drag the forecast toward a year the system has left behind. The average of the two years' February windows is 36,900 rides, 23% below the 2012 count, and it lands on the bottom edge of the range as if it were the middle. Scaling 2011 by the yearly ratio of 1.65 gives 42,700, 11% below, which is inside the range and a good cross-check.
+
+**Why not a confidence interval of the days.** Bootstrapping the 14 daily counts of the 2012 window gives about 41,600 to 53,700 rides. That interval describes how much the days of one fortnight vary around each other. It says nothing about the level of 2013, and the same weeks of 2011 had 25,884 rides, far outside it. A confidence interval answers "how well does this sample estimate its population?", and here the uncertain thing is next year.
+
+### A worked decision
+
+**Decision A: Feb 4 to 17, break the promise on purpose, and tell members.**
+
+> **To:** Head of operations. **Re:** Refit window for 2013.
+>
+> **Recommendation.** Refit during February 4 to 17, 2013. Tell members in January that this fortnight is a deliberate exception to the one-week-per-season promise, and why.
+>
+> **Why.** In 2011 and in 2012, the weeks of early February are the cheapest of any window the crew can use. Based on 2012, the two weeks carried about 48,000 rides (56,000 RU). With 20% lost, we should expect to lose about **9,600 rides (plausible range 7,400 to 14,200)** and about **11,200 RU (8,700 to 16,600)**, of which about 800 are casual rides.
+>
+> **The promise.** Both weeks fall in the winter, so this breaks the promise. The cheapest windows that keep it are June 17 to 30 and September 16 to 29; the March window is ruled out by the festival. June would lose about 8,300 more rides, and about 13,600 more RU (10,500 to 20,200). On these numbers, the promise is worth keeping only if the board values it at more than about 13,600 RU; the case has no brand cost, so we have not put one.
+>
+> **Risks.** A slip costs little: starting one, two or three weeks late loses about 800, 900 and 1,900 more rides. A mild fortnight pushes the loss to the top of the range; a snow day pulls it down. The 2013 level is the biggest unknown, and it moves every number but not the ranking.
+>
+> **What would change this.** (1) A board decision that the promise is worth more than about 13,600 RU: then June 17 to 30. (2) Evidence that the pilot's 20% was measured in another season: ask when it ran. (3) A new fixed event in February or early March. Growth, weather and the choice of base year change the numbers but not the choice of window.
+
+Notice what the memo does: the decision follows from the numbers, each number has a range, the promise is named and priced, and it separates what changes the numbers from what changes the decision.
+
+**Decision B, just as defensible: keep the promise with June 17 to 30.** The case is that the promise is to members, who are the revenue the operator can rely on year-round, and that a break costs trust that the data cannot measure. The price is the 13,600 RU above, and the memo must say so. September 16 to 29 also keeps the promise but costs more, and the memo should say why it is not chosen. A memo that picks June without computing the price of the promise scores less than Decision A with its price.
+
+**Decision C, also defensible: Feb 11 to 24.** It starts a week after the crew's first day, so a delay does not push into March, at a cost of about 800 more rides. The memo must state the trade and note that the weeks after it also cost little.
+
+**What does not earn full marks:**
+
+- A window in November "because the winter is quiet". By every count in this file it costs more than February (14,900 rides after repairing Thanksgiving, against 9,600) and it breaks the promise just the same. A November answer needs a reason the data cannot give, such as a crew or weather risk that the memo states and prices; the case gives none.
+- Any window that touches the festival week, or that ignores the promise without saying so.
+- One number with no range, or a range from an interval of daily counts.
+- Averaging both years without saying so, or taking the cheapest weeks of 2012 without looking at why they are cheap.
+
+### The author knew you would use AI
+
+I wrote this case knowing you would use an AI assistant. So this is not a warning: it is the answer key for the places where AI shortcuts tend to fail on this data. I planted nothing. Every trap below is in the file as published or in the brief as written, and each has a check that catches it. These are common AI shortcuts, not a report on any one assistant.
+
+TODO(owner): replace this paragraph with the observed answer of a current AI assistant (model and date) once the live test is run: which of the traps below it fell into, and which it caught.
+
+1. **"Season 1 is spring."** An assistant that reads the Readme repeats "1:springer". The data say otherwise: season 1 runs from January 1 to March 20 and from December 21 to 31, with a mean of 12.2 °C, and the UCI page lists it as winter. If yours called February spring, it read the Readme and not the data. *Check:* take the first and last date of each season value.
+2. **Predicting rides from casual and registered.** `cnt` equals `casual + registered` in every row, so a model that uses them to predict `cnt` is given the answer. Computing revenue from them is correct, and that is the one place they belong. *Check:* ask whether you would know the column before the period you forecast, and add the two columns once to see `cnt`.
+3. **Quoting 0.5 degrees.** `temp` is divided by 41, so 0.5 is 20.5 °C, and `atemp` is divided by 50, a different divisor, so 0.5 there is 25 °C. A memo that says "mean temperature 0.28 in February" never turned the column back into degrees. In the February 2012 window the mean is 11.6 °C. *Check:* multiply by the Readme's divisor and compare with the weather you know.
+4. **Averaging both years without saying so.** It is the quickest forecast: the mean of the two years' same weeks. It understates 2013 by about 23% for the February window, because 2012 had 65% more rides than 2011. *Check:* total the rides by year before you pool anything.
+5. **Never noticing the 165 missing hours.** An assistant that sums `cnt` gets the right totals and never mentions the gaps; one that averages per row, or "fills the gaps", invents rides. There are 76 days with fewer than 24 rows, and 2012-10-29 has one. *Check:* count rows per day against 24, and compare the daily sums with `day.csv`.
+6. **Trusting the page's row count.** The UCI page says 17,389 instances. The file has 17,379. *Check:* count the rows yourself.
+7. **Taking the cheapest weeks at face value.** Sorting 2012 by weekly rides puts the week of Sandy and the week of Thanksgiving among the cheapest. Neither will fall on the same dates in 2013, and November looks cheaper than it is. *Check:* look at the daily values and the `holiday` flag in each cheap week.
+8. **Treating humidity zero and wind zero as measurements.** All 22 hours with `hum` equal to 0 are on 2011-03-10. The 2,180 hours of zero wind (12.5%) sit above a gap: the next reading is 6 on the original scale. A weather model that reads them as "calm and dry" learns from gaps. *Check:* look at a histogram or the value counts, and ask which values are possible.
+9. **Making a category of three rows.** `weathersit` 4 occurs in 3 hours. A model with a coefficient for it has no evidence behind that coefficient. *Check:* count rows per category before you model.
+10. **A confidence interval of the days.** A bootstrap of one fortnight's daily counts is real arithmetic and answers the wrong question: it says nothing about next year's level, and 2011 sits far outside it. *Check:* ask what the interval is an interval of.
+11. **The brief-only rules.** The festival week, the season promise, the 3× weight and the 20% loss appear in no public page, so generic advice about "the quietest weeks" ignores them. An assistant may use one third where the brief says 20%, or use the dataset's `season` column for a promise that the brief defines by date. *Check:* write each rule next to your window with a yes or a no, before you read the AI's answer.
+
+**What a strong submission does differently.** It runs the checks above and reports them, including the ones that changed nothing. It prices the promise instead of letting the lowest number decide. It separates what moves the numbers from what moves the decision. And its log shows at least one AI output that was revised or rejected, with the reason.
+
+</details>
