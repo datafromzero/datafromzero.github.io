@@ -5,7 +5,7 @@
 // Chips that move inside step animations can show up as false positives; look at each hit before changing it.
 const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
 const root = process.argv[2] ?? "dist"; const pages = [];
-for (const st of ['excel','sql','python']) for (const d of fs.readdirSync(path.join(root, st))) { const f = path.join(root, st, d, 'index.html'); if (fs.existsSync(f)) pages.push(`/${st}/${d}/`); }
+for (const st of ["excel","sql","python","core"]) for (const d of fs.readdirSync(path.join(root, st))) { const f = path.join(root, st, d, 'index.html'); if (fs.existsSync(f)) pages.push(`/${st}/${d}/`); }
 pages.push('/choose-your-track/'); // the skills chart (SPEC D49)
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 900, height: 900 } });

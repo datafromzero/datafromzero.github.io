@@ -441,6 +441,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-20 — 27 published Python lessons listed research issue #61 as a source, and the track page linked issues #71, #32 and #73 as evidence. The owner: learners are confused by GitHub issues on an academic page. → **Sources on any public page are primary and current (official docs, papers, government data, named job postings, books), with full URLs; research issues are working notes for the team and are never cited on the site. `check:lessons` fails on a lesson source that points at this repo's issues.**
 
+- 2026-11-20 — Drafting C5 to C7 from stubs: the stubs named a dataset that was never built (`app-events`) and said the NumPy lesson introduces seeded random numbers, which it does not; `t*` in prose failed markdownlint (MD037); the numbers of a simulation depend on the NumPy version (the docs give no stream guarantee). → **Check each claim a stub makes (dataset folder, a skill a prerequisite teaches) against the built content and report the mismatch; write `t*` in a code span; run every simulation notebook on a second NumPy, pandas and SciPy and diff the outputs, and state the seed beside each simulated number.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks

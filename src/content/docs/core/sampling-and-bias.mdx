@@ -1,0 +1,695 @@
+---
+id: core-sampling-and-bias
+title: Samples and the ways they mislead
+description: Tell a population from a sample, random from convenience samples, and name selection, nonresponse and survivorship bias.
+stage: core
+order: 50
+level: beginner
+duration: 25
+objectives:
+  - Explain population, sample, parameter and statistic
+  - Compare random and convenience sampling
+  - Name selection, nonresponse and survivorship bias with an example each
+  - Decide whether a given sample can support a conclusion about a population
+prerequisites:
+  - core-study-design-and-data-types
+  - core-distributions-and-outliers
+  - python-pandas-groupby-aggregate
+  - python-pandas-select-and-filter
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-sampling-and-bias.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'OpenIntro Statistics, 4th edition: section 1.3, Sampling principles and strategies (accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'Mangel and Samaniego (1984): Abraham Wald''s work on aircraft survivability, Journal of the American Statistical Association (accessed 2026-11-20)'
+    url: https://doi.org/10.1080/01621459.1984.10478038
+  - title: 'pandas documentation: Series.sample (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.sample.html
+status: draft
+---
+
+TODO(owner): team draft (SPEC D24), written for your edits. `reviewed` still holds the stub date: set it when you publish.
+
+TODO(owner): other lessons are named by title and code, not linked, because draft pages do not link yet.
+
+## The question
+
+The owner asks:
+
+> What does an order cost, on average? I cannot read all 1,800 orders. Can I just look at the mornings?
+
+The first rows of the file, with one number for each order: its value, the sum of its lines.
+
+| order_id | store_id | ordered_at | value |
+|---:|---:|---|---:|
+| 1001 | 2 | 2026-01-01 08:02:00 | 14.00 |
+| 1002 | 1 | 2026-01-01 15:38:00 | 12.50 |
+| 1003 | 2 | 2026-01-01 15:47:00 | 12.50 |
+| 1004 | 1 | 2026-01-01 16:18:00 | 6.50 |
+
+By the end of this page you can say, for any sample, who it speaks for and who it leaves out.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Counting and summing: aggregate functions* (S7), `AVG` over every row of a column gives one number about the whole table. `orders["value"].mean()` is its twin, and the same call on a few rows is the sample's version of it.
+
+**Diverge.** `AVG` only ever sees rows that are in the table. Unit 3 shows what that means when some customers are not.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Center and spread* (C2), you summarized a column by its center. Write the call that gives the mean of the `value` column of `orders`.
+
+   <details>
+   <summary>answer</summary>
+
+   `orders["value"].mean()`
+
+   </details>
+
+2. In *Data types, units and how data was collected* (C1), you named the unit of observation of a table. What is it for `orders`?
+
+   <details>
+   <summary>answer</summary>
+
+   One order: one visit to the till. Each row is one order.
+
+   </details>
+
+## The big idea
+
+A sample can only speak for the cases it could have reached, so before you trust its number, ask who could be in it.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="smp-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="smp" id="smp-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="smp" id="smp-r1" aria-label="Step 1 of 5: 24 orders, the whole population" />
+<input class="sa-r r2 o3" type="radio" name="smp" id="smp-r2" aria-label="Step 2 of 5: Draw 6 at random" />
+<input class="sa-r r3 o4" type="radio" name="smp" id="smp-r3" aria-label="Step 3 of 5: Their mean is an estimate" />
+<input class="sa-r r4 o6" type="radio" name="smp" id="smp-r4" aria-label="Step 4 of 5: Now draw the 6 easiest to reach" />
+<input class="sa-r r5 o8" type="radio" name="smp" id="smp-r5" aria-label="Step 5 of 5: Its mean misses to one side" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>orders</small><span><i class="w1 tmp hl">24</i><i class="w7 d2">24</i></span></span><span class="sa-n c-grp"><small>drawn</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">6</i><i class="w1 d4 tmp">6</i><i class="w2 d5 tmp hl">6</i><i class="w2 d7">6</i></span></span><span class="sa-n c-out"><small>estimates</small><span><i class="w3 tmp">—</i><i class="w1 d4 tmp hl">1</i><i class="w2 d5 tmp">1</i><i class="w2 d7 hl">2</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 254" width="360" role="img" aria-labelledby="smp-t smp-d">
+<title id="smp-t">A random sample and a sample of the easiest orders to reach</title>
+<desc id="smp-d">A grid of 24 dots, each one an order, in eight columns; the two left columns are the morning orders and a bigger dot is a bigger order. Below it, a line for the average order value with an ochre mark for the true mean of all 24 orders. Six orders drawn at random are ringed in blue and their mean, a blue dot, lands close to the true mean. Six morning orders, inside a gray band, are then ringed in blue and their mean lands far to the left of the true mean, with a red bracket marking the gap.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · 24 orders, the whole population</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Draw 6 at random</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · Their mean is an estimate</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · Now draw the 6 easiest to reach</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Its mean misses to one side</text>
+<text class="f11 b" x="10" y="14">Who could be in the sample?</text>
+<rect class="f-ord k1 w4 d5" x="26" y="60" width="74" height="90" rx="8" />
+<text class="f10 b m w4 d5" x="63" y="56">mornings</text>
+<circle class="f-ord k3" cx="46" cy="78" r="4.49" />
+<circle class="f-ord k3" cx="46" cy="104" r="4.82" />
+<circle class="f-ord k3" cx="46" cy="130" r="4.16" />
+<circle class="f-ord k3" cx="84" cy="78" r="5.15" />
+<circle class="f-ord k3" cx="84" cy="104" r="4.49" />
+<circle class="f-ord k3" cx="84" cy="130" r="5.48" />
+<circle class="f-ord k3" cx="122" cy="78" r="5.81" />
+<circle class="f-ord k3" cx="122" cy="104" r="6.8" />
+<circle class="f-ord k3" cx="122" cy="130" r="6.47" />
+<circle class="f-ord k3" cx="160" cy="78" r="6.14" />
+<circle class="f-ord k3" cx="160" cy="104" r="7.46" />
+<circle class="f-ord k3" cx="160" cy="130" r="5.81" />
+<circle class="f-ord k3" cx="198" cy="78" r="5.48" />
+<circle class="f-ord k3" cx="198" cy="104" r="6.47" />
+<circle class="f-ord k3" cx="198" cy="130" r="8.12" />
+<circle class="f-ord k3" cx="236" cy="78" r="6.8" />
+<circle class="f-ord k3" cx="236" cy="104" r="6.14" />
+<circle class="f-ord k3" cx="236" cy="130" r="9.11" />
+<circle class="f-ord k3" cx="274" cy="78" r="5.15" />
+<circle class="f-ord k3" cx="274" cy="104" r="7.13" />
+<circle class="f-ord k3" cx="274" cy="130" r="6.47" />
+<circle class="f-ord k3" cx="312" cy="78" r="5.81" />
+<circle class="f-ord k3" cx="312" cy="104" r="7.79" />
+<circle class="f-ord k3" cx="312" cy="130" r="6.14" />
+<circle class="s-src w3 d2 tmp" cx="84" cy="104" r="8.49" />
+<circle class="s-src w3 d2 tmp" cx="122" cy="78" r="9.81" />
+<circle class="s-src w3 d2 tmp" cx="160" cy="130" r="9.81" />
+<circle class="s-src w3 d2 tmp" cx="198" cy="104" r="10.47" />
+<circle class="s-src w3 d2 tmp" cx="236" cy="78" r="10.8" />
+<circle class="s-src w3 d2 tmp" cx="312" cy="130" r="10.14" />
+<circle class="s-src w4 d5" cx="46" cy="78" r="8.49" />
+<circle class="s-src w4 d5" cx="46" cy="104" r="8.82" />
+<circle class="s-src w4 d5" cx="46" cy="130" r="8.16" />
+<circle class="s-src w4 d5" cx="84" cy="78" r="9.15" />
+<circle class="s-src w4 d5" cx="84" cy="104" r="8.49" />
+<circle class="s-src w4 d5" cx="84" cy="130" r="9.48" />
+<path class="ln" d="M20 206H340" />
+<text class="f10 mu" x="20" y="246">lower</text>
+<text class="f10 mu e" x="340" y="246">higher</text>
+<text class="f10 mu m" x="180" y="246">average order value</text>
+<path class="s-out" d="M171.91176470588235 168V214" />
+<text class="f10 b m" x="171.91" y="164">true mean</text>
+<circle class="f-src k4 w5 d4" cx="159.41" cy="206" r="5" />
+<text class="f10 m w5 d4" x="167.41" y="224">random 6</text>
+<circle class="f-src k4 w2 d7" cx="97.65" cy="206" r="5" />
+<text class="f10 m w2 d7" x="97.65" y="224">mornings 6</text>
+<path class="s-flt dr p2 d7" pathLength="1" d="M97.64705882352942 190H171.91176470588235" />
+<text class="f10 b m w2 d7" x="134.78" y="184">gap</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="smp-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="smp-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="smp-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="smp-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="smp-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="smp-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="smp-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="smp-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="smp-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="smp-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="smp-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="smp-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="smp-r1">1</label><label class="sa-sb sb2" for="smp-r2">2</label><label class="sa-sb sb3" for="smp-r3">3</label><label class="sa-sb sb4" for="smp-r4">4</label><label class="sa-sb sb5" for="smp-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">The population is every order we care about; its mean is the true value.<span class="sa-chs"><span class="sa-ch pl">24 orders</span><span class="sa-ch pl">the true mean</span></span></div>
+<div class="c-grp w2 d2 tmp">In a random draw every order has the same chance, wherever it sits.<span class="sa-chs"><span class="sa-ch pl">6 orders drawn</span></span></div>
+<div class="c-out w1 d4 tmp">The sample mean is an estimate of the true mean, a little off by luck.<span class="sa-chs"><span class="sa-ch pl">1 estimate</span></span></div>
+<div class="c-grp w2 d5 tmp">An easy-to-reach sample comes from one corner of the population.<span class="sa-chs"><span class="sa-ch ch">draw moved to mornings</span></span></div>
+<div class="c-flt w2 d7">This estimate sits to one side, and a bigger sample from the same corner would too.<span class="sa-chs"><span class="sa-ch pl">a gap to the true mean</span></span></div>
+</div>
+<p class="ca-cap">A random draw gives every order the same chance, so its average lands near the true one. A draw from the easiest corner to reach lands to one side, and drawing more from that corner does not move it.</p>
+<ol class="sa-steps">
+<li>24 orders, the whole population</li>
+<li>Draw 6 at random</li>
+<li>Their mean is an estimate</li>
+<li>Now draw the 6 easiest to reach</li>
+<li>Its mean misses to one side</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 25 minutes, 3 new ideas: population and sample, random and convenience samples, the people who are missing. Unit 4 teaches nothing new. The setup cell gave `orders` a `value`, an `hour` and a `weekday` column.
+
+<OpenInColab />
+
+### 1. Population, sample, parameter and statistic
+
+**Idea.** The population is every case you care about: here the 1,800 orders of the file. A sample is some of them. A number computed from the whole population is a parameter; the same calculation on a sample is a statistic. In a simple random sample every case has the same chance of being picked, as the OpenIntro textbook describes it. `Series.sample(200, random_state=0)` draws one, no order twice; `random_state` is a seed, so the same number gives the same draw on every run.
+
+**Try it.** Compute the parameter and one statistic:
+
+```python
+value = orders["value"]                       # one number for each order
+mu = value.mean()                             # the parameter: computed from all 1,800 orders
+sample = value.sample(200, random_state=0)    # a simple random sample: 200 orders, none twice
+xbar = sample.mean()                          # the statistic: computed from the sample
+print(len(value), round(float(mu), 2), len(sample), round(float(xbar), 2))
+```
+
+**Predict:** the sample is 200 of the 1,800 orders. Will its mean equal the mean of all 1,800 exactly, land close to it, or be far from it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1800 12.64 200 12.45
+```
+
+</details>
+
+*Why:* the parameter is 12.64 and the statistic, with seed 0, is 12.45: close, but 0.19 low. The 200 orders are only part of the population, so the statistic is an estimate of the parameter.
+
+**Try it.** Draw the sample again with the seeds 0 to 4:
+
+```python
+print([round(float(value.sample(200, random_state=seed).mean()), 2) for seed in range(5)])
+```
+
+**Predict:** will the five sample means agree with each other?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[12.45, 11.34, 13.09, 12.34, 13.12]
+```
+
+<figure>
+<svg viewBox="0 0 360 190" width="360" role="img" aria-labelledby="sb-seeds-t sb-seeds-d">
+<title id="sb-seeds-t">Five random samples of 200 orders: the mean of each, against the mean of all 1,800 orders</title>
+<desc id="sb-seeds-d">Five rows, one for each seed from 0 to 4, each with a blue dot at the mean of that sample, on a dollar scale from 10.5 to 14. A vertical ochre line marks the mean of all 1,800 orders, 12.64. The five dots lie on both sides of the line.</desc>
+<defs>
+<marker id="sb-seeds-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="14" y="43.5" font-size="10">seed 0</text>
+<path d="M76.0 40.0 L346.0 40.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="226.6" cy="40.0" r="5" fill="#0072b2" />
+<text x="14" y="67.5" font-size="10">seed 1</text>
+<path d="M76.0 64.0 L346.0 64.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="140.7" cy="64.0" r="5" fill="#0072b2" />
+<text x="14" y="91.5" font-size="10">seed 2</text>
+<path d="M76.0 88.0 L346.0 88.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="275.9" cy="88.0" r="5" fill="#0072b2" />
+<text x="14" y="115.5" font-size="10">seed 3</text>
+<path d="M76.0 112.0 L346.0 112.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="218.2" cy="112.0" r="5" fill="#0072b2" />
+<text x="14" y="139.5" font-size="10">seed 4</text>
+<path d="M76.0 136.0 L346.0 136.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="278.0" cy="136.0" r="5" fill="#0072b2" />
+<path d="M241.2 28.0 L241.2 152.0" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="241.182" y="20" font-size="10" text-anchor="middle">all 1,800 orders: 12.64</text>
+<path d="M76.0 154.0 L346.0 154.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M114.6 154.0 L114.6 158.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="114.571" y="169" font-size="10" text-anchor="middle" fill-opacity="0.8">11</text>
+<path d="M191.7 154.0 L191.7 158.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="191.714" y="169" font-size="10" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M268.9 154.0 L268.9 158.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="268.857" y="169" font-size="10" text-anchor="middle" fill-opacity="0.8">13</text>
+<path d="M346.0 154.0 L346.0 158.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="346" y="169" font-size="10" text-anchor="middle" fill-opacity="0.8">14</text>
+<text x="211" y="182" font-size="10" text-anchor="middle">mean of one sample of 200 orders (&#36;)</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the parameter is one fixed number, 12.64, and a statistic changes with the orders you happen to draw. The next lesson, *Sampling variability and the Central Limit Theorem* (C6), measures how much.
+
+### 2. A random sample and a convenience sample
+
+**Idea.** A convenience sample is made of the cases that are easiest to reach, such as the orders placed before 9 a.m. To judge a way of sampling, repeat it 1,000 times and compare the average of its sample means with the parameter. That gap is the bias of the way of sampling. The OpenIntro textbook adds that it is hard to tell which part of a population a convenience sample stands for.
+
+**Try it.** Draw 1,000 samples of 200 orders in two ways, each with its own seed from 0 to 999:
+
+```python
+mornings = orders[orders["hour"] < 9]["value"]    # the orders easiest to reach: placed before 9 a.m.
+print(len(mornings), round(float(mornings.mean()), 2))
+random_means = [value.sample(200, random_state=seed).mean() for seed in range(1000)]
+morning_means = [mornings.sample(200, random_state=seed).mean() for seed in range(1000)]
+print(round(float(np.mean(random_means)), 2), round(float(np.mean(morning_means)), 2))
+```
+
+**Predict:** what will the average of the 1,000 sample means be for each way, to the nearest 0.1?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+329 11.67
+12.62 11.68
+```
+
+</details>
+
+*Why:* the morning samples draw only from the 329 orders before 9 a.m., which average 11.67, so their means gather around 11.67. The random samples gather around 12.62.
+
+**Try it.** Subtract the parameter, and look at the smallest and largest mean of each list:
+
+```python
+print(round(float(np.mean(random_means) - mu), 2), round(float(np.mean(morning_means) - mu), 2))
+print(round(float(np.min(random_means)), 2), round(float(np.max(random_means)), 2))
+print(round(float(np.min(morning_means)), 2), round(float(np.max(morning_means)), 2))
+```
+
+**Predict:** compare each average with the parameter. Do the two lists of means overlap, and does any morning mean reach 12.64?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+-0.03 -0.97
+10.99 14.7
+10.64 12.59
+```
+
+<figure>
+<svg viewBox="0 0 360 240" width="360" role="img" aria-labelledby="sb-bias-t sb-bias-d">
+<title id="sb-bias-t">1,000 sample means from random samples and from morning-only samples, against the mean of all orders</title>
+<desc id="sb-bias-d">Two histograms on one dollar scale, each of 1,000 sample means of 200 orders. The random samples center on 12.62, next to a vertical ochre line at the mean of all 1,800 orders, 12.64. The morning-only samples center on 11.68, to the left of the line, and none of them reaches it; a red bracket marks the gap.</desc>
+<defs>
+<marker id="sb-bias-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Random samples</text>
+<text x="346" y="14" font-size="10" text-anchor="end">average of the means 12.62</text>
+<path d="M42.9 84.0 V84.0 Q42.9 83.8 43.1 83.8 H58.6 Q58.8 83.8 58.8 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M60.8 84.0 V84.0 Q60.8 83.5 61.3 83.5 H76.1 Q76.7 83.5 76.7 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M78.7 84.0 V84.0 Q78.7 81.7 81.0 81.7 H92.3 Q94.6 81.7 94.6 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M96.6 84.0 V82.6 Q96.6 79.6 99.6 79.6 H109.4 Q112.4 79.6 112.4 82.6 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M114.4 84.0 V74.6 Q114.4 71.6 117.4 71.6 H127.3 Q130.3 71.6 130.3 74.6 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M132.3 84.0 V62.4 Q132.3 59.4 135.3 59.4 H145.2 Q148.2 59.4 148.2 62.4 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M150.2 84.0 V55.7 Q150.2 52.7 153.2 52.7 H163.1 Q166.1 52.7 166.1 55.7 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M168.1 84.0 V52.9 Q168.1 49.9 171.1 49.9 H181.0 Q184.0 49.9 184.0 52.9 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M186.0 84.0 V58.9 Q186.0 55.9 189.0 55.9 H198.9 Q201.9 55.9 201.9 58.9 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M203.9 84.0 V70.2 Q203.9 67.2 206.9 67.2 H216.8 Q219.8 67.2 219.8 70.2 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M221.8 84.0 V75.7 Q221.8 72.7 224.8 72.7 H234.7 Q237.7 72.7 237.7 75.7 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M239.7 84.0 V80.3 Q239.7 77.3 242.7 77.3 H252.6 Q255.6 77.3 255.6 80.3 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M257.6 84.0 V84.0 Q257.6 81.7 259.9 81.7 H271.1 Q273.4 81.7 273.4 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M275.4 84.0 V84.0 Q275.4 82.8 276.7 82.8 H290.1 Q291.3 82.8 291.3 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M293.3 84.0 V84.0 Q293.3 83.6 293.7 83.6 H308.9 Q309.2 83.6 309.2 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M311.2 84.0 V84.0 Q311.2 83.8 311.4 83.8 H326.9 Q327.1 83.8 327.1 84.0 V84.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M24.0 84.0 L346.0 84.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="108" font-size="10.5" font-weight="600">Morning-only samples</text>
+<text x="346" y="108" font-size="10" text-anchor="end">average of the means 11.68</text>
+<path d="M25.0 184.0 V184.0 Q25.0 183.6 25.4 183.6 H40.5 Q40.9 183.6 40.9 184.0 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M42.9 184.0 V184.0 Q42.9 182.4 44.5 182.4 H57.2 Q58.8 182.4 58.8 184.0 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M60.8 184.0 V174.1 Q60.8 171.1 63.8 171.1 H73.7 Q76.7 171.1 76.7 174.1 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M78.7 184.0 V152.9 Q78.7 149.9 81.7 149.9 H91.6 Q94.6 149.9 94.6 152.9 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M96.6 184.0 V131.0 Q96.6 128.0 99.6 128.0 H109.4 Q112.4 128.0 112.4 131.0 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M114.4 184.0 V140.2 Q114.4 137.2 117.4 137.2 H127.3 Q130.3 137.2 130.3 140.2 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M132.3 184.0 V165.8 Q132.3 162.8 135.3 162.8 H145.2 Q148.2 162.8 148.2 165.8 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M150.2 184.0 V183.5 Q150.2 180.5 153.2 180.5 H163.1 Q166.1 180.5 166.1 183.5 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M168.1 184.0 V184.0 Q168.1 183.8 168.3 183.8 H183.8 Q184.0 183.8 184.0 184.0 V184.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<path d="M24.0 184.0 L346.0 184.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M59.8 184.0 L59.8 188.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="59.7778" y="199" font-size="10" text-anchor="middle" fill-opacity="0.8">11</text>
+<path d="M131.3 184.0 L131.3 188.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="131.333" y="199" font-size="10" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M202.9 184.0 L202.9 188.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="202.889" y="199" font-size="10" text-anchor="middle" fill-opacity="0.8">13</text>
+<path d="M274.4 184.0 L274.4 188.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="274.444" y="199" font-size="10" text-anchor="middle" fill-opacity="0.8">14</text>
+<path d="M177.2 24.0 L177.2 184.0" fill="none" stroke="#ad9100" stroke-width="2" />
+<path d="M108.1 122.0 L177.2 122.0" fill="none" stroke="#c0392b" stroke-width="2" />
+<path d="M108.1 118.0 L108.1 126.0" fill="none" stroke="#c0392b" stroke-width="2" />
+<text x="185.218" y="125.5" font-size="10" font-weight="600">bias 0.97</text>
+<text x="185" y="214" font-size="10" text-anchor="middle">mean of one sample of 200 orders (&#36;)</text>
+<path d="M14.0 230.0 L34.0 230.0" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="42" y="233.5" font-size="10">the mean of all 1,800 orders: 12.64</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the random samples miss the parameter by 0.03, which is luck left in 1,000 draws. The morning samples miss it by 0.97 on the low side, and none of the 1,000 reaches 12.64: that gap is a bias, and more draws would not shrink it. The two lists overlap, so one morning sample alone could not show its bias. We know the truth here only because the population is in hand.
+
+### 3. The people who are missing
+
+**Idea.** Two more biases come from people who are missing. In survivorship bias the data holds only the cases that lasted long enough to be recorded: Abraham Wald met it when he estimated how vulnerable aircraft were from data on the aircraft that survived (Mangel and Samaniego, 1984). In nonresponse bias you ask many people, but those who answer differ from those who do not, and the OpenIntro textbook notes that it can skew the results.
+
+**Try it.** Count the visits of each customer from the orders table, then from the customer list:
+
+```python
+visits = orders.groupby("customer_id").size()                 # only customers who ordered have a row here
+print(len(visits), int(visits.sum()), round(float(visits.mean()), 2))
+all_visits = customers["customer_id"].map(visits).fillna(0)   # every customer, 0 visits for one who never ordered
+print(len(all_visits), round(float(all_visits.mean()), 2))
+```
+
+**Predict:** how many customers have a row in `visits`, and will their average number of visits be higher or lower than the average over all 150 customers?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+145 1799 12.41
+150 11.99
+```
+
+</details>
+
+*Why:* five customers never ordered, so the orders table never shows them. The 145 who appear hold 1,799 of the 1,800 orders, because the walk-in order has no customer id, and their average of 12.41 is about 0.4 too high against 11.99. The five missing customers would have pulled it down. Strictly, this is undercoverage, a list that leaves out part of the population, more than survivorship; the effect is the same.
+
+**Try it.** A made-up scenario, not in the data: the cafe asks all 150 customers how often they visit, and only customers with 18 or more visits answer:
+
+```python
+# A made-up scenario, not in the data: the cafe asks all 150 customers "How often do you visit?",
+# and suppose that only customers with 18 or more visits answer.
+answered = all_visits[all_visits >= 18]
+print(len(answered), round(float(answered.mean()), 2), round(float(all_visits.mean()), 2))
+```
+
+**Predict:** how many customers answer, and how far is the average they report from the true average of all 150?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+43 22.05 11.99
+```
+
+<figure>
+<svg viewBox="0 0 360 206" width="360" role="img" aria-labelledby="sb-missing-t sb-missing-d">
+<title id="sb-missing-t">Average visits per customer, counted three ways</title>
+<desc id="sb-missing-d">Four vertical bars of average visits per customer. Counted from the orders table, 145 customers: 12.41. All 150 customers: 11.99. In the made-up survey, the 43 customers who answered: 22.05. All 150 customers again: 11.99. The two ochre bars for all customers are equal.</desc>
+<defs>
+<marker id="sb-missing-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<path d="M40.0 126.0 L346.0 126.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="34" y="129.5" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M40.0 87.6 L346.0 87.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="91.1" font-size="10" text-anchor="end" fill-opacity="0.8">10</text>
+<path d="M40.0 49.2 L346.0 49.2" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="52.7" font-size="10" text-anchor="end" fill-opacity="0.8">20</text>
+<path d="M52.0 126.0 V82.4 Q52.0 78.4 56.0 78.4 H100.0 Q104.0 78.4 104.0 82.4 V126.0 Z" fill="#0072b2" fill-opacity="0.95" />
+<text x="78" y="72.3575" font-size="11" text-anchor="middle" font-weight="600">12.41</text>
+<text x="78" y="140" font-size="10" text-anchor="middle">orders table</text>
+<text x="78" y="152" font-size="10" text-anchor="middle" fill-opacity="0.8">145 people</text>
+<path d="M128.0 126.0 V83.9 Q128.0 79.9 132.0 79.9 H176.0 Q180.0 79.9 180.0 83.9 V126.0 Z" fill="#ad9100" fill-opacity="0.95" />
+<text x="154" y="73.9456" font-size="11" text-anchor="middle" font-weight="600">11.99</text>
+<text x="154" y="140" font-size="10" text-anchor="middle">everyone</text>
+<text x="154" y="152" font-size="10" text-anchor="middle" fill-opacity="0.8">150 people</text>
+<path d="M218.0 126.0 V45.3 Q218.0 41.3 222.0 41.3 H266.0 Q270.0 41.3 270.0 45.3 V126.0 Z" fill="#0072b2" fill-opacity="0.95" />
+<text x="244" y="35.3414" font-size="11" text-anchor="middle" font-weight="600">22.05</text>
+<text x="244" y="140" font-size="10" text-anchor="middle">answered</text>
+<text x="244" y="152" font-size="10" text-anchor="middle" fill-opacity="0.8">43 people</text>
+<path d="M294.0 126.0 V83.9 Q294.0 79.9 298.0 79.9 H342.0 Q346.0 79.9 346.0 83.9 V126.0 Z" fill="#ad9100" fill-opacity="0.95" />
+<text x="320" y="73.9456" font-size="11" text-anchor="middle" font-weight="600">11.99</text>
+<text x="320" y="140" font-size="10" text-anchor="middle">everyone</text>
+<text x="320" y="152" font-size="10" text-anchor="middle" fill-opacity="0.8">150 people</text>
+<circle cx="20.0" cy="176.0" r="5" fill="#0072b2" />
+<text x="32" y="179.5" font-size="10">a subset of the customers</text>
+<circle cx="196.0" cy="176.0" r="5" fill="#ad9100" />
+<text x="208" y="179.5" font-size="10">all 150 customers</text>
+<text x="14" y="198" font-size="10" fill-opacity="0.8">average number of visits per customer</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* 43 customers answer and report 22.05 visits, against a true 11.99. Nobody lied: the people who answer visit more, and the ones who did not are exactly the ones the average needs. The cutoff of 18 is invented; a real survey cannot see its non-responders.
+
+### 4. Check a sample with three questions
+
+No new idea here: the questions of units 1 to 3, asked before you compute anything.
+
+1. Who could be in the sample, and who could not?
+2. Who was never recorded, or dropped out?
+3. Who was asked and did not answer?
+
+The orders of the file by hour show what a sample from one part of the day could reach.
+
+<figure>
+<svg viewBox="0 0 360 164" width="360" role="img" aria-labelledby="sb-hours-t sb-hours-d">
+<title id="sb-hours-t">Orders by hour of the day, with the morning hours marked</title>
+<desc id="sb-hours-d">Eleven vertical bars, one for each hour from 7 to 17, each holding between 142 and 181 orders. The bars for 7 and 8 o'clock, the orders placed before 9 a.m., are blue and together hold 329 orders; the other nine are gray.</desc>
+<defs>
+<marker id="sb-hours-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<path d="M40.0 120.0 L346.0 120.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="34" y="123.5" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M40.0 78.0 L346.0 78.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="81.5" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M40.0 36.0 L346.0 36.0" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="39.5" font-size="10" text-anchor="end" fill-opacity="0.8">200</text>
+<path d="M46.0 120.0 V50.8 Q46.0 47.8 49.0 47.8 H68.5 Q71.5 47.8 71.5 50.8 V120.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<text x="58.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">7</text>
+<path d="M73.5 120.0 V57.1 Q73.5 54.1 76.5 54.1 H96.0 Q99.0 54.1 99.0 57.1 V120.0 Z" fill="#0072b2" fill-opacity="0.9" />
+<text x="86.25" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">8</text>
+<path d="M101.0 120.0 V52.0 Q101.0 49.0 104.0 49.0 H123.5 Q126.5 49.0 126.5 52.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="113.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">9</text>
+<path d="M128.5 120.0 V47.0 Q128.5 44.0 131.5 44.0 H151.0 Q154.0 44.0 154.0 47.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="141.25" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">10</text>
+<path d="M156.0 120.0 V52.0 Q156.0 49.0 159.0 49.0 H178.5 Q181.5 49.0 181.5 52.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="168.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">11</text>
+<path d="M183.5 120.0 V63.4 Q183.5 60.4 186.5 60.4 H206.0 Q209.0 60.4 209.0 63.4 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="196.25" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M211.0 120.0 V60.0 Q211.0 57.0 214.0 57.0 H233.5 Q236.5 57.0 236.5 60.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="223.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">13</text>
+<path d="M238.5 120.0 V55.4 Q238.5 52.4 241.5 52.4 H261.0 Q264.0 52.4 264.0 55.4 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="251.25" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">14</text>
+<path d="M266.0 120.0 V52.4 Q266.0 49.4 269.0 49.4 H288.5 Q291.5 49.4 291.5 52.4 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="278.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">15</text>
+<path d="M293.5 120.0 V52.0 Q293.5 49.0 296.5 49.0 H316.0 Q319.0 49.0 319.0 52.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="306.25" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">16</text>
+<path d="M321.0 120.0 V55.0 Q321.0 52.0 324.0 52.0 H343.5 Q346.5 52.0 346.5 55.0 V120.0 Z" fill="currentColor" fill-opacity="0.3" />
+<text x="333.75" y="134" font-size="10" text-anchor="middle" fill-opacity="0.8">17</text>
+<text x="46" y="22" font-size="10.5" font-weight="600">329 orders before 9 a.m. (18%)</text>
+<text x="193" y="152" font-size="10" text-anchor="middle" fill-opacity="0.8">hour of the day the order was placed</text>
+</g>
+</svg>
+</figure>
+
+Try the questions on each case before you open the answers.
+
+- **A.** A card at the till asks, "How was your visit, 1 to 5?" and 60 cards come back, averaging 4.7. Does 4.7 describe all customers?
+- **B.** A manager asks feedback only from the first ten customers each day. Does it describe all customers?
+- **C.** 200 orders are drawn with `Series.sample` from all 1,800. What can their mean value support?
+
+<details>
+<summary>Answers</summary>
+
+**A.** No. Only customers who reached the till and chose to fill in a card could be in; those who left unhappy or never came back are missing.
+
+**B.** No. Only people who arrive first could be in it, and they may differ from the people who come at lunch.
+
+**C.** The average order value of these 1,800 orders, give or take the luck of the draw. It says nothing about what customers think, or about orders after June 2026.
+
+</details>
+
+<Aside type="tip" title="Remember">
+
+- A parameter describes the population and is fixed; a statistic describes a sample and changes with it.
+- The error of a random sample is luck; the error of a convenience sample leans one way, and more draws do not remove it.
+- Data of survivors and surveys that only some answer miss people for a reason.
+- Before you use a sample, ask who could be in it, who could not and who did not answer.
+
+**Common trap:** trusting a sample because it is large: more orders from the same easy-to-reach place shrink the luck, not the bias.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-sampling-and-bias-1">
+
+**Who is missing from the orders table?** The five customers who never ordered have no row in it. What share of customers is on the bronze tier among the customers who appear in the orders table, and what share among all 150 customers? Give both as a list, the first share first, each rounded to 3 decimals. Expected: `answer_1` is a list of two numbers.
+
+```python
+tiers = customers.set_index("customer_id")["loyalty_tier"]   # given: the tier of each of the 150 customers
+seen = tiers[tiers.index.isin(orders["customer_id"])]        # given: the tiers of the customers who appear in the orders table
+# the share of bronze among `seen`, then among all customers, each rounded to 3 decimals
+answer_1 = None  # replace None with [share among seen, share among all]
+```
+
+<details>
+<summary>Hint</summary>
+
+A comparison such as `seen == "bronze"` gives `True` and `False`, and the mean of those is the share of `True`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [round(float((seen == "bronze").mean()), 3), round(float((tiers == ...).mean()), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+tiers = customers.set_index("customer_id")["loyalty_tier"]
+seen = tiers[tiers.index.isin(orders["customer_id"])]
+answer_1 = [round(float((seen == "bronze").mean()), 3), round(float((tiers == "bronze").mean()), 3)]
+```
+
+0.559 and 0.567: bronze is 81 of the 145 customers who appear and 85 of all 150, because four of the five customers who never ordered are bronze. The check cell reports 0.567 twice when both shares use all 150 customers.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-sampling-and-bias-2">
+
+**Which weekday would give the most biased convenience sample of order values?** Before you start, say in one sentence what the result looks like: a day name and one number. Take each weekday's mean order value minus `mu`, and find the weekday whose gap is largest in size, in either direction. Put the name and its gap, rounded to 2 decimals, in `answer_2` as a list, the name first. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of a weekday name and a number.
+
+<details>
+<summary>Hint</summary>
+
+`groupby("weekday")["value"].mean()` gives one mean for each day. Subtract `mu`, then ask for the largest absolute value with `.abs().idxmax()`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A day name, then a number just under 1."*
+
+```python
+gap = orders.groupby("weekday")["value"].mean() - mu
+day = gap....idxmax()
+```
+
+</details>
+
+<Solution>
+
+```python
+gap = orders.groupby("weekday")["value"].mean() - mu
+day = gap.abs().idxmax()
+answer_2 = [day, round(float(gap[day]), 2)]
+```
+
+Friday, 0.92. Thursday has a gap of -0.89, the largest in the other direction. One order explains most of Friday's gap: order 2075, the 197.00 order with the extra zero, was on a Friday, and without it the Friday mean is 12.76, 0.11 above `mu`.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what is the difference between a parameter and a statistic, and which of the two changes from sample to sample?
+
+   <details>
+   <summary>answer</summary>
+
+   A parameter is a number about the whole population, so it is one fixed value; a statistic is the same calculation on a sample, so it changes with the sample drawn.
+
+   </details>
+
+<Exercise id="core-sampling-and-bias-3">
+
+**Spot the flaw.** A colleague wants the mean order value of all three cafes. They draw 100 orders at random from each store and average the three store means. Over many repeats that estimate centers on the plain average of the store means, which the lines below compute. Fix the lines so that it centers on the population mean, then set `answer_3` to it, rounded to 2 decimals. Expected: `answer_3` is `12.64`.
+
+```python
+store_means = orders.groupby("store_id")["value"].mean()   # the mean order value of each store
+answer_3 = round(float(store_means.mean()), 2)               # the colleague's estimate: each store counts the same
+```
+
+<details>
+<summary>Hint</summary>
+
+Print `orders.groupby("store_id").size()`. How many orders does each store hold, and how many of each are in the colleague's sample? Then look for `np.average` and its `weights`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+store_sizes = orders.groupby("store_id").size()
+answer_3 = round(float(np.average(store_means, weights=...)), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+store_means = orders.groupby("store_id")["value"].mean()
+store_sizes = orders.groupby("store_id").size()
+answer_3 = round(float(np.average(store_means, weights=store_sizes)), 2)
+```
+
+The colleague's estimate centers on 12.70, not 12.64. An order at Harbor had about twice the chance of being drawn (100 of 355) as an order at Old Town (100 of 729), so Harbor's higher mean counted too much. Weighting each store's mean by the orders it holds gives every order the same weight again. The check cell reports 12.7.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can name the population and the parameter, draw a random sample and compute its statistic, measure the bias of a convenience sample against a known truth, and say who is missing from a survey or a table.*
+Test: Exercise core-sampling-and-bias-2, done from the notebook without opening the hints.
+
+The pattern to remember: **ask who could be in the sample, who could not and who did not answer, before you trust its number.** The next lesson, *Sampling variability and the Central Limit Theorem* (C6), puts a number on the luck.
