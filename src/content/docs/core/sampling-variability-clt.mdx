@@ -1,0 +1,588 @@
+---
+id: core-sampling-variability-clt
+title: Sampling variability and the Central Limit Theorem
+description: See by simulation that sample averages vary, that the variation shrinks with sample size, and what standard error measures.
+stage: core
+order: 60
+level: intermediate
+duration: 30
+objectives:
+  - Simulate repeated samples and plot the sampling distribution of the mean
+  - Explain standard error versus standard deviation
+  - Predict how the spread changes when the sample size grows
+  - State the Central Limit Theorem in one sentence
+prerequisites:
+  - core-probability-and-base-rates
+  - core-sampling-and-bias
+  - python-numpy-vectorization
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-sampling-variability-clt.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'OpenIntro Statistics, 4th edition: sections 5.1 (point estimates and sampling variability) and 7.1 (the sampling distribution of the sample mean) (accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'NumPy documentation: Random Generator, default_rng and seeding (accessed 2026-11-20)'
+    url: https://numpy.org/doc/stable/reference/random/generator.html
+  - title: 'NumPy documentation: numpy.random.Generator.choice (accessed 2026-11-20)'
+    url: https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.choice.html
+  - title: 'NumPy documentation: numpy.std (accessed 2026-11-20)'
+    url: https://numpy.org/doc/stable/reference/generated/numpy.std.html
+  - title: 'pandas documentation: Series.std (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.std.html
+  - title: 'SciPy documentation: scipy.stats.skew (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.skew.html
+status: draft
+---
+
+TODO(owner): team draft (SPEC D24), written for your edits. `reviewed` still holds the stub date: set it when you publish. The title is 50 characters, so it needs a `short_title` of at most 24 when you publish (D47).
+
+TODO(owner): the stub says seeded random numbers are introduced in the NumPy lesson, but *Arrays and vectorized math with NumPy* (P10) does not teach them, so unit 1 does. Other lessons are named by title and code, not linked, because draft pages do not link yet.
+
+## The question
+
+The owner asks:
+
+> Two samples of 200 orders gave you 12.45 and 11.34 dollars. Which number should I believe, and how many orders do I need to look at before the average stops jumping around?
+
+The file the samples came from, the first rows again (one row for each order, with its value):
+
+| order_id | store_id | ordered_at | value |
+|---:|---:|---|---:|
+| 1001 | 2 | 2026-01-01 08:02:00 | 14.00 |
+| 1002 | 1 | 2026-01-01 15:38:00 | 12.50 |
+| 1003 | 2 | 2026-01-01 15:47:00 | 12.50 |
+| 1004 | 1 | 2026-01-01 16:18:00 | 6.50 |
+
+By the end of this page you can say how far a sample mean is likely to be from the truth, and why more orders help less and less.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Arrays and vectorized math with NumPy* (P10), a method such as `amount.sum()` turns a whole array into one number. `values.mean()` and `values.std()` do the same, and `rng.choice(values, size=30)` hands you an array to reduce in the same way.
+
+**Diverge.** An array in P10 never changed between runs; the array that `rng.choice` gives is different at every call. Unit 1 shows how to get the same one back.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Samples and the ways they mislead* (C5), the mean of all 1,800 orders and the mean of 200 drawn orders have two different names. What are they?
+
+   <details>
+   <summary>answer</summary>
+
+   The mean of all 1,800 orders is a parameter. The mean of the 200 drawn orders is a statistic.
+
+   </details>
+
+2. In *Center and spread* (C2), you measured spread. Write the call that gives the standard deviation of the `value` column of `orders`.
+
+   <details>
+   <summary>answer</summary>
+
+   `orders["value"].std()`. pandas divides by n − 1 unless you pass `ddof=0`.
+
+   </details>
+
+## The big idea
+
+A sample mean is a number that changes from sample to sample, and the pile of its values over many samples has a width you can predict.
+
+<svg viewBox="0 0 360 222" width="360" role="img" aria-labelledby="clt-idea-t clt-idea-d">
+<title id="clt-idea-t">How to build a sampling distribution of the mean</title>
+<desc id="clt-idea-d">Four boxes in a column joined by arrows: draw n orders from the 1,800, take their mean, repeat 1,000 times, then look at the pile of the 1,000 means.</desc>
+<defs>
+<marker id="clt-idea-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<rect x="30" y="6" width="300" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<text x="180" y="25" font-size="10.5" text-anchor="middle" font-weight="600">1  Draw n orders from the 1,800</text>
+<rect x="30" y="56" width="300" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<text x="180" y="75" font-size="10.5" text-anchor="middle" font-weight="600">2  Take their mean</text>
+<rect x="30" y="106" width="300" height="32" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<text x="180" y="125" font-size="10.5" text-anchor="middle" font-weight="600">3  Repeat 1,000 times</text>
+<rect x="30" y="156" width="300" height="54" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5" />
+<text x="180" y="178.5" font-size="10.5" text-anchor="middle" font-weight="600">4  Look at the pile of the 1,000 means</text>
+<text x="180" y="193.5" font-size="10.5" text-anchor="middle">that pile is the sampling distribution</text>
+<path d="M180 39 L180 55" fill="none" stroke="currentColor" stroke-opacity="0.75" marker-end="url(#clt-idea-arrow)" />
+<path d="M180 89 L180 105" fill="none" stroke="currentColor" stroke-opacity="0.75" marker-end="url(#clt-idea-arrow)" />
+<path d="M180 139 L180 155" fill="none" stroke="currentColor" stroke-opacity="0.75" marker-end="url(#clt-idea-arrow)" />
+</g>
+</svg>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a seeded random draw, the sampling distribution of the mean, the standard error, the Central Limit Theorem. The setup cell made `values`, the 1,800 order values as an array, and `mu`, their mean.
+
+<OpenInColab />
+
+### 1. A seeded random draw
+
+**Idea.** `np.random.default_rng(42)` makes a random number generator, and 42 is its seed: the same seed gives the same numbers, as the NumPy documentation says. `rng.choice(values, size=30)` draws 30 values at random and, by default, puts each one back before the next draw, so an order can come up twice and the draws do not depend on each other. We draw this way because the 1,800 orders stand for every order the cafes could take.
+
+**Try it.** Draw two samples of 30 orders, then start again from the same seed:
+
+```python
+rng = np.random.default_rng(42)         # a random number generator; 42 is its seed
+first = rng.choice(values, size=30)     # 30 orders drawn at random; an order can come up twice
+second = rng.choice(values, size=30)    # the next 30
+print(round(float(first.mean()), 2), round(float(second.mean()), 2))
+rng = np.random.default_rng(42)         # the same seed again
+print(round(float(rng.choice(values, size=30).mean()), 2))
+```
+
+**Predict:** two draws of 30 orders follow each other. Will their means be equal? Then the generator starts again from the same seed: what will the third mean be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+14.06 10.93
+14.06
+```
+
+</details>
+
+*Why:* two samples from the same population give different means, 14.06 and 10.93. The third mean is the first one again: the same seed gives the same draws. A seed makes a simulation repeatable. NumPy does not promise the same numbers from a seed across its versions, so the numbers on this page are what the notebook printed with seed 42, and another version may print slightly different ones.
+
+### 2. The sampling distribution of the mean
+
+**Idea.** The sampling distribution of the mean is the pile of means you get from many samples of the same size. We build it by brute force: draw 1,000 samples of 30 orders and keep each sample's mean. `np.histogram` counts how many means fall in each bar of 1 dollar, and the dashed line marks `mu`.
+
+**Try it.** Build the 1,000 means, print them as numbers and draw them:
+
+```python
+rng = np.random.default_rng(42)
+means30 = np.array([rng.choice(values, size=30).mean() for _ in range(1000)])   # 1,000 samples, one mean for each
+print(round(float(means30.mean()), 2), round(float(means30.std(ddof=1)), 2))
+print(round(float(means30.min()), 2), round(float(means30.max()), 2))
+edges = np.arange(8, 22.1, 1.0)                                                 # the bars: 1 dollar wide
+counts, _ = np.histogram(means30, bins=edges)
+print(counts.tolist())
+fig, ax = plt.subplots()
+ax.hist(means30, bins=edges)
+ax.axvline(mu, color="black", linestyle="--")                                   # the mean of all 1,800 orders
+ax.set_xlabel("mean of one sample of 30 orders (USD)")
+ax.set_ylabel("number of samples")
+```
+
+**Predict:** each of the 1,000 values is the mean of 30 orders. Where will they center, how wide will they spread (the SD of single orders is 8.61), and will the histogram be a symmetric bell or lopsided?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12.62 1.51
+8.58 19.73
+[2, 18, 104, 234, 268, 226, 91, 34, 7, 7, 6, 3, 0, 0]
+```
+
+<figure>
+<svg viewBox="0 0 360 196" width="360" role="img" aria-labelledby="clt-h30-t clt-h30-d">
+<title id="clt-h30-t">1,000 means of samples of 30 orders</title>
+<desc id="clt-h30-d">A histogram of 1,000 sample means, each from 30 orders, on a dollar scale from 8 to 22. A dashed line marks the mean of all 1,800 orders, 12.64.</desc>
+<defs>
+<marker id="clt-h30-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10">1,000 sample means, each from 30 orders</text>
+<rect x="28.0" y="139.1" width="21.7" height="0.9" fill="currentColor" fill-opacity="0.45" />
+<rect x="50.7" y="132.1" width="21.7" height="7.9" fill="currentColor" fill-opacity="0.45" />
+<rect x="73.4" y="94.2" width="21.7" height="45.8" fill="currentColor" fill-opacity="0.45" />
+<rect x="96.1" y="37.0" width="21.7" height="103.0" fill="currentColor" fill-opacity="0.45" />
+<rect x="118.9" y="22.0" width="21.7" height="118.0" fill="currentColor" fill-opacity="0.45" />
+<rect x="141.6" y="40.5" width="21.7" height="99.5" fill="currentColor" fill-opacity="0.45" />
+<rect x="164.3" y="99.9" width="21.7" height="40.1" fill="currentColor" fill-opacity="0.45" />
+<rect x="187.0" y="125.0" width="21.7" height="15.0" fill="currentColor" fill-opacity="0.45" />
+<rect x="209.7" y="136.9" width="21.7" height="3.1" fill="currentColor" fill-opacity="0.45" />
+<rect x="232.4" y="136.9" width="21.7" height="3.1" fill="currentColor" fill-opacity="0.45" />
+<rect x="255.1" y="137.4" width="21.7" height="2.6" fill="currentColor" fill-opacity="0.45" />
+<rect x="277.9" y="138.7" width="21.7" height="1.3" fill="currentColor" fill-opacity="0.45" />
+<path d="M28 140 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M28.0 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="28" y="156" font-size="10" text-anchor="middle">8</text>
+<path d="M73.4 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="73.4286" y="156" font-size="10" text-anchor="middle">10</text>
+<path d="M118.9 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="118.857" y="156" font-size="10" text-anchor="middle">12</text>
+<path d="M164.3 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="164.286" y="156" font-size="10" text-anchor="middle">14</text>
+<path d="M209.7 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="209.714" y="156" font-size="10" text-anchor="middle">16</text>
+<path d="M255.1 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="255.143" y="156" font-size="10" text-anchor="middle">18</text>
+<path d="M300.6 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="300.571" y="156" font-size="10" text-anchor="middle">20</text>
+<path d="M346.0 140 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="346" y="156" font-size="10" text-anchor="middle">22</text>
+<text x="185" y="171" font-size="10" text-anchor="middle">mean of one sample of 30 orders (&#36;)</text>
+<path d="M133.4 22 V140" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<path d="M14 184 H34" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<text x="40" y="187.5" font-size="10">the mean of all 1,800 orders: 12.64</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the 1,000 means average 12.62, almost the parameter 12.64, and their SD is 1.51, far less than 8.61: the mean of 30 orders moves much less than one order does. The histogram has a longer tail on the right, up to 19.73.
+
+### 3. Standard error and standard deviation
+
+**Idea.** Two spreads need two names. The standard deviation (SD) says how far single orders sit from the mean. The standard error (SE) of the mean says how far a sample mean sits from the parameter, and for samples of n orders from a population with SD sigma it is sigma divided by the square root of n, as the OpenIntro textbook gives it. NumPy's `std` divides by n unless you pass `ddof=1`, and pandas' `std` divides by n − 1; by convention n is for a whole population and n − 1 for a sample.
+
+**Try it.** Build the sampling distribution for three sizes and set its SD beside the formula:
+
+```python
+sigma = values.std()                    # NumPy divides by n unless told otherwise: right for all 1,800 orders
+print(round(float(sigma), 2))
+rng = np.random.default_rng(42)
+for n in (30, 120, 480):
+    means = np.array([rng.choice(values, size=n).mean() for _ in range(1000)])
+    print(n, round(float(means.std(ddof=1)), 2), round(float(sigma / np.sqrt(n)), 2))
+```
+
+**Predict:** for samples of 30, 120 and 480 orders, the cell prints the SD of the 1,000 sample means next to the formula. How will the SD of the means change from one size to the next?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+8.61
+30 1.51 1.57
+120 0.81 0.79
+480 0.4 0.39
+```
+
+The bars show the middle 95 percent of each list, from its 2.5th to its 97.5th percentile.
+
+<figure>
+<svg viewBox="0 0 360 196" width="360" role="img" aria-labelledby="clt-range-t clt-range-d">
+<title id="clt-range-t">The middle 95 percent of single orders and of sample means</title>
+<desc id="clt-range-d">Four horizontal bars on a dollar scale from 0 to 35, each showing the middle 95 percent of 1,000 values: single orders, then the means of samples of 30, 120 and 480 orders. A dashed line marks the mean of all 1,800 orders, 12.64.</desc>
+<defs>
+<marker id="clt-range-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="12" y="23" font-size="10.5" font-weight="600">single orders</text>
+<text x="12" y="37" font-size="10" fill-opacity="0.85">3.25 to 31.25</text>
+<rect x="151.9" y="18" width="171.2" height="16" fill="currentColor" fill-opacity="0.5" />
+<text x="12" y="59" font-size="10.5" font-weight="600">means of 30</text>
+<text x="12" y="73" font-size="10" fill-opacity="0.85">10.08 to 15.68</text>
+<rect x="193.7" y="54" width="34.2" height="16" fill="currentColor" fill-opacity="0.5" />
+<text x="12" y="95" font-size="10.5" font-weight="600">means of 120</text>
+<text x="12" y="109" font-size="10" fill-opacity="0.85">11.29 to 14.59</text>
+<rect x="201.0" y="90" width="20.2" height="16" fill="currentColor" fill-opacity="0.5" />
+<text x="12" y="131" font-size="10.5" font-weight="600">means of 480</text>
+<text x="12" y="145" font-size="10" fill-opacity="0.85">11.90 to 13.46</text>
+<rect x="204.8" y="126" width="9.5" height="16" fill="currentColor" fill-opacity="0.5" />
+<path d="M132 8 V150 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M132.0 150 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="132" y="166" font-size="10" text-anchor="middle">0</text>
+<path d="M193.1 150 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="193.143" y="166" font-size="10" text-anchor="middle">10</text>
+<path d="M254.3 150 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="254.286" y="166" font-size="10" text-anchor="middle">20</text>
+<path d="M315.4 150 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="315.429" y="166" font-size="10" text-anchor="middle">30</text>
+<path d="M209.3 8 V150" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<path d="M14 182 H34" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<text x="40" y="185.5" font-size="10">the mean of all 1,800 orders: 12.64</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* single orders have an SD of 8.61; the means have an SD of 1.51, 0.81 and 0.40, and the formula gives 1.57, 0.79 and 0.39. Each time n grows four times, the SE falls to about half: it shrinks with the square root of n, so ever more orders buy ever less.
+
+**Idea.** A real study has one sample, not 1,000, so the SE is estimated from it: replace sigma by the sample's own SD, `s`, computed with `ddof=1`.
+
+**Try it.** Estimate the SE from the first sample of 30 of unit 1:
+
+```python
+rng = np.random.default_rng(42)
+one = rng.choice(values, size=30)     # the first sample of unit 1
+s = one.std(ddof=1)                   # the SD of this one sample, dividing by n - 1
+print(round(float(s), 2), round(float(s / np.sqrt(30)), 2))
+```
+
+**Predict:** will s divided by the square root of 30 land near the 1.51 that the 1,000 samples gave?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+7.0 1.28
+```
+
+</details>
+
+*Why:* this sample has an SD of 7.00 and gives 1.28, a bit under 1.51: the SD of one sample is itself a draw, so one sample gives an estimate of the SE, not the SE. It is still how you put a number on luck when you have only one sample, and *Confidence intervals* (C7) builds on it.
+
+### 4. The Central Limit Theorem
+
+**Idea.** Skewness measures lopsidedness: it is about zero for symmetric data, and positive when there is more weight in the right tail, as the SciPy documentation puts it. Orders are lopsided: most cost under 20 dollars and a few cost far more. We compute the skewness of the orders and of the 1,000 means at three sample sizes.
+
+**Try it.** Print the skewness:
+
+```python
+print(round(float(stats.skew(values)), 2))
+rng = np.random.default_rng(42)
+for n in (30, 120, 480):
+    means = np.array([rng.choice(values, size=n).mean() for _ in range(1000)])
+    print(n, round(float(stats.skew(means)), 2))
+```
+
+**Predict:** the skewness of the orders themselves is printed first. As the sample size grows from 30 to 120 to 480, will the skewness of the sample means rise, fall or stay near that number?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+6.21
+30 0.79
+120 0.7
+480 0.27
+```
+
+The three histograms use one scale, in standard errors from the true mean, with the bell curve drawn over them.
+
+<figure>
+<svg viewBox="0 0 360 306" width="360" role="img" aria-labelledby="clt-shape-t clt-shape-d">
+<title id="clt-shape-t">Sampling distributions of the mean for three sample sizes, with the bell curve</title>
+<desc id="clt-shape-d">Three histograms of 1,000 sample means each, for samples of 30, 120 and 480 orders, drawn on one scale of standard errors from the true mean. A line shows the bell curve for comparison.</desc>
+<defs>
+<marker id="clt-shape-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10">Samples of 30 orders</text>
+<rect x="56.2" y="81.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="72.3" y="79.6" width="15.1" height="2.4" fill="currentColor" fill-opacity="0.4" />
+<rect x="88.4" y="72.6" width="15.1" height="9.4" fill="currentColor" fill-opacity="0.4" />
+<rect x="104.5" y="51.0" width="15.1" height="31.0" fill="currentColor" fill-opacity="0.4" />
+<rect x="120.6" y="27.9" width="15.1" height="54.1" fill="currentColor" fill-opacity="0.4" />
+<rect x="136.7" y="20.0" width="15.1" height="62.0" fill="currentColor" fill-opacity="0.4" />
+<rect x="152.8" y="21.5" width="15.1" height="60.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="168.9" y="33.1" width="15.1" height="48.9" fill="currentColor" fill-opacity="0.4" />
+<rect x="185.0" y="64.1" width="15.1" height="17.9" fill="currentColor" fill-opacity="0.4" />
+<rect x="201.1" y="72.3" width="15.1" height="9.7" fill="currentColor" fill-opacity="0.4" />
+<rect x="217.2" y="80.2" width="15.1" height="1.8" fill="currentColor" fill-opacity="0.4" />
+<rect x="233.3" y="80.8" width="15.1" height="1.2" fill="currentColor" fill-opacity="0.4" />
+<rect x="249.4" y="79.3" width="15.1" height="2.7" fill="currentColor" fill-opacity="0.4" />
+<rect x="265.5" y="81.4" width="15.1" height="0.6" fill="currentColor" fill-opacity="0.4" />
+<rect x="281.6" y="81.1" width="15.1" height="0.9" fill="currentColor" fill-opacity="0.4" />
+<rect x="297.7" y="81.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<polyline points="32.0,81.9 48.2,81.7 64.2,80.5 80.3,77.0 96.5,68.6 112.5,54.1 128.6,36.4 144.8,23.8 160.9,23.8 176.9,36.4 193.1,54.1 209.2,68.6 225.2,77.0 241.3,80.5 257.4,81.7 273.6,81.9 289.6,82.0 305.8,82.0 321.9,82.0 337.9,82.0" fill="none" stroke="currentColor" stroke-width="1.5" />
+<path d="M24 82 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="14" y="100" font-size="10">Samples of 120 orders</text>
+<rect x="40.1" y="167.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="56.2" y="167.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="72.3" y="166.5" width="15.1" height="1.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="88.4" y="155.2" width="15.1" height="12.8" fill="currentColor" fill-opacity="0.4" />
+<rect x="104.5" y="139.7" width="15.1" height="28.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="120.6" y="116.9" width="15.1" height="51.1" fill="currentColor" fill-opacity="0.4" />
+<rect x="136.7" y="107.2" width="15.1" height="60.8" fill="currentColor" fill-opacity="0.4" />
+<rect x="152.8" y="111.5" width="15.1" height="56.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="168.9" y="119.4" width="15.1" height="48.6" fill="currentColor" fill-opacity="0.4" />
+<rect x="185.0" y="145.8" width="15.1" height="22.2" fill="currentColor" fill-opacity="0.4" />
+<rect x="201.1" y="160.7" width="15.1" height="7.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="217.2" y="161.3" width="15.1" height="6.7" fill="currentColor" fill-opacity="0.4" />
+<rect x="233.3" y="164.0" width="15.1" height="4.0" fill="currentColor" fill-opacity="0.4" />
+<rect x="249.4" y="165.9" width="15.1" height="2.1" fill="currentColor" fill-opacity="0.4" />
+<rect x="265.5" y="167.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="281.6" y="167.1" width="15.1" height="0.9" fill="currentColor" fill-opacity="0.4" />
+<rect x="297.7" y="167.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<polyline points="32.0,167.9 48.2,167.7 64.2,166.5 80.3,163.0 96.5,154.6 112.5,140.1 128.6,122.4 144.8,109.8 160.9,109.8 176.9,122.4 193.1,140.1 209.2,154.6 225.2,163.0 241.3,166.5 257.4,167.7 273.6,167.9 289.6,168.0 305.8,168.0 321.9,168.0 337.9,168.0" fill="none" stroke="currentColor" stroke-width="1.5" />
+<path d="M24 168 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="14" y="186" font-size="10">Samples of 480 orders</text>
+<rect x="40.1" y="253.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="56.2" y="252.8" width="15.1" height="1.2" fill="currentColor" fill-opacity="0.4" />
+<rect x="72.3" y="250.0" width="15.1" height="4.0" fill="currentColor" fill-opacity="0.4" />
+<rect x="88.4" y="240.0" width="15.1" height="14.0" fill="currentColor" fill-opacity="0.4" />
+<rect x="104.5" y="223.9" width="15.1" height="30.1" fill="currentColor" fill-opacity="0.4" />
+<rect x="120.6" y="205.7" width="15.1" height="48.3" fill="currentColor" fill-opacity="0.4" />
+<rect x="136.7" y="193.5" width="15.1" height="60.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="152.8" y="197.5" width="15.1" height="56.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="168.9" y="213.3" width="15.1" height="40.7" fill="currentColor" fill-opacity="0.4" />
+<rect x="185.0" y="228.2" width="15.1" height="25.8" fill="currentColor" fill-opacity="0.4" />
+<rect x="201.1" y="241.5" width="15.1" height="12.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="217.2" y="247.6" width="15.1" height="6.4" fill="currentColor" fill-opacity="0.4" />
+<rect x="233.3" y="252.2" width="15.1" height="1.8" fill="currentColor" fill-opacity="0.4" />
+<rect x="249.4" y="252.5" width="15.1" height="1.5" fill="currentColor" fill-opacity="0.4" />
+<rect x="265.5" y="253.7" width="15.1" height="0.3" fill="currentColor" fill-opacity="0.4" />
+<polyline points="32.0,253.9 48.2,253.7 64.2,252.5 80.3,249.0 96.5,240.6 112.5,226.1 128.6,208.4 144.8,195.8 160.9,195.8 176.9,208.4 193.1,226.1 209.2,240.6 225.2,249.0 241.3,252.5 257.4,253.7 273.6,253.9 289.6,254.0 305.8,254.0 321.9,254.0 337.9,254.0" fill="none" stroke="currentColor" stroke-width="1.5" />
+<path d="M24 254 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M24.0 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="24" y="270" font-size="10" text-anchor="middle">-4</text>
+<path d="M88.4 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="88.4" y="270" font-size="10" text-anchor="middle">-2</text>
+<path d="M152.8 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="152.8" y="270" font-size="10" text-anchor="middle">0</text>
+<path d="M217.2 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="217.2" y="270" font-size="10" text-anchor="middle">2</text>
+<path d="M281.6 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="281.6" y="270" font-size="10" text-anchor="middle">4</text>
+<path d="M346.0 254 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="346" y="270" font-size="10" text-anchor="middle">6</text>
+<text x="185" y="285" font-size="10" text-anchor="middle">sample mean minus true mean, in standard errors</text>
+<path d="M14 296 H34" stroke="currentColor" stroke-width="1.5" fill="none" />
+<text x="40" y="299.5" font-size="10">the bell curve</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the orders have a skewness of 6.21, a long right tail. The means have 0.79, 0.70 and 0.27: far lower, and near 0 at 480 orders. That is the Central Limit Theorem in one sentence: **when you average many independent draws, the averages pile up in a bell shape around the population mean, with a spread of sigma divided by the square root of n, whatever the shape of the data, if the sample is large enough.** At 30 and 120 orders the right lean is still there, so how large is large enough depends on how lopsided the data are. The OpenIntro rule of thumb for 30 orders or more asks for no particularly extreme outliers, and the 197.00 order of the file is one.
+
+<Aside type="tip" title="Remember">
+
+- A sample mean changes with the sample; a seed makes the draw repeat.
+- The sampling distribution of the mean centers on the parameter, and its SD is the standard error, sigma divided by the square root of n.
+- Halving the standard error takes four times the sample.
+- With enough independent draws the means form a bell shape, whatever the data look like.
+
+**Common trap:** using the SD of single orders where the SE of the mean belongs, or expecting twice the sample to halve the SE.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-sampling-variability-clt-1">
+
+**How much would the mean order value of 100 Harbor orders move from sample to sample?** Take the 355 Harbor orders as the population. Find the standard deviation of that population, then the standard error of the mean for samples of 100 orders, rounded to 2 decimals. Expected: `answer_1` is a number.
+
+```python
+harbor = orders[orders["store_id"] == 3]["value"].to_numpy()  # given: the 355 Harbor orders as the population
+# the SD of this population, then the standard error of the mean for samples of 100, rounded to 2 decimals
+answer_1 = None  # replace None
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 3 divided the SD of the population by the square root of the sample size. `harbor.std()` is the SD of the 355 orders.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+sigma_harbor = harbor.std()
+answer_1 = round(float(sigma_harbor / np.sqrt(...)), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+harbor = orders[orders["store_id"] == 3]["value"].to_numpy()
+sigma_harbor = harbor.std()
+answer_1 = round(float(sigma_harbor / np.sqrt(100)), 2)
+```
+
+0.75: Harbor's orders have an SD of 7.51, and a mean of 100 of them has a standard error of 7.51 divided by 10. The SD of 7.51 is the spread of single orders, so it is not the answer, and the check cell says so.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-sampling-variability-clt-2">
+
+**How many orders must a sample hold before the standard error of its mean order value is at most 0.5 dollars?** Before you start, say in one sentence what the result looks like: one whole number. Use the SD of all 1,800 orders as sigma, and find the smallest whole sample size that brings the standard error to 0.5 or below. Put it in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a whole number.
+
+<details>
+<summary>Hint</summary>
+
+Turn the formula around: SE = sigma / sqrt(n), so sqrt(n) = sigma / 0.5. Then ask what n is, and round up with `np.ceil`, because a sample cannot hold a fraction of an order.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One whole number in the hundreds."*
+
+```python
+sigma = values.std()
+answer_2 = int(np.ceil((... / 0.5) ** 2))
+```
+
+</details>
+
+<Solution>
+
+```python
+sigma = values.std()
+answer_2 = int(np.ceil((sigma / 0.5) ** 2))
+```
+
+297 orders: sigma divided by 0.5 is 17.2, and 17.2 squared is 296.8, which rounds up to 297. With 296 orders the standard error is 0.5006, just over the limit. The check cell reports 18, the answer without the square, as a hint.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: say the Central Limit Theorem in one sentence.
+
+   <details>
+   <summary>answer</summary>
+
+   When you average many independent draws, the averages pile up in a bell shape around the population mean, with a spread of sigma divided by the square root of n, whatever the shape of the data, if the sample is large enough.
+
+   </details>
+
+<Exercise id="core-sampling-variability-clt-3">
+
+**Spot the flaw.** A colleague builds 1,000 sample means of 30 orders, but the SD of the means comes out as 0.0. Fix the lines so that each of the 1,000 means comes from its own sample, then set `answer_3` to the average of the means and the SD of the means, each rounded to 1 decimal. Expected: `answer_3` is close to `[12.7, 1.6]`: the check cell accepts a difference of up to 0.25 in each number, because the numbers depend on the seed.
+
+```python
+rng = np.random.default_rng(7)
+one_sample_mean = rng.choice(values, size=30).mean()
+means_3 = np.array([one_sample_mean for _ in range(1000)])  # the colleague's 1,000 sample means
+answer_3 = [round(float(means_3.mean()), 1), round(float(means_3.std(ddof=1)), 1)]
+```
+
+<details>
+<summary>Hint</summary>
+
+Print `means_3[:5]`. How many different numbers are there? Look at where the line with `rng.choice` sits compared with the line that makes 1,000 values.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+means_3 = np.array([... for _ in range(1000)])
+```
+
+</details>
+
+<Solution>
+
+```python
+rng = np.random.default_rng(7)
+means_3 = np.array([rng.choice(values, size=30).mean() for _ in range(1000)])
+answer_3 = [round(float(means_3.mean()), 1), round(float(means_3.std(ddof=1)), 1)]
+```
+
+With seed 7 the notebook prints `[12.7, 1.6]`. The colleague drew one sample and copied its mean 1,000 times, so the SD of the copies was 0.0 and their average was that one mean, 15.5. The draw has to sit inside the loop, once for each sample.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can simulate the sampling distribution of a mean with seeded draws, tell the standard error from the standard deviation, predict how the standard error changes with the sample size, and state the Central Limit Theorem in one sentence.*
+Test: Exercise core-sampling-variability-clt-2, done from the notebook without opening the hints.
+
+The pattern to remember: **an average is itself a random number, and its spread is the SD divided by the square root of n.** The next lesson, *Confidence intervals* (C7), turns that spread into an interval you can report.

@@ -1,0 +1,589 @@
+---
+id: core-confidence-intervals
+title: Confidence intervals
+description: Estimate a mean or a proportion with an interval, read the interval correctly, and bootstrap one when no formula fits.
+stage: core
+order: 70
+level: intermediate
+duration: 30
+objectives:
+  - Compute a confidence interval for a proportion and for a mean
+  - Interpret a 95 percent interval as long-run coverage
+  - Say what makes an interval narrower
+  - Build a bootstrap interval for a median
+  - Tell a confidence interval from a prediction interval
+prerequisites:
+  - core-sampling-variability-clt
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-confidence-intervals.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'OpenIntro Statistics, 4th edition: sections 5.2 (confidence intervals for a proportion) and 7.1 (one-sample means with the t-distribution) (accessed 2026-11-20)'
+    url: https://www.openintro.org/book/os/
+  - title: 'Seeing Theory (Brown University): Frequentist inference, confidence intervals and the bootstrap (accessed 2026-11-20)'
+    url: https://seeing-theory.brown.edu/frequentist-inference/index.html
+  - title: 'Hoekstra, Morey, Rouder and Wagenmakers (2014): Robust misinterpretation of confidence intervals, Psychonomic Bulletin & Review 21(5) (accessed 2026-11-20)'
+    url: https://doi.org/10.3758/s13423-013-0572-3
+  - title: 'SciPy documentation: scipy.stats.t, the interval method (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html
+  - title: 'SciPy documentation: scipy.stats.bootstrap (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 4.1.3.2 Prediction (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd132.htm
+  - title: 'NIST Dataplot reference manual: PREDICTION LIMITS for a mean (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/software/dataplot/refman1/auxillar/predlimi.htm
+status: draft
+---
+
+TODO(owner): team draft (SPEC D24) for your edits; `reviewed` holds the stub date until you publish. Part 1 ends with the project step below (SPEC D49). Other lessons are named by title and code, not linked, because drafts do not link yet.
+
+TODO(owner): unit 3 calls `stats.bootstrap(..., rng=...)`, a keyword the SciPy documentation lists. The notebook ran on SciPy 1.18; confirm that the Colab runtime's SciPy accepts `rng` before you publish.
+
+## The question
+
+The owner asks:
+
+> Last meeting you said that about a quarter of orders are paid by mobile and that an order is worth about 12.80 dollars, from a sample of 200 orders. How much can I trust those two numbers? Give me a range I can plan with.
+
+The first rows of that sample, 200 orders drawn at random from the 1,800:
+
+| order_id | store_id | ordered_at | payment_method | value |
+|---:|---:|---|---|---:|
+| 1161 | 2 | 2026-01-22 13:44:00 | card | 14.25 |
+| 2394 | 1 | 2026-05-27 10:52:00 | cash | 13.00 |
+| 2179 | 2 | 2026-05-10 13:33:00 | card | 24.50 |
+| 1790 | 3 | 2026-04-06 14:40:00 | cash | 13.75 |
+
+By the end you can give the owner a range for a share, a mean and a median, say what the 95 percent promises, and finish Part 1 with a one-page report.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Several metrics in one pass* (S9), a share is the rows that pass a test divided by all the rows. `(sample["payment_method"] == "mobile").mean()` is its twin: `True` counts as 1, so the mean of the column is the share.
+
+**Diverge.** A SQL query returns one number for a share. An interval needs a second number, how far off the first could be. Unit 1 builds it.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Sampling variability and the Central Limit Theorem* (C6), the SD of single order values is 8.62. Write the standard error of the mean of 100 orders in code.
+
+   <details>
+   <summary>answer</summary>
+
+   `8.62 / 100 ** 0.5`, which is 0.862: the SD divided by the square root of n.
+
+   </details>
+
+2. In *Samples and the ways they mislead* (C5), a convenience sample of 5,000 morning orders gives a very narrow interval for the mean. Does the narrow interval fix its bias?
+
+   <details>
+   <summary>answer</summary>
+
+   No. More orders shrink the luck of the draw, not a bias.
+
+   </details>
+
+## The big idea
+
+An estimate on its own hides how far off it could be, so you report it with a margin made from its standard error.
+
+<svg viewBox="0 0 360 118" width="360" role="img" aria-labelledby="ci-idea-t ci-idea-d">
+<title id="ci-idea-t">The parts of a confidence interval</title>
+<desc id="ci-idea-d">A number line with a dot in the middle labeled estimate, a thick bar running from a low end on the left to a high end on the right, and a note that the margin from the dot to either end is a multiplier times the standard error.</desc>
+<defs>
+<marker id="ci-idea-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<path d="M30 62 H330" stroke="currentColor" stroke-opacity="0.35" fill="none" />
+<path d="M90 62 H270" stroke="currentColor" stroke-width="5" stroke-opacity="0.55" fill="none" />
+<path d="M90 52 V72 M270 52 V72" stroke="currentColor" stroke-width="2" fill="none" />
+<circle cx="180" cy="62" r="6" fill="currentColor" />
+<text x="90" y="42" font-size="10.5" text-anchor="middle">low end</text>
+<text x="180" y="42" font-size="10.5" text-anchor="middle" font-weight="600">estimate</text>
+<text x="270" y="42" font-size="10.5" text-anchor="middle">high end</text>
+<path d="M184 84 H266" stroke="currentColor" stroke-opacity="0.75" fill="none" marker-end="url(#ci-idea-arrow)" />
+<text x="225" y="103" font-size="10.5" text-anchor="middle">margin = multiplier × SE</text>
+</g>
+</svg>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: the interval for a share and a mean, the reading of the 95 percent, the bootstrap, the prediction interval. The setup cell gave `values`, the 1,800 order values, and `mu`, their mean. The 1,800 orders play the population, so each interval can be checked against the truth.
+
+<OpenInColab />
+
+### 1. Estimate plus and minus a margin
+
+**Idea.** A confidence interval is an estimate plus and minus a margin: estimate ± multiplier × SE. For a share, the SE is the square root of p̂(1 − p̂)/n and the multiplier for 95 percent is 1.96, as in the OpenIntro textbook; it asks for at least 10 successes and 10 failures in the sample. For a mean, the SE is s/√n from lesson C6, and the multiplier `t*` comes from the t distribution with n − 1 degrees of freedom, because s is itself an estimate. `stats.t.interval` gives the interval that leaves equal areas out on each side, as the SciPy documentation puts it.
+
+**Try it.** Draw 200 orders with replacement, and build the interval for the share paid by mobile:
+
+```python
+rng = np.random.default_rng(42)
+pick = rng.integers(0, len(orders), size=200)             # 200 order positions, drawn with replacement
+sample = orders.iloc[pick]                                # the sample of 200 orders
+n = len(sample)
+p_hat = (sample["payment_method"] == "mobile").mean()     # the share paid by mobile in the sample
+se = np.sqrt(p_hat * (1 - p_hat) / n)                     # the standard error of a share
+print(n, round(float(p_hat), 3), round(float(se), 3))
+print(round(float(p_hat - 1.96 * se), 3), round(float(p_hat + 1.96 * se), 3))
+print(round(float((orders["payment_method"] == "mobile").mean()), 3))   # the truth for all 1,800 orders
+```
+
+**Predict:** a sample of 200 orders gives a share of mobile payments. Will the interval around it contain the share of all 1,800 orders, printed last? And how wide will it be: a few percentage points or tens?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+200 0.26 0.031
+0.199 0.321
+0.303
+```
+
+</details>
+
+*Why:* the sample share is 0.26 with a standard error of 0.031, so the margin is 1.96 × 0.031 and the interval runs from 0.199 to 0.321. The share of all 1,800 orders, 0.303, is inside. The interval is about 12 percentage points wide: 200 orders do not pin a share down.
+
+**Try it.** Build the interval for the mean order value of the same sample, by hand and with SciPy:
+
+```python
+x = sample["value"].to_numpy()                    # the 200 order values
+m, s = x.mean(), x.std(ddof=1)
+sem = s / np.sqrt(n)                              # the standard error of the mean, estimated from the sample
+t_star = stats.t.ppf(0.975, df=n - 1)             # the t multiplier for 95 percent
+print(round(float(m), 2), round(float(sem), 2), round(float(t_star), 3))
+print(round(float(m - t_star * sem), 2), round(float(m + t_star * sem), 2))
+low, high = stats.t.interval(0.95, df=n - 1, loc=m, scale=sem)    # the same interval from SciPy
+print(round(float(low), 2), round(float(high), 2), round(float(mu), 2))
+```
+
+**Predict:** for a mean, the multiplier is `t*` instead of 1.96. Will `t*` for 200 orders be above or below 1.96? Will SciPy's interval agree with the hand-made one, and will it contain the true mean, printed last?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12.8 0.51 1.972
+11.8 13.81
+11.8 13.81 12.64
+```
+
+</details>
+
+*Why:* `t*` is 1.972, a little above 1.96, and the interval, 11.80 to 13.81, is the same by hand and from SciPy. The true mean, 12.64, is inside it.
+
+### 2. What the 95 percent means, and what makes an interval narrower
+
+**Idea.** The 95 percent describes the recipe, not one interval: draw a sample, build the interval the same way, and repeat, as the Seeing Theory page puts it. Read one interval as the range of values for the mean that the data do not rule out. It is not a range that holds 95 percent of the orders, nor a 95 percent chance that this interval holds the mean. Hoekstra and colleagues (2014) gave 120 researchers and 442 students six false statements about a confidence interval; on average they accepted more than three.
+
+**Try it.** Build the interval from 1,000 different samples of 200 orders and count how often it holds the true mean:
+
+```python
+rng = np.random.default_rng(42)
+low_miss = high_miss = 0
+spans = []                                        # the first 20 intervals, for the picture
+for k in range(1000):
+    xs = values[rng.integers(0, len(values), size=200)]
+    lo, hi = stats.t.interval(0.95, df=199, loc=xs.mean(), scale=xs.std(ddof=1) / np.sqrt(200))
+    low_miss += hi < mu                           # the interval lies below the true mean
+    high_miss += lo > mu                          # the interval lies above it
+    if k < 20:
+        spans.append((float(lo), float(hi)))
+print(1000 - low_miss - high_miss, low_miss, high_miss)
+print(sum(1 for lo, hi in spans if lo <= mu <= hi), "of the first 20 contain the true mean")
+```
+
+**Predict:** how many of the 1,000 intervals will contain the true mean? Of those that miss it, will more lie below it or above it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+952 41 7
+17 of the first 20 contain the true mean
+```
+
+<figure>
+<svg viewBox="0 0 360 252" width="360" role="img" aria-labelledby="ci-cover-t ci-cover-d">
+<title id="ci-cover-t">Twenty 95 percent intervals from twenty samples of 200 orders</title>
+<desc id="ci-cover-d">Twenty horizontal intervals, one above the other, each the 95 percent interval of the mean order value from its own sample. A dashed vertical line marks the mean of all 1,800 orders, 12.64. 17 of the 20 intervals cross the line; 3 do not and are drawn thicker.</desc>
+<defs>
+<marker id="ci-cover-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<path d="M129.8 14.0 H222.1" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M129.8 11.5 v5 M222.1 11.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M117.6 22.5 H222.9" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M117.6 20.0 v5 M222.9 20.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M74.2 31.0 H265.5" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M74.2 28.5 v5 M265.5 28.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M130.1 39.5 H217.4" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M130.1 37.0 v5 M217.4 37.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M134.2 48.0 H233.1" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M134.2 45.5 v5 M233.1 45.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M69.8 56.5 H165.4" stroke="currentColor" stroke-width="3.2" stroke-opacity="1" fill="none" />
+<path d="M69.8 54.0 v5 M165.4 54.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="1" fill="none" />
+<text x="176.497" y="60" font-size="10">misses</text>
+<path d="M128.9 65.0 H216.9" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M128.9 62.5 v5 M216.9 62.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M111.2 73.5 H202.0" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M111.2 71.0 v5 M202.0 71.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M109.0 82.0 H195.8" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M109.0 79.5 v5 M195.8 79.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M96.4 90.5 H185.9" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M96.4 88.0 v5 M185.9 88.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M119.9 99.0 H216.6" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M119.9 96.5 v5 M216.6 96.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M137.2 107.5 H245.0" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M137.2 105.0 v5 M245.0 105.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M139.7 116.0 H229.0" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M139.7 113.5 v5 M229.0 113.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M116.3 124.5 H207.2" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M116.3 122.0 v5 M207.2 122.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M128.6 133.0 H222.9" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M128.6 130.5 v5 M222.9 130.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M131.9 141.5 H234.1" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M131.9 139.0 v5 M234.1 139.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M73.4 150.0 H161.2" stroke="currentColor" stroke-width="3.2" stroke-opacity="1" fill="none" />
+<path d="M73.4 147.5 v5 M161.2 147.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="1" fill="none" />
+<text x="176.497" y="153.5" font-size="10">misses</text>
+<path d="M126.4 158.5 H224.1" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M126.4 156.0 v5 M224.1 156.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M113.2 167.0 H204.6" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.6" fill="none" />
+<path d="M113.2 164.5 v5 M204.6 164.5 v5" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" fill="none" />
+<path d="M86.7 175.5 H168.3" stroke="currentColor" stroke-width="3.2" stroke-opacity="1" fill="none" />
+<path d="M86.7 173.0 v5 M168.3 173.0 v5" stroke="currentColor" stroke-width="1" stroke-opacity="1" fill="none" />
+<text x="176.497" y="179" font-size="10">misses</text>
+<path d="M168.5 6 V190" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<path d="M24 190 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M47.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="47" y="206" font-size="10" text-anchor="middle">10</text>
+<path d="M93.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="93" y="206" font-size="10" text-anchor="middle">11</text>
+<path d="M139.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="139" y="206" font-size="10" text-anchor="middle">12</text>
+<path d="M185.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="185" y="206" font-size="10" text-anchor="middle">13</text>
+<path d="M231.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="231" y="206" font-size="10" text-anchor="middle">14</text>
+<path d="M277.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="277" y="206" font-size="10" text-anchor="middle">15</text>
+<path d="M323.0 190 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="323" y="206" font-size="10" text-anchor="middle">16</text>
+<text x="185" y="221" font-size="10" text-anchor="middle">95% interval of the mean order value (&#36;)</text>
+<path d="M14 237 H34" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<text x="40" y="240.5" font-size="10">the mean of all 1,800 orders: 12.64</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* 952 of 1,000 intervals hold the mean, so 4.8 percent miss, close to the 5 percent the recipe allows; 3 of the first 20 missed, which a short run can do. 41 of the 48 misses lie below the mean: the order values lean right, so a typical sample misses the biggest orders and lands a little low.
+
+**Idea.** The width of the interval is the multiplier times s/√n. The next cell holds s fixed at the SD of all orders and changes n and the confidence level.
+
+**Try it.** Print the width of the interval, from low end to high end:
+
+```python
+s_all = values.std(ddof=1)                        # the spread of single orders, kept fixed
+for size in (50, 200, 800):
+    widths = [2 * stats.t.ppf(0.5 + level / 2, df=size - 1) * s_all / np.sqrt(size) for level in (0.90, 0.95, 0.99)]
+    print(size, [round(float(w), 2) for w in widths])
+```
+
+**Predict:** the cell prints the width for three sample sizes (50, 200, 800) at three confidence levels (90, 95 and 99 percent). What happens to the width when n grows four times, and when the level goes up?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+50 [4.09, 4.9, 6.53]
+200 [2.01, 2.4, 3.17]
+800 [1.0, 1.2, 1.57]
+```
+
+</details>
+
+*Why:* each row is about half as wide as the one above it (4.90, 2.40, 1.20 at 95 percent): four times the orders halve the width. Along a row a higher level is wider: more certainty, less precision.
+
+### 3. A bootstrap interval for a median
+
+**Idea.** The median has no simple formula for its SE. The bootstrap builds the sampling distribution from the sample itself: treat the sample as a stand-in for the population, resample it with replacement to the same size, compute the median of each resample, and take the middle 95 percent of the medians. Seeing Theory describes it as resampling with replacement from the empirical distribution; SciPy's `bootstrap` has a `percentile` method for the same idea.
+
+**Try it.** Bootstrap the median of the 200 orders of unit 1:
+
+```python
+rng = np.random.default_rng(7)
+boot = np.array([np.median(rng.choice(x, size=len(x))) for _ in range(2000)])    # 2,000 resamples of the sample, with replacement
+print(round(float(np.median(x)), 2), round(float(boot.std(ddof=1)), 2))
+b_low, b_high = np.percentile(boot, [2.5, 97.5])                                 # the middle 95 percent of the 2,000 medians
+print(round(float(b_low), 2), round(float(b_high), 2), round(float(np.median(values)), 2))
+res = stats.bootstrap((x,), np.median, confidence_level=0.95, method="percentile", rng=np.random.default_rng(7))
+print(round(float(res.confidence_interval.low), 2), round(float(res.confidence_interval.high), 2))
+```
+
+**Predict:** the cell resamples the 200 orders 2,000 times and takes the median of each resample. Will the interval contain the sample's median? Will it contain the median of all 1,800 orders, printed last?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12.5 0.66
+10.75 13.0 11.75
+10.75 13.0
+```
+
+</details>
+
+*Why:* the sample median is 12.5 and the interval, 10.75 to 13.0, holds both it and the true median, 11.75. The SD of the 2,000 medians, 0.66, is the bootstrap standard error. SciPy's `bootstrap` gives the same ends here.
+
+### 4. An interval for the mean and an interval for the next order
+
+**Idea.** An interval for the mean says where the parameter probably sits. A prediction interval says where one new value will probably fall, and the NIST handbook explains, for regression, why it is wider: it includes the uncertainty of the new measurement as well as that of the estimate. The results below show the same here. Under a bell-shape assumption it is x̄ ± `t*` × s × √(1 + 1/n), and the NIST reference says that this formula is fairly tolerant of non-normal data unless the sample is small or the data strongly skewed. The sample's own 2.5th and 97.5th percentiles are a rough alternative that assumes no bell.
+
+**Try it.** Build both ranges for one new order, and check them against all 1,800 orders:
+
+```python
+half = t_star * s * np.sqrt(1 + 1 / n)            # the bell-shape formula for the next single order
+pi_low, pi_high = m - half, m + half
+q_low, q_high = np.percentile(x, [2.5, 97.5])     # the middle 95 percent of the sample itself
+print(round(float(pi_low), 2), round(float(pi_high), 2))
+print(round(float(q_low), 2), round(float(q_high), 2))
+share = lambda lo, hi: round(float(((values >= lo) & (values <= hi)).mean()), 3)    # the share of all 1,800 orders inside
+print(share(pi_low, pi_high), share(q_low, q_high), float(values.min()))
+```
+
+**Predict:** the interval for the mean of the sample was 11.80 to 13.81 dollars. How much wider will an interval for one single new order be? Can the formula's lower end be a real order value, when the cheapest order of all is printed last?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+-1.42 27.03
+3.25 31.51
+0.952 0.963 3.0
+```
+
+<figure>
+<svg viewBox="0 0 360 176" width="360" role="img" aria-labelledby="ci-pi-t ci-pi-d">
+<title id="ci-pi-t">An interval for the mean and two intervals for the next order</title>
+<desc id="ci-pi-d">Three horizontal bars on a dollar scale from minus 5 to 35. The interval for the mean is narrow, 11.80 to 13.81. The interval for one new order from the bell formula runs from -1.42 to 27.03, below zero at its low end. The interval from the sample's percentiles runs from 3.25 to 31.51.</desc>
+<defs>
+<marker id="ci-pi-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<g fill="currentColor">
+<text x="10" y="22" font-size="10" font-weight="600">mean, 95% interval</text>
+<text x="10" y="36" font-size="10" fill-opacity="0.85">11.80 to 13.81</text>
+<rect x="242.8" y="17" width="8.9" height="16" fill="currentColor" fill-opacity="0.5" />
+<text x="10" y="62" font-size="10" font-weight="600">next order, bell formula</text>
+<text x="10" y="76" font-size="10" fill-opacity="0.85">-1.42 to 27.03</text>
+<rect x="183.9" y="57" width="126.6" height="16" fill="currentColor" fill-opacity="0.5" />
+<text x="10" y="102" font-size="10" font-weight="600">next order, percentiles</text>
+<text x="10" y="116" font-size="10" fill-opacity="0.85">3.25 to 31.51</text>
+<rect x="204.7" y="97" width="125.7" height="16" fill="currentColor" fill-opacity="0.5" />
+<path d="M168 6 V132 H346" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<path d="M168.0 132 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="168" y="148" font-size="10" text-anchor="middle">-5</text>
+<path d="M190.2 132 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="190.25" y="148" font-size="10" text-anchor="middle">0</text>
+<path d="M234.8 132 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="234.75" y="148" font-size="10" text-anchor="middle">10</text>
+<path d="M279.2 132 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="279.25" y="148" font-size="10" text-anchor="middle">20</text>
+<path d="M323.8 132 v4" stroke="currentColor" stroke-opacity="0.6" fill="none" />
+<text x="323.75" y="148" font-size="10" text-anchor="middle">30</text>
+<path d="M246.5 6 V132" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<path d="M14 164 H34" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" fill="none" />
+<text x="40" y="167.5" font-size="10">the mean of all 1,800 orders: 12.64</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the range for one order is about 28 dollars wide, against 2 for the mean: no sample size shrinks it below the spread of single orders. The formula's low end is below zero, which no order can be: the values lean right and are not bell-shaped. The percentile range, 3.25 to 31.51, holds 96.3 percent of all orders; we can check that only because all 1,800 are in hand.
+
+<Aside type="tip" title="Remember">
+
+- An interval is the estimate ± multiplier × SE: 1.96 for a share, `t*` for a mean.
+- The 95 percent describes the recipe: in the long run about 95 of 100 such intervals hold the parameter.
+- Four times the sample halves the width; a higher level widens it.
+- The bootstrap, resampling with replacement, gives an interval when no formula fits.
+- An interval for the mean is not a range for one order: that one is far wider.
+
+**Common trap:** reading "95 percent" as "95 percent of the orders lie in it" or as "this interval holds the mean with 95 percent chance".
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-confidence-intervals-1">
+
+**What share of Harbor's orders is paid by mobile, give or take?** Take the 355 Harbor orders as the sample. Compute the standard error of the share and the 95 percent interval p_hat plus and minus 1.96 standard errors, each end rounded to 3 decimals, as a list [low, high]. Expected: `answer_1` is a list of two numbers.
+
+```python
+harbor = orders[orders["store_id"] == 3]                       # given: the 355 Harbor orders
+p_h = (harbor["payment_method"] == "mobile").mean()           # given: the share paid by mobile
+# the standard error of the share, then the interval, each end rounded to 3 decimals
+answer_1 = None  # replace None with [low, high]
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 1 used `np.sqrt(p_hat * (1 - p_hat) / n)` for the standard error and `p_hat - 1.96 * se`, `p_hat + 1.96 * se` for the two ends.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+se_h = np.sqrt(p_h * (1 - p_h) / len(harbor))
+answer_1 = [round(float(p_h - ...), 3), round(float(p_h + ...), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+harbor = orders[orders["store_id"] == 3]
+p_h = (harbor["payment_method"] == "mobile").mean()
+se_h = np.sqrt(p_h * (1 - p_h) / len(harbor))
+answer_1 = [round(float(p_h - 1.96 * se_h), 3), round(float(p_h + 1.96 * se_h), 3)]
+```
+
+120 of Harbor's 355 orders are mobile, a share of 0.338, with a standard error of 0.025: the interval is 0.289 to 0.387. Without the square root the interval would be 0.337 to 0.339, far too narrow, and the check cell says so.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-confidence-intervals-2">
+
+**What is the mean order value at Campus, give or take?** Before you start, say in one sentence what the result looks like: two dollar amounts, a low and a high. Take the Campus orders, store 2, as the sample and build the 95 percent interval for their mean with the t multiplier, each end rounded to 2 decimals, as a list [low, high]. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+Get the values of the Campus orders as an array, then repeat unit 1: the SD with `ddof=1`, divided by the square root of n, and `stats.t.interval(0.95, df=n - 1, loc=mean, scale=sem)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two amounts a little under and a little over 12.6."*
+
+```python
+campus = orders[orders["store_id"] == 2]["value"].to_numpy()
+sem_c = campus.std(ddof=1) / np.sqrt(len(campus))
+```
+
+</details>
+
+<Solution>
+
+```python
+campus = orders[orders["store_id"] == 2]["value"].to_numpy()
+sem_c = campus.std(ddof=1) / np.sqrt(len(campus))
+low_c, high_c = stats.t.interval(0.95, df=len(campus) - 1, loc=campus.mean(), scale=sem_c)
+answer_2 = [round(float(low_c), 2), round(float(high_c), 2)]
+```
+
+12.0 to 13.15 dollars: the 716 Campus orders average 12.58 with a standard error of 0.29. The middle 95 percent of single Campus orders is a much wider range, 3.25 to 31.28: it says where one order falls, not where the mean is. The check cell reports those two numbers as a hint.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a report says "the 95 percent interval for the mean order is 11.80 to 13.81 dollars." Write, in one sentence, what the 95 percent is about.
+
+   <details>
+   <summary>answer</summary>
+
+   It is about the recipe: built the same way from many samples, about 95 in 100 such intervals would hold the true mean. It does not say that 95 in 100 orders cost between 11.80 and 13.81.
+
+   </details>
+
+<Exercise id="core-confidence-intervals-3">
+
+**Spot the flaw.** A colleague bootstraps the median order value of a sample of 100 Old Town orders, but the interval comes out with no width: both ends are the same number. Fix the lines, then set `answer_3` to the 95 percent bootstrap interval, each end rounded to 2 decimals, as a list [low, high]. Expected: `answer_3` is close to `[8.0, 13.75]`: the check cell accepts a difference of up to 0.75 in each end, because the numbers depend on the seed.
+
+```python
+rng = np.random.default_rng(7)
+old_town = orders[orders["store_id"] == 1]["value"].to_numpy()
+sample_3 = rng.choice(old_town, size=100, replace=False)       # the sample of 100 Old Town orders
+boot_3 = np.array([np.median(rng.choice(sample_3, size=100, replace=False)) for _ in range(2000)])   # the colleague's resamples
+answer_3 = [round(float(v), 2) for v in np.percentile(boot_3, [2.5, 97.5])]
+```
+
+<details>
+<summary>Hint</summary>
+
+Print the first five of `boot_3`. A resample of 100 values drawn from 100 values without replacement holds exactly the same 100 values. What does `replace` do?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+boot_3 = np.array([np.median(rng.choice(sample_3, size=100, ...)) for _ in range(2000)])
+```
+
+</details>
+
+<Solution>
+
+```python
+rng = np.random.default_rng(7)
+old_town = orders[orders["store_id"] == 1]["value"].to_numpy()
+sample_3 = rng.choice(old_town, size=100, replace=False)
+boot_3 = np.array([np.median(rng.choice(sample_3, size=100)) for _ in range(2000)])
+answer_3 = [round(float(v), 2) for v in np.percentile(boot_3, [2.5, 97.5])]
+```
+
+The sample is rightly drawn without replacement, but the resamples must be with replacement. Without it, every resample is the same 100 orders in another order, so every median is the same: the check cell reports one number twice.
+
+</Solution>
+
+</Exercise>
+
+## Project step: a descriptive report on cafe-sales
+
+Part 1 of the advanced core ends here. **The brief.** The owner wants a one-page report on the orders of cafe-sales, January to June 2026, 1,800 orders, to read before a meeting. It answers three questions in plain words: **What is typical? How spread out? How sure are you?** Treat the 1,800 orders as a sample of the orders these cafes take on an ordinary day. Work in the last section of the notebook: name `typical_median`, `typical_mean`, `spread_sd` and `spread_iqr` (each rounded to 2 decimals), `ci_mean` (95 percent, t multiplier, 2 decimals), `ci_share` (the share paid by mobile, 3 decimals) and `ci_median` (a 95 percent bootstrap interval, 2 decimals), then write `report` with an f-string, so that every number in it comes from a variable. The check cell compares the seven variables with known answers; the report itself is read by you.
+
+**Self-check list**, before you call it done:
+
+1. Every number in `report` comes from a cell: none is typed.
+2. It gives a median and a mean, and says which one it would quote for a typical order, and why.
+3. It says whether order 2075, the 197.00 order with the extra zero, is in the numbers.
+4. It gives the spread two ways: the SD and the IQR.
+5. Each interval says its level and reads as a range of plausible values for the parameter, not as a share of orders.
+6. One sentence says who the data can speak for and who it cannot.
+
+<details>
+<summary>A model report, written by the model solution of the notebook</summary>
+
+```text
+The typical order is worth 11.75 dollars (the median). The mean, 12.64, is pulled up by a few large orders, one of them 197.00 dollars (order 2075). The middle half of the orders runs from 7.00 to 16.50 dollars (IQR 9.50); the SD is 8.62. If these six months are a fair sample of ordinary trade, the mean order is between 12.24 and 13.04 dollars and the median between 11.00 and 12.25 (95% intervals), and 30.3% of orders are paid by mobile, between 28.2% and 32.5%. The data cover three cafes from January to June 2026, and Harbor only from April, so they do not speak for other cafes or later months.
+```
+
+</details>
+
+**Can you do it?** *I can build an interval for a share, a mean and a median, read the 95 percent as long-run coverage, say what makes an interval narrower, and tell an interval for the mean from an interval for one order.*
+Test: Exercise core-confidence-intervals-2, done from the notebook without opening the hints.
+
+The pattern to remember: **report an estimate with its margin, and say what the margin is about.** Part 1 stops here; Part 2 starts with comparing groups, where an interval becomes a decision.
