@@ -60,7 +60,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 		},
 		...stages,
 		{
-			label: 'Project',
+			label: 'About this site',
 			collapsed: true,
 			items: [
 				{ label: 'About', link: '/about/' },
