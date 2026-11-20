@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { cardAnchors, codeRange, entriesOf, isFigure, sheetProblems } from '../src/lib/cheatsheet.ts';
 import { sqlCheatsheet } from '../src/data/cheatsheets/sql.ts';
 import { excelCheatsheet } from '../src/data/cheatsheets/excel.ts';
+import { pythonCheatsheet } from '../src/data/cheatsheets/python.ts';
 import { SHEETS, cheatsheetLink } from '../src/data/cheatsheets/index.ts';
 import { CHEATSHEETS } from '../src/lib/roadmap.ts';
 
@@ -88,8 +89,45 @@ describe('Excel cheatsheet', () => {
 	});
 });
 
+describe('Python cheatsheet', () => {
+	const python = published('python');
+	const entries = entriesOf(pythonCheatsheet);
+
+	test('all 27 lessons are published, cited, and inside their part; twins are published SQL and Excel lessons', () => {
+		assert.equal(python.size, 27);
+		assert.deepEqual(sheetProblems(pythonCheatsheet, python, published('sql'), published('excel')), []);
+		const cited = new Set(entries.map((e) => e.lesson));
+		assert.deepEqual([...cited].sort(), [...python.keys()].sort());
+	});
+	test('follows the data flow in seven parts that cover P1 to P27 once each', () => {
+		assert.deepEqual(
+			pythonCheatsheet.parts.map((p) => p.id),
+			['basics', 'load', 'shape', 'clean', 'reshape', 'charts', 'ship'],
+		);
+		const ranges = pythonCheatsheet.parts.map((p) => (p.codes.includes('–') ? codeRange(p.codes) : [Number(p.codes.slice(1)), Number(p.codes.slice(1))]));
+		assert.equal(ranges[0][0], 1);
+		assert.equal(ranges.at(-1)?.[1], 27);
+		ranges.slice(1).forEach((r, i) => assert.equal(r[0], ranges[i][1] + 1));
+	});
+	test('every card has a pattern and the trap its lesson names; there are three drawings', () => {
+		for (const e of entries) assert.ok(e.trap, `${e.lesson}: a trap`);
+		const figs = pythonCheatsheet.parts.flatMap((p) => p.items.filter(isFigure).map((f) => f.figure));
+		assert.deepEqual(figs.sort(), ['merge', 'split', 'wide']);
+	});
+	test('every cited lesson names a Common trap, which its card carries', () => {
+		for (const e of entries) {
+			const lesson = readFileSync(`src/content/docs/python/${e.lesson}.mdx`, 'utf8');
+			assert.match(lesson, /\*\*Common trap:\*\*/, e.lesson);
+		}
+	});
+	test('is registered for the sidebar and /start/', () => {
+		assert.equal(CHEATSHEETS.python.href, '/python/cheatsheet/');
+	});
+});
+
 describe('Cheatsheet anchors and lesson footer links (D44)', () => {
-	for (const stage of ['sql', 'excel']) {
+	const prefix: Record<string, string> = { sql: 's', excel: 'e', python: 'p' };
+	for (const stage of ['sql', 'excel', 'python']) {
 		const sheet = SHEETS[stage];
 		const lessons = published(stage);
 		const anchors = cardAnchors(sheet, lessons);
@@ -98,7 +136,7 @@ describe('Cheatsheet anchors and lesson footer links (D44)', () => {
 		test(`${stage}: every card anchor is unique, lowercase lesson code, and not a part id`, () => {
 			const ids = [...anchors.values()];
 			assert.equal(new Set(ids).size, ids.length);
-			for (const id of ids) assert.match(id, new RegExp(`^${stage === 'sql' ? 's' : 'e'}\\d+(\\.\\d+)?$`));
+			for (const id of ids) assert.match(id, new RegExp(`^${prefix[stage]}\\d+(\\.\\d+)?$`));
 			for (const id of ids) assert.ok(!partIds.includes(id), id);
 		});
 		test(`${stage}: the first card of a lesson carries its anchor (every cited lesson has one)`, () => {
@@ -128,8 +166,9 @@ describe('Cheatsheet anchors and lesson footer links (D44)', () => {
 		assert.ok(all.length > new Set(all).size);
 		assert.equal(cardAnchors(excelCheatsheet, published('excel')).size, new Set(all).size);
 	});
-	test('a stage without a sheet (Python) and an unknown lesson get no link', () => {
-		assert.equal(cheatsheetLink('python', 'anything', 10), undefined);
+	test('a stage without a sheet (core) and an unknown lesson get no link', () => {
+		assert.equal(cheatsheetLink('core', 'anything', 10), undefined);
+		assert.equal(cheatsheetLink('python', 'no-such-lesson', 10), undefined);
 		assert.equal(cheatsheetLink('sql', 'no-such-lesson', 10), undefined);
 	});
 });

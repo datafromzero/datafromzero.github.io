@@ -42,7 +42,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 - **Excel cheatsheet (D44, 2026-11-19):** `/excel/cheatsheet/` "Excel in a nutshell", data first (six parts in data-flow order, 24 cards, 3 drawings), from
   `src/data/cheatsheets/excel.ts` through the same component. Each card has a `next` (linked SQL lessons, pandas method names, no links to draft pages);
   `tests/cheatsheet.test.ts` checks that every formula is the lesson's own text and every SQL twin is published. No lesson states a duplicate-key trap for
-  lookups, so none is on a card. Python gets its page the same way once its lessons are published.
+  lookups, so none is on a card.
+- **Python cheatsheet (D44, 2026-11-20):** `/python/cheatsheet/` "Python in a nutshell", 27 cards (one per lesson P1–P27) in seven data-flow parts, 3 drawings (`split`, `merge`, `wide`), from
+  `src/data/cheatsheets/python.ts` through the same component. Cards may have a `twin` (linked SQL and Excel lessons); `tests/cheatsheet.test.ts` checks every lesson is cited once and every twin is
+  published. `npm run check:cheatsheet-python` runs every pattern on the cafe-sales data (needs pandas, numpy, openpyxl, matplotlib, seaborn; skips with a message without them; `$` lines are only
+  checked for existing). Python lessons now show the "Sum it up" footer link.
 
 - **Cheatsheet anchors and footer links (D44, 2026-11-19):** each card's id is its lesson code in lowercase (`#s8`; first card when a lesson has
   several); `LessonFooter.astro` shows "Sum it up: this lesson in the SQL cheatsheet →" from `cheatsheetLink` (`src/data/cheatsheets/index.ts`).
@@ -137,8 +141,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   of reshape and chart is unit 3) and writes no cleaned-CSV or twin-notebook companions; P26 grows one file, `pack.py`, in four versions; P27 shows only assistant text written by
   the lesson, labeled as such, and no claim about how a model behaves beyond two NIST AI 600-1 sentences. Still open for the owner: edits and approval of every lesson text, and
   a Colab run of P24 to P26 (`python -m venv` and `ensurepip`, `%pip`, `%%writefile` and `!python` there, and the pins on Colab's Python).
-- **Planned, not part of any batch (owner request, 2026-11-20):** a "Python for engineers" block in the advanced core, to be discussed with the owner after a Muse research
-  issue arrives.
+- **Advanced core redesign (in discussion with the owner, 2026-11-20):** research issues #71 (engineering block), #72 (AI era, data beyond tables,
+  infrastructure awareness) and #73 (DSA literacy plus a practice gym) are in `research/issues/`. Decided: D48, the engineering lessons run on the
+  learner's laptop (VS Code, Git, uv) with Codespaces as fallback. Proposed by the lead, not yet decided: the core as five parts of about 4 hours each
+  (statistics, engineering tools, data systems, decisions and the AI era, a project built part by part), a skip check at the start of each part,
+  about 34 lessons, a data ethics and governance lesson (needs research), the DSA gym after the tracks.
 
 ## Open items and owner decisions still pending
 

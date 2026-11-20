@@ -132,7 +132,7 @@ export function classify(entryId: string): Classified {
 	const [first] = segs;
 	// The SQL playground (src/pages/sql/playground.astro, D42) and the cheatsheets (src/pages/{stage}/cheatsheet.astro, D44)
 	// are pages, not lessons, although their URLs sit in the stage folders.
-	if (path === 'sql/playground' || path === 'sql/cheatsheet' || path === 'excel/cheatsheet') return none();
+	if (path === 'sql/playground' || path === 'sql/cheatsheet' || path === 'excel/cheatsheet' || path === 'python/cheatsheet') return none();
 	if ((STAGES as readonly string[]).includes(first)) {
 		if (segs.length === 1) return none(); // stage landing page
 		if (segs.length === 2) return { kind: 'lesson', locale, path, folder: first };

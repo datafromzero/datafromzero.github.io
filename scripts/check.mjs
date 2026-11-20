@@ -16,6 +16,7 @@ const steps = [
 	['unit tests (graph.ts)', 'npm', ['run', '--silent', 'test:unit']],
 	['fixture tests (valid builds, invalid fails)', 'npm', ['run', '--silent', 'test:fixtures']],
 	['notebooks have no outputs (nbstripout)', 'npm', ['run', '--silent', 'check:notebooks']],
+	['Python cheatsheet patterns run on the cafe-sales data (skipped without pandas)', 'npm', ['run', '--silent', 'check:cheatsheet-python']],
 ];
 
 const failed = [];

@@ -17,6 +17,14 @@ export interface CheatEntry {
 	trap?: string;
 	/** The twin of this pattern in the coming stages (the "Next:" line); only the Excel sheet uses it. */
 	next?: CheatNext;
+	/** The twin of this pattern taught earlier (SQL, Excel), linked to published lessons; only the Python sheet uses it. */
+	twin?: CheatTwin;
+}
+
+/** Where the same idea was taught earlier: published SQL and Excel lessons, each with the words to show. */
+export interface CheatTwin {
+	sql?: { text: string; lesson: string }[];
+	excel?: { text: string; lesson: string }[];
 }
 
 /**
@@ -30,7 +38,7 @@ export interface CheatNext {
 
 /** A small static drawing placed beside the entries of the lesson it explains (see `CheatsheetFigure.astro`). */
 export interface CheatFigure {
-	figure: 'order' | 'joins' | 'window' | 'tidy' | 'lookup' | 'pivot';
+	figure: 'order' | 'joins' | 'window' | 'tidy' | 'lookup' | 'pivot' | 'split' | 'merge' | 'wide';
 	lesson: string;
 }
 
@@ -50,6 +58,8 @@ export interface Cheatsheet {
 	description: string;
 	/** One or two sentences under the title. */
 	intro: string;
+	/** Optional scope note under the intro: what the sheet is not, with links for going further. */
+	scope?: { text: string; links: { label: string; href: string }[] };
 	parts: CheatPart[];
 	/** The line printed under the sheet (a source note). */
 	foot: string;
@@ -103,7 +113,12 @@ export function codeCovers(codes: string, n: number): boolean {
  * Every problem found in a sheet, given the published lessons of its stage as `slug -> order`. `sql` (the published SQL
  * lessons the same way) is given when the sheet has "Next" lines, so that each SQL twin is checked to exist.
  */
-export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, number>, sql?: ReadonlyMap<string, number>): string[] {
+export function sheetProblems(
+	sheet: Cheatsheet,
+	lessons: ReadonlyMap<string, number>,
+	sql?: ReadonlyMap<string, number>,
+	excel?: ReadonlyMap<string, number>,
+): string[] {
 	const out: string[] = [];
 	const seen = new Set<string>();
 	for (const part of sheet.parts) {
@@ -127,6 +142,13 @@ export function sheetProblems(sheet: Cheatsheet, lessons: ReadonlyMap<string, nu
 				if (sql && !sql.has(t.lesson)) out.push(`${item.lesson}: next SQL lesson "${t.lesson}" is not a published SQL lesson`);
 				if (!t.text.trim()) out.push(`${item.lesson}: empty next SQL text`);
 			}
+			for (const [kind, known] of [['sql', sql], ['excel', excel]] as const) {
+				for (const t of item.twin?.[kind] ?? []) {
+					if (known && !known.has(t.lesson)) out.push(`${item.lesson}: twin ${kind} lesson "${t.lesson}" is not a published ${kind} lesson`);
+					if (!t.text.trim()) out.push(`${item.lesson}: empty twin ${kind} text`);
+				}
+			}
+			if (item.twin && !item.twin.sql?.length && !item.twin.excel?.length) out.push(`${item.lesson}: "twin" is empty`);
 			if (item.next && !item.next.sql?.length && !item.next.pandas) out.push(`${item.lesson}: "next" is empty`);
 			if (item.next?.pandas && /https?:|\]\(/.test(item.next.pandas)) out.push(`${item.lesson}: pandas twins are names only, no links`);
 		}

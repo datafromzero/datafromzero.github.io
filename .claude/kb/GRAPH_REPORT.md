@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1231 nodes, 1322 edges, 143 communities (585 isolated nodes).
-- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 47, dependency 25, design-section 15, doc 33, i18n 6, layout 1, module 21, npm-script 20, page 4, research-section 419, rule 10, script 115, skill 1, spec-section 25, starlight-component 6, style 7, symbol 217, template 2, token 12.
-- Edges: defines 217, imports 49, mentions 742, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
+- 1238 nodes, 1331 edges, 142 communities (587 isolated nodes).
+- Nodes: agent 8, build plan 9, component 39, config 10, content 174, content-type 5, decision 48, dependency 25, design-section 15, doc 33, i18n 6, layout 1, module 22, npm-script 21, page 5, research-section 419, rule 10, script 116, skill 1, spec-section 25, starlight-component 6, style 7, symbol 219, template 2, token 12.
+- Edges: defines 219, imports 50, mentions 748, overrides 6, references 27, runs 11, specified-by 4, uses 230, uses-token 31, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -16,29 +16,29 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 1 | `src/components/content/Solution.astro` | component | 86 | src/components/content/Solution.astro:1 |
 | 2 | `src/components/content/Exercise.astro` | component | 85 | src/components/content/Exercise.astro:1 |
 | 3 | `D41` Lesson step-by-step figures | decision | 50 | SPEC.md:68 |
-| 4 | `.claude/HANDOFF.md` | doc | 42 | .claude/HANDOFF.md:1 |
+| 4 | `.claude/HANDOFF.md` | doc | 44 | .claude/HANDOFF.md:1 |
 | 5 | `astro.config.mjs` | config | 41 | astro.config.mjs:1 |
 | 6 | `src/components/content/RunSQL.astro` | component | 38 | src/components/content/RunSQL.astro:1 |
 | 7 | `D42` In-page SQL runner | decision | 29 | SPEC.md:69 |
 | 8 | `src/components/content/OpenInColab.astro` | component | 29 | src/components/content/OpenInColab.astro:1 |
 | 9 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 10 | `agent:LESSON-STANDARD` | agent | 27 | .claude/agents/LESSON-STANDARD.md:1 |
-| 11 | `S6` Authoring components | spec-section | 25 | SPEC.md:264 |
+| 11 | `S6` Authoring components | spec-section | 25 | SPEC.md:266 |
 | 12 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 13 | `design/README.md` | doc | 23 | design/README.md:1 |
-| 14 | `src/lib/content-schemas.ts` | module | 22 | src/lib/content-schemas.ts:1 |
-| 15 | `.claude/MISTAKES.md` | doc | 21 | .claude/MISTAKES.md:1 |
+| 14 | `D44` Stage cheatsheets; a math blo… | decision | 22 | SPEC.md:71 |
+| 15 | `src/lib/content-schemas.ts` | module | 22 | src/lib/content-schemas.ts:1 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (88): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/sql/from-spreadsheet-to-sql.mdx; src/content/docs/excel/grid-and-tidy-layout.mdx
-- **C2 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C3 HANDOFF.md** (17): .claude/HANDOFF.md; D42 In-page SQL runner; D32 Four career branches; CLAUDE.md; research/curriculum/07-curriculum-rationale.md; S14 Content production (replaces migr…
+- **C2 HANDOFF.md** (31): .claude/HANDOFF.md; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; D32 Four career branches; CLAUDE.md; S3.1 Route map
+- **C3 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C4 Tech stack** (15): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
-- **C5 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C6 cheatsheet.ts** (14): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C5 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C6 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C7 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
 - **C8 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 - **C9 sync-research-issues.mjs** (10): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C77 to C74, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C95 to C7, scripts/animations/concept-join.mjs:1)
-- `src/pages/sql/cheatsheet.astro` -mentions-> `src/data/cheatsheets/sql.ts` (C20 to C128, src/pages/sql/cheatsheet.astro:3)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C32 to C66, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C130 to C126, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C3 to C14, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C24 to C40, design/README.md:181)
-- `M7` -mentions-> `D34` (C50 to C24, CLAUDE.md:65)
-- `M8` -mentions-> `D24` (C70 to C14, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C120 to C3, scripts/check-placeholders.mjs:2)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C49 to C50, src/lib/repo-files.ts:4)
-- `DG6` -mentions-> `DG2` (C68 to C25, design/README.md:226)
+- `ctype:career` -specified-by-> `S5.4` (C75 to C72, src/lib/content-schemas.ts:98)
+- `src/pages/excel/cheatsheet.astro` -mentions-> `src/data/cheatsheets/excel.ts` (C2 to C126, src/pages/excel/cheatsheet.astro:3)
+- `src/pages/python/cheatsheet.astro` -mentions-> `src/data/cheatsheets/python.ts` (C2 to C127, src/pages/python/cheatsheet.astro:3)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C93 to C7, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C2 to C64, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C129 to C124, src/layouts/HomeLayout.astro:39)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C14, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C23 to C38, design/README.md:181)
+- `M7` -mentions-> `D34` (C48 to C23, CLAUDE.md:65)
+- `M8` -mentions-> `D24` (C68 to C14, CLAUDE.md:66)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C118 to C2, scripts/check-placeholders.mjs:2)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C47 to C48, src/lib/repo-files.ts:4)
 
 ## Decisions (SPEC §1)
 
@@ -114,23 +114,24 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D45 | Python stage shape | 27 lessons: the Python stage follows the research of issue #61 (owner… | SPEC.md:72 §4 §7 |
 | D46 | Accented menu names for the text-… | A new companion dataset `datasets/cafe-menu-accents/` (v1, one CSV of… | SPEC.md:73 §7 |
 | D47 | Short lesson names in lists | An optional `short_title` (at most 24 characters) is the lesson's one… | SPEC.md:74 |
+| D48 | Where the advanced core's enginee… | The learner's own laptop first, GitHub Codespaces as the fallback (ow… | SPEC.md:75 |
 
 ## CONTRACT sections
 
-- §3 URL contract — SPEC.md:93-143 (includes §3.1, §3.2, §3.3, §3.4)
-- §5 Content model — SPEC.md:165-263 (includes §5.1, §5.2, §5.3, §5.4)
-- §6 Authoring components — SPEC.md:264-300 (includes §6.4)
-- §7 Datasets — SPEC.md:301-331
+- §3 URL contract — SPEC.md:94-145 (includes §3.1, §3.2, §3.3, §3.4)
+- §5 Content model — SPEC.md:167-265 (includes §5.1, §5.2, §5.3, §5.4)
+- §6 Authoring components — SPEC.md:266-302 (includes §6.4)
+- §7 Datasets — SPEC.md:303-333
 
 ## Where is…
 
 term: id — file:line
 
 - draft: `R:issues/29-a-short-history-of-data-homepage-slider#method-and-verdict-on-the-draft` — research/issues/29-a-short-history-of-data-homepage-slider.md:18
-- prerequisites: `S5.1` — SPEC.md:179
+- prerequisites: `S5.1` — SPEC.md:181
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `astro.config.mjs` — astro.config.mjs:1
-- slug: `S3.2` — SPEC.md:124
+- slug: `S3.2` — SPEC.md:126
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:98
 - dataset: `R:issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi#1-the-10-most-useful-findings:10-the-vietnamese-lane-is-empty-and-our-dataset-holds-a-lesson-nobody-else-can-teach` — research/issues/66-how-competitors-teach-python-for-data-lesson-by-lesson-findi.md:49
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
@@ -138,8 +139,8 @@ term: id — file:line
 - analytics: `R9` — CLAUDE.md:40
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:27
-- gsap: `pkg:gsap` — package.json:49
-- scroll: `S12` — SPEC.md:396
+- gsap: `pkg:gsap` — package.json:50
+- scroll: `S12` — SPEC.md:398
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
@@ -153,19 +154,19 @@ term: id — file:line
 - exercise: `src/components/content/Exercise.astro` — src/components/content/Exercise.astro:1
 - solution: `src/components/content/Solution.astro` — src/components/content/Solution.astro:1
 - colab: `R:issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d#9-addendum-2026-11-18-learning-environment-colab-decided` — research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md:179
-- sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:11
+- sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:12
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:50
+- katex: `pkg:katex` — package.json:51
 - math: `src/styles/math.css` — src/styles/math.css:1
-- mdx: `pkg:@astrojs/mdx` — package.json:35
-- auto-import: `pkg:astro-auto-import` — package.json:48
+- mdx: `pkg:@astrojs/mdx` — package.json:36
+- auto-import: `pkg:astro-auto-import` — package.json:49
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
 - quality gates: `M6` — CLAUDE.md:56
-- cspell: `pkg:cspell` — package.json:56
-- markdownlint: `pkg:markdownlint-cli2` — package.json:23
-- migration: `S14` — SPEC.md:466
+- cspell: `pkg:cspell` — package.json:57
+- markdownlint: `pkg:markdownlint-cli2` — package.json:24
+- migration: `S14` — SPEC.md:468
 - license: `R:issues/52-sql-core-academic-depth-interleaved-with-query-practice#5-citation-and-license-rules-for-whoever-builds-this` — research/issues/52-sql-core-academic-depth-interleaved-with-query-practice.md:71
-- changelog: `S9` — SPEC.md:348
+- changelog: `S9` — SPEC.md:350
 - zenodo: `S1` — SPEC.md:24
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
@@ -185,7 +186,7 @@ term: id — file:line
 - RunSQL: `src/components/content/RunSQL.astro` — src/components/content/RunSQL.astro:1
 - OpenInColab: `src/components/content/OpenInColab.astro` — src/components/content/OpenInColab.astro:1
 - LESSON-STANDARD: `agent:LESSON-STANDARD` — .claude/agents/LESSON-STANDARD.md:1
-- Authoring components: `S6` — SPEC.md:264
+- Authoring components: `S6` — SPEC.md:266
 
 ## Suggested questions
 
