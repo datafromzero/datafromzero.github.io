@@ -167,6 +167,10 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - 2026-11-19 — Generated notebooks used readable cell ids (`c000`), and `nbstripout --verify` failed because it renumbers ids to
   `0`, `1`, `2`. → **Write notebook cell ids as sequential strings from `0`; run `npm run check:notebooks` (needs `nbstripout`)
   before committing notebooks.**
+- 2026-11-20 — A stub-writing script broke three schema rules in one pass (an unquoted colon in a `description`, seven objectives, a
+  `short_title` of 25 characters) and an apostrophe ended a single-quoted TypeScript string. → **Frontmatter written by a script goes
+  through one quoting helper for every value; check the limits before writing (objectives 2 to 5, description at most 160, short
+  title at most 24) and run `npm run build` right after the script.**
 
 ## Datasets and generated files
 
@@ -434,6 +438,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   were taken. → **Grep each exercise answer, and the numbers of its wrong answer, across `python`, `sql` and `excel` before writing the exercise; pick another store, month or measure when it appears.**
 
 - 2026-11-20 — Batch 5 again let Ideas state a Predict's answer and let an Idea or Common-trap line state Exercise 3's flaw. → Before finishing, read every Idea, Match/Diverge, figure `<desc>` and Remember line against both the Predicts that follow and the three exercises' flaws; move any outcome or mechanism into the Why after the reveal.
+
+- 2026-11-20 — 27 published Python lessons listed research issue #61 as a source, and the track page linked issues #71, #32 and #73 as evidence. The owner: learners are confused by GitHub issues on an academic page. → **Sources on any public page are primary and current (official docs, papers, government data, named job postings, books), with full URLs; research issues are working notes for the team and are never cited on the site. `check:lessons` fails on a lesson source that points at this repo's issues.**
 
 ## Agents and reviews
 

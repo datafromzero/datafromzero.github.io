@@ -6,6 +6,7 @@
  *   - a bare `$` inside an inline SVG (use &#36;)
  *   - `datasets:` naming a folder that does not exist in datasets/
  *   - a placeholder line left in a written lesson (`XX`, `TBD`, `TODO` outside a TODO(owner) note)
+ *   - a source that points at this repository's GitHub issues (learners need primary sources, owner rule 2026-11-20)
  *   - a published lesson whose name in the sidebar (short_title, else title) too wide for one line (D47; capitals count 1.25)
  * Code spans, fenced code and SVG text (which shows data values as they are) are ignored for the spelling check.
  * Lessons that are still unwritten stubs are skipped: their planned datasets may not exist yet.
@@ -34,6 +35,8 @@ for (const stage of STAGES) {
 
 		const fm = text.match(/^---\n([\s\S]*?)\n---/);
 		if (fm) {
+			if (/url:\s*https:\/\/github\.com\/datafromzero\/datafromzero\.github\.io\/issues\//.test(fm[1]))
+				report(file, 1, 'a source cites a GitHub issue of this site; cite the primary source instead (owner rule, 2026-11-20)');
 			// One sidebar line holds about 26 lowercase characters; capitals are wider, so they count 1.25 (D47).
 			const width = (t) => [...t].reduce((w, c) => w + (/[A-Z]/.test(c) ? 1.25 : 1), 0);
 			const unquote = (t) => (t ?? '').trim().replace(/^(['"])(.*)\1$/, '$2');

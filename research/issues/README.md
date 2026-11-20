@@ -21,3 +21,6 @@ Copies of the GitHub issues labelled `research`, refreshed by `npm run research:
 | [#71](71-python-as-an-engineer-the-advanced-core-block-shared-vs-trac.md) | open | Research: Python as an engineer — the advanced core block (shared vs track, depth, environment, traps) |
 | [#72](72-working-in-the-ai-era-prompting-without-dependence-data-beyo.md) | open | Research: Working in the AI era — prompting without dependence, data beyond tables, infrastructure awareness |
 | [#73](73-where-dsa-belongs-a-literacy-module-in-the-core-a-practice-g.md) | open | Research: Where DSA belongs — a literacy module in the core, a practice gym beside the tracks |
+| [#87](87-skill-profiles-of-the-four-data-roles-evidence-check-for-the.md) | open | Research: Skill profiles of the four data roles — evidence check for the "choose your track" page |
+| [#88](88-working-with-ai-in-data-work-capability-map-failure-taxonomy.md) | open | Research: Working with AI in data work — capability map, failure taxonomy, and design for the core's last part |
+| [#89](89-database-internals-beyond-the-sql-stage-depth-per-role-place.md) | open | Research: Database internals beyond the SQL stage — depth per role, placement, and a DE-track module |

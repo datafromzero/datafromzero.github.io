@@ -3,7 +3,7 @@ id: core-grain-facts-and-dimensions
 title: Grain, facts and dimensions
 description: Split a business process into facts (events and measures) and dimensions (who, what, where, when), and fix the grain first.
 stage: core
-order: 210
+order: 170
 level: intermediate
 duration: 25
 objectives:
@@ -14,6 +14,7 @@ objectives:
 prerequisites:
   - sql-normalization
   - sql-join-fanout
+  - core-modeling-the-domain
 datasets:
   - cafe-sales
 reviewed: 2026-11-16

@@ -27,6 +27,8 @@ sources:
 status: draft
 ---
 
+TODO(owner): Part 1 of 6 ends here (SPEC D49): finish with the project step on cafe-sales, a descriptive report on cafe-sales (what is typical, how spread out, how sure) in one notebook.
+
 ## Warm-up
 
 Draft: the owner writes this section.

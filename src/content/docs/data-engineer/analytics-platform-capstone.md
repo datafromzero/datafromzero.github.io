@@ -3,7 +3,7 @@ id: data-engineer-analytics-platform-capstone
 title: 'A dbt capstone: one serious analytics project'
 description: Design a layered dbt project on warehouse data with tests, docs, CI and a README that defends grain and keys.
 stage: data-engineer
-order: 190
+order: 300
 level: advanced
 duration: 30
 objectives:

@@ -27,6 +27,8 @@ sources:
 status: draft
 ---
 
+TODO(owner): Part 2 of 6, Statistics II and decisions (SPEC D49): open with a skip check of 4 to 6 questions in `<details>` (no JavaScript); if all are right, the learner goes on to Part 3.
+
 ## Warm-up
 
 Draft: the owner writes this section.

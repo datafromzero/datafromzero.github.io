@@ -3,7 +3,7 @@ id: core-git-save-history
 title: 'Git: saving a history of your work'
 description: 'Track a project folder with Git: stage, commit with a clear message, read the history and undo a mistake.'
 stage: core
-order: 190
+order: 230
 level: beginner
 duration: 25
 objectives:
@@ -13,7 +13,7 @@ objectives:
   - Restore a file to an earlier version
   - Choose what must not be committed (data, secrets)
 prerequisites:
-  - python-notebook-to-script
+  - core-laptop-setup-and-terminal
 reviewed: 2026-11-16
 sources:
   - title: Pro Git (book)
@@ -22,6 +22,8 @@ sources:
     url: https://git-scm.com/book/en/v2/Git-Basics-Recording-Changes-to-the-Repository
 status: draft
 ---
+
+TODO(owner): Now follows the laptop and terminal lesson (SPEC D49); run every command in the terminal from that lesson.
 
 ## Warm-up
 

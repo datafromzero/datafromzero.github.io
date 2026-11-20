@@ -3,7 +3,7 @@ id: data-engineer-pipeline-capstone-design
 title: Designing a pipeline end to end and defending it
 description: Design an API-to-warehouse pipeline with layers, schedule, checks and an operations note, and defend each choice against an alternative.
 stage: data-engineer
-order: 200
+order: 310
 level: advanced
 duration: 30
 objectives:

@@ -3,7 +3,7 @@ id: core-framing-split-and-baseline
 title: Framing a prediction problem, splitting and a baseline
 description: Frame a prediction problem, split the data before looking, fit on the training part only and beat a trivial baseline on held-out data.
 stage: core
-order: 160
+order: 190
 level: intermediate
 duration: 30
 objectives:

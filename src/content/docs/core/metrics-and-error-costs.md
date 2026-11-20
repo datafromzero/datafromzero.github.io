@@ -3,7 +3,7 @@ id: core-metrics-and-error-costs
 title: 'Choosing a metric: accuracy, precision, recall and error costs'
 description: Pick an evaluation metric from the cost of each kind of error, and see why accuracy fails on rare events.
 stage: core
-order: 180
+order: 210
 level: intermediate
 duration: 30
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://developers.google.com/machine-learning/crash-course
 status: draft
 ---
+
+TODO(owner): Part 3 of 6 ends here (SPEC D49): finish with the project step on cafe-sales, a star schema for the project: grain, one fact table and its dimensions, drawn and checked against cafe-sales.
 
 ## Warm-up
 
