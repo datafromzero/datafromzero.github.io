@@ -1,27 +1,36 @@
 ---
 id: python-pandas-reshape-wide-long
 title: 'Reshaping: wide to long and back'
-description: Switch a table between wide and long with melt and pivot, and rebuild the Excel PivotTable in code with pivot_table.
+short_title: 'Wide and long tables'
+description: Switch a table between wide and long with melt and pivot, group by two keys, and build the Excel PivotTable in code with pivot_table.
 stage: python
 order: 190
 level: intermediate
 duration: 30
 objectives:
-  - Explain tidy data and when a table is wide or long
-  - Turn columns into rows with melt
-  - Turn rows into columns with pivot, and build the Excel PivotTable in code with pivot_table
-  - Say why pivot refuses duplicates and pivot_table aggregates them
+  - Say when a table is wide and when it is long, and turn columns into rows with melt
+  - Group by two keys and say why a pair that is not in the data gets no row
+  - Turn rows into columns with pivot, and say why pivot refuses duplicates
+  - Build the Excel PivotTable in code with pivot_table, and say what it does when you give no aggfunc
 prerequisites:
   - python-pandas-groupby-aggregate
+  - python-pandas-merge-and-validate
+  - python-pandas-dates-and-resample
   - excel-pivottables-build
 datasets:
   - cafe-sales
 notebook: notebooks/python/python-pandas-reshape-wide-long.ipynb
 reviewed: 2026-11-16
 sources:
-  - title: 'pandas documentation: Reshaping and pivot tables'
+  - title: 'pandas documentation: Reshaping and pivot tables (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/reshaping.html
-  - title: Wickham, Tidy Data (Journal of Statistical Software)
+  - title: 'pandas documentation: DataFrame.pivot (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.pivot.html
+  - title: 'pandas documentation: pandas.pivot_table (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.pivot_table.html
+  - title: 'pandas documentation: pandas.melt (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.melt.html
+  - title: 'Wickham, Tidy Data, Journal of Statistical Software (accessed 2026-11-20)'
     url: https://www.jstatsoft.org/article/view/v059i10
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
@@ -30,91 +39,359 @@ status: draft
 
 TODO(owner): Set `reviewed` and `status` when you publish this lesson.
 
-TODO(owner): pivot_table framed as the Excel PivotTable, in code (issue section 2, item 19).
+TODO(owner): Team draft (owner request under D24, 2026-11-20); edit it. Placement accepted by the owner from issue #76: grouping by two keys and `pivot_table` were dropped from the groupby lesson (P14) and come here, with the Excel PivotTable as the twin. The lesson drops `crosstab` (the stub named it as awareness), `wide_to_long` and `stack`/`unstack`, to keep four ideas. The wide table of unit 1 is typed from the real counts (the orders of each store by payment method, all 1,800 orders); the check cell of the notebook compares it with the data. Every total names its rows: all 3,287 lines, the canceled order and the extra-zero line of order 2075 included. The Diverge line rests on the lesson E15 (its PivotTable showed a grand total) and on the pandas page for `pivot_table`, where `margins` is `False` by default and `aggfunc` defaults to "mean". There is no Excel twin for `melt` in the Excel lessons (Power Query's unpivot is not taught there), so none is claimed. The tidy-data sentence rests on the abstract of Wickham's paper, which was opened. The figure is a static original drawing; the owner may ask for a CSS animation of melt and pivot later (SPEC D41).
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> How did each cafe sell, month by month, and which cafe did best in which month?
+
+The lines of order 1001, one row for each line, with the cafe and the month beside them:
+
+| order_item_id | order_id | store_id | month | amount |
+|---:|---:|---:|---:|---:|
+| 5001 | 1001 | 2 | 1 | 3.25 |
+| 5002 | 1001 | 2 | 1 | 4.75 |
+| 5003 | 1001 | 2 | 1 | 6.00 |
+
+The owner wants one row for each cafe and one column for each month, as in a PivotTable. By the end of this page you will switch a table between that shape and one row for each fact, build it with `pivot_table`, and check that no money got lost on the way.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Summarize with a PivotTable* (E15), a PivotTable with the store in Rows, the category in Columns and the sum of the amount in Values gave one row for each store. `pivot_table(index="store_id", columns="category", values="amount", aggfunc="sum")` is the same table, field for field: Rows is `index`, Columns is `columns`, Values is `values`.
+
+**Diverge.** In E15 the PivotTable showed a grand total without being asked. `pivot_table` adds totals only when you ask, and unit 4 shows what they add.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Summarize with a PivotTable* (E15), which fields did you drag to Rows, Columns and Values to see the sales of each store in each category?
+
+   <details>
+   <summary>answer</summary>
+
+   The store to Rows, the category to Columns and the amount to Values, summed. The PivotTable made one row for each store and one column for each category.
+
+   </details>
+
+2. In *Grouping and aggregating* (P14), write the line that gives the number of orders of each store.
+
+   <details>
+   <summary>answer</summary>
+
+   `orders.groupby("store_id").size()`. It gives one row for each store.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+`melt` turns the headings of columns into the values of one column, `pivot` turns the values of a column back into headings, and `pivot_table` also adds up the rows that land in one cell.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 282" width="360" role="img" aria-labelledby="rs-fig-title rs-fig-desc">
+<title id="rs-fig-title">melt turns column headings into a column of labels, and pivot turns them back</title>
+<desc id="rs-fig-desc">A small wide table with a store_id column and two payment columns, card and cash, has two rows: store 1 with 421 and 91, and store 2 with 400 and 107. An arrow labeled melt points down to a long table with three columns, store_id, an old heading and an old cell, and four rows: store 1 card 421, store 1 cash 91, store 2 card 400, store 2 cash 107. An arrow labeled pivot points back up. The two payment headings of the wide table and the old heading cells of the long table are shaded alike.</desc>
+<defs>
+<marker id="rs-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="80" y="22" width="120" height="24" fill="currentColor" fill-opacity="0.14" />
+<rect x="10" y="22" width="70" height="24" fill="currentColor" fill-opacity="0.07" />
+<rect x="90" y="146" width="90" height="24" fill="currentColor" fill-opacity="0.14" /><rect x="90" y="170" width="90" height="96" fill="currentColor" fill-opacity="0.04" />
+<rect x="10" y="146" width="80" height="24" fill="currentColor" fill-opacity="0.07" /><rect x="180" y="146" width="80" height="24" fill="currentColor" fill-opacity="0.07" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="22" width="190" height="72" /><path d="M10 46 H200 M10 70 H200 M80 22 V94 M140 22 V94" />
+<rect x="10" y="146" width="250" height="120" /><path d="M10 170 H260 M10 194 H260 M10 218 H260 M10 242 H260 M90 146 V266 M180 146 V266" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.75">
+<path d="M215 100 V138" marker-end="url(#rs-arrow)" /><path d="M262 138 V102" marker-end="url(#rs-arrow)" />
+</g>
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="10" y="14">wide: the payment methods are headings</text><text x="10" y="138">long: one row for each fact</text>
+<text x="223" y="123">melt</text><text x="270" y="123">pivot</text>
+</g>
+<g fill="currentColor" font-size="10" font-weight="600" text-anchor="middle">
+<text x="45" y="38">store_id</text><text x="110" y="38">card</text><text x="170" y="38">cash</text>
+<text x="50" y="162">store_id</text><text x="135" y="162">old heading</text><text x="220" y="162">old cell</text>
+</g>
+<g fill="currentColor" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="45" y="62">1</text><text x="110" y="62">421</text><text x="170" y="62">91</text>
+<text x="45" y="86">2</text><text x="110" y="86">400</text><text x="170" y="86">107</text>
+<text x="50" y="186">1</text><text x="135" y="186">card</text><text x="220" y="186">421</text>
+<text x="50" y="210">1</text><text x="135" y="210">cash</text><text x="220" y="210">91</text>
+<text x="50" y="234">2</text><text x="135" y="234">card</text><text x="220" y="234">400</text>
+<text x="50" y="258">2</text><text x="135" y="258">cash</text><text x="220" y="258">107</text>
+</g>
+<g fill="currentColor" font-size="10" fill-opacity="0.85">
+<text x="212" y="42">A miniature: two of the</text><text x="212" y="56">three stores, two of the</text><text x="212" y="70">three payment methods.</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 30 minutes, 4 new ideas: `melt`, grouping by two keys, `pivot`, and `pivot_table`. The last unit only checks them. The setup cell made `sales`, one row for each order line with its amount, store, month, category and payment method (lessons P13, P15 and P17). The cell that fails on purpose runs through `show_error`, the helper of *Reading errors and debugging* (P8).
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. melt: columns into rows
 
-### 1. Wide and long
+**Idea.** A table is **wide** when the headings of its columns are values of something, here a payment method, and **long** when one column holds those values and every fact has its own row. Tidy data, in Wickham's words, has each variable in a column and each observation in a row, and a long table is usually the tidy one. `table.melt(id_vars="store_id")` keeps `store_id` and turns every other column into rows.
 
-TODO(owner): tidy data; which shape a chart or a groupby wants.
+**Try it.** A wide table as a colleague's PivotTable export arrives: the orders of each store, one column for each payment method (typed here from the cafe-sales counts).
 
-### 2. melt
+```python
+wide_orders = pd.DataFrame({
+    "store_id": [1, 2, 3],
+    "card": [421, 400, 180],
+    "cash": [91, 107, 55],
+    "mobile": [217, 209, 120],
+})
+long = wide_orders.melt(id_vars="store_id")
+print(long.shape)
+print(long.columns.tolist())
+```
 
-TODO(owner): columns into rows.
+**Predict:** how many rows will `long` have, and what will its three columns be called?
 
-### 3. pivot
+<details>
+<summary>Reveal the result</summary>
 
-TODO(owner): rows into columns; pivot refuses duplicate combinations.
+```text
+(9, 3)
+['store_id', 'variable', 'value']
+```
 
-### 4. pivot_table is the Excel PivotTable in code
+</details>
 
-TODO(owner): pivot_table named explicitly; crosstab at awareness level.
+*Why:* 9 rows, one for each of the 3 stores and 3 payment methods. The old headings became the cells of a column, and the old cells became the cells of another. `melt` names them `variable` and `value` unless you say otherwise. Now with names that mean something, and a total for each method:
 
-### 5. Check: round trip
+```python
+long = wide_orders.melt(id_vars="store_id", var_name="payment_method", value_name="orders")
+print(long.groupby("payment_method")["orders"].sum())
+print(long["orders"].sum())
+```
 
-TODO(owner): reshape there and back without losing a row.
+**Predict:** what will the three totals be, and what will their sum be?
 
-## Remember
+<details>
+<summary>Reveal the result</summary>
 
-Draft: the owner writes this section.
+```text
+payment_method
+card      1001
+cash       253
+mobile     546
+Name: orders, dtype: int64
+1800
+```
+
+</details>
+
+*Why:* 1,001 card, 253 cash and 546 mobile orders, and 1,800 in all: the counts of unit 4 of lesson P14, from another table. The long shape suits `groupby`: one column names the group, one column holds the numbers to add. In the wide shape there was no single column to add.
+
+### 2. Group by two keys
+
+**Idea.** `groupby(["store_id", "month"])` takes a list of keys and makes one group for each pair of values that occurs in the table. The result has one row for each pair, and the two keys together are its row label. `reset_index()` turns the keys back into ordinary columns. It is the `GROUP BY store_id, month` of *GROUP BY and HAVING* (S8).
+
+**Try it.** The sales of each store in each month:
+
+```python
+store_month = sales.groupby(["store_id", "month"])["amount"].sum().reset_index()
+print(store_month.shape)
+print(store_month.head(4))
+```
+
+**Predict:** there are 3 stores and 6 months. How many rows will `store_month` have?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(15, 3)
+   store_id  month   amount
+0         1      1  1591.00
+1         1      2  1162.00
+2         1      3  1554.50
+3         1      4  1542.25
+```
+
+</details>
+
+*Why:* 15 rows, not 18. Harbor opened on April 1, so its pairs for January, February and March are not in the data, and a group exists only for a pair that is. The three keys of each row are in columns now, so `store_month` is a long table: one row for each store and month.
+
+### 3. pivot: rows into columns
+
+**Idea.** `table.pivot(index="store_id", columns="month", values="amount")` turns the values of `columns` into headings, the values of `index` into row labels, and puts in each cell the `values` of the row with that pair. It undoes a `melt`, and it reads one row for each pair.
+
+**Try it.** The table the owner asked for, from `store_month`:
+
+```python
+wide = store_month.pivot(index="store_id", columns="month", values="amount")
+print(wide.shape)
+print(wide.loc[3].tolist())
+```
+
+**Predict:** what shape will `wide` have, and what will the row of Harbor, store 3, hold in its first three months?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(3, 6)
+[nan, nan, nan, 1596.5, 1546.5, 1463.25]
+```
+
+</details>
+
+*Why:* 3 rows and 6 columns: all 18 cells exist. The three pairs that had no row in unit 2 are empty cells, shown as `nan`, the missing value of lesson P16: no orders, not 0. Now `pivot` on the order lines themselves, which have many rows for each store and month:
+
+```python
+show_error('sales.pivot(index="store_id", columns="month", values="amount")', short=True)
+```
+
+**Predict:** `sales` has many rows for the same store and month. What will `pivot` do with them: add them up, keep the first, or stop?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ValueError: Index contains duplicate entries, cannot reshape
+```
+
+</details>
+
+*Why:* it stops, with a `ValueError`: pandas does not choose between rows for you, and the pandas page for `pivot` says that duplicates raise this error. Adding the rows up is a decision, and the next unit is the tool that makes it.
+
+### 4. pivot_table: the PivotTable in code
+
+**Idea.** `table.pivot_table(index=..., columns=..., values=..., aggfunc=...)` builds the wide table straight from the long one and adds up the rows that land in one cell with `aggfunc`, such as `"sum"` or `"count"`. It is the PivotTable of E15: Rows, Columns, Values and the summary of the value. `margins=True` asks for the totals that a PivotTable draws on its own.
+
+**Try it.** The sales of each store in each category, with totals:
+
+```python
+by_category = sales.pivot_table(index="store_id", columns="category", values="amount", aggfunc="sum", margins=True)
+print(by_category.shape)
+print(by_category.round(2))
+```
+
+**Predict:** the table has 3 stores and 4 categories. What shape will it really have, and what will the cell in the bottom right corner hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(4, 5)
+category   bakery    coffee     food     tea       All
+store_id                                              
+1         1511.00   4507.75  1810.50  1315.0   9144.25
+2         1584.25   4134.75  2038.75  1246.0   9003.75
+3          729.00   2164.50  1041.25   671.5   4606.25
+All       3824.25  10807.00  4890.50  3232.5  22754.25
+```
+
+</details>
+
+*Why:* 4 rows and 5 columns: the totals are a row and a column named `All`, and their corner is the grand total of all 3,287 lines, the same figure as the PivotTable of E15 when it counts every row. They are cells of the table, not a note beside it. Now the same call without `aggfunc` and without `margins`:
+
+```python
+by_default = sales.pivot_table(index="store_id", columns="category", values="amount")
+print(by_default.round(2).loc[1])
+```
+
+**Predict:** for store 1, the coffee cell of the table above was 4,507.75. What kind of number will the coffee cell hold now?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+category
+bakery     5.44
+coffee     6.40
+food      11.91
+tea        6.48
+Name: 1, dtype: float64
+```
+
+</details>
+
+*Why:* about 6.40, the average of one coffee line of store 1, not a total. The pandas page for `pivot_table` says that `aggfunc` is `"mean"` unless you give one. The table looks like the other one, and its cells mean something else.
+
+### 5. Check: there and back
+
+Write down what you expect, then run the cell. `wide` is the table of unit 3.
+
+```python
+back = wide.reset_index().melt(id_vars="store_id", var_name="month", value_name="amount")
+print(len(back), back["amount"].notna().sum(), back["amount"].sum())
+```
+
+**Predict:** how many rows will `back` have, how many of them hold a number, and what will the numbers add up to?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+18 15 22754.25
+```
+
+</details>
+
+*Why:* 18 rows, 15 numbers, 22,754.25: `melt` kept the three empty cells as rows, and the sum skips them. The total is the control total of lessons P14, P13 and E15, all 3,287 lines, the canceled order and the extra-zero line included. Nothing was lost between the lines and the wide table and back.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: pick the most common mistake of this lesson.
+- `melt(id_vars=...)` turns the other columns into rows: a wide table becomes long.
+- `groupby([key1, key2])` gives one row for each pair of keys that occurs, so a pair that never happened has no row.
+- `pivot` turns rows into columns, needs one row for each pair and stops on duplicates. A pair with no row is an empty cell.
+- `pivot_table` adds up the rows of each cell with `aggfunc`. `margins=True` adds the totals row and column, named `All`.
+- Check the total: the cells of a table made by reshaping must add up to the total of the lines.
+
+**Common trap:** `pivot_table` without `aggfunc` averages, so a table that looks like totals holds averages.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
-
 <Exercise id="python-pandas-reshape-wide-long-1">
 
-**Finish it.** Notebook: Exercise 1.
+**What share of the orders of the customers who live in Alameda were taken at Harbor, store 3?** `counts` holds the orders of each home city and store, one row for each pair; the walk-in order has no city, so it is in no group. Replace the first `None` with `counts` as a wide table, one row for each city and one column for each store, then set `answer_1` to the share, a number between 0 and 1. Expected: one decimal number between 0 and 1.
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+home = orders.merge(customers[["customer_id", "city"]], on="customer_id", how="left", validate="many_to_one")
+counts = home.groupby(["city", "store_id"]).size().reset_index(name="orders")  # given: one row for each city and store
+wide_home = None  # replace None: counts as a wide table, one row for each city
+answer_1 = None  # then set answer_1 to the Alameda orders taken at store 3, divided by all Alameda orders
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+A pair of city and store is one row of `counts`, and `pivot` makes the stores the columns. Which total do you want, the one down a column or the one along a row?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+wide_home = counts.pivot(index="city", columns="store_id", values=...)
+answer_1 = wide_home.loc["Alameda", 3] / ...
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+home = orders.merge(customers[["customer_id", "city"]], on="customer_id", how="left", validate="many_to_one")
+counts = home.groupby(["city", "store_id"]).size().reset_index(name="orders")
+wide_home = counts.pivot(index="city", columns="store_id", values="orders")
+answer_1 = wide_home.loc["Alameda", 3] / wide_home.loc["Alameda"].sum()
+```
+
+The answer is 0.7772: 314 of the 404 orders of Alameda's customers were taken at Harbor. The row of Alameda holds 47, 43 and 314. Dividing by the column of store 3 gives 0.8845, the share of Harbor's orders that came from Alameda's customers, another question; the check cell says so.
 
 </Solution>
 
@@ -122,31 +399,36 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
-
 <Exercise id="python-pandas-reshape-wide-long-2">
 
-**On your own.** Notebook: Exercise 2.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**What share of the coffee sales were paid by mobile?** Before you start, say in one sentence what the table should look like: which fields are rows, which are columns and which is the number. Build it with `pivot_table` on `sales`, and set `answer_2` to the share, a number between 0 and 1. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one decimal number between 0 and 1.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+The rows of the table are the categories, the columns are the payment methods. Unit 4 shows what the table holds when you do not say how to add up.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A decimal between 0 and 1, below one half: one cell divided by the total of its row."*
+
+```python
+pay = sales.pivot_table(index=..., columns=..., values="amount", aggfunc=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+pay = sales.pivot_table(index="category", columns="payment_method", values="amount", aggfunc="sum")
+answer_2 = pay.loc["coffee", "mobile"] / pay.loc["coffee"].sum()
+```
+
+The answer is 0.2825: the cells of the coffee row are 6,298.00 card, 1,456.00 cash and 3,053.00 mobile, 10,807.00 in all. Without `aggfunc` the cells hold the average of a line, about 6.58, 6.68 and 6.36, and the share comes out as 0.3242; the check cell says so.
 
 </Solution>
 
@@ -154,36 +436,54 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: a long table has a row for each store and month with a number, and one pair has no row. What does `pivot` show in that cell, and what does `melt` do with an empty cell?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
+
+   `pivot` shows `nan`, an empty cell. `melt` turns every cell into a row, so the empty cell becomes a row with `nan` in the value column.
+
+   </details>
 
 <Exercise id="python-pandas-reshape-wide-long-3">
 
-**Check yourself: spot the flaw.** Notebook: Exercise 3.
+**Spot the flaw.** A colleague wants the average monthly sales of Harbor, store 3, over the months in which it traded. They built the wide table with an empty cell filled in, and their average is 767.71. Fix the line, then set `answer_3` to Harbor's average, a decimal number. `store_month` is the table of unit 2. Expected: one decimal number.
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+```python
+wide_fixed = store_month.pivot_table(index="store_id", columns="month", values="amount", fill_value=0)  # the colleague's line
+answer_3 = None  # fix the line above, then set answer_3 = wide_fixed.loc[3].mean()
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Print `wide_fixed.loc[3]`. What do the first three months hold, and would the average skip them if they were empty? The pandas page for `pivot_table` describes `fill_value`.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+wide_fixed = store_month.pivot_table(index="store_id", columns="month", values="amount")  # no fill_value
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+wide_fixed = store_month.pivot_table(index="store_id", columns="month", values="amount")
+answer_3 = wide_fixed.loc[3].mean()
+```
+
+The answer is 1,535.42: Harbor's 4,606.25 over the 3 months it traded. `fill_value=0` wrote a zero where there was no row, so the average ran over 6 months and gave 767.71, half of the true figure; the check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can switch a table between wide and long with `melt` and `pivot`, group by two keys, build a PivotTable in code with `pivot_table` and its `aggfunc`, and check that the total survives the trip.*
+Test: Exercise python-pandas-reshape-wide-long-2, done from the notebook without opening the hints.
+
+The pattern to remember: **wide to read, long to group; reshape, then reconcile the total.** The next lesson, *Group-aware columns: transform, rank and rolling* (P20), keeps every row and adds a value computed for its group.

@@ -116,6 +116,17 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   P16 drops `to_numeric` and the median fill; P17 drops `date_range` and time zones beyond awareness; P18 drops the recoding with a mapping. P18 reads no file for the D46
   menu: the data cell holds the 48 lines of `menu_accents.csv` as pasted text, because the dataset is newer than the `v0.1.0` tag; when the owner creates the first tag that
   contains it, replace that text by one `read_csv` from the tag. Still open for the owner: edits and approval of every lesson text.
+- **Python batch 4 (2026-11-20, team drafts for the owner to edit, D24, all still `status: draft`):** `pandas-reshape-wide-long` (P19, with grouping by two keys and
+  `pivot_table`, placement from issue #76), `pandas-transform-rank-rolling` (P20), `charts-matplotlib` (P21, id `python-charts`), `charts-seaborn` (P22) and
+  `apis-and-web-data` (P23, retitled "Data from an API and from a database", with a `read_sql` unit, placement from issue #74) are written in full with their notebooks, three
+  exercises each and one figure each. Charts: each chart on a page is the figure its notebook cell draws, saved as SVG by the notebook run (the harness appends a
+  `_save_svg` call to the chart cell, text and axes become `currentColor`, colors are the site's four figure colors) and pasted inline with `<title>` and `<desc>`; no image files,
+  no JavaScript. The chart checks (`check_chart`) read the Axes, never pixels. API: Frankfurter (`api.frankfurter.dev/v2/rates`, `providers=ecb`), keyless; it
+  answered from the build machine only, so the owner should run the P23 notebook in Colab once. Every notebook was run from the top on pandas 3.1.1 (real `v0.1.0` URLs)
+  and 2.2.3. Choices the owner may reverse: P19 drops `crosstab`, `wide_to_long`, `stack`; P20 replaces "fill a missing value with its group mean" by the broadcast of a
+  group total (no numeric column of cafe-sales has blanks to fill), and drops `cumsum` and `expanding`; P21 drops histogram, scatter and `subplots` (the fifth chart type stays
+  open); P22 keeps one of the one-line charts (`histplot`); P23 drops pagination, `json_normalize`, `read_html` and a key-keeping demo. Still open for the owner: edits and
+  approval of every lesson text, the direction of the Frankfurter `rate` (marked `TODO(owner)` in P23), and a Colab run of P23.
 - **Planned, not part of any batch (owner request, 2026-11-20):** a "Python for engineers" block in the advanced core, to be discussed with the owner after a Muse research
   issue arrives.
 

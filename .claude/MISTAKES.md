@@ -391,6 +391,30 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   trap or combination from every unit demo, not the same function on new data; grep each exercise's solution lines against the unit blocks before finishing. Ideas, Match/Diverge lines,
   figures, Warm-up answers and Common-trap lines must not state a later Predict's result or mechanism.**
 
+- 2026-11-20 — Drafting Python batch 4, the first chart lessons: an MDX figure whose first line held `<svg ...><title>...` failed to build ("Expected a closing tag for `<svg>`
+  before the end of `paragraph`"), because a line that opens with a tag but carries other inline tags is read as a paragraph; matplotlib's own SVG also carried `style`
+  attributes, hashed ids and a line break inside `d="..."`. → **Put `<svg>`, `<title>` and `<desc>` each on its own line, convert every `style` to attributes, make ids
+  unique per page, write text and axes as `currentColor`, escape `$ * { }`, and run the chart through the build before reporting.**
+- 2026-11-20 — A chart cell shows the figure's repr (`<Figure size 450x280 with 1 Axes>`) as text, and seaborn's legend swatches are zero-height patches. → **A reveal holds the
+  printed lines only: the harness drops the display repr of an image; a check that reads `ax.patches` ignores zero-height patches; print `float(p.get_height())`, because numpy
+  2 prints `np.float64(...)` inside a list.**
+- 2026-11-20 — Two chart exercises were first built on data that a published lesson already prints as a table (the monthly sales of Old Town, the units of each category). →
+  **Before choosing the data of an exercise, grep its distinctive numbers across `python`, `sql` and `excel`; take a subset (another store, another month range) whose list does not appear.**
+- 2026-11-20 — Seaborn's `barplot` on raw rows draws means with an error bar, and a long table with a missing pair gets a gap, not a zero bar. → **A lesson that teaches a library's
+  one-liner says what summary it applies to rows you did not summarize, and shows it by a run; a gap in a chart is a missing row, not 0.**
+- 2026-11-20 — An API lesson needs real answers: a second source (the default of the API) gave other numbers than the provider named in the page. → **Pin the provider and the
+  version in the request (`providers=ecb`), print the address that was really sent, and take every number on the page from a run of that request.**
+
+- 2026-11-20 — The first inline charts lost the size of every text (matplotlib writes `font-size` as its own style property, and the converter kept only the `font` shorthand),
+  so tick labels were drawn at 16px and cut off, and black text without a `fill` stayed black on a dark page. Two hand-drawn figures also ran a callout past the right edge
+  and an arrow through a label. → **Read every chart and figure page of the exported PDF, and one of them in dark mode at 390 px, before reporting; every `<text>` carries
+  `fill="currentColor"` and a `font-size`; a callout stays inside the 360-wide viewBox and no arrow crosses a label.**
+- 2026-11-20 — An Idea or a Match/Diverge line in the first drafts of P20 stated the result of the Predict under it (a group's first row holds `nan`, a window gives a result only
+  when it is full, `rolling` "waits for three rows"). → **Write the Idea as the rule of the call, and put what it gives in the Why; a Diverge line says "unit N shows what it does on
+  its first rows", not what it does.**
+- 2026-11-20 — Seaborn's default error bar is a random bootstrap, so the same chart cell drew a slightly different picture on every run and the SVGs differed between pandas
+  versions. → **Fix every random draw a chart depends on (`seed=`), then run the notebook on both pandas versions and compare the saved SVG files byte for byte.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
