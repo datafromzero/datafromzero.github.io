@@ -1,205 +1,386 @@
 ---
 id: python-pandas-missing-data-and-types
 title: Missing values, types and duplicates
-description: Count missing values, tell NaN, NaT and pd.NA apart, fix wrong types with astype and to_numeric, and remove duplicates with drop_duplicates.
+description: Count missing values, tell NaN, NaT and pd.NA apart, choose between dropping and filling, read columns with the right dtype and remove duplicates on a key.
 stage: python
 order: 160
 level: intermediate
-duration: 30
+duration: 35
 objectives:
-  - Count missing values per column
-  - Tell NaN, NaT and pd.NA apart and test for them only with isna and notna
-  - Choose drop, fill with a value or fill with the median, and justify it
-  - Convert a text column to numbers with to_numeric, and keep whole numbers whole
-  - Find and remove duplicates with drop_duplicates on a stated key
+  - Count missing values per column, and test for them only with isna and notna
+  - Choose between dropping a row, filling a value and keeping the gap, and say what each hides
+  - 'Read a column with the type you want: whole numbers that can be missing, and codes as text'
+  - Find and remove duplicates on a stated key
 prerequisites:
   - python-pandas-groupby-aggregate
+  - python-pandas-merge-and-validate
   - sql-null-handling
+  - excel-cleaning-workflow
 datasets:
   - cafe-sales
 notebook: notebooks/python/python-pandas-missing-data-and-types.ipynb
-reviewed: 2026-11-16
+reviewed: 2026-11-20
 sources:
-  - title: 'pandas documentation: Working with missing data'
+  - title: 'pandas documentation: Working with missing data (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/missing_data.html
-  - title: 'pandas documentation: Intro to data structures'
-    url: https://pandas.pydata.org/docs/user_guide/dsintro.html
+  - title: 'pandas documentation: DataFrame.duplicated (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.duplicated.html
+  - title: 'pandas documentation: DataFrame.drop_duplicates (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.drop_duplicates.html
+  - title: 'pandas documentation: read_csv (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
-status: draft
+status: published
 ---
-
-TODO(owner): Set `reviewed` and `status` when you publish this lesson.
-
-TODO(owner): The draft objective said NaN poisons sums. In pandas aggregates skip missing values (issue section 3, trap 11), so the objective was reworded to the NaN, NaT and pd.NA objective.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> Before I use the lists, where is data missing, which columns have the wrong type, and is any order listed twice?
+
+Three customers show the gaps. A blank `referred_by` means nobody referred the customer:
+
+| customer_id | city | referred_by |
+|---:|---|---:|
+| 5 | Alameda | |
+| 6 | Alameda | 3 |
+| 7 | Alameda | |
+
+A gap is data too: it has to be found, counted and handled on purpose. By the end of this page you will count the gaps, choose what to do with one, read two columns as the right type and look for a repeated row.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *NULL: unknown is not zero* (S4), `IS NULL` found the blank `customer_id`. The test for a gap in pandas is `isna()`. In *A cleaning workflow you can defend* (E13) every cleaning step went into a log, with the rows before and after.
+
+**Diverge.** SQL has one `NULL`, and pandas has more than one kind of missing value. How the tests treat them is the check of unit 1.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *NULL: unknown is not zero* (S4), which test finds the rows where `customer_id` is blank, `= NULL` or `IS NULL`?
+
+   <details>
+   <summary>answer</summary>
+
+   `IS NULL`. It answers yes or no for each row, blank or not.
+
+   </details>
+
+2. In *Grouping and aggregating* (P14), which of `size` and `count` counts only the values that are not blank?
+
+   <details>
+   <summary>answer</summary>
+
+   `count`. `size` counts every row of a group, blank or not.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+A gap in a column can be dropped, filled or kept, and each choice changes what the data says, so you choose on purpose and count what changed.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 196" width="360" role="img" aria-labelledby="mt-fig-title mt-fig-desc">
+<title id="mt-fig-title">One empty field, three ways to repair it</title>
+<desc id="mt-fig-desc">Five lines of the orders file, the order_id and customer_id fields: 1333 with 100, 1334 with 9, 1335 with an empty field, 1336 with 70 and 1337 with 24. The 1335 line is shaded. Three arrows lead to three choices: drop the line, fill with a code, or keep the gap.</desc>
+<defs>
+<marker id="mt-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="10" y="22" width="140" height="22" fill="currentColor" fill-opacity="0.07" /><rect x="10" y="88" width="140" height="22" fill="currentColor" fill-opacity="0.14" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="22" width="140" height="132" /><path d="M10 44 H150 M10 66 H150 M10 88 H150 M10 110 H150 M10 132 H150" />
+<rect x="190" y="22" width="160" height="40" rx="3" /><rect x="190" y="70" width="160" height="40" rx="3" /><rect x="190" y="118" width="160" height="40" rx="3" />
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity="0.75">
+<path d="M154 88 L186 44" marker-end="url(#mt-arrow)" /><path d="M154 88 L186 90" marker-end="url(#mt-arrow)" /><path d="M154 88 L186 136" marker-end="url(#mt-arrow)" />
+</g>
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="10" y="14">orders.csv, five lines</text>
+</g>
+<g fill="currentColor" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="18" y="38" font-weight="600">order_id,customer_id</text>
+<text x="18" y="60">1333,100</text><text x="18" y="82">1334,9</text><text x="18" y="104" font-weight="600">1335,</text><text x="18" y="126">1336,70</text><text x="18" y="148">1337,24</text>
+</g>
+<g fill="currentColor" font-size="10" fill-opacity="0.85">
+<text x="68" y="104">an empty field</text>
+</g>
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="198" y="38">Drop the line</text><text x="198" y="86">Fill with a code</text><text x="198" y="134">Keep the gap</text>
+</g>
+<g fill="currentColor" font-size="10">
+<text x="198" y="53">the line is removed</text><text x="198" y="101">the gap gets a value</text><text x="198" y="149">the gap stays a gap</text>
+</g>
+<g fill="currentColor" font-size="11">
+<text x="10" y="184">Every repair changes what the data says.</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 4 new ideas: finding missing values, dropping and filling, reading the right type, and duplicates. The last unit only checks them. The setup cell made `lines`, the order lines of lesson P13, and `signup_log` for Exercise 2.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. isna: finding the gaps
 
-### 1. There is no single NULL
+**Idea.** A missing value is `NaN` in a column of numbers, `NaT` in a column of dates and `pd.NA` in the newer types. `isna()` is the test for a gap, `.sum()` of it counts the gaps, and `notna()` is the opposite test.
 
-TODO(owner): NaN, NaT and pd.NA compare three different ways; == np.nan finds nothing; only isna and notna are safe (bridge trap 2).
+**Try it.** The gaps of `orders`, and two ways to look for them in `customer_id`:
 
-<Exercise id="python-pandas-missing-data-and-types-1">
+```python
+print(orders.isna().sum())
+print((orders["customer_id"] == np.nan).sum(), orders["customer_id"].isna().sum())
+```
 
-**Trap slot, bridge trap 2 of 12: there is no single NULL.** Notebook: Exercise 1, Find the walk-in order.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** which columns of `orders` have gaps, and how many? On the last line, how many rows will the test `== np.nan` find, and how many will `isna()` find?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+order_id          0
+customer_id       1
+store_id          0
+ordered_at        0
+status            0
+payment_method    0
+dtype: int64
+0 1
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* only `customer_id` has a gap, and it is one row, the walk-in order. `== np.nan` found none, although the gap is there. A missing value does not compare as equal to anything, itself included, so `==` cannot say yes, and no error tells you so. The pandas page on missing data gives `isna()` and `notna()` as the way to detect them. Now the kinds of missing value:
 
-TODO(owner): half-solution.
+```python
+print(np.nan == np.nan)
+print(pd.isna(np.nan), pd.isna(None), pd.isna(pd.NaT), pd.isna(pd.NA))
+```
+
+**Predict:** does `np.nan` equal itself? And what does `isna` say for NaN, `None`, `NaT` and `pd.NA`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+False
+True True True True
+```
 
 </details>
 
-<Solution>
+*Why:* `np.nan == np.nan` is `False`, the pandas page lists it among the comparisons that do not act like `None == None`, and all four are gaps for `isna`. Count the gaps with `isna().sum()` before any other step.
 
-TODO(owner): solution and the known answer.
+### 2. dropna and fillna: choose, then count
 
-</Solution>
+**Idea.** `dropna(subset=["column"])` removes the rows where that column has a gap. `fillna(value)` writes a value into the gaps. Which one fits depends on the question, and you count what changed. A median would not help here, because the only numbers missing in cafe-sales are ids, and the middle of a list of ids is not an id.
 
-</Exercise>
+**Try it.** The walk-in order, dropped and filled with 0:
 
-### 2. Drop or fill
+```python
+kept = orders.dropna(subset=["customer_id"])
+coded = orders.assign(customer_id=orders["customer_id"].fillna(0))
+print(len(orders), len(kept), len(coded))
+print(lines.loc[lines["order_id"] == 1335, "amount"].sum())
+```
 
-TODO(owner): choose and justify.
-
-### 3. Wrong types
-
-TODO(owner): to_numeric and astype; numbers read as text will not sum (beginner trap 4); one missing value turns an integer column into floats (bridge trap 9); the pyarrow footnote, a footnote and not a topic.
-
-<Exercise id="python-pandas-missing-data-and-types-2">
-
-**Trap slot, bridge trap 9 of 12: one missing value turns an integer column into floats.** Notebook: Exercise 2, The largest customer id.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** how many rows will `kept` and `coded` have, and how much money did the dropped order carry?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+1800 1799 1800
+7.0
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* `kept` lost the walk-in order, and with it \$7.00 of sales that every total of the lines still counts; `coded` kept all 1,800 rows. Now the other side:
 
-TODO(owner): half-solution.
+```python
+print(orders["customer_id"].nunique(), coded["customer_id"].nunique())
+```
+
+**Predict:** how many different customers are there before the fill, and after it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+145 146
+```
 
 </details>
 
-<Solution>
+*Why:* 145 before and 146 after: the fill made the walk-in a customer, number 0. E13 left the blank blank for this reason. If the question is how much we sold, keep the row and the gap. If it is how many customers ordered, the row has nothing to say, and the gap is the honest answer.
 
-TODO(owner): solution and the known answer.
+### 3. dtype: read the type you want
 
-</Solution>
+**Idea.** `read_csv(..., dtype={"column": type})` sets the type of a column as the file is read. Two types matter here. `"Int64"` holds whole numbers and allows gaps. `"string"` holds text, and is the type for a code that you match but never add: a card number, a postal code, an id.
 
-</Exercise>
+**Try it.** The customer ids of `orders`, read in two ways:
 
-<Exercise id="python-pandas-missing-data-and-types-3">
+```python
+as_read = orders["customer_id"].head(3).tolist()
+whole = pd.read_csv(BASE + "orders.csv", dtype={"customer_id": "Int64"})
+print(as_read, whole["customer_id"].head(3).tolist(), whole["customer_id"].isna().sum())
+```
 
-**Trap slot, beginner trap 4 of 10: dtype surprises: numbers read as text will not sum.** Notebook: Exercise 3, Discounts that arrive as text.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** customer ids are whole numbers, and one is missing. How do the first three print as read, and with `dtype="Int64"`?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+[15.0, 46.0, 61.0] [15, 46, 61] 1
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* as read, the ids are decimals, 15.0, because the gap is a float `NaN` and a float column holds only floats. The pandas page says that `NaN` coerces the type to float, and that `NA` in the `Int64` type keeps the original type. `isna()` still finds the one gap. Now a code with leading zeros, in a small file typed here, not cafe-sales data:
 
-TODO(owner): half-solution.
+```python
+card_file = "card_no,tier\n0042,gold\n0107,silver\n0003,bronze\n"
+as_number = pd.read_csv(io.StringIO(card_file))
+as_text = pd.read_csv(io.StringIO(card_file), dtype={"card_no": "string"})
+print(as_number["card_no"].tolist(), as_text["card_no"].tolist())
+```
+
+**Predict:** a loyalty card number is a code, not a quantity. What does each read give?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[42, 107, 3] ['0042', '0107', '0003']
+```
 
 </details>
 
-<Solution>
+*Why:* read as numbers, `0042` became 42, and the zeros are gone for good: the original text can no longer be matched. Read as text, it stays `0042`. Choose the type when you read the file, not afterwards.
 
-TODO(owner): solution and the known answer.
+### 4. duplicates: say what makes a row the same
 
-</Solution>
+**Idea.** `duplicated()` flags repeated rows with `True`, and `drop_duplicates()` removes them. `subset=["column"]` chooses the columns to compare.
 
-</Exercise>
+**Try it.** First the real orders, then a copy of the first five in which one order was typed twice, planted here for the example:
 
-### 4. Duplicates
+```python
+print(orders.duplicated().sum())
+exact = orders.head(5).loc[[0, 1, 2, 2, 3, 4]]
+print(exact.duplicated().tolist())
+```
 
-TODO(owner): drop_duplicates named explicitly, on a stated key.
+**Predict:** how many repeated orders does `orders` hold? In `exact`, order 1003 is typed twice: which of the six rows does `duplicated()` mark?
 
-### 5. Check: counts before and after
+<details>
+<summary>Reveal the result</summary>
 
-TODO(owner): rows and missing values before and after cleaning.
+```text
+0
+[False, False, False, True, False, False]
+```
 
-## Remember
+</details>
 
-Draft: the owner writes this section.
+*Why:* none in `orders`, so the repeat had to be planted. The first typing of 1003 is `False` and the second is `True`: a row is a duplicate of an earlier row, and the earlier one stays. Now the second typing is a little different:
+
+```python
+near = exact.assign(payment_method=["mobile", "mobile", "mobile", "cash", "mobile", "mobile"])
+print(len(near.drop_duplicates()), len(near.drop_duplicates(subset=["order_id"])))
+```
+
+**Predict:** order 1003 is typed twice again, as mobile and then as cash. How many rows does `drop_duplicates()` leave, and how many with `subset=["order_id"]`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+6 5
+```
+
+</details>
+
+*Why:* 6 against 5. Every column has to match for the plain call, and the cash copy differs, so both stay. An order is its `order_id`, so the key says they are one order. Decide the key before you drop, and write it down.
+
+### 5. Check: a cleaning log
+
+Keep a log of the rows before and after each step, as in E13. Write down what you expect, then run the cell.
+
+```python
+log = [("start", len(orders))]
+step = orders.drop_duplicates(subset=["order_id"])
+log.append(("drop_duplicates", len(step)))
+step = step.dropna(subset=["customer_id"])
+log.append(("dropna", len(step)))
+print(log)
+```
+
+**Predict:** how many rows are left after each step?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[('start', 1800), ('drop_duplicates', 1800), ('dropna', 1799)]
+```
+
+</details>
+
+*Why:* the first step changes nothing, which is worth a line in the log too, and the second removes the walk-in order of unit 2. A log makes every loss visible, so that a total that no longer matches has a reason.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: there is no single NULL; one missing value turns an integer column into floats; dtype surprises: numbers read as text will not sum.
+- `isna()` and `notna()` find missing values: NaN, NaT, `pd.NA` and `None`. `==` and `!=` cannot find them.
+- `dropna` loses rows and what they carried; `fillna` invents a value. Say which, and count.
+- Read a column with the type you want: `dtype="Int64"` keeps whole numbers whole with a gap, and text keeps codes whole.
+- `duplicated(subset=[key])` and `drop_duplicates(subset=[key])` need the key to be named.
+- Keep a log: the rows before and after each step.
+
+**Common trap:** a gap turns a column of whole numbers into decimals, and ids come out as `15.0`.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-missing-data-and-types-1">
 
-<Exercise id="python-pandas-missing-data-and-types-4">
+**What is the highest customer id that appears as a referrer?** `referred_by` has a gap for each customer who was not referred. Replace the first `None` with `customers` read again from `BASE + "customers.csv"`, with `referred_by` read as whole numbers that can be missing, then set `answer_1` to the largest value of that column. Expected: one whole number.
 
-**Finish it.** Notebook: Exercise 4.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+customers_whole = None  # replace None: customers read from BASE + "customers.csv", with referred_by read as whole numbers that can be missing
+answer_1 = None  # then set answer_1 to the largest value of the referred_by column
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 3 reads a column as whole numbers that can be missing with the `dtype` parameter of `read_csv`, a dictionary from column name to type.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+customers_whole = pd.read_csv(BASE + "customers.csv", dtype=...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+customers_whole = pd.read_csv(BASE + "customers.csv", dtype={"referred_by": "Int64"})
+answer_1 = customers_whole["referred_by"].max()
+```
+
+The answer is 117: customer 127 was referred by customer 117, the highest referrer id. Read without `dtype`, the same maximum is the decimal 117.0, and the check cell says so.
 
 </Solution>
 
@@ -207,31 +388,35 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-missing-data-and-types-2">
 
-<Exercise id="python-pandas-missing-data-and-types-5">
-
-**On your own.** Notebook: Exercise 5.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**How many different customers does the signup log hold?** `signup_log` is the first eight customers as a signup desk typed them, and the setup cell of the notebook makes it. Customer 6 was typed twice in the same way, and customer 3 twice with two different tiers. A customer is the same customer when the `customer_id` is the same. Before you start, say in one sentence how many rows you expect to keep, and why. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one whole number.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 4 removes repeated rows. A repeat that differs in one column is not seen as a repeat unless the key is named.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A whole number a little below the number of rows of the log."*
+
+```python
+answer_2 = len(signup_log.drop_duplicates(subset=...))
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+answer_2 = len(signup_log.drop_duplicates(subset=["customer_id"]))
+```
+
+The answer is 8: ten rows, two of them repeated customers, 3 and 6. `drop_duplicates()` without a key removes only the exact repeat of customer 6 and leaves 9, and the check cell says so.
 
 </Solution>
 
@@ -239,36 +424,56 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: which type does pandas give a column of whole numbers when one value is missing, and what keeps them whole?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-pandas-missing-data-and-types-6">
+   Decimals, because the gap is a float `NaN`. `dtype="Int64"` when you read the file, or `astype("Int64")` afterwards, keeps whole numbers and shows the gap as `<NA>`.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 6.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-pandas-missing-data-and-types-3">
+
+**Spot the flaw.** A colleague fills the gap of `customer_id` with 0 in a copy of the orders, then checks that no gap is left, and the check still finds one. Fix the colleague's line, then set `answer_3` to the number of gaps left in `filled`. Expected: one whole number.
+
+```python
+filled = orders.copy()
+filled["customer_id"].fillna(0)  # the colleague's line
+answer_3 = filled["customer_id"].isna().sum()  # the number of gaps left: fix the line above so that this is right
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+`fillna` returns the filled column. Where does the colleague's line put it?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+filled["customer_id"] = ...
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+filled = orders.copy()
+filled["customer_id"] = filled["customer_id"].fillna(0)
+answer_3 = filled["customer_id"].isna().sum()
+```
+
+The answer is 0. `fillna` returns a new column and leaves `filled` as it was, as `assign` did in lesson P13; the colleague's line threw the result away, so one gap was left, and the check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can count the gaps with `isna`, choose between dropping, filling and keeping them and say what each hides, read whole numbers and codes with the right `dtype`, and remove duplicates on a named key.*
+Test: Exercise python-pandas-missing-data-and-types-2, done from the notebook without opening the hints.
+
+The pattern to remember: **find the gap, choose on purpose, count what changed and write it in the log.** The next lesson, *Dates and periods in pandas* (P17), turns the text of `ordered_at` into dates.

@@ -1,149 +1,335 @@
 ---
 id: python-pandas-text-cleaning
 title: Cleaning text columns
-description: Clean text with the str accessor, normalize accented text to NFC, extract one pattern with a simple regex and recode labels with a mapping.
+description: Clean text with the str accessor, extract one pattern with a small regex and normalize accented text to NFC before you filter or group.
 stage: python
 order: 180
 level: intermediate
 duration: 35
 objectives:
-  - Apply str methods to a whole column
-  - Find or extract one pattern with a simple regular expression
-  - Normalize text to NFC before any filter, groupby or merge, and strip diacritics into a matching key when asked
-  - Recode labels with a mapping dictionary and map()
-  - Keep the original column untouched
+  - Apply str methods to a whole column, and keep the original column untouched
+  - Find or extract one pattern with a small regular expression
+  - Normalize text to NFC before any filter, groupby or merge, because two texts that print the same can compare unequal
 prerequisites:
+  - python-pandas-merge-and-validate
   - python-pandas-missing-data-and-types
   - python-strings
+  - sql-text-functions
+  - excel-text-functions
 datasets:
   - cafe-sales
+  - cafe-menu-accents
 notebook: notebooks/python/python-pandas-text-cleaning.ipynb
-reviewed: 2026-11-16
+reviewed: 2026-11-20
 sources:
-  - title: 'pandas documentation: Working with text data'
+  - title: 'pandas documentation: Working with text data (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/text.html
-  - title: 'Python documentation: unicodedata module'
+  - title: 'pandas documentation: Series.str.extract (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extract.html
+  - title: 'pandas documentation: Series.str.normalize (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
+  - title: 'Python documentation: unicodedata, Unicode Database (accessed 2026-11-20)'
     url: https://docs.python.org/3/library/unicodedata.html
+  - title: 'Python documentation: Regular Expression HOWTO (accessed 2026-11-20)'
+    url: https://docs.python.org/3/howto/regex.html
+  - title: 'Microsoft Support: TRIM function (accessed 2026-11-20)'
+    url: https://support.microsoft.com/en-us/office/trim-function-410388fa-c5df-49c6-b16c-9e5630b479f9
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
-status: draft
+status: published
 ---
-
-TODO(owner): Set `reviewed` and `status` when you publish this lesson.
-
-TODO(owner): The draft description named place names with accented letters. cafe-sales is a Bay Area dataset with no accented text, so the NFC slot can use the accented café names of D46 (`datasets/cafe-menu-accents/`), once a release tag contains that file. The owner decides which messy example to use.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> Count the drinks that the tills record, one name for each drink, and list the lines of the menu boards that name a café drink.
+
+The same drink is typed in several ways at the tills, and the name of a drink on a menu board looks the same on each board:
+
+| menu_item_id | store_id | product_id | board_name |
+|---:|---:|---:|---|
+| 1 | 1 | 1 | Café espresso |
+| 17 | 2 | 1 | Café espresso |
+| 33 | 3 | 1 | Café espresso |
+
+The first table looks clean, and it still hides a trap. By the end of this page you will clean typed names, pull a size out of a note, and find out why a name that looks the same does not always match.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Cleaning text with TRIM, LEFT and TEXTSPLIT* (E10) and *Cleaning text in SQL* (S10), `TRIM` and `LOWER` cleaned a text, and `SUBSTITUTE` or `REPLACE` swapped part of it. `str.strip()`, `str.lower()` and `str.replace()` do the same to every value of a column.
+
+**Diverge.** In E10, `TRIM` also reduced the repeated spaces inside a text. What `strip()` does with the spaces inside is the first check of unit 1.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Cleaning text with TRIM, LEFT and TEXTSPLIT* (E10), which formula cleaned a till code of stray spaces and capitals?
+
+   <details>
+   <summary>answer</summary>
+
+   `=UPPER(TRIM(raw_till_export!A2))`: `TRIM` removed the stray spaces and `UPPER` fixed the case, in a new column beside the raw one.
+
+   </details>
+
+2. In *Working with text* (P3), write the line that turns the text `"Cold Brew"` into lowercase.
+
+   <details>
+   <summary>answer</summary>
+
+   `"Cold Brew".lower()`, which gives `"cold brew"`. On a column, `.str.lower()` does it for every value.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+A text column is cleaned by applying a string method to every value with `.str`, one step at a time, into a new column.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 136" width="360" role="img" aria-labelledby="tx-fig-title tx-fig-desc">
+<title id="tx-fig-title">A string method cleans a whole column into a new column</title>
+<desc id="tx-fig-desc">A typed value, shown in quotes so that its spaces are visible: two spaces, Mocha, one space. An arrow labeled str.strip().str.lower() leads to the clean value, mocha, in a shaded box. The typed value stays as it was, and the method returns a new column.</desc>
+<defs>
+<marker id="tx-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity="0.75" /></marker>
+</defs>
+<rect x="10" y="30" width="130" height="28" fill="currentColor" fill-opacity="0.07" /><rect x="230" y="30" width="100" height="28" fill="currentColor" fill-opacity="0.14" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="30" width="130" height="28" rx="3" /><rect x="230" y="30" width="100" height="28" rx="3" />
+</g>
+<path d="M146 44 H224" fill="none" stroke="currentColor" stroke-opacity="0.75" marker-end="url(#tx-arrow)" />
+<g fill="currentColor" font-size="11" font-weight="600">
+<text x="10" y="22">typed</text><text x="230" y="22">clean</text>
+</g>
+<g fill="currentColor" font-size="12" font-family="ui-monospace, Menlo, Consolas, monospace" xml:space="preserve">
+<text x="18" y="49">"  Mocha "</text><text x="238" y="49" font-weight="600">mocha</text>
+</g>
+<g fill="currentColor" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">
+<text x="185" y="78">.str.strip().str.lower()</text>
+</g>
+<g fill="currentColor" font-size="11">
+<text x="10" y="102">Each method returns a new column.</text><text x="10" y="116">The typed column is left as it was.</text><text x="10" y="130" fill-opacity="0.8">The quotes show the spaces.</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 35 minutes, 3 new ideas: the `str` methods, small regular expressions, and NFC. The last unit only checks them. The setup cell made `menu`, the 48 lines of the menu boards from the dataset `cafe-menu-accents`, a companion of cafe-sales.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. str: clean a whole column
 
-### 1. The str accessor
+**Idea.** `.str` opens the text methods of a column: `.str.strip()` cuts the spaces at both ends of each value, `.str.lower()` lowercases it, and `.str.replace(old, new)` swaps one text for another. Each returns a new column. Put it in a new column with `assign`, and the raw column stays as it was typed, as in E10.
 
-TODO(owner): the plain-string methods of the strings lesson, on a whole column.
+**Try it.** Six till entries for two drinks, typed by different staff (a small list typed here, not cafe-sales data):
 
-### 2. One bounded regex
+```python
+till = pd.DataFrame({"typed": [" Latte", "latte ", "LATTE", "Cold  Brew", "cold brew", "Cold Brew "]})
+till = till.assign(clean=till["typed"].str.strip().str.lower())
+print(till["typed"].nunique(), till["clean"].nunique())
+```
 
-TODO(owner): find or extract one pattern, recognition-plus-extraction level; no regex theory.
-
-### 3. Normalize before you compare
-
-TODO(owner): NFC and NFD forms of one word compare unequal and split filters, groupbys and merges (beginner trap 7).
-
-<Exercise id="python-pandas-text-cleaning-1">
-
-**Trap slot, beginner trap 7 of 10: NFC and NFD forms of one word compare unequal.** Notebook: Exercise 1, Two spellings of one name.
-
-TODO(owner): write the predict-first task and keep its title and first sentence from naming the result. Draft task in the notebook; the known answer was computed from the cafe-sales tables.
+**Predict:** the six entries are two drinks, Latte and Cold Brew. How many different texts are in `typed`, and how many are left in `clean`?
 
 <details>
-<summary>Hint</summary>
+<summary>Reveal the result</summary>
 
-TODO(owner): hint.
+```text
+6 3
+```
 
 </details>
 
-<details>
-<summary>Half-solution</summary>
+*Why:* six in `typed` and three in `clean`, not two. `strip()` cut the spaces at the ends and `lower()` merged the capitals, but `Cold  Brew` has two spaces inside, and `strip()` leaves the inside alone. The Microsoft Support page says that `TRIM` removes all spaces except single spaces between words, so Excel would have merged them. Now the swap:
 
-TODO(owner): half-solution.
+```python
+till = till.assign(clean=till["clean"].str.replace("  ", " "))
+print(till["clean"].nunique())
+print(till["typed"].tolist())
+```
+
+**Predict:** after two spaces become one, how many texts are left in `clean`, and does `typed` still hold the six entries as typed?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2
+[' Latte', 'latte ', 'LATTE', 'Cold  Brew', 'cold brew', 'Cold Brew ']
+```
 
 </details>
 
-<Solution>
+*Why:* two texts, one for each drink. `typed` is exactly as it was: `assign` made a new column, so the raw one can always be compared with the clean one. `replace` swaps the exact text you give it, two spaces here; the next unit gives a pattern that swaps any number.
 
-TODO(owner): solution and the known answer.
+### 2. A small regular expression
 
-</Solution>
+**Idea.** A regular expression is a pattern for text. `\d` matches one digit and `\s` one white space character (a space, a tab). `+` after a piece means one or more of it, and `*` means zero or more. Brackets mark the part to take out. `str.extract(pattern)` returns that part, and `str.replace(pattern, new, regex=True)` swaps whatever the pattern matches. The Python Regular Expression HOWTO lists them.
 
-</Exercise>
+**Try it.** The size in ounces, inside notes typed at the till (a small list typed here, not cafe-sales data):
 
-### 4. Recode with a mapping
+```python
+notes = pd.Series(["Latte 12oz", "Mocha 16 oz", "Cold Brew 16OZ", "Espresso", "Chai Latte 12 oz", "Latte 16oz"])
+sizes = notes.str.extract(r"(\d+)\s*oz", flags=re.IGNORECASE, expand=False)
+print(sizes.tolist())
+print(sizes.isna().sum())
+```
 
-TODO(owner): map with a dictionary.
+**Predict:** the pattern takes the digits in front of `oz`, with or without a space, in any case. What does it return for each note, and for how many notes is there no size?
 
-### 5. Check: keep the original
+<details>
+<summary>Reveal the result</summary>
 
-TODO(owner): the cleaned column sits beside the raw one.
+```text
+['12', '16', '16', nan, '12', '16']
+1
+```
 
-## Remember
+</details>
 
-Draft: the owner writes this section.
+*Why:* the sizes come back as text, `'12'` and `'16'`, and `Espresso`, which has no size, gives `nan`. To add them, turn the text into numbers with `astype(float)`. Now spaces of any number, and a tab:
+
+```python
+spellings = pd.Series(["Cold Brew", "Cold  Brew", "Cold   Brew", "Cold \tBrew"])
+print(spellings.str.replace(r"\s+", " ", regex=True).nunique())
+```
+
+**Predict:** four spellings of one drink, with one, two or three spaces and with a space and a tab. How many different texts are left after the replace?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1
+```
+
+</details>
+
+*Why:* one: `\s+` matches a whole run of white space, whatever its length and kind, and `" "` puts one space in its place.
+
+### 3. NFC: texts that look the same
+
+**Idea.** An accented letter can be stored in two ways, called **NFC** and **NFD**, and `.str.normalize("NFC")` turns every value of a column into the NFC form, as `unicodedata.normalize` does for one string.
+
+**Try it.** Product 1 on the three boards. The setup cell made `menu`, and each board was typed on a different device:
+
+```python
+name1 = menu[menu["product_id"] == 1]
+print(name1["board_name"].tolist())
+print(name1["board_name"].str.len().tolist())
+```
+
+**Predict:** the three boards print the name of product 1 the same way. What are the lengths of the three texts?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+['Café espresso', 'Café espresso', 'Café espresso']
+[13, 14, 13]
+```
+
+</details>
+
+*Why:* the three names print alike, but the lengths are 13, 14 and 13. In NFC, `é` is one character; in NFD it is an `e` followed by a separate accent mark, two characters, and the second board stores it that way. A filter on the typed name, `Café espresso`, will meet two of the three:
+
+```python
+typed_name = "Café espresso"
+print((menu["board_name"] == typed_name).sum())
+clean_names = menu["board_name"].str.normalize("NFC")
+print((clean_names == typed_name).sum())
+```
+
+**Predict:** how many lines equal the typed name as stored, and how many after the whole column is normalized to NFC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2
+3
+```
+
+</details>
+
+*Why:* 2 as stored, and 3 after normalizing: the typed name is in NFC, and the second board is in NFD, so the filter lost a line without a word. The Python page on `unicodedata` warns that two strings that look the same to a reader may not compare equal when one has combining characters and the other does not. Normalize to NFC before any filter, `groupby` or merge on a text that may have accents. The letters are the same to the eye and different to the computer.
+
+### 4. Check: one name for each product
+
+The products table has 16 products, and every product is on the board of each of the three cafes. After normalizing, one name must be one product. Write down what you expect, then run the cell.
+
+```python
+menu = menu.assign(clean_name=menu["board_name"].str.normalize("NFC"))
+print(menu["clean_name"].nunique())
+per_name = menu.groupby("clean_name").size()
+print(per_name.min(), per_name.max())
+```
+
+**Predict:** how many different clean names are there, and how many lines does each one have?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+16
+3 3
+```
+
+</details>
+
+*Why:* 16 names with 3 lines each, one line for each board: 48 lines, 16 products. `board_name` is untouched beside `clean_name`. A grouped count that is not the same for every name would have shown a name still split in two.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: NFC and NFD forms of one word compare unequal.
+- `.str.strip()`, `.str.lower()` and `.str.replace()` clean a whole column. Put the result in a new column, so that the raw one stays.
+- `strip()` cuts only the ends. `\s+` replaced by one space cuts the inside as well.
+- `\d+` is one or more digits, `\s*` is any white space or none, brackets mark what `str.extract` returns.
+- Normalize accented text to NFC before a filter, a `groupby` or a merge.
+
+**Common trap:** two texts that print the same are not always equal: an accent can be stored as two characters.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-text-cleaning-1">
 
-<Exercise id="python-pandas-text-cleaning-2">
+**What is the total size, in ounces, of the five drinks on the notes?** Replace the first `None` with the digits in front of `oz` in each note, taken with `str.extract` and a pattern that accepts any number of digits, a space or none, and any case. Then set `answer_1` to the total, with the sizes turned into numbers. Expected: one decimal number.
 
-**Finish it.** Notebook: Exercise 2.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+notes_2 = pd.Series(["Mocha 16oz", "Latte 12 oz", "Espresso", "Cold Brew 16 OZ", "Mocha 12oz"])
+sizes_2 = None  # replace None: the digits before "oz" in each note, with str.extract (digits, a space or none, any case)
+answer_1 = None  # then set answer_1 to the total of the sizes in sizes_2, as numbers
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 2 takes the digits in front of `oz` with `str.extract`. `\d+` is one or more digits, and the extracted digits are text: `astype(float)` makes them numbers.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+sizes_2 = notes_2.str.extract(r"(...)\s*oz", flags=re.IGNORECASE, expand=False)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+notes_2 = pd.Series(["Mocha 16oz", "Latte 12 oz", "Espresso", "Cold Brew 16 OZ", "Mocha 12oz"])
+sizes_2 = notes_2.str.extract(r"(\d+)\s*oz", flags=re.IGNORECASE, expand=False)
+answer_1 = sizes_2.astype(float).sum()
+```
+
+The answer is 56.0: 16, 12, none, 16 and 12. The missing size of the espresso is skipped by the sum. A pattern with `\d` takes one digit only, so 16 becomes 6 and 12 becomes 2, and the total is 16.0; the check cell says so.
 
 </Solution>
 
@@ -151,31 +337,40 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
+<Exercise id="python-pandas-text-cleaning-2">
 
-<Exercise id="python-pandas-text-cleaning-3">
-
-**On your own.** Notebook: Exercise 3.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**How many of the names on Old Town's board also appear on Campus's board?** The two boards were typed on different devices. Before you start, say in one sentence how many names you expect, and why. Match the board of store 1 with the board of store 2 on the name, with a promise in `validate`, and count the matches. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one whole number.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Unit 3 makes two stored forms of one name agree, and lesson P15 matches two tables on a key with a promise in `validate`. Which column do you match on?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"A whole number between 0 and 16, the number of products on a board."*
+
+```python
+names_1 = board_1.assign(name=board_1["board_name"].str.normalize(...))
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+board_1 = menu[menu["store_id"] == 1]
+board_2 = menu[menu["store_id"] == 2]
+names_1 = board_1.assign(name=board_1["board_name"].str.normalize("NFC"))
+names_2 = board_2.assign(name=board_2["board_name"].str.normalize("NFC"))
+both = names_1.merge(names_2, on="name", validate="one_to_one")
+answer_2 = len(both)
+```
+
+The answer is 16: every name of Old Town's board is on Campus's board. Merging on `board_name` as stored finds only 6, the names without an accent, because the other 10 are stored in NFC on one board and in NFD on the other; the check cell says so.
 
 </Solution>
 
@@ -183,36 +378,56 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: what is the difference between NFC and NFD, and why can a filter on a name miss lines that look the same?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
 
-<Exercise id="python-pandas-text-cleaning-4">
+   NFC stores `é` as one character and NFD as `e` plus a separate accent mark. The texts print alike but are not equal, so a filter finds only the lines stored in the same form as the typed name. Normalize to NFC first.
 
-**Check yourself: spot the flaw.** Notebook: Exercise 4.
+   </details>
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+<Exercise id="python-pandas-text-cleaning-3">
+
+**Spot the flaw.** A colleague wants the bare drink names of the Old Town lines that begin with Café, without the word and its space. The list shows a name that is not on the board. Fix the line, then set `answer_3 = bare.tolist()`. Expected: a list of four names.
+
+```python
+cafe_names = menu.loc[(menu["store_id"] == 1) & menu["board_name"].str.startswith("Café"), "board_name"]
+bare = cafe_names.str.strip("Café ")  # the colleague's line
+answer_3 = None  # fix the line above, then set answer_3 = bare.tolist()
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Print `bare`. One name has lost a letter that is not part of the word `Café`. Look up what `str.strip` does with the text you give it, and what `str.removeprefix` and `str.replace` do.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+bare = cafe_names.str.removeprefix(...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+cafe_names = menu.loc[(menu["store_id"] == 1) & menu["board_name"].str.startswith("Café"), "board_name"]
+bare = cafe_names.str.removeprefix("Café ")
+answer_3 = bare.tolist()
+```
+
+The answer is `['espresso', 'americano', 'au lait', 'cold brew']`. `strip("Café ")` removes any of the characters C, a, f, é and space from both ends, so it cut the `a` of americano and the `a` of au lait; `removeprefix` removes the word once, and `str.replace("Café ", "", regex=False)` gives the same names. The check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can clean a text column with `str` methods and keep the raw column, extract a size with a small regular expression, and normalize accented text to NFC before I filter or group it.*
+Test: Exercise python-pandas-text-cleaning-2, done from the notebook without opening the hints.
+
+The pattern to remember: **clean into a new column, collapse the spaces, and normalize to NFC before you match.** The next lesson, *Reshaping: wide to long and back* (P19), turns the cleaned tables into the shapes a chart or a report needs.
