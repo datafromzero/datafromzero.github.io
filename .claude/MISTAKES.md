@@ -387,6 +387,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   the builder's output.**
 - 2026-11-20 — The P18 notebook and the first reveal of its NFC unit contain text in NFD on purpose. → **A file that must keep NFD (the menu text in the notebook, one reveal
   block) is checked with `unicodedata.normalize` before the commit, and no formatter or editor may normalize it; the lesson page names this in its `TODO(owner)` paragraph.**
+- 2026-11-20 — All five batch-3 Exercise 3 spot-the-flaw tasks reran a unit's demo on new values with a fix already shown as a unit line. → **Exercise 3's flaw and fix must be a different
+  trap or combination from every unit demo, not the same function on new data; grep each exercise's solution lines against the unit blocks before finishing. Ideas, Match/Diverge lines,
+  figures, Warm-up answers and Common-trap lines must not state a later Predict's result or mechanism.**
 
 ## Agents and reviews
 
