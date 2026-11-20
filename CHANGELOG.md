@@ -7,7 +7,19 @@ All notable changes to datafromzero are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Python stage, lessons 19 to 23 published (owner approval, 2026-11-20): wide and long tables (`melt`, two-key grouping, `pivot`, `pivot_table`), group-aware columns (`transform`, `rank`, `shift` in groups, `rolling`), honest charts with matplotlib and with seaborn (each chart the notebook's own SVG, inline, no JavaScript), and data from an API (the keyless Frankfurter rates, ECB) and from a database with `read_sql` and parameters. Owner checks moved to issue #80.
 - Short lesson names in the sidebar (SPEC D47, owner decision, 2026-11-20): an optional `short_title` frontmatter field, at most 24 characters, is the one-line name of a lesson in the sidebar and in the bottom bar's Course list (for example P9 *Files and tables* for *Reading files and tables: paths, CSV, JSON and Excel*); the full title stays on the page and shows as the sidebar tooltip. Every published Excel, SQL and Python lesson whose title is longer than 26 characters now has one, and `npm run check:lessons` keeps it that way, counting capitals as wider letters (S2, S13 and S24 still wrapped and were shortened). URLs are unchanged.
+- Python stage, fourth batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the five lessons stay drafts and
+  are not on the site): *Reshaping: wide to long and back* (`melt`, grouping by two keys, `pivot` and why it refuses duplicates, `pivot_table` as the Excel
+  PivotTable in code with its `aggfunc` and `margins`; placement from issue #76), *Group-aware columns: transform, rank and rolling* (`transform`, `rank` with the
+  methods that match `RANK` and `DENSE_RANK`, `shift` and `rolling` inside groups, each checked against its window function on DuckDB 2.0.0), *Charts with pandas and
+  matplotlib* (figure and axes, bar against line, the zero baseline, a title that states the message, labels and `savefig`), *Charts with seaborn* (seaborn on an
+  Axes, the mean that `barplot` draws for raw rows, `hue`, `histplot`, `set_theme`, and a Plotly awareness box) and *Data from an API and from a database* (a
+  keyless exchange-rate API with its status codes, JSON into a table, and `read_sql` on an in-memory SQLite database with parameters instead of pasted text;
+  placement from issue #74). Every chart on the pages is the figure that its notebook cell draws, saved as SVG by the notebook run and pasted inline with a title and a
+  description, static and without JavaScript. Each lesson has a notebook with free hints, known-answer checks (the chart exercises inspect the Axes: bar heights, line
+  values, the bottom of the y axis, the title and the labels) and one plausible wrong answer rejected for each of its three exercises. Every notebook was run from the
+  top on pandas 3.1.1 with the data read from the real `v0.1.0` URLs and on pandas 2.2.3, with matplotlib 3.11.2 and seaborn 0.13.2.
 - Python stage, lessons 14 to 18 published (owner approval, 2026-11-20): sorting and grouping (with a CSS split-apply-combine animation), merging safely with `validate=` and `indicator=True`, missing values, types and duplicates, dates and monthly periods, and cleaning text columns, including the NFC/NFD trap on the accented café names of D46. Each has a Colab notebook on cafe-sales. Owner checks moved to issue #76.
 - Python stage, third batch written as team drafts for the owner to edit and approve (owner request under D24, 2026-11-20; the five lessons stay drafts and
   are not on the site): *Grouping and aggregating* (opens with `sort_values` and the trap that blanks sort last in both directions, then `groupby` as split,

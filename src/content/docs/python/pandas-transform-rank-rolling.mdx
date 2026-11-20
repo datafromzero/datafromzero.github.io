@@ -1,125 +1,409 @@
 ---
 id: python-pandas-transform-rank-rolling
 title: 'Group-aware columns: transform, rank and rolling'
-description: Add a value computed per group back onto every row with transform, and use rank, shift and rolling the way SQL windows do.
+short_title: 'Transform, rank, rolling'
+description: Add a value computed for each group back onto every row with transform, and use rank, shift and rolling the way SQL window functions do.
 stage: python
 order: 200
 level: intermediate
 duration: 30
 objectives:
-  - Fill a missing value with its own group mean using transform
+  - Add a group's total to every row of the group with transform, and say how it differs from aggregating
   - Rank rows within a group, with the rank method that matches RANK or DENSE_RANK
-  - Compare to the previous row with shift, within groups
-  - Compute a rolling average
-  - Explain the difference between aggregating and broadcasting a group value
+  - Compare each row with the previous row of its own group with shift
+  - Compute a rolling average, and say what it gives before the window is full
 prerequisites:
   - python-pandas-groupby-aggregate
+  - python-pandas-reshape-wide-long
   - python-pandas-dates-and-resample
+  - sql-window-functions
   - sql-lag-lead-moving-windows
   - sql-rank-top-n
 datasets:
   - cafe-sales
 notebook: notebooks/python/python-pandas-transform-rank-rolling.ipynb
-reviewed: 2026-11-16
+reviewed: 2026-11-20
 sources:
-  - title: 'pandas documentation: Group by (split-apply-combine)'
+  - title: 'pandas documentation: Group by: split-apply-combine (accessed 2026-11-20)'
     url: https://pandas.pydata.org/docs/user_guide/groupby.html
-  - title: 'pandas documentation: Time series / date functionality'
-    url: https://pandas.pydata.org/docs/user_guide/timeseries.html
-  - title: 'pandas documentation: Copy-on-Write (CoW)'
-    url: https://pandas.pydata.org/docs/user_guide/copy_on_write.html
+  - title: 'pandas documentation: DataFrame.rank (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.rank.html
+  - title: 'pandas documentation: DataFrame.rolling (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.rolling.html
+  - title: 'pandas documentation: Windowing operations (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/user_guide/window.html
+  - title: 'pandas documentation: Comparison with SQL (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_sql.html
   - title: 'datafromzero research: Python for data, stage check (issue #61)'
     url: https://github.com/datafromzero/datafromzero.github.io/issues/61
-status: draft
+status: published
 ---
-
-TODO(owner): Set `reviewed` and `status` when you publish this lesson.
-
-TODO(owner): rank(method=...) taught as the RANK and DENSE_RANK mapping (issue section 3). It now depends on the dates lesson, where shift is first met.
 
 ## The question
 
-Draft: the owner writes this section.
+The owner asks:
 
-TODO(owner): One business question with the cafe data visible (a small table); promise the answer.
+> For each cafe, which months carried the biggest share of its sales, and how did each month compare with the one before?
+
+The first months of the two older cafes, one row for each store and month:
+
+| store_id | month | amount |
+|---:|---:|---:|
+| 1 | 1 | 1,591.00 |
+| 1 | 2 | 1,162.00 |
+| 2 | 1 | 1,518.75 |
+| 2 | 2 | 1,508.25 |
+
+Every row has to stay, and each needs a number that comes from its own cafe. By the end of this page you will add such columns, in the way of the window functions of the SQL stage.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Window functions: keep the rows, add the context* (S14), `SUM(orders) OVER (PARTITION BY day)` wrote the day's total beside every row and kept all rows. `groupby("store_id")["amount"].transform("sum")` writes the store's total beside every row of the store. `LAG(x) OVER (PARTITION BY ...)` of *Comparing to the previous row* (S16) is `groupby(...).shift(1)`, and `RANK() OVER (PARTITION BY ... ORDER BY ... DESC)` of *Ranking and top-N per group* (S15) is `groupby(...).rank(method="min", ascending=False)`.
+
+**Diverge.** In S16 the first rows of a moving average used only the rows that existed. Unit 4 shows what `rolling(3)` does on its first rows.
+
+</Aside>
 
 ## Warm-up
 
-Draft: the owner writes this section.
+From memory first, then click to check.
 
-TODO(owner): At most 2 recall prompts from earlier lessons, at least one that produces something; answers in lowercase details blocks.
+1. In *Window functions: keep the rows, add the context* (S14), what does `OVER (PARTITION BY store_id)` change compared with `GROUP BY store_id`?
+
+   <details>
+   <summary>answer</summary>
+
+   `GROUP BY` collapses the rows to one for each store. `PARTITION BY` keeps every row and writes the store's result beside each of them.
+
+   </details>
+
+2. In *Dates and periods in pandas* (P17), write the line that puts the previous month's value beside each month of a series called `monthly`.
+
+   <details>
+   <summary>answer</summary>
+
+   `monthly.shift(1)`. It moves every value down one place.
+
+   </details>
 
 ## The big idea
 
-Draft: the owner writes this section.
+A group calculation can shrink the table to one row for each group, or keep every row and write the group's result beside it; `transform`, `rank`, `shift` and `rolling` are the second kind.
 
-TODO(owner): One plain sentence on what the tool does to the rows, then one static figure.
+<svg viewBox="0 0 360 264" width="360" role="img" aria-labelledby="tr-fig-title tr-fig-desc">
+<title id="tr-fig-title">A group calculation can shrink the table to one row per group, or keep every row and write the result beside it</title>
+<desc id="tr-fig-desc">Six rows of a small table, each with a group letter A or B and a value: A 10, B 20, A 30, B 40, A 50, B 60. On the left, an aggregate collapses them to two rows, one for each group. On the right, transform keeps all six rows and adds a column holding the sum of the row's own group beside each row: A rows show 90 and B rows show 120. The added column is shaded.</desc>
+<rect x="230" y="46" width="70" height="144" fill="currentColor" fill-opacity="0.12" />
+<g fill="none" stroke="currentColor" stroke-opacity="0.5">
+<rect x="10" y="22" width="110" height="168" /><path d="M10 46 H120 M10 70 H120 M10 94 H120 M10 118 H120 M10 142 H120 M10 166 H120 M50 22 V190" />
+<rect x="150" y="22" width="150" height="168" /><path d="M150 46 H300 M150 70 H300 M150 94 H300 M150 118 H300 M150 142 H300 M150 166 H300 M190 22 V190 M230 22 V190" />
+</g>
+<g fill="currentColor" font-size="11" font-weight="600"><text x="10" y="14">six rows, a group and a value</text></g>
+<g fill="currentColor" font-size="10" font-weight="600" text-anchor="middle">
+<text x="30" y="38">group</text><text x="85" y="38">value</text>
+<text x="170" y="38">group</text><text x="210" y="38">value</text><text x="265" y="38">group sum</text>
+</g>
+<g fill="currentColor" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">
+<text x="30" y="62">A</text><text x="85" y="62">10</text><text x="30" y="86">B</text><text x="85" y="86">20</text>
+<text x="30" y="110">A</text><text x="85" y="110">30</text><text x="30" y="134">B</text><text x="85" y="134">40</text>
+<text x="30" y="158">A</text><text x="85" y="158">50</text><text x="30" y="182">B</text><text x="85" y="182">60</text>
+<text x="170" y="62">A</text><text x="210" y="62">10</text><text x="265" y="62">90</text>
+<text x="170" y="86">B</text><text x="210" y="86">20</text><text x="265" y="86">120</text>
+<text x="170" y="110">A</text><text x="210" y="110">30</text><text x="265" y="110">90</text>
+<text x="170" y="134">B</text><text x="210" y="134">40</text><text x="265" y="134">120</text>
+<text x="170" y="158">A</text><text x="210" y="158">50</text><text x="265" y="158">90</text>
+<text x="170" y="182">B</text><text x="210" y="182">60</text><text x="265" y="182">120</text>
+</g>
+<g fill="currentColor" font-size="11">
+<text x="10" y="212">An aggregate would give 2 rows: A 90, B 120.</text>
+<text x="10" y="230">transform keeps all 6 rows and writes the sum of</text>
+<text x="10" y="246">the row's own group beside each row (shaded).</text>
+</g>
+</svg>
 
 ## Learn by doing
 
-Draft: the owner writes this section.
+About 30 minutes, 4 new ideas: `transform`, `rank`, `shift` within groups, and `rolling`. The last unit only checks them. The setup cell made `store_month`, the sales of each store in each month, and `per_customer`, the orders of each customer in each store.
 
 <OpenInColab />
 
-TODO(owner): one line of orientation, then the units. Each unit: Idea, Try it in the notebook, Predict, Result, Why.
+### 1. transform: the group's answer on every row
 
-### 1. transform keeps the rows
+**Idea.** `groupby("key")["column"].transform("sum")` runs the same calculation for each group as `sum()` does, but hands the answers back to the rows of the table instead of making a new table.
 
-TODO(owner): aggregate against broadcast a group value.
+**Try it.** The total of each store, two ways:
 
-### 2. rank
+```python
+totals = store_month.groupby("store_id")["amount"].sum()
+broadcast = store_month.groupby("store_id")["amount"].transform("sum")
+print(len(totals), len(broadcast))
+print(broadcast.head(3).tolist())
+```
 
-TODO(owner): rank(method=min) is RANK, method=dense is DENSE_RANK.
+**Predict:** how many values will each of the two have, and what will the first three values of `broadcast` be?
 
-### 3. shift within groups
+<details>
+<summary>Reveal the result</summary>
 
-TODO(owner): groupby(...).shift(1) is LAG.
+```text
+3 15
+[9144.25, 9144.25, 9144.25]
+```
 
-### 4. cumsum, rolling, expanding
+</details>
 
-TODO(owner): divide up SUM() OVER (...).
+*Why:* 3 values against 15, one for each store against one for each row. The first three rows belong to store 1, so each holds store 1's total, 9,144.25. Now the share of each month in its own store, and the biggest shares:
 
-### 5. Check against SQL
+```python
+store_month["store_total"] = broadcast
+store_month["share"] = store_month["amount"] / store_month["store_total"]
+print(store_month.sort_values("share", ascending=False).head(4).round(3))
+```
 
-TODO(owner): one window query of the SQL stage and its pandas twin.
+**Predict:** which store and month will have the biggest share of its own store's sales, and how many of the first four rows will belong to that store?
 
-## Remember
+<details>
+<summary>Reveal the result</summary>
 
-Draft: the owner writes this section.
+```text
+    store_id  month   amount  store_total  share
+12         3      4  1596.50      4606.25  0.347
+13         3      5  1546.50      4606.25  0.336
+14         3      6  1463.25      4606.25  0.318
+4          1      5  1868.50      9144.25  0.204
+```
+
+</details>
+
+*Why:* the first three rows are Harbor's, with 0.347, 0.336 and 0.318. Harbor has only three months, so each month is about a third of its sales, and every month of the other cafes is smaller. A share is a share of the group, so it depends on how many rows the group has. Shares of a group add up to 1, which the check unit shows.
+
+### 2. rank: places, with ties
+
+**Idea.** `column.rank()` gives each value its place, counting from the smallest. `ascending=False` counts from the largest. `method` says what rows with the same value get: `"min"` gives all of them the lowest place of the tie, as `RANK()` does, and `"dense"` gives the next place number with no gap, as `DENSE_RANK()` does. The places come back as decimals.
+
+**Try it.** Harbor's eight most active customers, ranked both ways. `per_customer` counts every order that has a customer:
+
+```python
+harbor = per_customer[per_customer["store_id"] == 3]
+ranked = harbor.assign(
+    rank_min=harbor["orders"].rank(method="min", ascending=False),
+    rank_dense=harbor["orders"].rank(method="dense", ascending=False),
+)
+print(ranked.sort_values(["rank_min", "customer_id"]).head(8))
+```
+
+**Predict:** four customers have 10 orders and five have 9. What will `rank_min` and `rank_dense` show for the customers with 9?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+     store_id  customer_id  orders  rank_min  rank_dense
+285         3          104      11       1.0         1.0
+220         3            7      10       2.0         2.0
+224         3           13      10       2.0         2.0
+264         3           77      10       2.0         2.0
+284         3          103      10       2.0         2.0
+223         3           12       9       6.0         3.0
+236         3           33       9       6.0         3.0
+246         3           47       9       6.0         3.0
+```
+
+</details>
+
+*Why:* `rank_min` shows 6.0 and `rank_dense` shows 3.0. The four customers with 10 orders hold places 2 to 5, so `"min"` skips to 6 for the next value, while `"dense"` goes on from 2 to 3. Now inside each store at once. A `groupby` before `rank` restarts the places for every store:
+
+```python
+per_customer["place"] = per_customer.groupby("store_id")["orders"].rank(method="min", ascending=False)
+top = per_customer[per_customer["place"] <= 3]
+print(top.groupby("store_id").size())
+```
+
+**Predict:** for each store, how many customers will have place 3 or better?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+store_id
+1    3
+2    5
+3    5
+dtype: int64
+```
+
+</details>
+
+*Why:* 3, 5 and 5. In store 1 the places are 1, 2 and 2: two customers tie at place 2, and nobody holds place 3, so three pass. In store 2 three customers tie at place 3, and in store 3 four tie at place 2, so five pass in each. Asking for "the top 3" with `"min"` can return more than three rows, as in S15.
+
+### 3. shift inside each group
+
+**Idea.** `groupby("key")["column"].shift(1)` puts the value of the previous row of the same group beside each row.
+
+**Try it.** The month before, within each store:
+
+```python
+store_month["prev"] = store_month.groupby("store_id")["amount"].shift(1)
+print(store_month["prev"].isna().sum())
+print(store_month[store_month["store_id"] == 3][["month", "amount", "prev"]])
+```
+
+**Predict:** how many rows of `prev` will be empty, and which rows are they?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+3
+    month   amount    prev
+12      4  1596.50     NaN
+13      5  1546.50  1596.5
+14      6  1463.25  1546.5
+```
+
+</details>
+
+*Why:* 3: the first row of each store. Harbor's April has no month before it, because Harbor has no March, as in S16. Now the same without the `groupby`:
+
+```python
+plain = store_month["amount"].shift(1)
+first_harbor = store_month.index[store_month["store_id"] == 3][0]
+print(plain.isna().sum())
+print(plain[first_harbor])
+```
+
+**Predict:** how many rows will be empty now, and what will sit beside Harbor's April?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1
+1590.75
+```
+
+</details>
+
+*Why:* 1 empty row, and 1,590.75 beside Harbor's April: that is the June of Campus, the row above it in the table. Without the `groupby`, pandas has no idea where one store ends, so a store's first row borrows from the last row of the one before.
+
+### 4. rolling: a window that slides
+
+**Idea.** `series.rolling(3).mean()` takes the mean of each row and the two rows before it, the window of three rows, and moves one row at a time. A window counts rows, not days. The second line below adds a setting, `min_periods=1`.
+
+**Try it.** The three-month average of Old Town, store 1:
+
+```python
+old_town = store_month[store_month["store_id"] == 1]["amount"]
+print(old_town.rolling(3).mean().round(2).tolist())
+print(old_town.rolling(3, min_periods=1).mean().round(2).tolist())
+```
+
+**Predict:** what will the first two values of each list be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[nan, nan, 1435.83, 1419.58, 1655.08, 1612.25]
+[1591.0, 1376.5, 1435.83, 1419.58, 1655.08, 1612.25]
+```
+
+</details>
+
+*Why:* `nan, nan` for the first and 1,591.0, 1,376.5 for the second. With `rolling(3)` the first two rows have fewer than three values in their window, so they stay empty. The pandas page for `rolling` names `min_periods` as the smallest number of values a window must hold, and with `min_periods=1` the first rows average the rows that exist, as S16's moving average did: 1,591.00 alone, then 1,591.00 and 1,162.00 together. Now one average for each store, as in unit 3:
+
+```python
+by_store = store_month.groupby("store_id")["amount"].rolling(3).mean()
+plain_roll = store_month["amount"].rolling(3).mean()
+print(by_store.isna().sum(), plain_roll.isna().sum())
+```
+
+**Predict:** how many empty values will each version have, with and without the `groupby`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+6 2
+```
+
+</details>
+
+*Why:* 6 against 2. The grouped version starts again in each store, so each store has two empty values at its start. The other one slides across the borders, so Campus's January average would include Old Town's last months. The grouped result has the store id and the old row label together as its row label; `by_store.reset_index(level=0, drop=True)` puts the row labels back, and the column can be assigned.
+
+### 5. Check: two ways to the same numbers
+
+Write down what you expect, then run the cell. The shares are those of unit 1, and `old_town` is the series of unit 4.
+
+```python
+print(store_month.groupby("store_id")["share"].sum().round(6).tolist())
+by_hand = old_town.iloc[1:4].mean()
+print(round(old_town.rolling(3).mean().iloc[3], 6) == round(by_hand, 6))
+```
+
+**Predict:** what will the shares of each store add up to, and does the average that `rolling` gives for Old Town's April equal the mean of February, March and April worked out by hand?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[1.0, 1.0, 1.0]
+True
+```
+
+</details>
+
+*Why:* each store's shares add up to 1.0, and the answer to the second is `True`: a rolling average is the mean of the rows in its window and nothing else.
 
 <Aside type="tip" title="Remember">
 
-TODO(owner): 3 to 5 one-line rules and one bold Common trap line. Trap candidates: pick the most common mistake of this lesson.
+- `transform("sum")` repeats each group's result on every row of the group; `sum()` gives one row for each group.
+- `rank(method="min", ascending=False)` is `RANK`, `method="dense"` is `DENSE_RANK`; a `groupby` before `rank` restarts the places for each group.
+- `groupby(...).shift(1)` is `LAG` inside each group; the first row of a group holds `nan`.
+- `rolling(3).mean()` waits for three rows; `min_periods=1` averages the rows that exist.
+- Reconcile: shares add up to 1, and a window result can be checked by hand.
+
+**Common trap:** `shift` and `rolling` without a `groupby` slide across the borders between groups, so a group's first rows borrow from the group above.
 
 </Aside>
 
 ## Finish it
 
-Draft: the owner writes this section.
-
 <Exercise id="python-pandas-transform-rank-rolling-1">
 
-**Finish it.** Notebook: Exercise 1.
+**Which product has the biggest share of the sales of its own category? Report that share.** `by_product` holds the sales of each product, with its category. Replace the first `None` with the sales of the product's whole category on every row, made with `transform`, then set `answer_1` to the biggest share of a product in its category, a number between 0 and 1. Expected: one decimal number between 0 and 1.
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Finish it: the first steps are given and the learner finishes.
+```python
+by_product = sales.groupby(["category", "product_id"])["amount"].sum().reset_index()  # given: one row for each product
+by_product["category_total"] = None  # replace None: the sales of the product's category, on every row
+answer_1 = None  # then set answer_1 to the largest share: amount divided by category_total
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+The total of a category must be repeated on every row of the category, which is a calculation per group that keeps the rows.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+by_product["category_total"] = by_product.groupby("category")[...].transform(...)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+by_product = sales.groupby(["category", "product_id"])["amount"].sum().reset_index()
+by_product["category_total"] = by_product.groupby("category")["amount"].transform("sum")
+answer_1 = (by_product["amount"] / by_product["category_total"]).max()
+```
+
+The answer is 0.5070: Chai Latte, product 8, sold 1,639.00 of the 3,232.50 of the tea category, the biggest share any product has in its category. Dividing by the total of the whole chain gives 0.1286, a share of everything, which the check cell flags.
 
 </Solution>
 
@@ -127,31 +411,38 @@ TODO(owner): solution and the known answer.
 
 ## On your own
 
-Draft: the owner writes this section.
-
 <Exercise id="python-pandas-transform-rank-rolling-2">
 
-**On your own.** Notebook: Exercise 2.
-
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. On your own: a blank start; the learner writes the expected output in words first.
+**What was the biggest rise in the sales of a category from one month to the next?** Before you start, say in one sentence what the table you need looks like: one row for each category and month, with the month before beside it. Build it from `sales`, with the sales of each category in each month, and set `answer_2` to the biggest rise in dollars, a decimal number. Write the code in the empty cell of the notebook and set `answer_2`. Expected: one decimal number, a rise in dollars.
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Group by category and month first. A category's January has no month before it: group before you shift.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+Expected output in words: *"One number in dollars, a rise between two months of the same category."*
+
+```python
+category_month = sales.groupby([..., ...])["amount"].sum().reset_index()
+category_month["change"] = category_month["amount"] - category_month.groupby(...)[...].shift(1)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+category_month = sales.groupby(["category", "month"])["amount"].sum().reset_index()
+category_month["change"] = category_month["amount"] - category_month.groupby("category")["amount"].shift(1)
+answer_2 = category_month["change"].max()
+```
+
+The answer is 508.50: food rose from 525.75 in March to 1,034.25 in April, when Harbor opened. Without the `groupby` each category's January is compared with the June of the category above it, and the rise from bakery's June to coffee's January, 637.25, wins; the check cell says so.
 
 </Solution>
 
@@ -159,36 +450,56 @@ TODO(owner): solution and the known answer.
 
 ## Check yourself
 
-Draft: the owner writes this section.
+1. Without looking back: a store has three customers with 5, 5 and 3 orders. What do `method="min"` and `method="dense"` give to the customer with 3 orders, ranking from the largest?
 
-TODO(owner): one closed-book recall in a details block.
+   <details>
+   <summary>answer</summary>
+
+   `"min"` gives 3.0: the two customers with 5 hold places 1 and 2, so the next value takes place 3. `"dense"` gives 2.0, the next place number after 1, with no gap.
+
+   </details>
 
 <Exercise id="python-pandas-transform-rank-rolling-3">
 
-**Check yourself: spot the flaw.** Notebook: Exercise 3.
+**Spot the flaw.** A colleague wants the best-selling product of each category by units. The list has one product only, and it is not the best of every category. Fix the lines, then set `answer_3` to the product ids of the best sellers, in the order of the categories (bakery, coffee, food, tea), as a list. `units` has one row for each product. Expected: a list of four product ids.
 
-TODO(owner): write this exercise with cafe-sales values, never foo and bar. Check yourself: a plausible wrong solution; the learner spots the flaw.
+```python
+units = sales.groupby(["category", "product_id"])["quantity"].sum().reset_index()
+units["place"] = units["quantity"].rank(method="min", ascending=False)  # the colleague's line
+answer_3 = None  # fix the line above, then set answer_3 = units[units["place"] == 1]["product_id"].tolist()
+```
 
 <details>
 <summary>Hint</summary>
 
-TODO(owner): hint.
+Print `units[units["place"] == 1]`. How many rows does it have, and how many categories are there?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-TODO(owner): half-solution.
+```python
+units["place"] = units.groupby(...)["quantity"].rank(method="min", ascending=False)
+```
 
 </details>
 
 <Solution>
 
-TODO(owner): solution and the known answer.
+```python
+units = sales.groupby(["category", "product_id"])["quantity"].sum().reset_index()
+units["place"] = units.groupby("category")["quantity"].rank(method="min", ascending=False)
+answer_3 = units[units["place"] == 1]["product_id"].tolist()
+```
+
+The answer is `[10, 3, 13, 8]`: Croissant, Latte, Bagel with Cream Cheese and Chai Latte, the best seller of each category. Without the `groupby` the places run over the whole table, so only product 3, the Latte, holds place 1, and the check cell says so.
 
 </Solution>
 
 </Exercise>
 
-TODO(owner): the Can you do it ability statement and the named pattern in one sentence.
+**Can you do it?** *I can add a group's value to every row with `transform`, rank within groups with the method that matches `RANK` or `DENSE_RANK`, compare with the previous row of the same group with `shift`, and average a sliding window with `rolling`.*
+Test: Exercise python-pandas-transform-rank-rolling-2, done from the notebook without opening the hints.
+
+The pattern to remember: **group first, then transform, rank, shift or roll, so that every row keeps its group.** The next lesson, *Charts with pandas and matplotlib* (P21), draws tables like these.
