@@ -217,5 +217,3 @@ export const MATH_SOURCES: readonly { label: string; href: string }[] = [
 	{ label: 'University of Wisconsin–Madison: MS in Data Engineering', href: 'https://pdc.wisc.edu/degrees/data-engineering-ms/' },
 ];
 
-/** Why bars come first (research issue #87, section 6). */
-export const CHART_SOURCE = { label: 'Albo, Lanir, Bak and Rafaeli, IEEE TVCG 22(1), 2016', href: 'https://doi.org/10.1109/TVCG.2015.2467322' };
