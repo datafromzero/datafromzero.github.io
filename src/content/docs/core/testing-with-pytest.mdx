@@ -2,15 +2,15 @@
 id: core-testing-with-pytest
 title: Testing on known answers with pytest
 short_title: Testing with pytest
-description: Write pytest tests on small cafe tables with edge rows, catch a join that drops or doubles rows, and take expected answers from another route.
+description: Write pytest tests on small cafe order lists with edge rows, catch a count that silently doubles rows, and take expected answers from another route.
 stage: core
 order: 270
 level: intermediate
 duration: 30
 objectives:
-  - Write a test function with an assert and run it with pytest
-  - Build a small table whose answer you know, with edge rows such as the last second of a month and a missing value
-  - Catch a join that silently drops or doubles rows
+  - Write a test function with an assert, run it with pytest, and make the package importable from the tests
+  - Build a small list of orders whose answer you know, with edge rows such as the first moment of a day and a canceled order
+  - Catch a count that silently doubles rows when an export repeats one
   - Take the expected answer from another route, and say what continuous integration does with your tests
 prerequisites:
   - core-debugging-and-retries
@@ -22,12 +22,14 @@ reviewed: 2026-11-20
 sources:
   - title: 'pytest documentation: Get started (accessed 2026-11-21)'
     url: https://docs.pytest.org/en/stable/getting-started.html
-  - title: 'pytest documentation: How to write and report assertions (accessed 2026-11-21)'
-    url: https://docs.pytest.org/en/stable/how-to/assert.html
   - title: 'pytest documentation: How to use fixtures (accessed 2026-11-21)'
     url: https://docs.pytest.org/en/stable/how-to/fixtures.html
-  - title: 'pandas documentation: DataFrame.merge (accessed 2026-11-21)'
-    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html
+  - title: 'pytest documentation: pytest import mechanisms and sys.path (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/explanation/pythonpath.html
+  - title: 'pytest documentation: Configuration, pyproject.toml (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/reference/customize.html
+  - title: 'pytest documentation: API reference, the pythonpath option (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/reference/reference.html
   - title: 'uv documentation: Managing dependencies, development dependencies (accessed 2026-11-21)'
     url: https://docs.astral.sh/uv/concepts/projects/dependencies/
   - title: 'GitHub Docs: Continuous integration (accessed 2026-11-21)'
@@ -35,25 +37,25 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24) for you to edit and approve; `reviewed` and `status` are yours to set. Changes from the stub: the objectives now say what the four units do ("catch a transform that drops or doubles rows" became unit 3, "explain CI" is a paragraph of unit 4 with no workflow built); the prerequisites add the environments lesson (`uv add --dev`) and P27 (its `assert` and "tiny table, second route" checks are what this lesson moves into a file); the sources lose the pandas `assert_frame_equal` page, which no unit uses, and the MLOps Zoomcamp repository (not opened), and add the pandas merge page, the uv page and the GitHub CI page. Doubts: (1) the repository names are those of C26 (`cafe-report`, package `cafe_report`, `report.py` with `read_orders`, `in_month`, `order_totals` and `store_sales`); align them with the C22 to C25 text. (2) The exit status of pytest is not taught (the pytest page that lists the exit codes was not opened). (3) The expected answers of unit 4 and the exercises come from the SQL playground route, named as plain text (`/sql/playground/`) because the links validator rejects a link to that custom page; the page says to run the query there, and the numbers were checked with DuckDB 2.0.0 and pandas 3.1.1 on Python 3.13, with pytest 9.2.0. (4) Floating-point money: the April sums happen to be exact in binary, so `approx` is not needed for them; the lesson uses it as the safe habit and does not claim it is needed here.
+TODO(owner): Team draft (D24) for you to edit and approve; `reviewed` and `status` are yours to set. Every command and output comes from a real run on Linux with Python 3.13, uv 0.11, pandas 3.1.1 and pytest 9.2.0, in a folder rebuilt from the code blocks of C22 to C25 and then through C26 (home folder printed as `/home/ana`); nothing was run on Windows or macOS. Changes from the stub: the objectives now say what the four units do (the stub's "catch a transform that silently drops or doubles rows" became unit 3, which finds a real doubling bug in `orders_per_store`; a dropped row is not shown, because the package has no join); "explain CI" is a paragraph of unit 4 with no workflow built; the prerequisites add the environments lesson (`uv add --dev`) and P27 (its `assert` on a tiny table and "second route" checks are what this lesson moves into a file); the sources lose the pandas `assert_frame_equal` page, which no unit uses, and the MLOps Zoomcamp repository (not opened), and add the pytest import, configuration and `pythonpath` pages, the uv page and the GitHub CI page. The project of C22 to C25 has no `src/` folder, no tests folder and a bare `pyproject.toml`, so a first test cannot import `cafe_report`: unit 1 makes the learner meet that error and fix it with `pythonpath = ["."]`. The functions under test are `orders_per_store` (a list of dictionaries with text values), `read_orders` and `orders_by_store_month` (Exercise 2, with `tmp_path`). The change of unit 3 edits `cafe_report/summary.py` (it skips an order id it has seen); say so if C24 should end with that version. Doubts: (1) the exit status of pytest is not taught (the pytest page that lists the exit codes was not opened); (2) the expected answers of unit 4 come from a SQL query on the same file (checked with DuckDB 2.0.0), named as plain text (`/sql/playground/`) because the links validator rejects a link to that custom page; (3) `data/orders.csv` is ignored by Git (C23), so the test of unit 4 needs `uv run download_data.py` on a clean clone, as in C25 unit 4; (4) the line numbers in the failure reports depend on the exact layout of the learner's test file.
 
 ## The question
 
-Last week the owner changed the month filter, and nobody saw that March had lost 8 orders until the till report disagreed. The owner asks:
+The owner wants to change the order counts again, and writes:
 
-> Can the program check itself every time I change it? And can it catch the kind of mistake that only shows on the first and last day of a month?
+> Last time I changed the first day of the count, nobody noticed that a day was missing until I added the numbers by hand. Can the program check itself every time I change it, also on the first day and the last second of a month?
 
-A tiny table is enough to show where such a mistake hides. These five orders have a known April: the first moment and the last second of the month, a walk-in with no customer, and the first moment of May.
+A tiny list is enough to show where such a mistake hides. These five orders have a known answer for a count from April 1: the last second of March, the first moment of April, a walk-in with no customer, a canceled order, and the first moment of May.
 
-| order_id | customer_id | store_id | ordered_at |
-|---:|---:|---:|---|
-| 1 | 7 | 1 | 2026-03-31 23:59:59 |
-| 2 | 8 | 1 | 2026-04-01 00:00:00 |
-| 3 | | 2 | 2026-04-15 12:30:00 |
-| 4 | 8 | 2 | 2026-04-30 23:59:59 |
-| 5 | 9 | 3 | 2026-05-01 00:00:00 |
+| order_id | customer_id | store_id | ordered_at | status |
+|---:|---:|---:|---|---|
+| 1 | 7 | 1 | 2026-03-31 23:59:59 | completed |
+| 2 | 8 | 1 | 2026-04-01 00:00:00 | completed |
+| 3 | | 2 | 2026-04-15 12:30:00 | completed |
+| 4 | 9 | 2 | 2026-04-30 23:59:59 | canceled |
+| 5 | 9 | 3 | 2026-05-01 00:00:00 | completed |
 
-By the end you can write tests that run on tables like this one, see what a failed test tells you, and trust a test because its answer came from somewhere else.
+By the end you can write tests that run on lists like this one, see what a failed test tells you, and trust a test because its answer came from somewhere else.
 
 <Aside type="note" title="You already know this">
 
@@ -76,14 +78,12 @@ From memory first, then click to check.
 
    </details>
 
-2. In *When it breaks: errors, retries and debugging* (C26), the script counted 250 March orders instead of 258. Which cut of the month was wrong? Write the two lines of the version that is right.
+2. In *When it breaks: errors, retries and debugging* (C26), the script counted 250 March orders instead of 258. What kind of comparison was wrong, and what does `orders_per_store` compare instead?
 
    <details>
    <summary>answer</summary>
 
-   The end: `<= end` with `end` at midnight of March 31 dropped the orders of that day. The right version cuts at the first moment of the next month and uses `<`:
-
-   `end = start + pd.offsets.MonthBegin(1)` and `orders["ordered_at"] < end`
+   It compared the text of the time with the text of a day, so every time after midnight on the 31st was greater. `orders_per_store` turns the time into a date with `datetime.fromisoformat(...).date()` and compares days.
 
    </details>
 
@@ -156,103 +156,102 @@ A test runs your code on rows whose answer you know and fails when the result di
 
 ## Learn by doing
 
-About 30 minutes, 4 new ideas: a test function, edge rows and a fixture, guards against dropped and doubled rows, and an answer from another route. Work in the repository of C26 (`cafe-report`), in the terminal.
+About 30 minutes, 4 new ideas: a test function and where pytest looks for your code, edge rows and a fixture, a count that doubles a repeated row, and an answer from another route. Work in the folder `cafe-report` after C26, in the terminal, with the changes of C26 committed.
 
 ### 1. A test is a function with an assert
 
-**Idea.** A test is a function that builds a small input, calls your code and asserts the answer you know. pytest finds your tests, runs each one and prints a dot for every test that holds. It is a development tool, so it goes in the development group of the project and never into what the program needs to run.
+**Idea.** A test is a function that builds a small input, calls your code and asserts the answer you know. pytest runs the files named `test_*.py` or `*_test.py` and the functions whose names start with `test_`, and prints a dot for every test that holds. It is a development tool, so it goes in the development group of the project and never into what the program needs to run.
 
-**Try it.** Add pytest, then save the first test as `tests/test_report.py`:
+**Try it.** Add pytest, then save the first test as `tests/test_summary.py` (make the folder `tests`):
 
 ```bash
 uv add --dev pytest
 ```
 
 ```python
-import pandas as pd
+from datetime import date
 
-from cafe_report.report import order_totals
+from cafe_report.summary import orders_per_store
 
 
-def test_order_totals_is_quantity_times_price_minus_discount():
-    items = pd.DataFrame(
-        {
-            "order_id": [1, 1, 2],
-            "product_id": [10, 1, 10],
-            "quantity": [1, 2, 3],
-            "discount_usd": [0.0, 0.0, 1.0],
-        }
-    )
-    products = pd.DataFrame({"product_id": [1, 10], "unit_price_usd": [3.0, 3.25]})
-    totals = order_totals(items, products)
-    assert totals["amount"].tolist() == [9.25, 8.75]
+def test_orders_per_store_counts_the_completed_orders_from_the_day():
+    orders = [
+        {"order_id": "1", "store_id": "1", "ordered_at": "2026-04-02 08:00:00", "status": "completed"},
+        {"order_id": "2", "store_id": "1", "ordered_at": "2026-04-03 09:30:00", "status": "completed"},
+        {"order_id": "3", "store_id": "2", "ordered_at": "2026-04-03 10:00:00", "status": "canceled"},
+    ]
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 2}
 ```
 
-Run `uv run pytest -q`. Then rename the file to `tests/check_report.py` and run it again. Rename it back.
+Run `uv run pytest -q`.
 
-**Predict:** What do the two runs print?
+**Predict:** The code holds and the answer is right: store 1 has two completed orders, and the canceled order does not count. Does the run print a dot?
 
 <details>
 <summary>Reveal the result</summary>
 
 ```text
 $ uv run pytest -q
-.                                                                        [100%]
-1 passed in 0.23s
-$ uv run pytest -q
 
-no tests ran in 0.01s
-```
-
-The time differs on your machine. After the first command, `pyproject.toml` has a new group:
-
-```toml
-[dependency-groups]
-dev = [
-    "pytest>=9.2.0",
-]
+==================================== ERRORS ====================================
+____________________ ERROR collecting tests/test_summary.py ____________________
+ImportError while importing test module '/home/ana/cafe-report/tests/test_summary.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_summary.py:3: in <module>
+    from cafe_report.summary import orders_per_store
+E   ModuleNotFoundError: No module named 'cafe_report'
+=========================== short test summary info ============================
+ERROR tests/test_summary.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.07s
 ```
 
 </details>
 
-*Why:* the answer was worked out by hand from two prices of the menu, Espresso 3.00 and Croissant 3.25: order 1 is 1 × 3.25 + 2 × 3.00 = 9.25 and order 2 is 3 × 3.25 − 1.00 = 8.75. pytest runs files of the form `test_*.py` or `*_test.py`, and functions whose names start with `test_`, so `check_report.py` was never looked at. A file pytest does not collect gives "no tests ran", not a pass. The uv page says that a development dependency is local only and is not part of the requirements when the project is published, and that `uv run` includes the `dev` group by default.
+*Why:* the test never ran: pytest could not import the package. The pytest page says that, for a test file with no `__init__.py` beside it, pytest inserts the folder of the test file into the search path, which here is `tests/`, not the project folder; it is the cause of C24's Exercise 3 again, a folder missing from the search path. The same page says that `python -m pytest` adds the current directory instead. The lasting fix is a setting in `pyproject.toml`: the pytest configuration page says a `[tool.pytest.ini_options]` table configures pytest, and the reference says that `pythonpath` sets the list of directories added to the search path, relative to the rootdir, which is the folder of that file. Add this to the end of `pyproject.toml` and run again:
+
+```toml
+[tool.pytest.ini_options]
+pythonpath = ["."]
+```
+
+```text
+$ uv run pytest -q
+.                                                                        [100%]
+1 passed in 0.01s
+```
+
+The time differs on your machine. After `uv add --dev pytest`, `pyproject.toml` also has a new group, `[dependency-groups]` with `dev = ["pytest>=9.2.0"]`; the uv page says a development dependency is local only and is not part of the requirements when the project is published, and that `uv run` includes the `dev` group by default. The answer was worked out by hand: the two completed orders are in store 1, and the canceled order of store 2 is not counted.
 
 ### 2. Edge rows, a fixture, and a failure report
 
-**Idea.** The mistakes that survive a first look sit at the edges of a rule: the first moment and the last second of a month, a value that is missing. Put those rows in the table. A fixture is a function marked `@pytest.fixture` that builds a table once for each test; a test asks for it by writing its name as an argument.
+**Idea.** The mistakes that survive a first look sit at the edges of a rule: the first moment of a day, the last second before it, a canceled order, a customer that is missing. Put those rows in the list. A fixture is a function marked `@pytest.fixture` that builds the list once for each test; a test asks for it by writing its name as an argument.
 
-**Try it.** Add the five orders of the question as a fixture, and a test that April keeps orders 2, 3 and 4. Put `import pytest` at the top, change the import to `from cafe_report.report import in_month, order_totals`, and keep the first test.
+**Try it.** Add the five orders of the question as a fixture, and a test that a count from April 1 keeps orders 2, 3 and 5. Put `import pytest` at the top, the fixture above the first test, and the new test at the end:
 
 ```python
 @pytest.fixture
 def orders():
-    return pd.DataFrame(
-        {
-            "order_id": [1, 2, 3, 4, 5],
-            "customer_id": [7, 8, None, 8, 9],
-            "store_id": [1, 1, 2, 2, 3],
-            "ordered_at": pd.to_datetime(
-                [
-                    "2026-03-31 23:59:59",
-                    "2026-04-01 00:00:00",
-                    "2026-04-15 12:30:00",
-                    "2026-04-30 23:59:59",
-                    "2026-05-01 00:00:00",
-                ]
-            ),
-            "status": ["completed"] * 5,
-        }
-    )
+    return [
+        {"order_id": "1", "customer_id": "7", "store_id": "1", "ordered_at": "2026-03-31 23:59:59", "status": "completed"},
+        {"order_id": "2", "customer_id": "8", "store_id": "1", "ordered_at": "2026-04-01 00:00:00", "status": "completed"},
+        {"order_id": "3", "customer_id": "", "store_id": "2", "ordered_at": "2026-04-15 12:30:00", "status": "completed"},
+        {"order_id": "4", "customer_id": "9", "store_id": "2", "ordered_at": "2026-04-30 23:59:59", "status": "canceled"},
+        {"order_id": "5", "customer_id": "9", "store_id": "3", "ordered_at": "2026-05-01 00:00:00", "status": "completed"},
+    ]
 
 
-def test_in_month_keeps_the_first_moment_and_the_last_second(orders):
-    april = in_month(orders, "2026-04")
-    assert april["order_id"].tolist() == [2, 3, 4]
+def test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not(orders):
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
 ```
 
-It passes. Now put the bug of C26 back into `in_month` in `report.py`: replace the line that sets `end` by `end = start + pd.offsets.MonthEnd(0)` and the last line by `return orders[(orders["ordered_at"] >= start) & (orders["ordered_at"] <= end)]`, and run `uv run pytest -q`.
+It passes. Now break the rule in `cafe_report/summary.py`: change `day >= since` to `day > since`, and run `uv run pytest -q`.
 
-**Predict:** Which test fails, and which order does the report say is missing?
+**Predict:** Which test fails, and which store does the report say is missing?
 
 <details>
 <summary>Reveal the result</summary>
@@ -261,120 +260,103 @@ It passes. Now put the bug of C26 back into `in_month` in `report.py`: replace t
 $ uv run pytest -q
 .F                                                                       [100%]
 =================================== FAILURES ===================================
-___________ test_in_month_keeps_the_first_moment_and_the_last_second ___________
+_ test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not _
 
-(the fixture table, shortened by pytest, is left out)
+(the fixture list, shortened by pytest, is left out)
 
-    def test_in_month_keeps_the_first_moment_and_the_last_second(orders):
-        april = in_month(orders, "2026-04")
->       assert april["order_id"].tolist() == [2, 3, 4]
-E       assert [2, 3] == [2, 3, 4]
-E         
-E         Right contains one more item: 4
+    def test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not(orders):
+>       assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
+E       AssertionError: assert {'2': 1, '3': 1} == {'1': 1, '2': 1, '3': 1}
+E
+E         Omitting 2 identical items, use -vv to show
+E         Right contains 1 more item:
+E         {'1': 1}
 E         Use -v to get more diff
 
-tests/test_report.py:44: AssertionError
+tests/test_summary.py:29: AssertionError
 =========================== short test summary info ============================
-FAILED tests/test_report.py::test_in_month_keeps_the_first_moment_and_the_last_second
-1 failed, 1 passed in 0.23s
+FAILED tests/test_summary.py::test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not
+1 failed, 1 passed in 0.02s
 ```
 
 </details>
 
-*Why:* the test for the edge row fails and the other test still runs and passes, so one run tells you everything that is broken. The `>` marks the failing line and the `E` lines show the two values, the result `[2, 3]` and the known answer `[2, 3, 4]`, with the item that is missing: order 4, at 23:59:59 on April 30, after the midnight that the buggy `end` stops at. pytest's assert report shows the intermediate values, so you do not write a message. Put the right two lines back.
+*Why:* the test of the edge row fails and the first test still passes, because its orders are days after April 1: one run tells you everything that is broken, and the first test could never have seen this change. The `>` marks the failing line and the `E` lines show the two answers, with what is missing: `{'1': 1}`, store 1, whose only order from April 1 is the one at exactly midnight. pytest's assert report shows the intermediate values, so you do not write a message. Undo the change with `git restore cafe_report/summary.py`.
 
-### 3. Guard the joins that drop or double rows
+### 3. A count that doubles a repeated row
 
-**Idea.** A merge can change the number of rows without an error: a key that repeats in one table matches a line twice, and an inner join drops every row that finds no partner. Two guards cover it. The first is the check you ask pandas to make (`validate="many_to_one"` in `order_totals` makes it refuse a repeated key in `products`), and a test that the check fires, with `pytest.raises`. The second is a count: the rows that went in come out.
+**Idea.** A count can change the number of rows without an error. When an export is written twice, an order appears on two rows, and a loop that adds one for each row counts it twice. A test finds this only when the list contains a repeated row on purpose.
 
-**Try it.** Add two tests, with `import pytest` and `store_sales` in the import. The second takes the orders 2, 3 and 4 of the fixture, and gives totals only for 2 and 3, so order 4 has no lines:
+**Try it.** Add a test that repeats order 2, and run `uv run pytest -q`:
 
 ```python
-def test_a_repeated_product_row_is_refused():
-    items = pd.DataFrame(
-        {"order_id": [1], "product_id": [1], "quantity": [2], "discount_usd": [0.0]}
-    )
-    products = pd.DataFrame({"product_id": [1, 1], "unit_price_usd": [3.0, 3.0]})
-    with pytest.raises(pd.errors.MergeError):
-        order_totals(items, products)
-
-
-def test_an_order_without_lines_still_counts(orders):
-    totals = pd.DataFrame({"order_id": [2, 3], "amount": [6.0, 4.5]})
-    result = store_sales(orders.iloc[1:4], totals)
-    assert result["orders"].tolist() == [1, 2]
-    assert result["sales"].tolist() == [6.0, 4.5]
+def test_a_repeated_order_row_counts_once(orders):
+    again = orders + [orders[1]]  # the export wrote order 2 twice
+    assert orders_per_store(again, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
 ```
 
-Four tests pass. Now break both guards in `report.py`: delete `, validate="many_to_one"` from the merge in `order_totals`, and change `how="left"` to `how="inner"` in `store_sales`. Run `uv run pytest -q`.
-
-**Predict:** How many tests fail, and what does the `E` line of each one say?
+**Predict:** The answer is the same as in unit 2, because it is the same orders. Does the test pass? If not, what do the `E` lines say?
 
 <details>
 <summary>Reveal the result</summary>
 
 ```text
 $ uv run pytest -q
-..FF                                                                     [100%]
+..F                                                                      [100%]
 =================================== FAILURES ===================================
-____________________ test_a_repeated_product_row_is_refused ____________________
+____________________ test_a_repeated_order_row_counts_once _____________________
 
-    def test_a_repeated_product_row_is_refused():
-        items = pd.DataFrame(
-            {"order_id": [1], "product_id": [1], "quantity": [2], "discount_usd": [0.0]}
-        )
-        products = pd.DataFrame({"product_id": [1, 1], "unit_price_usd": [3.0, 3.0]})
->       with pytest.raises(pd.errors.MergeError):
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       Failed: DID NOT RAISE MergeError
+(the fixture list, shortened by pytest, is left out)
 
-tests/test_report.py:52: Failed
-___________________ test_an_order_without_lines_still_counts ___________________
-
-(the fixture table, shortened by pytest, is left out)
-
-    def test_an_order_without_lines_still_counts(orders):
-        totals = pd.DataFrame({"order_id": [2, 3], "amount": [6.0, 4.5]})
-        result = store_sales(orders.iloc[1:4], totals)
->       assert result["orders"].tolist() == [1, 2]
-E       assert [1, 1] == [1, 2]
-E         
-E         At index 1 diff: 1 != 2
+    def test_a_repeated_order_row_counts_once(orders):
+        again = orders + [orders[1]]  # the export wrote order 2 twice
+>       assert orders_per_store(again, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
+E       AssertionError: assert {'1': 2, '2': 1, '3': 1} == {'1': 1, '2': 1, '3': 1}
+E
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'1': 2} != {'1': 1}
 E         Use -v to get more diff
 
-tests/test_report.py:59: AssertionError
-=========================== short test summary info ============================
-FAILED tests/test_report.py::test_a_repeated_product_row_is_refused - Failed:...
-FAILED tests/test_report.py::test_an_order_without_lines_still_counts - asser...
-2 failed, 2 passed in 0.26s
+tests/test_summary.py:34: AssertionError
 ```
 
 </details>
 
-*Why:* without `validate` the repeated product row matched the line twice, which would have priced a line worth 6.00 (2 × 3.00) at 12.00, and nothing complained, so the test that the guard fires reports `DID NOT RAISE`. The pandas page says that `how="inner"` uses the keys found in both tables and `how="left"` the keys of the left one, so the inner join lost order 4 and store 2 counted 1 order instead of 2. Neither mistake raised an error; only a test that knew the answer could see it. Put both lines back.
+*Why:* the code of C24 added one for each row, so order 2 counted twice and store 1 shows 2 instead of 1. Nothing raised an error; only a test that knew the answer could see it. The fix is to skip an order id that was already seen. Change `orders_per_store` in `cafe_report/summary.py` to:
+
+```python
+def orders_per_store(orders, since):
+    """Count the completed orders of each store on or after the day `since`."""
+    counts = {}
+    seen = set()
+    for order in orders:
+        if order["order_id"] in seen:
+            continue
+        seen.add(order["order_id"])
+        day = datetime.fromisoformat(order["ordered_at"]).date()
+        if order["status"] == "completed" and day >= since:
+            counts[order["store_id"]] = counts.get(order["store_id"], 0) + 1
+    return counts
+```
+
+Now `uv run pytest -q` prints `...` and `3 passed`. Commit the tests and the fix: `git add pyproject.toml uv.lock tests cafe_report`, then `git commit -m "Test the order counts and skip a repeated order row"`.
 
 ### 4. The answer comes from another route
 
-**Idea.** A test on the real file needs an answer you did not get from the code under test. Take it from a second route on the same data: a SQL query, or a PivotTable. For the sums of money, compare with `pytest.approx`, which the pytest page describes for floating-point values where small rounding errors are expected.
+**Idea.** A test on the real file needs an answer from a second route on the same data: a SQL query, a PivotTable, a `uniq -c` pipeline. The numbers that C24 printed for the count from April 1 came out of this function, so they cannot check it.
 
-**Try it.** Run this query in the SQL playground of this site, at `/sql/playground/`, which has the five tables loaded. It gives the completed orders and the sales of each cafe in April:
+**Try it.** Run this query in the SQL playground of this site, at `/sql/playground/`, which has the five tables loaded. It counts the completed orders of each store from April 1:
 
 ```sql
-SELECT o.store_id,
-       COUNT(*) AS orders,
-       ROUND(SUM(t.amount), 2) AS sales
-FROM orders AS o
-LEFT JOIN (SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS amount
-           FROM order_items AS i
-           JOIN products AS p ON p.product_id = i.product_id
-           GROUP BY i.order_id) AS t ON t.order_id = o.order_id
-WHERE o.status = 'completed'
-  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-05-01'
-GROUP BY o.store_id
-ORDER BY o.store_id;
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed' AND ordered_at >= '2026-04-01'
+GROUP BY store_id
+ORDER BY store_id;
 ```
 
-Expected: 3 rows, 3 columns: stores 1, 2 and 3 with 123, 103 and 123 orders and 1,542.25, 1,252 and 1,596.5 dollars. Now add the same numbers as a test on the real files, with `from pathlib import Path` at the top of the file, `read_orders` in the import and this line below the imports:
+Expected: 3 rows, 2 columns: stores 1, 2 and 3 with 365, 362 and 355 orders. Now add the same numbers as a test on the real file, with `from pathlib import Path` and `from cafe_report.load import read_orders` in the imports and this line below them:
 
 ```python
 DATA = Path(__file__).resolve().parent.parent / "data"
@@ -382,39 +364,34 @@ DATA = Path(__file__).resolve().parent.parent / "data"
 
 ```python
 def test_april_matches_the_answer_from_sql():
-    orders = in_month(read_orders(DATA / "orders.csv"), "2026-04")
-    items = pd.read_csv(DATA / "order_items.csv")
-    products = pd.read_csv(DATA / "products.csv")
-    result = store_sales(orders, order_totals(items, products))
-    assert result["store_id"].tolist() == [1, 2, 3]
-    assert result["orders"].tolist() == [123, 103, 123]
-    assert result["sales"].tolist() == pytest.approx([1542.25, 1252.00, 1596.50])
+    orders = read_orders(DATA / "orders.csv")
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 365, "2": 362, "3": 355}
 ```
 
-**Predict:** With the five tests of this lesson in the file, how many does `uv run pytest -q` report, and do they all pass?
+**Predict:** With the four tests of this lesson in the file, how many does `uv run pytest -q` report, and do they all pass?
 
 <details>
 <summary>Reveal the result</summary>
 
 ```text
 $ uv run pytest -q
-.....                                                                    [100%]
-5 passed in 0.35s
+....                                                                     [100%]
+4 passed in 0.02s
 ```
 
 </details>
 
-*Why:* 1 + 1 + 2 + 1 = 5 tests, one dot each. The numbers in the last test were never produced by `store_sales`, so a mistake in it cannot hide in them: the SQL joined the lines to the prices on its own. April has 349 orders, all completed, and 123 + 103 + 123 is 349. Continuous integration is what GitHub's documentation describes as frequently committing code to a shared repository and building and testing it each time; its workflows can start when new code is pushed, and run linters and functional tests. You do not build one here. What makes it possible is that `uv run pytest` needs only the repository (code, lockfile and data), so a clean machine can run the same command and report the same dots.
+*Why:* 1 + 1 + 1 + 1 = 4 tests, one dot each. The numbers in the last test were not produced by `orders_per_store`, so a mistake in it cannot hide in them: the query filtered and counted on its own. The store numbers are text in the dictionary and numbers in SQL, which is why the keys have quotes. The file is ignored by Git, so on a clean clone this test needs `uv run download_data.py` first, as in C25. Continuous integration is what GitHub's documentation describes as frequently committing code to a shared repository and building and testing it each time; its workflows can start when new code is pushed, and run linters and functional tests. You do not build one here. What makes it possible is that `uv run pytest` needs only the repository and the data script, so a clean machine can run the same commands and report the same dots.
 
 <Aside type="tip" title="Remember">
 
 - A test builds a small input, calls the code and asserts an answer you know.
-- Put the edge rows in the table: the first moment, the last second, a missing value.
-- A merge can drop or double rows without an error: test that its check fires, and count the rows.
-- Take the expected answer from another route, not from the code under test.
+- The tests folder is not the project folder: tell pytest where the package is with `pythonpath`.
+- Put the edge rows in the list: the first moment, the last second, a canceled order, a missing value, a repeated row.
+- A count can double a repeated row without an error: test it with a repeated row.
 - Read a failure from the `E` lines: the result, the known answer and what differs.
 
-**Common trap:** a test file that pytest does not collect. `no tests ran` is not a pass.
+**Common trap:** a green run that tested nothing. Make a test fail once, on purpose, before you trust it.
 
 </Aside>
 
@@ -422,23 +399,17 @@ $ uv run pytest -q
 
 <Exercise id="core-testing-with-pytest-1">
 
-**Canceled orders do not count.** `store_sales` keeps only completed orders. Finish the test that proves it. The two lines to fill in are the number of orders and the sales of each cafe, worked out by hand from the table. Put the test in `tests/test_report.py`. Expected: the run reports one more test than before, and it passes.
+**A canceled order does not count.** `orders_per_store` keeps only completed orders. Finish the test that proves it, on the fixture of unit 2: from April 30, order 4 (canceled, store 2) must not count, and order 5 (completed, store 3) does. Put the test in `tests/test_summary.py`. Expected: the run reports one more test than before, and it passes.
 
 ```python
-def test_store_sales_ignores_canceled_orders():
-    orders = pd.DataFrame(
-        {"order_id": [1, 2, 3], "store_id": [1, 1, 2], "status": ["completed", "canceled", "completed"]}
-    )
-    totals = pd.DataFrame({"order_id": [1, 2, 3], "amount": [5.0, 7.0, 4.5]})
-    result = store_sales(orders, totals)
-    assert result["orders"].tolist() == ...
-    assert result["sales"].tolist() == ...
+def test_a_canceled_order_does_not_count(orders):
+    assert orders_per_store(orders, date(2026, 4, 30)) == ...
 ```
 
 <details>
 <summary>Hint</summary>
 
-Cross out the canceled order 2 first. Store 1 has one order left, and store 2 has one. Each list has one number for each store, in store order.
+Cross out the canceled order 4 first. Which orders are left from April 30, and in which stores? The answer is a dictionary with the store number as text, as in unit 2.
 
 </details>
 
@@ -446,7 +417,7 @@ Cross out the canceled order 2 first. Store 1 has one order left, and store 2 ha
 <summary>Half-solution</summary>
 
 ```python
-    assert result["orders"].tolist() == [1, ...]
+    assert orders_per_store(orders, date(2026, 4, 30)) == {"3": ...}
 ```
 
 </details>
@@ -454,11 +425,10 @@ Cross out the canceled order 2 first. Store 1 has one order left, and store 2 ha
 <Solution>
 
 ```python
-    assert result["orders"].tolist() == [1, 1]
-    assert result["sales"].tolist() == [5.0, 4.5]
+    assert orders_per_store(orders, date(2026, 4, 30)) == {"3": 1}
 ```
 
-Store 1 keeps order 1 (5.00) and drops the canceled order 2 (7.00); store 2 keeps order 3 (4.50). A run reports 6 passed with the five tests of the lesson.
+From April 30 only order 5 is left that counts: order 4 is canceled, so store 2 does not appear at all. A run reports 5 passed with the four tests of the lesson.
 
 </Solution>
 
@@ -468,45 +438,48 @@ Store 1 keeps order 1 (5.00) and drops the canceled order 2 (7.00); store 2 keep
 
 <Exercise id="core-testing-with-pytest-2">
 
-**June, from another route.** Write a test on the real files for the average order of each cafe in June 2026, completed orders only: the sales of a cafe divided by its orders, rounded to 2 decimals. Before you start, say in one sentence what the result looks like: one list of three amounts in dollars, one for each cafe. Get the expected list from the SQL playground first (the query of unit 4, with the June dates and `ROUND(AVG(t.amount), 2) AS avg_order` in place of the sum), then write the test in `tests/test_report.py` from a blank line. Expected: the test passes, and the run reports one more test.
+**The monthly table, on a file you write.** `orders_by_store_month(path)` of C25 reads a file by its path, so the test writes a small file first. Before you start, say in one sentence what the result looks like: a table of two stores and two months, in which store 2 has no order in March. Write the test from a blank line in `tests/test_summary.py`: with the `tmp_path` fixture, which pytest describes as a unique temporary directory for each test, write a file with the header `order_id,customer_id,store_id,ordered_at,status,payment_method` and the first four orders of the question (use cards, mobile and cash for the payment method as you like), call the function on its path, and assert the columns of the table and its numbers. Expected: the test passes, and the run reports one more test.
 
 <details>
 <summary>Hint</summary>
 
-Copy the shape of the April test in unit 4: read the orders of the month, build `store_sales`, then compare. The average is `result["sales"] / result["orders"]`, and a list of rounded floats compares with `==` when you round with `.round(2)`.
+`path = tmp_path / "orders.csv"` and `path.write_text("...")` make the file; end each line of text with `\n`. The columns of the table are `list(table.columns)`, and its numbers as a list of lists are `table.to_numpy().tolist()`. Cross out the canceled order and count by hand: store 1 has an order in March and one in April, and store 2 has one in April.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"The SQL gives one average for each of the three cafes, and the test compares the same three numbers computed from the code's result."*
+Expected output in words: *"The columns are the months 2026-03 and 2026-04, and the numbers are one row for each store: store 1 has 1 and 1, store 2 has 0 and 1."*
 
 ```python
-def test_june_average_order_matches_sql():
-    orders = in_month(read_orders(DATA / "orders.csv"), "2026-06")
-    ...
-    average = (result["sales"] / result["orders"]).round(2)
-    assert average.tolist() == [...]
+def test_monthly_table_has_a_row_for_each_store_and_a_column_for_each_month(tmp_path):
+    path = tmp_path / "orders.csv"
+    path.write_text(...)
+    table = orders_by_store_month(path)
+    assert list(table.columns) == [...]
 ```
 
 </details>
 
 <Solution>
 
-The query returns stores 1, 2 and 3 with 117, 125 and 111 orders and averages 12.19, 12.73 and 13.18 dollars.
-
 ```python
-def test_june_average_order_matches_sql():
-    orders = in_month(read_orders(DATA / "orders.csv"), "2026-06")
-    items = pd.read_csv(DATA / "order_items.csv")
-    products = pd.read_csv(DATA / "products.csv")
-    result = store_sales(orders, order_totals(items, products))
-    average = (result["sales"] / result["orders"]).round(2)
-    assert average.tolist() == [12.19, 12.73, 13.18]
+def test_monthly_table_has_a_row_for_each_store_and_a_column_for_each_month(tmp_path):
+    path = tmp_path / "orders.csv"
+    path.write_text(
+        "order_id,customer_id,store_id,ordered_at,status,payment_method\n"
+        "1,7,1,2026-03-31 23:59:59,completed,card\n"
+        "2,8,1,2026-04-01 00:00:00,completed,mobile\n"
+        "3,9,2,2026-04-15 12:30:00,completed,cash\n"
+        "4,9,2,2026-04-30 23:59:59,canceled,cash\n"
+    )
+    table = orders_by_store_month(path)
+    assert list(table.columns) == ["2026-03", "2026-04"]
+    assert table.to_numpy().tolist() == [[1, 1], [0, 1]]
 ```
 
-The expected list came from SQL that never calls `store_sales`, so the test checks the code and not itself.
+The file needs `from cafe_report.monthly import orders_by_store_month` in the imports. The 0 is the pair that has no order, which `fill_value=0` writes; the canceled order of store 2 is not counted. The run reports one more passing test.
 
 </Solution>
 
@@ -514,7 +487,7 @@ The expected list came from SQL that never calls `store_sales`, so the test chec
 
 ## Check yourself
 
-1. Without looking back: which file names and which function names does pytest collect?
+1. Without looking back: which file names and which function names does pytest run?
 
    <details>
    <summary>answer</summary>
@@ -525,17 +498,28 @@ The expected list came from SQL that never calls `store_sales`, so the test chec
 
 <Exercise id="core-testing-with-pytest-3">
 
-**Spot the flaw.** A colleague changes `in_month` and runs the tests. In a scratch copy of `report.py`, the filter reads `(orders["ordered_at"] > start) & (orders["ordered_at"] <= end)` with `end` from `MonthBegin(1)`. The test below passes, and the colleague says April is safe. Run it with the `orders` fixture of unit 2. Expected: one dot. What is wrong with the test, and what is the fix?
+**Spot the flaw.** A colleague changes `orders_per_store` so that the count starts one day early "to be safe": in a copy of `summary.py`, the test is `day >= since - timedelta(days=1)`, with `timedelta` imported. The test below passes, and the colleague says that April is safe. Save it as `tests/test_weak.py` and run `uv run pytest -q tests/test_weak.py` with the changed `summary.py`. Expected: one dot. What is wrong with the test, and what is the fix? Undo the change in `summary.py` and delete the test file afterwards.
 
 ```python
-def test_in_month_gives_three_orders_in_april(orders):
-    assert len(in_month(orders, "2026-04")) == 3
+from datetime import date
+
+from cafe_report.summary import orders_per_store
+
+
+def test_every_store_has_orders_from_april_1():
+    orders = [
+        {"order_id": "1", "store_id": "1", "ordered_at": "2026-03-31 23:59:59", "status": "completed"},
+        {"order_id": "2", "store_id": "1", "ordered_at": "2026-04-01 00:00:00", "status": "completed"},
+        {"order_id": "3", "store_id": "2", "ordered_at": "2026-04-15 12:30:00", "status": "completed"},
+        {"order_id": "4", "store_id": "3", "ordered_at": "2026-05-01 00:00:00", "status": "completed"},
+    ]
+    assert len(orders_per_store(orders, date(2026, 4, 1))) == 3
 ```
 
 <details>
 <summary>Hint</summary>
 
-The changed filter is strict at the start and inclusive at the end. Write down which of the five orders it keeps.
+Write down what the changed function returns for these four orders, store by store, and compare it with the right answer.
 
 </details>
 
@@ -543,7 +527,7 @@ The changed filter is strict at the start and inclusive at the end. Write down w
 <summary>Half-solution</summary>
 
 ```python
-    assert in_month(orders, "2026-04")["order_id"].tolist() == ...
+    assert orders_per_store(orders, date(2026, 4, 1)) == {...}
 ```
 
 </details>
@@ -551,17 +535,16 @@ The changed filter is strict at the start and inclusive at the end. Write down w
 <Solution>
 
 ```python
-def test_in_month_gives_the_right_orders_in_april(orders):
-    assert in_month(orders, "2026-04")["order_id"].tolist() == [2, 3, 4]
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
 ```
 
-With `>` the order at exactly midnight on April 1 is lost, and with `<=` the order at exactly midnight on May 1 is gained. The filter returns orders 3, 4 and 5, which are three rows, so the count test passes while the answer is wrong. Compared with `[2, 3, 4]`, the new test fails and reports `[3, 4, 5]`, with the first difference at index 0. A count says how many; a list of ids says which.
+The changed filter also counts order 1, from March 31, so the function returns `{'1': 2, '2': 1, '3': 1}`. That has three stores, so `len(...) == 3` passes, while the answer is wrong. Compared with the full dictionary, the test fails and reports `{'1': 2} != {'1': 1}`. `len` says how many stores appear; the dictionary says how many orders each one has.
 
 </Solution>
 
 </Exercise>
 
-**Can you do it?** *I can write a test with a small known-answer table that has edge rows, read what a failed test reports, test that a join neither drops nor doubles rows, and take the expected answer from another route.*
+**Can you do it?** *I can write a test with a small list that has edge rows, make the package importable from the tests, read what a failed test reports, test that a count does not double a repeated row, and take the expected answer from another route.*
 Test: Exercise core-testing-with-pytest-2, done without opening the hints.
 
 The pattern to remember: **a test is code run on rows whose answer you know, and the answer must come from somewhere other than the code.** Next comes *Logging, configuration and secrets* (C28), which makes the program tell you what it did and keeps its settings and keys out of the code.
