@@ -497,6 +497,13 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   the labels are shuffled and every total still adds up. → **When a lesson teaches surrogate keys, give them an order that differs from the natural keys (here the stores in alphabetical order), and teach the check
   that compares a total for each group with the source, not only the grand total.**
 
+- 2026-11-21 — Review of C16 to C18: a block that ends in `CREATE TABLE … AS` shows a one-row `Count` in the runner (only a result with 0 rows is silent), and the count was the answer to the Predict
+  below it (15 rows, 181 days); the big-idea rule "the finest thing any question counts sets the grain" is false for the lesson's own case (the questions count orders, and the line grain is chosen because
+  one question needs a category for each line) and was already in the figure, the caption and three Ideas; Ideas stated the check, the unknown member and the distinct count that the Predict under them asked
+  for; Exercise 3's fix was already printed in two units; "a fine grain can always be added up" fails for distinct counts and ratios. → **End a block that builds a table with a harmless `SELECT 'built' AS note;`
+  and say so in the Expected line. Test a big-idea rule against the lesson's own worked case before it goes into the figure, the caption and the Ideas. Grep Exercise 3's fix against the unit blocks, as the
+  Python rules already say. Say "additive measures such as units and sales" where a rule needs addition.**
+
 ## Agents and reviews
 
 - 2026-11-21 — `node scripts/refresh-concept-figures.mjs` rewrote `src/content/docs/sql/inner-join.mdx`, a lesson the batch did not own (a figure stale on `main`), and it would have gone into the commit. → **After the

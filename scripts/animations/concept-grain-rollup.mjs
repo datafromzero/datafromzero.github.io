@@ -17,13 +17,13 @@ export default function make({ id = 'gr' } = {}) {
 		title: 'A fine grain adds up to a coarse one, but never splits back',
 		desc:
 			'Four line rows, L1 to L4, each with a value m1 to m4. L1, L2 and L3 add up into one order row, O1, and L4 becomes the order row O2. Both levels add up to the same total, m1 plus m2 plus m3 plus m4. A dashed arrow from O1 back toward three empty seats is crossed out: the sum of three values does not say which three values made it.',
-		caption: 'A fact table at a fine grain can always be added up into a coarser one. A coarse table cannot be turned back into the detail it was added from.',
+		caption: 'Additive values such as units and sales, added up from a fine grain, give any coarser grain. A coarse table cannot be turned back into the detail it was added from.',
 		phases: [
 			[1, 'One row per line', { role: 'src', key: 'The grain says what one row stands for. Here one row is one line.', changes: [['+', '4 line rows']] }],
 			[2, 'Lines add up into order rows', { role: 'out', key: 'Adding the lines of each order gives a coarser table: one row per order.', changes: [['+', '2 order rows'], ['~', 'each order row holds a sum']] }],
 			[4, 'Both levels give the same total', { role: 'mat', key: 'Adding up loses no value: every level of grain has the same total.', changes: [['~', 'total unchanged']] }],
 			[5, 'Splitting back does not work', { role: 'flt', key: 'A sum does not say which values made it, so the detail is gone for good.', changes: [['−', 'the three lines are not recoverable']] }],
-			[7, 'Keep the finest grain you can', { role: 'out', key: 'Keep the finest grain the questions need: coarser tables can always be made from it.', changes: [['+', 'a rule for choosing the grain']] }],
+			[7, 'Keep the finest grain you need', { role: 'out', key: 'Keep the finest grain the questions need: coarser tables can be added up from it.', changes: [['+', 'a rule for choosing the grain']] }],
 		],
 		counters: [
 			{ label: 'line rows', role: 'src', values: [[1, 4]] },
@@ -47,6 +47,6 @@ export default function make({ id = 'gr' } = {}) {
 	a.text(178, 236, '?', 'f11 b', { in: 5 }, 'm');
 	a.arrow(110, 176, 110, 218, 's-flt dsh', { in: 5, draw: true });
 	a.text(250, 200, 'no way back', 'f10 b f-flt', { in: 5 }, 'm');
-	a.text(280, 242, 'finest grain first', 'f10 b', { in: 7 }, 'm');
+	a.text(280, 242, 'finest grain you need', 'f10 b', { in: 7 }, 'm');
 	return a;
 }
