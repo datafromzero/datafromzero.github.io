@@ -28,7 +28,7 @@ export default function make({ id = 'er' } = {}) {
 	});
 	a.text(10, 14, 'Read a line from both ends', 'f11 b');
 	// the line and its two ends (shared helper lib/erd.mjs): zero or one at P, zero or many at C, at the header level
-	a.link([[56, 64], [226, 64]], '0..1', '0..*', { sideA: 'above', sideB: 'above' }, { in: 1, draw: true });
+	a.link([[56, 64], [226, 64]], '0..1', '0..*', { verb: 'has' }, { in: 1, draw: true });
 	a.text(10, 68, 'P · PK', 'f10 b');
 	a.text(232, 68, 'C · FK', 'f10 b');
 	// table P
