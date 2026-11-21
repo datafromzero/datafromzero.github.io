@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1393 nodes, 1528 edges, 170 communities (643 isolated nodes).
+- 1393 nodes, 1529 edges, 170 communities (643 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 38, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 463, rule 10, script 142, skill 1, spec-section 25, starlight-component 6, style 7, symbol 261, template 2, token 12.
-- Edges: defines 261, imports 50, mentions 834, overrides 6, references 28, runs 11, specified-by 4, uses 297, uses-token 32, validated-by 5.
+- Edges: defines 261, imports 50, mentions 835, overrides 6, references 28, runs 11, specified-by 4, uses 297, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,7 +17,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/components/content/Exercise.astro` | component | 106 | src/components/content/Exercise.astro:1 |
 | 3 | `D41` Lesson step-by-step figures | decision | 72 | SPEC.md:68 |
 | 4 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
-| 5 | `.claude/HANDOFF.md` | doc | 47 | .claude/HANDOFF.md:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 48 | .claude/HANDOFF.md:1 |
 | 6 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
 | 7 | `src/components/content/RunSQL.astro` | component | 41 | src/components/content/RunSQL.astro:1 |
 | 8 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
