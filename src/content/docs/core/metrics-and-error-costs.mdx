@@ -1,0 +1,586 @@
+---
+id: core-metrics-and-error-costs
+title: 'Choosing a metric: accuracy, precision, recall and error costs'
+description: Pick an evaluation metric from the cost of each kind of error, and see why accuracy fails on rare events.
+stage: core
+order: 210
+level: intermediate
+duration: 40
+objectives:
+  - Build and read a confusion matrix
+  - Compute accuracy, precision, recall and F1
+  - Show why predicting the majority class gives high accuracy on rare events
+  - Choose a threshold from the cost of false positives and false negatives
+  - Compute MAE and RMSE for a numeric target
+prerequisites:
+  - core-data-leakage
+datasets:
+  - app-events
+notebook: notebooks/core/core-metrics-and-error-costs.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Metrics and scoring, sections on the confusion matrix, precision, recall and F-measure, accuracy and ROC AUC (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+  - title: 'Google for Developers: Machine Learning Crash Course, Classification: Accuracy, precision, and recall (accessed 2026-11-21)'
+    url: https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall
+  - title: 'Google for Developers: Machine Learning Crash Course, Classification: Thresholding (accessed 2026-11-21)'
+    url: https://developers.google.com/machine-learning/crash-course/classification/thresholding
+  - title: 'scikit-learn documentation: mean_absolute_error (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.mean_absolute_error.html
+  - title: 'scikit-learn documentation: root_mean_squared_error, added in version 1.4 (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.root_mean_squared_error.html
+status: draft
+---
+
+TODO(owner): team draft (D24), for you to edit and approve. Open questions and changes to the stub. (1) Part 3 of 6 ends here (SPEC D49): finish with the project step on cafe-sales, a star schema for the project: grain, one fact table and its dimensions, drawn and checked against cafe-sales. This note was in the stub and is not part of this draft; the writer of the first half of Part 3 owns it. (2) Duration: the stub says 30 minutes; this draft has five concept units and about 3,700 body words with the figure text, so it says 40. (3) The costs ($1 for a wasted message, $5 for a missed buyer, and $1 and $9 in Exercise 2) are assumptions of this example, as the 2-point bar of C14 was; the data holds no costs. The lesson says that a chance of buying is not the chance that a message makes someone buy, which is a question for an A/B test. (4) The stub's note says ROC and precision-recall curves are named and shown once; the draft names the ROC AUC as one number (0.657) and draws no curve. Say if you want a curve. (5) The numeric target is the days from signup to purchase among the buyers (purchases within 14 days, so the days are cut at 14), with a constant as the prediction, because no column of the data is a natural numeric target for this model; the lesson shows by a run that the median is the best constant for MAE and the mean for RMSE. `root_mean_squared_error` needs scikit-learn 1.4 or later (the page I opened says so). (6) The stub's source "Machine Learning Crash Course" is replaced by the two pages whose sentences the lesson uses, and the two scikit-learn function pages are added; the Crash Course page on the confusion matrix is not cited (its address returned an error when I tried it). (7) This model's ranking is weak (ROC AUC 0.657 on this seed), so the best policy saves only $238 per 5,044 people; I kept it, because it is the honest model of the first two lessons, and Exercise 2 shows a cost ratio where flagging many people pays. (8) Every number was run on scikit-learn 1.9.1 with pandas 3.0.5 and on scikit-learn 1.6.1 with pandas 2.2.3: identical. (9) `reviewed` is the stub's date; you set it when you publish.
+
+## The question
+
+The success team of a budgeting app answers the model of the last two lessons:
+
+> The model gives chances of buying, 0.29 at most. A message costs us $1 of time. A buyer we do not message costs us about $5. Which people do we message?
+
+The data are the people of `app-events`, a fictional app. "Buy" means a purchase of Plus within 14 days of signing up. Four people of the test part, with the chance the model gave each at signup and what happened:
+
+| user_id | channel | platform | chance | bought within 14 days |
+|---:|---|---|---:|---:|
+| 27715 | paid_search | web | 0.091 | 0 |
+| 15049 | organic_search | web | 0.152 | 0 |
+| 13544 | referral | ios | 0.283 | 0 |
+| 22094 | referral | ios | 0.292 | 1 |
+
+By the end you can read the four counts of a rule, say why accuracy hides a weak model, compute precision, recall and F1, set a threshold from what each error costs, and score a number with MAE and RMSE.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Designing an A/B test*](/core/experiments-ab-testing/) (C14) a ship rule written before the data turned a result into ship, drop or keep running. A threshold chosen from the cost of each error is the same move for a model.
+
+**Diverge.** In C19 and C20 one score, the Brier score, judged the chances. Here the chances are turned into yes or no calls, the calls are counted in four cells, and the cells have prices.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C14 the ship rule was written before the data. Name two things it fixed.
+
+   <details>
+   <summary>answer</summary>
+
+   The bar for the lift (2 points) and the limit of the guardrail (a rise of at most 5 points); with them, which results mean ship, drop or keep running.
+
+   </details>
+
+2. In C20, a model's Brier score fell from 0.10 to 0.01 when a column was added. What do you do before you believe it?
+
+   <details>
+   <summary>answer</summary>
+
+   Ask of the column when its value settles. A value that is filled in after the prediction moment, or because of the outcome, is a leak, and the column goes.
+
+   </details>
+
+## The big idea
+
+A threshold on a ranking flags the rows above it, and every threshold gives four counts.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="thr-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="thr" id="thr-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="thr" id="thr-r1" aria-label="Step 1 of 4: Rows ranked by score" />
+<input class="sa-r r2 o4" type="radio" name="thr" id="thr-r2" aria-label="Step 2 of 4: A high threshold flags few" />
+<input class="sa-r r3 o6" type="radio" name="thr" id="thr-r3" aria-label="Step 3 of 4: A lower threshold flags more" />
+<input class="sa-r r4 o8" type="radio" name="thr" id="thr-r4" aria-label="Step 4 of 4: A still lower one flags most" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-flt"><small>flagged</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">2</i><i class="w2 d5 tmp hl">4</i><i class="w2 d7 hl">7</i></span></span><span class="sa-n c-grp"><small>TP</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">2</i><i class="w2 d5 tmp hl">3</i><i class="w2 d7 hl">4</i></span></span><span class="sa-n c-flt"><small>FP</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">0</i><i class="w2 d5 tmp hl">1</i><i class="w2 d7 hl">3</i></span></span><span class="sa-n c-mat"><small>FN</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">2</i><i class="w2 d5 tmp hl">1</i><i class="w2 d7 hl">0</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 214" width="360" role="img" aria-labelledby="thr-t thr-d">
+<title id="thr-t">A threshold on a ranking flags the rows above it and sorts them into four counts</title>
+<desc id="thr-d">Ten dots on a score axis from low to high, each labeled Y or N for the true outcome, in the order N N N Y N N Y N Y Y. A dashed threshold line stands before the last two dots, then before the last four, then before the last seven; the dots to its right are bracketed as flagged. The counters read flagged 2, 4 and 7, true positives 2, 3 and 4, false positives 0, 1 and 3, and false negatives 2, 1 and 0.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Rows ranked by score</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · A high threshold flags few</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · A lower threshold flags more</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · A still lower one flags most</text>
+<text class="f11 b" x="10" y="14">Rank, then cut</text>
+<circle class="f-ord k2" cx="30" cy="110" r="12" />
+<text class="f11 b m" x="30" y="114">N</text>
+<circle class="f-ord k2" cx="63" cy="110" r="12" />
+<text class="f11 b m" x="63" y="114">N</text>
+<circle class="f-ord k2" cx="96" cy="110" r="12" />
+<text class="f11 b m" x="96" y="114">N</text>
+<circle class="f-mat k3" cx="129" cy="110" r="12" />
+<text class="f11 b m" x="129" y="114">Y</text>
+<circle class="f-ord k2" cx="162" cy="110" r="12" />
+<text class="f11 b m" x="162" y="114">N</text>
+<circle class="f-ord k2" cx="195" cy="110" r="12" />
+<text class="f11 b m" x="195" y="114">N</text>
+<circle class="f-mat k3" cx="228" cy="110" r="12" />
+<text class="f11 b m" x="228" y="114">Y</text>
+<circle class="f-ord k2" cx="261" cy="110" r="12" />
+<text class="f11 b m" x="261" y="114">N</text>
+<circle class="f-mat k3" cx="294" cy="110" r="12" />
+<text class="f11 b m" x="294" y="114">Y</text>
+<circle class="f-mat k3" cx="327" cy="110" r="12" />
+<text class="f11 b m" x="327" y="114">Y</text>
+<path class="ln" d="M12 138H345" />
+<text class="f10 mu" x="12" y="154">low score</text>
+<text class="f10 mu e" x="345" y="154">high score</text>
+<path class="s-flt dsh dr p2 d3 tmp" pathLength="1" d="M277.5 76V138" />
+<path class="s-flt w2 d3 tmp" d="M281.5 84V78H341V84" />
+<text class="f10 b m w2 d3 tmp" x="311.25" y="70">flagged</text>
+<path class="s-flt dsh dr p2 d5 tmp" pathLength="1" d="M211.5 76V138" />
+<path class="s-flt w2 d5 tmp" d="M215.5 84V78H341V84" />
+<text class="f10 b m w2 d5 tmp" x="278.25" y="70">flagged</text>
+<path class="s-flt dsh dr p2 d7" pathLength="1" d="M112.5 76V138" />
+<path class="s-flt w2 d7" d="M116.5 84V78H341V84" />
+<text class="f10 b m w2 d7" x="228.75" y="70">flagged</text>
+<text class="f10 mu" x="10" y="186">Y: it happened, N: it did not</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="thr-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="thr-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="thr-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="thr-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="thr-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="thr-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="thr-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="thr-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="thr-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="thr-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="thr-r1">1</label><label class="sa-sb sb2" for="thr-r2">2</label><label class="sa-sb sb3" for="thr-r3">3</label><label class="sa-sb sb4" for="thr-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">Each row has a score, and its true outcome is Y or N.<span class="sa-chs"><span class="sa-ch pl">10 rows, 4 Y and 6 N</span></span></div>
+<div class="c-flt w2 d3 tmp">Rows at or above the threshold are flagged; the others are not.<span class="sa-chs"><span class="sa-ch pl">a threshold</span><span class="sa-ch pl">2 rows flagged</span></span></div>
+<div class="c-flt w2 d5 tmp">Moving the threshold changes which rows are flagged.<span class="sa-chs"><span class="sa-ch ch">threshold moved down</span><span class="sa-ch pl">2 more rows flagged</span></span></div>
+<div class="c-out w2 d7">Each threshold sorts every row into one of four counts: TP, FP, FN or TN.<span class="sa-chs"><span class="sa-ch ch">threshold moved down</span><span class="sa-ch pl">3 more rows flagged</span></span></div>
+</div>
+<p class="ca-cap">Every row at or above the threshold is flagged; each threshold gives a different count of true positives, false positives and false negatives.</p>
+<ol class="sa-steps">
+<li>Rows ranked by score</li>
+<li>A high threshold flags few</li>
+<li>A lower threshold flags more</li>
+<li>A still lower one flags most</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 40 minutes, 5 new ideas: the confusion matrix, why accuracy fails on a rare outcome, precision, recall and F1, a threshold from error costs, and MAE and RMSE. The setup cell built `people` of C19 and fitted the honest recipe on the training part of the seed-21 split: `chance` is the model's chance for each of the 5,044 test people, `y_test` their outcomes (607 buyers), and `counts(threshold)` gives `tn, fp, fn, tp` for the rule "flag a person when the chance is at least the threshold".
+
+<OpenInColab />
+
+### 1. The confusion matrix
+
+**Idea.** A model's chance becomes a *call*, a yes or no, once a rule is attached: flag the person when the chance is at least a *threshold*. Each person then falls in one of four cells. A *true positive* (TP) is flagged and bought, a *false positive* (FP) flagged and did not buy, a *false negative* (FN) not flagged and bought, a *true negative* (TN) neither. scikit-learn's `confusion_matrix` puts the true outcome in the rows and the call in the columns.
+
+**Try it:** count the four cells for the rule "flag when the chance is at least 0.5".
+
+```python
+cm = confusion_matrix(y_test, chance >= 0.5)         # rows: the true outcome (0, 1); columns: the call (0, 1)
+print(cm.tolist())
+tn, fp, fn, tp = cm.ravel().tolist()
+print(tn, fp, fn, tp)
+print(round(float(chance.max()), 3))                  # the largest chance the model gives any test person
+```
+
+**Predict:** A person is flagged when the model's chance is at least 0.5. How many of the test people does the model flag? In the confusion matrix, how many are true positives, and where do the buyers sit?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[[4437, 0], [607, 0]]
+4437 0 607 0
+0.292
+```
+
+<figure>
+<svg viewBox="0 0 360 232" width="360" role="img" aria-labelledby="mc-matrix-t mc-matrix-d">
+<title id="mc-matrix-t">Confusion matrix at the threshold 0.5: no test person is flagged</title>
+<desc id="mc-matrix-d">A two by two table. Rows are the true outcome, columns are the call. Did not buy and not flagged: 4,437 true negatives. Did not buy and flagged: 0 false positives. Bought and not flagged: 607 false negatives. Bought and flagged: 0 true positives. The two cells of right calls are green and the two cells of wrong calls are red.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Test part, 5,044 people, flagged when the chance is at least 0.5</text>
+<text x="156" y="44" font-size="10" font-weight="600" text-anchor="middle">not flagged</text>
+<text x="276" y="44" font-size="10" font-weight="600" text-anchor="middle">flagged</text>
+<text x="14" y="91" font-size="10" font-weight="600">did not buy</text>
+<text x="14" y="157" font-size="10" font-weight="600">bought</text>
+<rect x="96" y="54" width="116" height="62" rx="6" fill="#00a07a" fill-opacity="0.22" />
+<text x="154" y="84" font-size="16" font-weight="700" text-anchor="middle">4,437</text>
+<text x="154" y="102" font-size="10" text-anchor="middle" fill-opacity="0.9">true negative</text>
+<rect x="216" y="54" width="116" height="62" rx="6" fill="#c0392b" fill-opacity="0.22" />
+<text x="274" y="84" font-size="16" font-weight="700" text-anchor="middle">0</text>
+<text x="274" y="102" font-size="10" text-anchor="middle" fill-opacity="0.9">false positive</text>
+<rect x="96" y="120" width="116" height="62" rx="6" fill="#c0392b" fill-opacity="0.22" />
+<text x="154" y="150" font-size="16" font-weight="700" text-anchor="middle">607</text>
+<text x="154" y="168" font-size="10" text-anchor="middle" fill-opacity="0.9">false negative</text>
+<rect x="216" y="120" width="116" height="62" rx="6" fill="#00a07a" fill-opacity="0.22" />
+<text x="274" y="150" font-size="16" font-weight="700" text-anchor="middle">0</text>
+<text x="274" y="168" font-size="10" text-anchor="middle" fill-opacity="0.9">true positive</text>
+<text x="14" y="206" font-size="9" fill-opacity="0.85">Rows: what happened. Columns: what the rule said.</text>
+<text x="14" y="220" font-size="9" fill-opacity="0.85">A false positive is a wrong flag, a false negative a missed buyer.</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* nobody is flagged: the largest chance the model gives any test person is 0.292. All 5,044 people stand in the column "not flagged", 4,437 as true negatives and the 607 buyers as false negatives. The matrix has the same four cells at every threshold; only the counts move.
+
+### 2. Why accuracy fails on a rare outcome
+
+**Idea.** *Accuracy* is the share of calls that are right, the true positives and true negatives over all people. It counts a wrong flag and a missed buyer alike, and it counts every person once, so it follows the larger group.
+
+**Try it:** the accuracy of two rules, and of the call "nobody buys".
+
+```python
+for t in (0.5, 0.15):
+    tn, fp, fn, tp = counts(t)
+    print(t, tp + fp, round((tn + tp) / len(y_test), 4))          # threshold, people flagged, accuracy
+print(round(float(accuracy_score(y_test, np.zeros(len(y_test), dtype=int))), 4))        # the call "nobody buys"
+```
+
+**Predict:** Accuracy is the share of test people called correctly. What does the call "nobody buys" score? What does the model score at the cut 0.5? And a rule that flags everyone with a chance of at least 0.15, which does find buyers: a higher or a lower accuracy?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.5 0 0.8797
+0.15 1666 0.6679
+0.8797
+```
+
+</details>
+
+*Why:* 87.97 percent of the test people did not buy, so the call "nobody buys" is right for 87.97 percent of them, and the model at 0.5, which also flags nobody, scores the same. The rule at 0.15 flags 1,666 people, and its accuracy falls to 66.79 percent: a third of its calls are now wrong, because every flag on a person who does not buy is a wrong call and the non-buyers are the large group. The rule that goes looking for buyers looks worse on accuracy than the rule that finds none. The Crash Course page gives the extreme case: an outcome so rare that a model that always says no is almost always right, and useless.
+
+In symbols, with the four counts of unit 1 at the cut 0.5 (0 true positives, 4,437 true negatives, 0 false positives, 607 false negatives):
+
+$$
+\begin{gathered}
+\text{accuracy} = \frac{TP + TN}{TP + TN + FP + FN} \\
+= \frac{0 + 4{,}437}{5{,}044} \approx 0.880
+\end{gathered}
+$$
+
+### 3. Precision, recall and F1
+
+**Idea.** *Precision* is the share of the flagged people who are buyers: the ability not to flag people who do not buy. *Recall* is the share of the buyers who are flagged: the ability to find the buyers (the scikit-learn page words them as the ability not to label a negative as positive, and to find all the positives). The *F1 score* is their harmonic mean, one number that is low when either is low. Precision improves as false positives fall and recall as false negatives fall, so the two usually pull against each other when the threshold moves.
+
+**Try it:** the three numbers at the threshold 0.15, from the counts and from scikit-learn.
+
+```python
+tn, fp, fn, tp = counts(0.15)
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
+f1 = 2 * precision * recall / (precision + recall)
+print(tp, fp, fn, tn)
+print(round(precision, 3), round(recall, 3), round(f1, 3))
+flag = chance >= 0.15
+print(round(float(precision_score(y_test, flag)), 3), round(float(recall_score(y_test, flag)), 3), round(float(f1_score(y_test, flag)), 3))
+print(round(float(y_test.mean()), 4))                                 # the share of buyers among all test people
+```
+
+**Predict:** At the threshold 0.15 the model flags every test person with a chance of at least 0.15. Will the share of flagged people who are buyers (precision) be above or below 50 percent? And the share of all buyers who are flagged (recall)?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+299 1367 308 3070
+0.179 0.493 0.263
+0.179 0.493 0.263
+0.1203
+```
+
+</details>
+
+*Why:* of the 1,666 people flagged, 299 bought: precision 0.179, about one and a half times the 12.03 percent of buyers among all test people. The flags catch 299 of the 607 buyers: recall 0.493, a little under half. F1 is 0.263, pulled toward the smaller of the two. The counts and the scikit-learn functions give the same numbers.
+
+In symbols, with the counts above:
+
+$$
+\begin{gathered}
+\text{precision} = \frac{TP}{TP + FP} = \frac{299}{1{,}666} \\
+\text{recall} = \frac{TP}{TP + FN} = \frac{299}{607} \\
+F_1 = \frac{2 \cdot \text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}
+\end{gathered}
+$$
+
+### 4. A threshold from the cost of each error
+
+**Idea.** A threshold is a choice, and the choice follows what each error costs. Write the two costs and the rule before reading any score, as the ship rule of C14 was written before the data: a false positive costs $$c_{FP}$$, a false negative $$c_{FN}$$, and right calls cost nothing. The total cost of a rule is $$c_{FP} \times FP + c_{FN} \times FN$$, a number of dollars that can be compared across rules, which accuracy cannot do. The people who pay for the decision set the costs, not the data.
+
+**Try it:** the total cost of the rule "flag when the chance is at least one sixth", of the two simple policies, and of every threshold from 0.03 to 0.30.
+
+```python
+cost_fp, cost_fn = 1, 5                                                  # assumptions of this example, in dollars
+
+
+def total_cost(threshold, c_fp=cost_fp, c_fn=cost_fn):
+    tn, fp, fn, tp = counts(threshold)
+    return fp * c_fp + fn * c_fn
+
+
+break_even = cost_fp / (cost_fp + cost_fn)
+print(round(break_even, 4), total_cost(break_even))
+print(int(y_test.sum()) * cost_fn, int((y_test == 0).sum()) * cost_fp)    # message nobody, message everybody
+grid = [round(0.03 + 0.01 * k, 2) for k in range(28)]                    # thresholds 0.03 to 0.30
+costs = {t: total_cost(t) for t in grid}
+best = min(costs, key=costs.get)
+print(best, costs[best])
+print(round(float(roc_auc_score(y_test, chance)), 3))
+```
+
+**Predict:** The rule, written before any score is read (assumptions of this example): a message costs $1 when the person does not buy (a false positive), and a buyer who gets no message costs $5 (a false negative); right calls cost nothing. For the test people, which costs least: messaging nobody, messaging everybody, or messaging the people with a chance of at least 1/6? And on a grid of thresholds from 0.03 to 0.30, is the cheapest one near 1/6 or far from it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.1667 2797
+3035 4437
+0.18 2792
+0.657
+```
+
+<figure>
+<svg viewBox="0 0 360 290" width="360" role="img" aria-labelledby="mc-cost-t mc-cost-d">
+<title id="mc-cost-t">Total cost of the errors for each threshold, with the costs of messaging nobody and messaging everybody</title>
+<desc id="mc-cost-d">A line chart. The horizontal axis is the threshold from 0.03 to 0.30, the vertical axis the total cost in dollars from 2,600 to 4,600, for a false positive costing 1 dollar and a false negative 5 dollars. The blue curve falls from 4,036 dollars at 0.03 to a lowest point of 2,792 dollars at 0.18 and rises to 3,035 at 0.30. A dashed gray line marks 3,035 dollars for messaging nobody and another 4,437 dollars for messaging everybody. A dashed vertical line at one sixth, 0.167, meets the curve at 2,797 dollars.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Total cost of the errors, in dollars, by threshold</text>
+<path d="M52 164.8 L344 164.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48" y="168.3" font-size="10" text-anchor="end" fill-opacity="0.8">3,000</text>
+<path d="M52 125.8 L344 125.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48" y="129.3" font-size="10" text-anchor="end" fill-opacity="0.8">3,500</text>
+<path d="M52 86.8 L344 86.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48" y="90.3" font-size="10" text-anchor="end" fill-opacity="0.8">4,000</text>
+<path d="M52 47.8 L344 47.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48" y="51.3" font-size="10" text-anchor="end" fill-opacity="0.8">4,500</text>
+<path d="M52 52.7 L344 52.7" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="344" y="47.7" font-size="9" text-anchor="end">everybody: 4,437</text>
+<path d="M52 162.1 L344 162.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="56" y="174.1" font-size="9">nobody: 3,035</text>
+<path d="M52 84 L62.8 86.2 L73.6 109.6 L84.4 118.7 L95.3 131.7 L106.1 145.6 L116.9 146.9 L127.7 155.9 L138.5 164.7 L149.3 166.3 L160.1 170.4 L171 169.2 L181.8 172.1 L192.6 179 L203.4 180.6 L214.2 181 L225 179.9 L235.9 179.9 L246.7 179.9 L257.5 179.9 L268.3 179.8 L279.1 177.6 L289.9 173.5 L300.7 170.3 L311.6 168.6 L322.4 166.4 L333.2 164.6 L344 162.1" fill="none" stroke="#0072b2" stroke-width="2" stroke-linejoin="round" />
+<path d="M199.8 40 L199.8 196" fill="none" stroke="#00a07a" stroke-width="1.5" stroke-opacity="0.9" stroke-dasharray="4 3" />
+<circle cx="199.8" cy="180.6" r="4.5" fill="#00a07a" />
+<circle cx="214.2" cy="181" r="4.5" fill="#0072b2" />
+<path d="M52 196 L344 196" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M73.6 196 L73.6 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="73.6" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.05</text>
+<path d="M127.7 196 L127.7 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="127.7" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.10</text>
+<path d="M181.8 196 L181.8 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="181.8" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.15</text>
+<path d="M235.9 196 L235.9 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="235.9" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.20</text>
+<path d="M289.9 196 L289.9 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="289.9" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.25</text>
+<path d="M344 196 L344 200" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="344" y="212" font-size="10" text-anchor="middle" fill-opacity="0.8">0.30</text>
+<text x="344" y="228" font-size="9" text-anchor="end" fill-opacity="0.85">threshold: flag a person when the chance is at least this</text>
+<circle cx="20" cy="246" r="4.5" fill="#00a07a" />
+<text x="30" y="249.5" font-size="9.5">the break-even threshold 1/6 = 0.167 costs 2,797</text>
+<circle cx="20" cy="262" r="4.5" fill="#0072b2" />
+<text x="30" y="265.5" font-size="9.5">the cheapest threshold on the grid, 0.18, costs 2,792</text>
+<text x="14" y="282" font-size="9" fill-opacity="0.85">A false positive costs &#36;1, a false negative &#36;5.</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* messaging the people with a chance of at least 1/6 costs $2,797, against $3,035 for messaging nobody (607 buyers at $5) and $4,437 for messaging everybody (4,437 people at $1). The cheapest threshold on the grid, 0.18, costs $2,792. The best rule saves $238 over 5,044 people against messaging nobody, about 5 cents a person: the model's ranking is weak, and the ROC AUC of 0.657 says so in one number, the area under the ROC curve (scikit-learn's `roc_auc_score`), which ignores the threshold and so cannot say where to cut or what the cut costs. The chance of buying is also not the chance that a message makes someone buy; the $5 assumes it would, and how much a message helps is a question for an A/B test (C14).
+
+The 1/6 comes from comparing, for a person with a true chance $$p$$ of buying, the average cost of flagging with the average cost of not flagging:
+
+$$
+\begin{gathered}
+(1 - p)\,c_{FP} < p\,c_{FN} \\
+\iff p > \frac{c_{FP}}{c_{FP} + c_{FN}} = \frac{1}{1 + 5} \approx 0.167
+\end{gathered}
+$$
+
+The rule works to the extent that the chances are close to the true shares of buyers; here they are close to the training shares of their groups (C19), and the cheapest grid threshold, 0.18, is 0.013 from 1/6.
+
+### 5. MAE and RMSE for a numeric target
+
+**Idea.** For a numeric target the miss of a prediction is in the unit of the target, here days. The *mean absolute error* (MAE) is the average of the misses with the sign dropped; the *root mean squared error* (RMSE) squares the misses, averages them and takes the square root, so a long miss counts more, as in the least squares of C11. Neither has a threshold; each judges the number as it is.
+
+**Try it:** among the buyers, give every test buyer one number of days, the training buyers' mean or their median, and score both.
+
+```python
+days_train = train.loc[train["bought14"] == 1, "days_to_buy"]            # buyers only: purchases within 14 days of signup
+days_test = test.loc[test["bought14"] == 1, "days_to_buy"]
+for name, c in (("mean", days_train.mean()), ("median", days_train.median())):
+    pred = np.full(len(days_test), c)
+    print(name, round(float(c), 2), round(float(mean_absolute_error(days_test, pred)), 3), round(float(root_mean_squared_error(days_test, pred)), 3))
+levels = np.arange(0, 3.01, 0.01)                                        # every constant from 0 to 3 days, on the training buyers
+mae_by = [mean_absolute_error(days_train, np.full(len(days_train), c)) for c in levels]
+rmse_by = [root_mean_squared_error(days_train, np.full(len(days_train), c)) for c in levels]
+print(round(float(levels[np.argmin(mae_by)]), 2), round(float(levels[np.argmin(rmse_by)]), 2))
+print(int((days_test > 7).sum()), len(days_test))
+```
+
+**Predict:** Among the buyers, the target is the number of days from signup to the purchase. A forecaster gives every test buyer the same number: the mean of the training buyers' days or their median. Which gives the smaller mean absolute error on the test buyers? Which gives the smaller root mean squared error?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+mean 1.73 1.84 2.581
+median 0.48 1.63 2.906
+0.48 1.73
+41 607
+```
+
+</details>
+
+*Why:* the median, 0.48 days, wins on MAE (1.630 against 1.840 for the mean, 1.73 days), and the mean wins on RMSE (2.581 against 2.906). The grid over every constant from 0 to 3 days finds the same on the training buyers: the best constant for MAE is 0.48, the median, and for RMSE 1.73, the mean. Most buyers buy within hours, and 41 of the 607 test buyers waited more than a week: the squares make those waits count. Which metric is right depends on what a miss costs: if every day of error costs the same, MAE; if a long wait costs far more than a short one, RMSE.
+
+<Aside type="tip" title="Remember">
+
+- The confusion matrix has four cells: TP, FP, FN, TN. A threshold decides who is flagged, and moving it moves the counts.
+- Accuracy follows the larger group: on a rare outcome, the call "nobody" scores high.
+- Precision is the share of flagged people who are buyers, recall the share of buyers who are flagged; F1 is their harmonic mean.
+- Write the cost of each error first; the total cost of a rule is $$c_{FP} \times FP + c_{FN} \times FN$$, and the break-even chance is $$c_{FP} / (c_{FP} + c_{FN})$$.
+- MAE is the typical miss, RMSE punishes long misses; the best constant is the median for MAE and the mean for RMSE.
+
+**Common trap:** judging a model by its accuracy when the outcome is rare. The call "nobody" would have scored the same.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-metrics-and-error-costs-1">
+
+**What do a stricter threshold's flags look like?** Flag every test person with a chance of at least 0.20 (the flags are given). Compute the precision and the recall of these flags and put the list [precision, recall], each rounded to 3 decimals, in `answer_1`. Expected: `answer_1` is a list of two numbers between 0 and 1.
+
+```python
+flag20 = chance >= 0.20                                   # given: the flags at the threshold 0.20
+# compute precision and recall of flag20 against y_test (the true outcomes)
+answer_1 = None  # replace None with [precision, recall], each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`precision_score(y_true, y_pred)` and `recall_score(y_true, y_pred)` take the true outcomes first. Or count `tp`, `fp` and `fn` with `counts(0.20)`, as in unit 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [round(float(precision_score(..., flag20)), 3), round(float(recall_score(..., ...)), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_1 = [round(float(precision_score(y_test, flag20)), 3), round(float(recall_score(y_test, flag20)), 3)]
+```
+
+At 0.20 the model flags 659 people, 148 of them buyers: precision 0.225 and recall 0.244. Against the threshold 0.15 of unit 3 (precision 0.179, recall 0.493) the flags are right a little more often and find half as many buyers.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-metrics-and-error-costs-2">
+
+**Another team, other costs.** Before you start, say in one sentence what the result looks like: a threshold in the lower part of the grid and a cost between three and four thousand dollars, below what either of the two simple policies would cost. A second team pays $1 for a message that does not lead to a purchase and loses $9 for a buyer who gets none. Use `total_cost` from unit 4 with these costs on the grid of unit 4 (thresholds 0.03 to 0.30). Put the list [the cheapest threshold on the grid, its total cost] in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of a threshold and a whole number of dollars.
+
+<details>
+<summary>Hint</summary>
+
+`total_cost(threshold, c_fp, c_fn)` takes the two costs as its second and third arguments. Compute it for every threshold of `grid` and take the smallest with `min(..., key=...)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A threshold in the lower part of the grid and a cost between three and four thousand dollars, below what messaging everybody would cost."*
+
+```python
+costs2 = {t: total_cost(t, 1, 9) for t in grid}
+best2 = min(costs2, key=costs2.get)
+```
+
+</details>
+
+<Solution>
+
+```python
+costs2 = {t: total_cost(t, 1, 9) for t in grid}
+best2 = min(costs2, key=costs2.get)
+answer_2 = [best2, costs2[best2]]
+```
+
+The cheapest threshold is 0.1, which is the break-even chance 1 / (1 + 9) of unit 4, and it costs $3,626. Messaging nobody would cost 607 × 9 = $5,463 and messaging everybody 4,437 × 1 = $4,437. A missed buyer is now nine times as costly as a wasted message, so the rule flags 2,953 people instead of 1,010 and accepts 2,474 wrong flags to miss only 128 buyers.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: say why a model can have a higher accuracy than another and still be the worse choice for the success team.
+
+   <details>
+   <summary>answer</summary>
+
+   Accuracy counts every right call the same, and most people are non-buyers, so a rule that flags nobody scores high. The team's costs are different for the two errors, so the better rule is the one with the lower total cost, or the right balance of precision and recall.
+
+   </details>
+
+<Exercise id="core-metrics-and-error-costs-3">
+
+**Spot the flaw.** A colleague flags every test person with a chance of at least 0.25 and reports a precision of 0.130, which seems too low to use. Fix the call so that it computes the precision of the flags, and set `answer_3` to it, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 1.
+
+```python
+flag25 = chance >= 0.25
+answer_3 = round(float(precision_score(flag25, y_test)), 3)       # colleague: precision of the flags
+```
+
+<details>
+<summary>Hint</summary>
+
+Print `tp / (tp + fp)` using `counts(0.25)`. Which of the two numbers does `precision_score(flag25, y_test)` match: precision or recall?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float(precision_score(..., ...)), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = round(float(precision_score(y_test, flag25)), 3)
+```
+
+The precision is 0.241: of the 328 people flagged at 0.25, 79 bought. The colleague's 0.130 is the recall, 79 of 607 buyers: `precision_score(y_true, y_pred)` takes the true outcomes first, and with the two swapped it divides by the buyers instead of by the flagged people.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can build and read a confusion matrix, compute accuracy, precision, recall and F1, say why accuracy fails on a rare outcome, choose a threshold from the cost of each kind of error, and compute MAE and RMSE for a numeric target.*
+Test: Exercise core-metrics-and-error-costs-2, done from the notebook without opening the hints.
+
+The pattern to remember: **choose the metric from what each kind of error costs, write the costs before the scores, and read every number against what "nobody" or "the mean" would have scored.**
