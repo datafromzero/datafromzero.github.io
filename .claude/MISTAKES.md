@@ -457,6 +457,20 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   `Series.std()` before a Predict asked whether `std()` and `np.std` agree. → **When a lesson prints a statistic computed on a population with a
   sample formula, say so and keep the symbol convention (σ and N for populations, s and n − 1 for samples); never state a function's divisor in an
   Idea that precedes a Predict about that function.**
+- 2026-11-20 — Drafting C8 and C9 (Part 2): a formula with the lesson's own numbers (z = 2.78) and an Idea that said "the chi-square test gives the same p" or "α is the
+  chance of a false alarm" stood before the Predict that asks for exactly that; an inline `$$…$$` with a long substitution made the page 460 px wide at 390 px. → **A
+  formula with the data's numbers goes after the Why ("In symbols"); an Idea may give the symbols, never a number the Predict asks for; a substitution line is a display
+  formula; load the page at 390 px and compare `scrollWidth` with the viewport.**
+- 2026-11-20 — SciPy's `permutation_test` two-sided p-value is twice the smaller one-sided p (0.815 here), which differs from the share of shuffles with |gap| at least |real
+  gap| (0.794), and NumPy's `binomial` draws for large n differ between 2.1 and 2.5 (a false-alarm rate of 0.053 against 0.065 at n = 5,000). → **Do not show two
+  tools' p-values side by side as one number unless their two-sided rules are the same; state the seed beside a simulated number, run the notebook on a second NumPy, and
+  write "about" (or "near 5 percent") in the prose where the versions differ.**
+- 2026-11-20 — C8 printed simulated rates to three decimals from 2,000 runs (0.549, 0.989), but the standard error of a rate near 0.5 over 2,000 runs is about 0.011, so the
+  last digits were noise, and a "false-alarm rate" over 500 experiments (23.8 percent) was good to about two points. → **A simulated rate printed to three decimals needs at
+  least 20,000 runs; with fewer, print two decimals. State the runs, the seed and the assumptions (1 real test in 10, a lift of exactly 2 points) beside a derived share such as
+  "55 percent of significant results are real".**
+
+- 2026-11-20 — Drafting C10, a reverse-causation illustration was built from timing (55.5% of the buyers' first-week events came after the purchase) and the Why said buying may have caused some of the activity, although the dataset README says Plus does not change visits; the figure is a timing artifact (buyers buy early, a median 0.49 days after signup). → **A reverse-causation illustration built from timing (how much activity falls after the outcome) must say only that the measure cannot separate direction; never suggest the outcome drove the activity when the dataset truth says otherwise.**
 
 ## Agents and reviews
 

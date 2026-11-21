@@ -1,0 +1,1044 @@
+---
+id: core-hypothesis-testing
+title: Hypothesis tests and p-values, honestly
+short_title: 'Tests and p-values'
+description: Frame a test with a null and an alternative, read a p-value for what it is and is not, and see how Type I and Type II errors trade off.
+stage: core
+order: 80
+level: intermediate
+duration: 40
+objectives:
+  - State a null and an alternative hypothesis for a business question
+  - Explain what a p-value is and three things it is not
+  - Describe Type I and Type II errors and power in plain words
+  - Explain how p-hacking and optional stopping inflate false positives
+prerequisites:
+  - core-confidence-intervals
+  - core-probability-and-base-rates
+datasets:
+  - app-events
+notebook: notebooks/core/core-hypothesis-testing.ipynb
+reviewed: 2026-11-21
+sources:
+  - title: 'American Statistical Association, press release of 7 March 2016 on its statement on statistical significance and p-values (PDF file p-valuestatement.pdf): the six principles (accessed 2026-11-20)'
+    url: https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 7.1.3 What are statistical tests? (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/prc/section1/prc13.htm
+  - title: 'Johari, Pekelis and Walsh, Always valid inference: bringing sequential analysis to A/B testing, arXiv:1512.04922 (accessed 2026-11-20)'
+    url: https://arxiv.org/abs/1512.04922
+  - title: 'SciPy documentation: scipy.stats.permutation_test (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.permutation_test.html
+status: published
+---
+
+## Can you skip Part 2?
+
+Part 2, Statistics II and decisions, has eight lessons, C8 to C15, and ends with a decision memo. Try these six questions without looking anything up; the numbers are made up. If all six answers are right, go on to Part 3, which starts with *Modeling the domain before the tables*. If not, start here.
+
+1. A test of a new screen gives p = 0.03. Which describes it: (a) the chance that the screen does nothing, (b) the chance of a gap at least this big if the screen does nothing, (c) the chance that the result is right?
+
+   <details>
+   <summary>answer</summary>
+
+   (b). The p-value assumes the screen does nothing, so it cannot be the chance that this is true.
+
+   </details>
+
+2. A test with 40 people in each group finds no significant difference, and a colleague writes "the redesign has no effect". What is wrong with that?
+
+   <details>
+   <summary>answer</summary>
+
+   Not significant is not no effect: a small test misses real effects. The interval of the difference shows which sizes the data still allow.
+
+   </details>
+
+3. Two groups of 2,000,000 people convert at 12.0 and 12.1 percent, and p = 0.002. Is it worth acting on?
+
+   <details>
+   <summary>answer</summary>
+
+   Not on the p-value alone: with that many people a tiny gap is easy to detect. Report the 0.1 point and weigh it against the cost.
+
+   </details>
+
+4. Cities with more ice-cream sales have more drownings. Name one rival explanation to "ice cream causes drowning".
+
+   <details>
+   <summary>answer</summary>
+
+   A confounder: hot weather raises both.
+
+   </details>
+
+5. A team looks at an A/B test every day and stops on the first day with p below 0.05. What goes wrong?
+
+   <details>
+   <summary>answer</summary>
+
+   Every look is another chance to cross the bar by luck. Fix the sample size before the test starts.
+
+   </details>
+
+6. Weekly signups fell 12 percent. What do you check before looking for a cause?
+
+   <details>
+   <summary>answer</summary>
+
+   Whether the fall is real (tracking, an outage, a holiday, a changed definition). Then segment, then look for the driver.
+
+   </details>
+
+## The question
+
+The product manager of a budgeting app asks:
+
+> We put tips on the first screens for six weeks. Did they help people buy the paid plan?
+
+People were assigned at random as they signed up, March 16 to April 26; "bought" means a purchase of Plus within 14 days. The data is the `welcome_tips` experiment of `app-events`, a fictional app.
+
+| group | people | bought Plus | share |
+|---|---:|---:|---:|
+| control (the old screens) | 2,449 | 304 | 12.4% |
+| variant (the tips) | 2,519 | 306 | 12.1% |
+
+By the end you can say what a p-value says about this table, what it leaves out, and how repeated looks make wins that are not there.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Confidence intervals*](/core/confidence-intervals/) (C7), a 95 percent interval holds the values the data do not rule out at the 5 percent level. A test asks that about one value, "no difference".
+
+**Diverge.** A test boils the interval down to one number, the p-value, and unit 2 shows how much that leaves out.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Confidence intervals*](/core/confidence-intervals/) (C7), write the standard error of a share for a conversion rate of 0.12 in 2,500 people.
+
+   <details>
+   <summary>answer</summary>
+
+   `np.sqrt(0.12 * 0.88 / 2500)`, which is 0.0065.
+
+   </details>
+
+2. In [*Probability, conditional probability and base rates*](/core/probability-and-base-rates/) (C4), use a table of 1,000 people. Of 1,000 signups, 20 are fake. A filter catches 18 of the 20 fake ones and wrongly flags 49 of the 980 real ones. Of the flagged signups, how many are fake?
+
+   <details>
+   <summary>answer</summary>
+
+   18 of the 67 flagged, about 27 percent. Catching 9 in 10 fake ones is not the same as 9 in 10 flagged ones being fake.
+
+   </details>
+
+## The big idea
+
+A p-value is the share of luck-only results that are as far from "no effect" as yours.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="pva-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="pva" id="pva-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="pva" id="pva-r1" aria-label="Step 1 of 4: Assume nothing is going on" />
+<input class="sa-r r2 o2" type="radio" name="pva" id="pva-r2" aria-label="Step 2 of 4: Mark the real gap" />
+<input class="sa-r r3 o5" type="radio" name="pva" id="pva-r3" aria-label="Step 3 of 4: Shade as far or farther" />
+<input class="sa-r r4 o8" type="radio" name="pva" id="pva-r4" aria-label="Step 4 of 4: A bigger gap, less red" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>gap</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">in the pile</i><i class="w3 d3 tmp">in the pile</i><i class="w3 d6 hl">far out</i></span></span><span class="sa-n c-flt"><small>red</small><span><i class="w2 tmp">—</i><i class="w3 d3 tmp hl">big share</i><i class="w3 d6 hl">small share</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 274" width="360" role="img" aria-labelledby="pva-t pva-d">
+<title id="pva-t">The p-value is the share of luck-only gaps that are as far from 0 as the gap you saw</title>
+<desc id="pva-d">A bell-shaped pile of gaps that luck alone would produce, centered on an ochre line at 0. A blue marker shows the real gap, first near the middle: the two tails beyond it, in red, hold a large share of the pile. Then a bigger gap, far out on the right: the red tails beyond it are thin and hold a small share. Text under the picture says that the shaded share is the p-value, and that a smaller share means a smaller p.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Assume nothing is going on</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · Mark the real gap</text>
+<text class="f10 b w3 d3 tmp" x="10" y="29">3 · Shade as far or farther</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · A bigger gap, less red</text>
+<text class="f11 b" x="10" y="14">Is the gap more than luck?</text>
+<path class="f-ord k1" d="M45 210L45 208.8L50 208.3L55 207.7L60 206.9L65 205.8L70 204.5L75 202.8L80 200.7L85 198.2L90 195.1L95 191.5L100 187.3L105 182.6L110 177.2L115 171.2L120 164.8L125 157.9L130 150.7L135 143.3L140 135.9L145 128.7L150 121.9L155 115.7L160 110.3L165 105.9L170 102.7L175 100.7L180 100L185 100.7L190 102.7L195 105.9L200 110.3L205 115.7L210 121.9L215 128.7L220 135.9L225 143.3L230 150.7L235 157.9L240 164.8L245 171.2L250 177.2L255 182.6L260 187.3L265 191.5L270 195.1L275 198.2L280 200.7L285 202.8L290 204.5L295 205.8L300 206.9L305 207.7L310 208.3L315 208.8L315 210Z" />
+<path class="f-flt k3 w3 d3 tmp" d="M225 210L225 143.3L230 150.7L235 157.9L240 164.8L245 171.2L250 177.2L255 182.6L260 187.3L265 191.5L270 195.1L275 198.2L280 200.7L285 202.8L290 204.5L295 205.8L300 206.9L305 207.7L310 208.3L315 208.8L315 210Z" />
+<path class="f-flt k3 w3 d3 tmp" d="M45 210L45 208.8L50 208.3L55 207.7L60 206.9L65 205.8L70 204.5L75 202.8L80 200.7L85 198.2L90 195.1L95 191.5L100 187.3L105 182.6L110 177.2L115 171.2L120 164.8L125 157.9L130 150.7L135 143.3L135 210Z" />
+<path class="f-flt k3 w3 d6" d="M288 210L288 203.8L293 205.3L298 206.5L303 207.4L308 208.1L313 208.6L315 210Z" />
+<path class="f-flt k3 w3 d6" d="M45 210L45 208.8L50 208.3L55 207.7L60 206.9L65 205.8L70 204.5L72 210Z" />
+<path class="ln" d="M45 208.8L50 208.3L55 207.7L60 206.9L65 205.8L70 204.5L75 202.8L80 200.7L85 198.2L90 195.1L95 191.5L100 187.3L105 182.6L110 177.2L115 171.2L120 164.8L125 157.9L130 150.7L135 143.3L140 135.9L145 128.7L150 121.9L155 115.7L160 110.3L165 105.9L170 102.7L175 100.7L180 100L185 100.7L190 102.7L195 105.9L200 110.3L205 115.7L210 121.9L215 128.7L220 135.9L225 143.3L230 150.7L235 157.9L240 164.8L245 171.2L250 177.2L255 182.6L260 187.3L265 191.5L270 195.1L275 198.2L280 200.7L285 202.8L290 204.5L295 205.8L300 206.9L305 207.7L310 208.3L315 208.8" />
+<path class="bx" d="M20 210H340" />
+<path class="s-out" d="M180 92V214" />
+<text class="f10 b m" x="180" y="228">0, no effect</text>
+<text class="f10 mu e" x="340" y="244">gap between the groups</text>
+<text class="f10 mu" x="14" y="150">luck-only gaps</text>
+<path class="s-src w4 d2 tmp" d="M225 72V210" />
+<circle class="f-src k4 w4 d2 tmp" cx="225" cy="72" r="4" />
+<text class="f10 b m w4 d2 tmp" x="225" y="62">real gap</text>
+<path class="s-src w3 d6" d="M288 72V210" />
+<circle class="f-src k4 w3 d6" cx="288" cy="72" r="4" />
+<text class="f10 b m w3 d6" x="288" y="62">a bigger gap</text>
+<text class="f11 b w2 d4 tmp" x="10" y="262">the red share of the pile is the p-value</text>
+<text class="f11 b w2 d7" x="10" y="262">a smaller red share is a smaller p-value</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="pva-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="pva-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="pva-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="pva-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="pva-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="pva-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="pva-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="pva-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="pva-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="pva-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="pva-r1">1</label><label class="sa-sb sb2" for="pva-r2">2</label><label class="sa-sb sb3" for="pva-r3">3</label><label class="sa-sb sb4" for="pva-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">If nothing is going on, luck alone still makes the gap between two groups wander around 0.<span class="sa-chs"><span class="sa-ch pl">the luck-only pile</span></span></div>
+<div class="c-src w1 d2 tmp">Put the gap you really saw on the same line as the luck-only gaps.<span class="sa-chs"><span class="sa-ch pl">the real gap</span></span></div>
+<div class="c-flt w3 d3 tmp">The p-value is the share of luck-only gaps as far from 0 as yours or farther: the red part.<span class="sa-chs"><span class="sa-ch pl">two red tails</span></span></div>
+<div class="c-out w3 d6">A bigger gap leaves fewer luck-only gaps beyond it, so the red share, and the p-value, gets smaller.<span class="sa-chs"><span class="sa-ch ch">the gap moves out</span><span class="sa-ch mi">the red share shrinks</span></span></div>
+</div>
+<p class="ca-cap">Assume nothing is going on, and luck alone makes gaps pile up around 0. The p-value is the shaded share: how much of that pile is as far from 0 as your gap, or farther.</p>
+<ol class="sa-steps">
+<li>Assume nothing is going on</li>
+<li>Mark the real gap</li>
+<li>Shade as far or farther</li>
+<li>A bigger gap, less red</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 40 minutes, 4 new ideas: the null and the shuffle, the p-value, the two errors and power, and looking again and again. The setup cell gave `tips`, one row for each of the 4,968 people, with `is_var` (True for the 2,519 who saw the tips) and `y` (1 if the person bought Plus within 14 days).
+
+<OpenInColab />
+
+### 1. Say what "nothing is going on" means, then shuffle it
+
+**Idea.** A test starts with two claims, written before you look. The null hypothesis, H0, says nothing is going on: here, the tips do not change the chance to buy. The alternative, H1, says something is: the chance differs, up or down. You also set a bar for calling a p-value small enough, usually 0.05; NIST calls it the significance level, $$\alpha$$. If H0 is true, the label "variant" means nothing, so shuffling the labels makes new splits that H0 could have produced.
+
+**Try it.** Shuffle who is "variant" 10,000 times and record the gap in conversion of each shuffle:
+
+```python
+n0, n1 = int((~is_var).sum()), int(is_var.sum())
+c0, c1 = int(y[~is_var].sum()), int(y[is_var].sum())
+p0, p1 = c0 / n0, c1 / n1                                         # conversion rates
+gap = p1 - p0                                                     # variant minus control
+print(n0, n1, c0, c1, round(p0, 4), round(p1, 4), round(float(gap), 4))
+rng = np.random.default_rng(42)
+shuffled = np.empty(10_000)
+for k in range(10_000):
+    mix = rng.permutation(is_var)
+    shuffled[k] = y[mix].mean() - y[~mix].mean()
+extreme = int((np.abs(shuffled) >= abs(gap)).sum())
+print(extreme, round((extreme + 1) / (len(shuffled) + 1), 2))
+```
+
+**Predict:** the real gap is the variant's rate minus the control's. Will it sit near the middle of the shuffled gaps or far out in a tail? About how many of the 10,000 shuffles will give a gap at least as far from 0, in either direction?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2449 2519 304 306 0.1241 0.1215 -0.0027
+7944 0.79
+```
+
+<figure>
+<svg viewBox="0 0 360 236" width="360" role="img" aria-labelledby="ht-null-t ht-null-d">
+<title id="ht-null-t">10,000 shuffled gaps in conversion, and the real gap</title>
+<desc id="ht-null-d">A histogram of 10,000 shuffled gaps on a scale from -3.8 to 3.8 percentage points, tall in the middle and thin at the ends. A blue vertical line marks the real gap, -0.27 points, and an ochre line marks no effect at 0. Only the bars within 0.27 points of 0 are gray; every bar farther out is red, and the red bars hold 7,944 of the 10,000 shuffles, so the real gap lies inside the bulk of the shuffled gaps.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">10,000 shuffles, the label means nothing</text>
+<rect x="35.6" y="149.7" width="3" height="0.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="39" y="149.7" width="3" height="0.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="42.4" y="149.7" width="3" height="0.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="45.8" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="56" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="62.9" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="66.3" y="149.2" width="3" height="0.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="69.7" y="148.4" width="3" height="1.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="73.1" y="147.8" width="3" height="2.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="76.5" y="148.6" width="3" height="1.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="79.9" y="146.7" width="3" height="3.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="83.3" y="145.9" width="3" height="4.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="86.7" y="146.5" width="3" height="3.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="90.2" y="144" width="3" height="6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="93.6" y="140.8" width="3" height="9.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="97" y="141.1" width="3" height="8.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="100.4" y="141.1" width="3" height="8.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="103.8" y="139.4" width="3" height="10.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="107.2" y="136.4" width="3" height="13.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="110.6" y="132.1" width="3" height="17.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="114" y="130.2" width="3" height="19.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="117.5" y="125.1" width="3" height="24.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="120.9" y="127.8" width="3" height="22.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="124.3" y="120.2" width="3" height="29.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="127.7" y="116.4" width="3" height="33.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="131.1" y="112.6" width="3" height="37.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="134.5" y="102.8" width="3" height="47.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="137.9" y="98.2" width="3" height="51.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="141.3" y="97.4" width="3" height="52.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="144.7" y="94.2" width="3" height="55.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="148.2" y="96.3" width="3" height="53.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="151.6" y="75.5" width="3" height="74.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="155" y="75.2" width="3" height="74.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="158.4" y="70.3" width="3" height="79.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="161.8" y="73" width="3" height="77" fill="#c0392b" fill-opacity="0.75" />
+<rect x="165.2" y="67.3" width="3" height="82.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="168.6" y="67.1" width="3" height="82.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="172" y="61.4" width="3" height="88.6" fill="#c0392b" fill-opacity="0.75" />
+<rect x="175.5" y="60.8" width="3" height="89.2" fill="currentColor" fill-opacity="0.3" />
+<rect x="178.9" y="50" width="3" height="100" fill="currentColor" fill-opacity="0.3" />
+<rect x="182.3" y="58.1" width="3" height="91.9" fill="currentColor" fill-opacity="0.3" />
+<rect x="185.7" y="62.7" width="3" height="87.3" fill="currentColor" fill-opacity="0.3" />
+<rect x="189.1" y="55.7" width="3" height="94.3" fill="currentColor" fill-opacity="0.3" />
+<rect x="192.5" y="55.4" width="3" height="94.6" fill="currentColor" fill-opacity="0.3" />
+<rect x="195.9" y="60" width="3" height="90" fill="#c0392b" fill-opacity="0.75" />
+<rect x="199.3" y="62.7" width="3" height="87.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="202.8" y="67.9" width="3" height="82.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="206.2" y="67.3" width="3" height="82.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="209.6" y="74.9" width="3" height="75.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="213" y="85.8" width="3" height="64.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="216.4" y="86.3" width="3" height="63.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="219.8" y="80.6" width="3" height="69.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="223.2" y="92.8" width="3" height="57.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="226.6" y="95.3" width="3" height="54.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="230" y="105.3" width="3" height="44.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="233.5" y="106.6" width="3" height="43.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="236.9" y="112.3" width="3" height="37.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="240.3" y="115.6" width="3" height="34.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="243.7" y="121.5" width="3" height="28.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="247.1" y="123.2" width="3" height="26.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="250.5" y="130.8" width="3" height="19.2" fill="#c0392b" fill-opacity="0.75" />
+<rect x="253.9" y="133.2" width="3" height="16.8" fill="#c0392b" fill-opacity="0.75" />
+<rect x="257.3" y="135.6" width="3" height="14.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="260.8" y="137.5" width="3" height="12.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="264.2" y="135.9" width="3" height="14.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="267.6" y="137.3" width="3" height="12.7" fill="#c0392b" fill-opacity="0.75" />
+<rect x="271" y="142.1" width="3" height="7.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="274.4" y="144.9" width="3" height="5.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="277.8" y="145.1" width="3" height="4.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="281.2" y="145.1" width="3" height="4.9" fill="#c0392b" fill-opacity="0.75" />
+<rect x="284.6" y="146.7" width="3" height="3.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="288.1" y="145.9" width="3" height="4.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="291.5" y="148.6" width="3" height="1.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="294.9" y="148.9" width="3" height="1.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="298.3" y="148.9" width="3" height="1.1" fill="#c0392b" fill-opacity="0.75" />
+<rect x="301.7" y="148.6" width="3" height="1.4" fill="#c0392b" fill-opacity="0.75" />
+<rect x="305.1" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="308.5" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="311.9" y="149.7" width="3" height="0.3" fill="#c0392b" fill-opacity="0.75" />
+<rect x="315.3" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="318.8" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="329" y="149.5" width="3" height="0.5" fill="#c0392b" fill-opacity="0.75" />
+<rect x="339.2" y="149.7" width="3" height="0.3" fill="#c0392b" fill-opacity="0.75" />
+<path d="M185 34 L185 152" fill="none" stroke="#ad9100" stroke-width="2" stroke-opacity="1" />
+<path d="M173.7 34 L173.7 152" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" />
+<text x="168.7" y="44" font-size="10" text-anchor="end" font-weight="600">real gap -0.27</text>
+<text x="191" y="44" font-size="10" font-weight="600">no effect, 0</text>
+<path d="M24 152 L346 152" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M57.9 152 L57.9 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="57.9" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">-3</text>
+<path d="M100.3 152 L100.3 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="100.3" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">-2</text>
+<path d="M142.6 152 L142.6 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="142.6" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">-1</text>
+<path d="M185 152 L185 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="185" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M227.4 152 L227.4 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="227.4" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">+1</text>
+<path d="M269.7 152 L269.7 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="269.7" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">+2</text>
+<path d="M312.1 152 L312.1 156" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="312.1" y="167" font-size="10" text-anchor="middle" fill-opacity="0.8">+3</text>
+<text x="185" y="183" font-size="10" text-anchor="middle">gap in conversion, variant minus control (points)</text>
+<rect x="14" y="196" width="12" height="8" fill="#c0392b" fill-opacity="0.75" />
+<text x="32" y="204" font-size="10">at least as far from 0 as the real gap: 7,944 of 10,000</text>
+<rect x="14" y="212" width="12" height="8" fill="currentColor" fill-opacity="0.3" />
+<text x="32" y="220" font-size="10">closer to 0 than the real gap: 2,056 of 10,000</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the real gap is -0.0027, 0.27 points less for the tips, and 7,944 of the 10,000 shuffles gave a gap at least as far from 0. That share is the p-value, 0.79: luck explains the real gap easily. The "+ 1" counts the real labeling as one more shuffle, so p is never exactly 0.
+
+In symbols:
+
+$$
+p = \frac{\text{shuffles at least as extreme} + 1}{\text{shuffles} + 1} = \frac{7{,}944 + 1}{10{,}000 + 1} \approx 0.79
+$$
+
+where "at least as extreme" counts both directions.
+
+### 2. What a p-value says, and what it does not
+
+**Idea.** The p-value is the chance, if H0 were true, of a result at least as far from H0 as the one you saw. The spread of the shuffled gaps is the standard error when H0 is true. The test statistic is how many standard errors the real gap lies from the null value, and a bell curve turns that into a p-value.
+
+$$
+z = \frac{\text{estimate} - \text{null value}}{\mathrm{SE}}
+$$
+
+The estimate is the real gap, the null value is 0, and SE is the spread of the shuffled gaps. The cell also builds the 95 percent interval of the difference, as in lesson C7, with $$\mathrm{SE}_{\text{diff}} = \sqrt{\mathrm{SE}_0^2 + \mathrm{SE}_1^2}$$, where $$\mathrm{SE}_0$$ and $$\mathrm{SE}_1$$ are the standard errors of the two rates.
+
+**Try it.** Turn the gap into a z-score and a p-value, then build the interval of the difference, in percentage points:
+
+```python
+se_null = shuffled.std(ddof=1)
+z = gap / se_null
+p_norm = 2 * stats.norm.sf(abs(z))
+print(round(float(se_null), 4), round(float(z), 3), round(float(p_norm), 3))
+print(round(float(two_prop_p(c0, n0, c1, n1)), 3))
+print(int(np.isclose(np.abs(shuffled), abs(gap)).sum()), round(100 * (1 / n0 + 1 / n1), 2))
+se_diff = np.sqrt(p0 * (1 - p0) / n0 + p1 * (1 - p1) / n1)
+low, high = gap - 1.96 * se_diff, gap + 1.96 * se_diff
+print(round(float(100 * gap), 2), round(float(100 * low), 2), round(float(100 * high), 2))      # in percentage points
+```
+
+**Predict:** the p-value of unit 1 was a share of shuffles. Will the bell curve give about the same p-value? Will the 95 percent interval contain 0? Will it rule out a lift of +1 point?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.0093 -0.286 0.775
+0.776
+327 0.08
+-0.27 -2.09 1.56
+```
+
+<figure>
+<svg viewBox="0 0 360 168" width="360" role="img" aria-labelledby="ht-diff-t ht-diff-d">
+<title id="ht-diff-t">The difference in conversion and its 95 percent interval</title>
+<desc id="ht-diff-d">A horizontal interval on a scale from -3 to 3 percentage points: a blue dot at -0.27 and a blue bar from -2.09 to 1.56. A vertical ochre line marks no difference at 0 and a dashed gray line marks a lift of +1 point, which lies inside the bar.</desc>
+<g fill="currentColor">
+<path d="M185 36 L185 100" fill="none" stroke="#ad9100" stroke-width="2" stroke-opacity="1" />
+<path d="M236.7 36 L236.7 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="181" y="32" font-size="10" text-anchor="end" font-weight="600">no difference</text>
+<text x="240.7" y="32" font-size="10" font-weight="600">+1 point</text>
+<rect x="77" y="64" width="188.7" height="6" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<circle cx="171.3" cy="67" r="5" fill="#0072b2" />
+<text x="77" y="86" font-size="10" text-anchor="middle" fill-opacity="0.8">-2.09</text>
+<text x="171.3" y="86" font-size="10" text-anchor="middle" fill-opacity="0.8">-0.27</text>
+<text x="265.6" y="86" font-size="10" text-anchor="middle" fill-opacity="0.8">+1.56</text>
+<path d="M30 104 L340 104" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M30 104 L30 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="30" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">-3</text>
+<path d="M81.7 104 L81.7 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="81.7" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">-2</text>
+<path d="M133.3 104 L133.3 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="133.3" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">-1</text>
+<path d="M185 104 L185 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="185" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M236.7 104 L236.7 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="236.7" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">+1</text>
+<path d="M288.3 104 L288.3 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="288.3" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">+2</text>
+<path d="M340 104 L340 108" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="119" font-size="10" text-anchor="middle" fill-opacity="0.8">+3</text>
+<text x="185" y="140" font-size="10" text-anchor="middle">difference in conversion, variant minus control (points)</text>
+<path d="M14 156 L34 156" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="42" y="159.5" font-size="10">+1 point, a lift that would be worth keeping</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the shuffled gaps spread by 0.0093, so the real gap lies 0.286 standard errors below 0: $$z = -0.00266 / 0.00928 \approx -0.286$$. The bell curve gives 0.775 and the formula of the next lesson 0.776; the shuffles gave 0.79, a little higher: a shuffled gap moves in steps of one buyer, about 0.08 points, and "at least as far" counts the 327 shuffles that tie the real gap exactly. The interval, -2.09 to +1.56 points, holds 0 and does not rule out a lift of +1 point, which the p-value alone hides.
+
+Three things a p-value is not, from the principles of the American Statistical Association (ASA):
+
+- **Not the probability that H0 is true.** It was computed by assuming H0; the ASA says p-values do not measure that probability, nor the probability that the data were produced by chance alone.
+- **Not the size or importance of an effect**, the ASA says.
+- **Not a verdict.** The ASA says decisions should not rest only on whether a p-value passes a threshold. Here 0.78 leaves a lift of 1.6 points possible.
+
+### 3. Two ways to be wrong, and power
+
+**Idea.** A test can fail in two ways.
+
+| | the test says significant | the test says not significant |
+|---|---|---|
+| nothing is going on | false alarm (Type I error) | correct |
+| something is going on | correct: the real effect is caught | miss (Type II error) |
+
+**Power** is the chance of catching a real effect of a stated size: one minus the chance of a miss. The cell simulates experiments with no effect and with a real lift of 2 points, 12.4 to 14.4 percent.
+
+**Try it.** Simulate 20,000 experiments at each group size and print the false-alarm rate and the power at two bars (seed 1; another NumPy version can move the last digit):
+
+```python
+rng = np.random.default_rng(1)
+p_base = 0.124
+
+
+def experiments(size, p_variant, reps=20_000):
+    """p-values of `reps` simulated experiments with `size` people in each group."""
+    buyers0 = rng.binomial(size, p_base, size=reps)
+    buyers1 = rng.binomial(size, p_variant, size=reps)
+    return two_prop_p(buyers0, size, buyers1, size)
+
+
+table = {}
+for size in (1250, 2500, 5000, 10000):
+    none = experiments(size, 0.124)
+    lift = experiments(size, 0.144)
+    table[size] = (float((none < 0.05).mean()), [float((lift < a).mean()) for a in (0.05, 0.01)])
+    if size == 2500:
+        first_100 = none[:100]
+    print(size, round(table[size][0], 2), [round(share, 2) for share in table[size][1]])
+```
+
+**Predict:** in the experiments with no effect, what share will have p below 0.05? In the experiments with a real lift of 2 points, how does the share caught change when each group grows from 1,250 to 10,000 people, and when the bar goes from 0.05 to 0.01?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1250 0.05 [0.31, 0.13]
+2500 0.05 [0.54, 0.31]
+5000 0.05 [0.83, 0.64]
+10000 0.05 [0.99, 0.95]
+```
+
+<figure>
+<svg viewBox="0 0 360 214" width="360" role="img" aria-labelledby="ht-power-t ht-power-d">
+<title id="ht-power-t">How often a real lift of 2 points is caught, by group size and bar</title>
+<desc id="ht-power-d">For groups of 1,250, 2,500, 5,000 and 10,000 people, two bars show the share of simulated experiments with a real lift of 2 points that are caught at the bar of 0.05 (0.31, 0.54, 0.83, 0.99) and at the bar of 0.01 (0.13, 0.31, 0.64, 0.95). Both bars grow with the group size and the 0.01 bars are lower.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Share of experiments that catch a real lift of 2 points</text>
+<path d="M40 150 L346 150" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="34" y="153.5" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M40 100 L346 100" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="103.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.5</text>
+<path d="M40 50 L346 50" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="53.5" font-size="10" text-anchor="end" fill-opacity="0.8">1</text>
+<rect x="62" y="118.6" width="27" height="31.4" fill="#0072b2" fill-opacity="0.9" />
+<text x="75.5" y="114.6" font-size="10" text-anchor="middle" font-weight="600">0.31</text>
+<rect x="91" y="136.9" width="27" height="13.1" fill="#0072b2" fill-opacity="0.45" />
+<text x="104.5" y="132.9" font-size="10" text-anchor="middle" font-weight="600">0.13</text>
+<text x="90" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">1,250</text>
+<rect x="140" y="96" width="27" height="54" fill="#0072b2" fill-opacity="0.9" />
+<text x="153.5" y="92" font-size="10" text-anchor="middle" font-weight="600">0.54</text>
+<rect x="169" y="119.4" width="27" height="30.6" fill="#0072b2" fill-opacity="0.45" />
+<text x="182.5" y="115.4" font-size="10" text-anchor="middle" font-weight="600">0.31</text>
+<text x="168" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">2,500</text>
+<rect x="218" y="66.6" width="27" height="83.4" fill="#0072b2" fill-opacity="0.9" />
+<text x="231.5" y="62.6" font-size="10" text-anchor="middle" font-weight="600">0.83</text>
+<rect x="247" y="86.1" width="27" height="63.9" fill="#0072b2" fill-opacity="0.45" />
+<text x="260.5" y="82.1" font-size="10" text-anchor="middle" font-weight="600">0.64</text>
+<text x="246" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">5,000</text>
+<rect x="296" y="51.2" width="27" height="98.8" fill="#0072b2" fill-opacity="0.9" />
+<text x="309.5" y="47.2" font-size="10" text-anchor="middle" font-weight="600">0.99</text>
+<rect x="325" y="55.5" width="27" height="94.5" fill="#0072b2" fill-opacity="0.45" />
+<text x="338.5" y="51.5" font-size="10" text-anchor="middle" font-weight="600">0.95</text>
+<text x="324" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">10,000</text>
+<text x="193" y="182" font-size="10" text-anchor="middle">people in each group</text>
+<rect x="40" y="194" width="12" height="8" fill="#0072b2" fill-opacity="0.9" />
+<text x="56" y="201.5" font-size="10">bar of 0.05</text>
+<rect x="150" y="194" width="12" height="8" fill="#0072b2" fill-opacity="0.45" />
+<text x="166" y="201.5" font-size="10">bar of 0.01</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the false-alarm rate stays near 5 percent at every size: the bar $$\alpha$$ sets it, not the sample. Power is what changes. Each row is the group size, the false-alarm rate, then the power at 0.05 and at 0.01. With 2,500 people in each group, about the size of welcome_tips, a real lift of 2 points is caught only 0.54 of the time; 10,000 people catch it 0.99 of the time. A stricter bar costs power: at 2,500 it falls to 0.31. A low-power test that finds nothing is weak evidence of nothing.
+
+**Try it.** Look at 100 of the no-effect experiments of size 2,500, and ask what "significant" is worth when real lifts are rare:
+
+```python
+print(int((first_100 < 0.05).sum()), "of the first 100 no-effect experiments of size 2,500 have p < 0.05")
+power = table[2500][1][0]
+real, false = 100 * power, 900 * 0.05
+print(round(real), round(false), round(real / (real + false), 2))
+```
+
+**Predict:** suppose 1 in 10 of the tests a team runs has a real lift of 2 points, and every test has 2,500 people in each group. Of the results that come out significant, about what share is real?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+5 of the first 100 no-effect experiments of size 2,500 have p < 0.05
+54 45 0.55
+```
+
+<figure>
+<svg viewBox="0 0 360 124" width="360" role="img" aria-labelledby="ht-dots-t ht-dots-d">
+<title id="ht-dots-t">100 experiments where nothing is going on: how many have p below 0.05</title>
+<desc id="ht-dots-d">100 dots in 5 rows of 20, one for each of 100 simulated experiments with no effect and 2,500 people in each group. 5 dots are red because their p-value is below 0.05; the other 95 are gray.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">100 experiments where nothing is going on</text>
+<circle cx="30" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="46" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="62" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="78" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="94" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="110" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="126" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="142" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="158" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="174" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="190" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="206" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="222" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="238" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="254" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="270" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="286" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="302" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="318" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="334" cy="36" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="30" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="46" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="62" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="78" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="94" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="110" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="126" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="142" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="158" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="174" cy="52" r="4" fill="#c0392b" />
+<circle cx="190" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="206" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="222" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="238" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="254" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="270" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="286" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="302" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="318" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="334" cy="52" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="30" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="46" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="62" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="78" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="94" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="110" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="126" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="142" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="158" cy="68" r="4" fill="#c0392b" />
+<circle cx="174" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="190" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="206" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="222" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="238" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="254" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="270" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="286" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="302" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="318" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="334" cy="68" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="30" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="46" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="62" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="78" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="94" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="110" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="126" cy="84" r="4" fill="#c0392b" />
+<circle cx="142" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="158" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="174" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="190" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="206" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="222" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="238" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="254" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="270" cy="84" r="4" fill="#c0392b" />
+<circle cx="286" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="302" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="318" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="334" cy="84" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="30" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="46" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="62" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="78" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="94" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="110" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="126" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="142" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="158" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="174" cy="100" r="4" fill="#c0392b" />
+<circle cx="190" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="206" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="222" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="238" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="254" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="270" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="286" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="302" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="318" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<circle cx="334" cy="100" r="4" fill="currentColor" fill-opacity="0.3" />
+<text x="14" y="114" font-size="10">5 of 100 have p below 0.05 (red); about 5 are expected</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* of 100 no-effect experiments, 5 are red, as about 5 are expected. The 55 percent rests on three assumptions: 1 test in 10 is real, its lift is exactly 2 points, and the power is about 0.54, as found above. Then 1,000 tests give 54 real wins (100 × 0.54) and 45 false ones (900 × 0.05):
+
+$$
+\frac{\text{real wins}}{\text{real wins} + \text{false wins}} = \frac{54}{54 + 45} \approx 0.55
+$$
+
+Only about half of the significant results are real, not 95 percent: the base-rate problem of lesson C4. Change an assumption and the share changes.
+
+### 4. Looking again and again
+
+**Idea.** The 5 percent belongs to one test, planned in advance and read once at its end. Every extra look is another chance to cross the bar by luck. Two ways: read the running result each day and stop when it is under 0.05 (optional stopping), or cut the people into segments and report one that is (p-hacking). Johari and colleagues write that the usual p-values and intervals are wholly unreliable when users choose the sample size by continuously monitoring. The dataset's documentation says the tips do nothing for anyone, so every significant result below is a false alarm.
+
+**Try it.** Look at the data after each day from day 7 to day 42 and print the p-value of each look:
+
+```python
+rows = []
+for day in range(7, 43):
+    d = tips[tips["day"] <= day]
+    v = d["variant"] == "variant"
+    rows.append((day, len(d), float(two_prop_p(d.loc[~v, "converted"].sum(), (~v).sum(), d.loc[v, "converted"].sum(), v.sum()))))
+running = pd.DataFrame(rows, columns=["day", "people", "p"])
+below = running[running["p"] < 0.05]
+print(len(running), len(below), int(below["day"].iloc[0]), round(float(below["p"].iloc[0]), 3), round(float(running["p"].iloc[-1]), 3))
+```
+
+**Predict:** the tips change nothing, and the data are the same people that unit 1 tested. Will the running p-value ever drop below 0.05? On which day first, and on how many of the 36 looks?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+36 3 12 0.022 0.776
+```
+
+<figure>
+<svg viewBox="0 0 360 202" width="360" role="img" aria-labelledby="ht-peek-t ht-peek-d">
+<title id="ht-peek-t">The running p-value of welcome_tips, one look after each day</title>
+<desc id="ht-peek-d">A line chart of the p-value after each day from day 7 to day 42, on a log scale from 0.01 to 1. The line wanders between 0.06 and 0.86, with a red dashed line at 0.05. On days 12, 13 and 14 the line dips below it, marked by red dots; day 12 is 0.022. On day 42 the p-value is 0.776.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">p-value after each day (log scale)</text>
+<path d="M40 40 L346 40" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="43.5" font-size="10" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M40 100 L346 100" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="103.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.1</text>
+<path d="M40 160 L346 160" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="163.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.01</text>
+<path d="M40 118.1 L346 118.1" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="34" y="121.6" font-size="10" text-anchor="end" font-weight="600">0.05</text>
+<path d="M40 72.9 L48.6 93.9 L57.1 108.2 L65.7 105.5 L74.3 109.3 L82.9 139.2 L91.4 138.4 L100 123.6 L108.6 113.9 L117.1 95.9 L125.7 83.1 L134.3 89 L142.9 110.9 L151.4 92.9 L160 84.6 L168.6 74.9 L177.1 82 L185.7 78.2 L194.3 84.2 L202.9 87.8 L211.4 97.9 L220 98 L228.6 114.7 L237.1 109.6 L245.7 97.8 L254.3 91.2 L262.9 81.1 L271.4 76.7 L280 68.2 L288.6 57.5 L297.1 47.2 L305.7 48.4 L314.3 44 L322.9 51.1 L331.4 49.7 L340 46.6" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.9" />
+<circle cx="40" cy="72.9" r="2" fill="#0072b2" />
+<circle cx="48.6" cy="93.9" r="2" fill="#0072b2" />
+<circle cx="57.1" cy="108.2" r="2" fill="#0072b2" />
+<circle cx="65.7" cy="105.5" r="2" fill="#0072b2" />
+<circle cx="74.3" cy="109.3" r="2" fill="#0072b2" />
+<circle cx="82.9" cy="139.2" r="3.5" fill="#c0392b" />
+<circle cx="91.4" cy="138.4" r="3.5" fill="#c0392b" />
+<circle cx="100" cy="123.6" r="3.5" fill="#c0392b" />
+<circle cx="108.6" cy="113.9" r="2" fill="#0072b2" />
+<circle cx="117.1" cy="95.9" r="2" fill="#0072b2" />
+<circle cx="125.7" cy="83.1" r="2" fill="#0072b2" />
+<circle cx="134.3" cy="89" r="2" fill="#0072b2" />
+<circle cx="142.9" cy="110.9" r="2" fill="#0072b2" />
+<circle cx="151.4" cy="92.9" r="2" fill="#0072b2" />
+<circle cx="160" cy="84.6" r="2" fill="#0072b2" />
+<circle cx="168.6" cy="74.9" r="2" fill="#0072b2" />
+<circle cx="177.1" cy="82" r="2" fill="#0072b2" />
+<circle cx="185.7" cy="78.2" r="2" fill="#0072b2" />
+<circle cx="194.3" cy="84.2" r="2" fill="#0072b2" />
+<circle cx="202.9" cy="87.8" r="2" fill="#0072b2" />
+<circle cx="211.4" cy="97.9" r="2" fill="#0072b2" />
+<circle cx="220" cy="98" r="2" fill="#0072b2" />
+<circle cx="228.6" cy="114.7" r="2" fill="#0072b2" />
+<circle cx="237.1" cy="109.6" r="2" fill="#0072b2" />
+<circle cx="245.7" cy="97.8" r="2" fill="#0072b2" />
+<circle cx="254.3" cy="91.2" r="2" fill="#0072b2" />
+<circle cx="262.9" cy="81.1" r="2" fill="#0072b2" />
+<circle cx="271.4" cy="76.7" r="2" fill="#0072b2" />
+<circle cx="280" cy="68.2" r="2" fill="#0072b2" />
+<circle cx="288.6" cy="57.5" r="2" fill="#0072b2" />
+<circle cx="297.1" cy="47.2" r="2" fill="#0072b2" />
+<circle cx="305.7" cy="48.4" r="2" fill="#0072b2" />
+<circle cx="314.3" cy="44" r="2" fill="#0072b2" />
+<circle cx="322.9" cy="51.1" r="2" fill="#0072b2" />
+<circle cx="331.4" cy="49.7" r="2" fill="#0072b2" />
+<circle cx="340" cy="46.6" r="2" fill="#0072b2" />
+<text x="160" y="152" font-size="10">red: below 0.05 on days 12, 13 and 14</text>
+<text x="346" y="33" font-size="10" text-anchor="end" font-weight="600">day 42: 0.776</text>
+<path d="M40 160 L340 160" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M40 160 L40 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="40" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">7</text>
+<path d="M100 160 L100 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="100" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">14</text>
+<path d="M160 160 L160 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="160" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">21</text>
+<path d="M220 160 L220 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="220" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">28</text>
+<path d="M280 160 L280 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="280" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">35</text>
+<path d="M340 160 L340 164" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="175" font-size="10" text-anchor="middle" fill-opacity="0.8">42</text>
+<text x="190" y="190" font-size="10" text-anchor="middle">day of the experiment (one look after each day)</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* on day 12 the running p-value is 0.022, and it is below 0.05 on 3 of the 36 looks (days 12, 13 and 14). A team that stopped on day 12 would have called the tips a winner; on day 42 the p-value is 0.776. The dip is real data, but the dataset's documentation says its random labels were chosen from several candidates to tell this story, so 3 of 36 looks is a favorable draw. Exercise 3 measures the honest rate.
+
+**Try it.** Cut the same experiment into 12 segments (5 channels, 3 platforms, 4 regions), test each, and apply a stricter bar:
+
+```python
+segments = []
+for column in ["channel", "platform", "region"]:
+    for value, d in tips.groupby(column):
+        v = d["variant"] == "variant"
+        p = float(two_prop_p(d.loc[~v, "converted"].sum(), (~v).sum(), d.loc[v, "converted"].sum(), v.sum()))
+        segments.append((column, value, len(d), round(float(d.loc[~v, "converted"].mean()), 3), round(float(d.loc[v, "converted"].mean()), 3), p))
+seg = pd.DataFrame(segments, columns=["split", "segment", "people", "control", "variant", "p"])
+print(len(seg), int((seg["p"] < 0.05).sum()))
+print(seg[seg["p"] < 0.05].round(3).to_string(index=False))
+bar = 0.05 / len(seg)
+print(round(float(bar), 4), int((seg["p"] < bar).sum()), round(float(1 - 0.95 ** len(seg)), 3))
+```
+
+**Predict:** how many of the 12 segments will have p below 0.05? Will any survive the stricter bar, 0.05 divided by 12?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12 2
+   split segment  people  control  variant     p
+platform     ios    1759    0.153    0.116 0.024
+platform     web    1592    0.142    0.182 0.027
+0.0042 0 0.46
+```
+
+<figure>
+<svg viewBox="0 0 360 333" width="360" role="img" aria-labelledby="ht-segments-t ht-segments-d">
+<title id="ht-segments-t">The p-value of each of 12 segments of welcome_tips</title>
+<desc id="ht-segments-d">A dot plot of 12 p-values on a log scale from 0.003 to 1, grouped by channel (5 rows), platform (3) and region (4). Two dots are red and lie left of the red dashed line at 0.05: ios, 0.024, and web, 0.027. A gray dashed line at 0.0042, which is 0.05 divided by 12, lies to the left of every dot.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">12 segments, one test each</text>
+<path d="M140.4 40 L140.4 282" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<path d="M230.7 40 L230.7 282" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="144.4" y="34" font-size="10" font-weight="600">0.0042</text>
+<text x="234.7" y="34" font-size="10" font-weight="600">0.05</text>
+<text x="14" y="52" font-size="10" font-weight="600">channel</text>
+<text x="26" y="70.5" font-size="10" fill-opacity="0.8">app_store</text>
+<circle cx="245.6" cy="67" r="3.5" fill="#0072b2" />
+<text x="26" y="85.5" font-size="10" fill-opacity="0.8">organic_search</text>
+<circle cx="330.1" cy="82" r="3.5" fill="#0072b2" />
+<text x="26" y="100.5" font-size="10" fill-opacity="0.8">paid_search</text>
+<circle cx="300.5" cy="97" r="3.5" fill="#0072b2" />
+<text x="26" y="115.5" font-size="10" fill-opacity="0.8">paid_social</text>
+<circle cx="277.5" cy="112" r="3.5" fill="#0072b2" />
+<text x="26" y="130.5" font-size="10" fill-opacity="0.8">referral</text>
+<circle cx="339.5" cy="127" r="3.5" fill="#0072b2" />
+<text x="14" y="142" font-size="10" font-weight="600">platform</text>
+<text x="26" y="160.5" font-size="10" fill-opacity="0.8">android</text>
+<circle cx="299.5" cy="157" r="3.5" fill="#0072b2" />
+<text x="26" y="175.5" font-size="10" fill-opacity="0.8">ios</text>
+<circle cx="204.6" cy="172" r="3.5" fill="#c0392b" />
+<text x="212.6" y="175.5" font-size="10" font-weight="600">0.024</text>
+<text x="26" y="190.5" font-size="10" fill-opacity="0.8">web</text>
+<circle cx="208.3" cy="187" r="3.5" fill="#c0392b" />
+<text x="216.3" y="190.5" font-size="10" font-weight="600">0.027</text>
+<text x="14" y="202" font-size="10" font-weight="600">region</text>
+<text x="26" y="220.5" font-size="10" fill-opacity="0.8">asia_pacific</text>
+<circle cx="302.9" cy="217" r="3.5" fill="#0072b2" />
+<text x="26" y="235.5" font-size="10" fill-opacity="0.8">europe</text>
+<circle cx="311.4" cy="232" r="3.5" fill="#0072b2" />
+<text x="26" y="250.5" font-size="10" fill-opacity="0.8">latin_america</text>
+<circle cx="252.9" cy="247" r="3.5" fill="#0072b2" />
+<text x="26" y="265.5" font-size="10" fill-opacity="0.8">north_america</text>
+<circle cx="277.7" cy="262" r="3.5" fill="#0072b2" />
+<path d="M130 273 L340 273" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M172 273 L172 277" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="172" y="288" font-size="10" text-anchor="middle" fill-opacity="0.8">0.01</text>
+<path d="M256 273 L256 277" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="256" y="288" font-size="10" text-anchor="middle" fill-opacity="0.8">0.1</text>
+<path d="M340 273 L340 277" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="288" font-size="10" text-anchor="middle" fill-opacity="0.8">1</text>
+<text x="235" y="305" font-size="10" text-anchor="middle">p-value of the segment (log scale)</text>
+<rect x="14" y="317" width="12" height="8" fill="#c0392b" fill-opacity="0.9" />
+<text x="32" y="324.5" font-size="10">below 0.05</text>
+<path d="M110 321 L130 321" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="136" y="324.5" font-size="10">the stricter bar, 0.05 / 12 = 0.0042</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* 2 of the 12 are under 0.05: iOS (15.3 to 11.6 percent, as if the tips hurt) and web (14.2 to 18.2, as if they helped). Opposite stories, each easy to tell afterwards. For independent tests, the chance of at least one false alarm would be
+
+$$
+1 - (1 - \alpha)^m = 1 - 0.95^{12} \approx 0.460
+$$
+
+where $$m = 12$$ is the number of tests. The three splits cut the same people, so the tests are not independent and 0.46 is only a guide. Dividing the bar by the number of tests (the Bonferroni correction), $$\alpha / m = 0.05 / 12 \approx 0.0042$$, is the simplest repair, and neither segment survives it. The ASA's fourth principle, that proper inference requires full reporting and transparency, adds: report how many cuts you made, not only the one that worked. An assistant asked to "find what the tips changed" runs the same search, so ask how many cuts it tried.
+
+<Aside type="tip" title="Remember">
+
+- H0 says nothing is going on and H1 says something is; write both, and the bar, before you look.
+- A p-value is the share of luck-only results as far from H0 as yours: not the chance that H0 is true, not the size of the effect, not a verdict.
+- The bar $$\alpha$$ sets the false-alarm rate; power, the chance to catch a real effect, grows with more people and falls with a stricter bar.
+- The 5 percent belongs to one planned test: every look and every segment adds chances, so count them.
+
+**Common trap:** stopping at the first p below 0.05, or reporting the one segment under it: day 12 (p = 0.022), iOS and web (0.024 and 0.027) all came from tips that do nothing.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-hypothesis-testing-1">
+
+**Did the tips change how many people finish onboarding?** Finishing onboarding is an `onboarding_complete` event. Count the shuffles at least as far from 0 as the real gap, either way, and turn the count into a p-value: (count + 1) / (10,000 + 1), rounded to 2 decimals. Expected: `answer_1` is a number between 0 and 1.
+
+```python
+finished = tips["user_id"].isin(events.loc[events["event_name"] == "onboarding_complete", "user_id"]).to_numpy().astype(int)    # given: 1 = finished
+gap_f = finished[is_var].mean() - finished[~is_var].mean()                                                                   # given: the real gap
+rng = np.random.default_rng(3)
+shuffled_f = np.array([finished[m].mean() - finished[~m].mean() for m in (rng.permutation(is_var) for _ in range(10_000))])   # given: the shuffles
+answer_1 = None  # replace None with the p-value
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 1 counted `(np.abs(shuffled) >= abs(gap)).sum()`. Use the same count with `shuffled_f` and `gap_f`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+extreme_f = int((np.abs(shuffled_f) >= abs(gap_f)).sum())
+answer_1 = round((extreme_f + 1) / ..., 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+extreme_f = int((np.abs(shuffled_f) >= abs(gap_f)).sum())
+answer_1 = round((extreme_f + 1) / (len(shuffled_f) + 1), 2)
+```
+
+70.1 percent of control and 70.6 percent of the variant finished onboarding, a gap of 0.55 points: p = 0.69, so there is no evidence that the tips changed it. The check cell warns about counting one tail only (0.34).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-hypothesis-testing-2">
+
+**How many people would a test need?** The tips would be worth keeping if they lifted conversion from 12.4 to 13.4 percent, 1 point. Before you start, say what the answer looks like: one group size. Use `two_prop_p` and the simulation of unit 3, with 20,000 experiments for each size 5,000, 10,000, 20,000 and 40,000, and set `answer_2` to the smallest size whose share of experiments with p below 0.05 is at least 0.80. Write the code in the empty cell. Expected: `answer_2` is one of the four sizes.
+
+<details>
+<summary>Hint</summary>
+
+Copy the cell of unit 3: `rng.binomial(size, 0.124, size=20_000)` and `rng.binomial(size, 0.134, size=20_000)` give the buyers of the two groups; then `two_prop_p` and the share of p-values below 0.05, for each size.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A share for each of the four sizes, rising with the size; one of them is the first to reach 0.80."*
+
+```python
+for size in (5000, 10000, 20000, 40000):
+    buyers0 = rng.binomial(size, 0.124, size=20_000)
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+def power_at(size, p_variant, p_control=0.124, reps=20_000):
+    rng = np.random.default_rng(5)
+    buyers0 = rng.binomial(size, p_control, size=reps)
+    buyers1 = rng.binomial(size, p_variant, size=reps)
+    return round(float((two_prop_p(buyers0, size, buyers1, size) < 0.05).mean()), 2)
+
+
+powers = {size: power_at(size, 0.134) for size in (5000, 10000, 20000, 40000)}
+print(powers)
+answer_2 = min(size for size, power in powers.items() if power >= 0.80)
+```
+
+The test catches a 1 point lift in 32 percent of the experiments at 5,000 people in each group, 56 at 10,000, 85 at 20,000 and 99 at 40,000: 20,000 is the smallest size that reaches 80 percent, about eight times the size of welcome_tips.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a dashboard shows p = 0.03 for a new feature. What does the 0.03 say, and what does it not say?
+
+   <details>
+   <summary>answer</summary>
+
+   If the feature did nothing, a gap this big would turn up in about 3 of 100 repeats. It is not a 97 percent chance that the feature works, and says nothing of its size.
+
+   </details>
+
+<Exercise id="core-hypothesis-testing-3">
+
+**Spot the flaw.** A colleague measures how often looking every day and stopping at the first p below 0.05 gives a false alarm. They simulate 5,000 experiments with no effect at all, each with 36 daily looks from day 7 to day 42, and report the share of looks with p below 0.05. That share answers another question. Fix the last line so that `answer_3` is the share of the 5,000 experiments in which at least one of the 36 looks has p below 0.05, rounded to 2 decimals. Expected: `answer_3` is a number; the check accepts a difference of 0.05.
+
+```python
+rng = np.random.default_rng(11)
+per_group = 59                                                   # given: people a day in each group
+days = np.arange(1, 43)                                          # given: no effect at all
+c0 = np.cumsum(rng.binomial(per_group, 0.124, size=(5000, 42)), axis=1)      # given: 5,000 experiments
+c1 = np.cumsum(rng.binomial(per_group, 0.124, size=(5000, 42)), axis=1)      # given: buyers after each day
+p_run = two_prop_p(c0, per_group * days, c1, per_group * days)             # given: running p-values
+looks = p_run[:, 6:]                                             # given: 36 looks from day 7 on
+# colleague: the share of looks with p < 0.05
+answer_3 = round(float((looks < 0.05).mean()), 2)
+```
+
+<details>
+<summary>Hint</summary>
+
+`looks < 0.05` has 5,000 rows (experiments) and 36 columns (looks); `.mean()` averages all 180,000 cells. Which axis gives one yes or no for each experiment?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float((looks < 0.05).any(axis=...).mean()), 2)
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+answer_3 = round(float((looks < 0.05).any(axis=1).mean()), 2)
+```
+
+Of the 180,000 looks, 5.0 percent are below 0.05, which is what the colleague reported. But 1,109 of the 5,000 experiments (22 percent) have at least one such look: that is the false-alarm rate of someone who stops at the first one.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a null and an alternative, read a p-value as a share of luck-only results, tell a false alarm from a miss, say what raises power, and explain why the 5 percent holds only for one planned look.*
+Test: Exercise core-hypothesis-testing-3, done from the notebook without opening the hints.
+
+The pattern to remember: **a p-value says how surprising a result would be if nothing were going on, and it means that only for a test you planned.** Next comes *Comparing two groups: tests and effect sizes*, where the p-value gets an effect size and an interval beside it.

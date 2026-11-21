@@ -1,0 +1,721 @@
+---
+id: core-comparing-groups
+title: 'Comparing two groups: tests and effect sizes'
+short_title: 'Comparing two groups'
+description: Compare two means or two proportions with a test, then report the effect size and a plain-language verdict.
+stage: core
+order: 90
+level: intermediate
+duration: 35
+objectives:
+  - Choose a two-sample test for a mean and for a proportion
+  - Run the test in Python and read the output
+  - Report an effect size and a confidence interval next to the p-value
+  - Tell statistical from practical significance
+  - Write the verdict in two sentences for a manager
+prerequisites:
+  - core-hypothesis-testing
+datasets:
+  - app-events
+notebook: notebooks/core/core-comparing-groups.ipynb
+reviewed: 2026-11-21
+sources:
+  - title: 'SciPy documentation: scipy.stats.ttest_ind, equal_var=False and the confidence_interval method (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
+  - title: 'SciPy documentation: scipy.stats.chi2_contingency (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
+  - title: 'SciPy documentation: scipy.stats.mannwhitneyu (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mannwhitneyu.html
+  - title: 'NIST/SEMATECH e-Handbook of Statistical Methods: 1.3.5.3 Two-Sample t-Test for Equal Means (accessed 2026-11-20)'
+    url: https://www.itl.nist.gov/div898/handbook/eda/section3/eda353.htm
+  - title: 'Sullivan and Feinn, Using effect size, or why the P value is not enough, Journal of Graduate Medical Education 4(3), 2012 (accessed 2026-11-20)'
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC3444174/
+  - title: 'American Statistical Association, press release of 7 March 2016 on its statement on statistical significance and p-values (PDF file p-valuestatement.pdf): the six principles (accessed 2026-11-20)'
+    url: https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf
+status: published
+---
+
+## The question
+
+The product manager of a budgeting app asks:
+
+> The new paywall, `paywall_v2`, ran for eight weeks in `app-events`, a fictional app. Did it lift purchases, and by how much? And iOS people seem more active than Android people: is that real, and does it matter?
+
+| comparison | group A | group B |
+|---|---|---|
+| bought Plus within 14 days of signing up | control: 343 of 2,706 (12.7%) | variant: 415 of 2,713 (15.3%) |
+| `session_start` and `add_expense` events in the first 14 days | Android: 6,508 people, mean 2.86 | iOS: 7,196 people, mean 3.30 |
+
+By the end you can pick the test for each, run it, report the gap and an interval beside the p-value, say which gap matters, and write the verdict in two sentences.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Hypothesis tests and p-values, honestly* (C8), you got a p-value by shuffling and by a formula. Here you write the formula out.
+
+**Diverge.** In C8 `two_prop_p` was a given tool. Unit 1 opens it, and unit 3 shows what a p-value leaves out.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C8 the standard error of the shuffle test was the spread of the 10,000 shuffled gaps. Write the line that turns a gap and that spread into a z-score.
+
+   <details>
+   <summary>answer</summary>
+
+   `z = gap / se_null`: how many standard errors the gap lies from 0.
+
+   </details>
+
+2. In C8 a team tests 12 segments of one experiment. A colleague tests 20. What stricter bar keeps the chance of a false alarm near 5 percent?
+
+   <details>
+   <summary>answer</summary>
+
+   0.05 divided by 20, which is 0.0025.
+
+   </details>
+
+## The big idea
+
+A p-value says whether a gap is real; the effect size says how big it is, and an interval says how sure you are: report all three.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="tgp-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="tgp" id="tgp-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="tgp" id="tgp-r1" aria-label="Step 1 of 5: Two groups, two piles" />
+<input class="sa-r r2 o3" type="radio" name="tgp" id="tgp-r2" aria-label="Step 2 of 5: The gap between the means" />
+<input class="sa-r r3 o5" type="radio" name="tgp" id="tgp-r3" aria-label="Step 3 of 5: The overlap next to the gap" />
+<input class="sa-r r4 o7" type="radio" name="tgp" id="tgp-r4" aria-label="Step 4 of 5: An interval around the gap" />
+<input class="sa-r r5 o8" type="radio" name="tgp" id="tgp-r5" aria-label="Step 5 of 5: Report all three" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-grp"><small>groups</small><span><i class="w1 tmp hl">2</i><i class="w7 d2">2</i></span></span><span class="sa-n c-src"><small>means</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">2</i><i class="w5 d4">2</i></span></span><span class="sa-n c-src"><small>interval</small><span><i class="w5 tmp">—</i><i class="w2 d6 tmp hl">1</i><i class="w1 d8">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 316" width="360" role="img" aria-labelledby="tgp-t tgp-d">
+<title id="tgp-t">Two piles, the gap between their means, and an interval around the gap</title>
+<desc id="tgp-d">Two bell-shaped piles side by side, group A in green and group B in purple, overlapping in the middle. Dashed lines mark the two means and an arrow between them is labeled gap. The overlap of the piles is shaded gray. Below, a second line shows the difference between the groups: an ochre mark at 0, a blue dot for the gap and a blue bar for the interval around it. Three labels name what to report: the p-value, the size and the interval.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Two groups, two piles</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · The gap between the means</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · The overlap next to the gap</text>
+<text class="f10 b w2 d6 tmp" x="10" y="29">4 · An interval around the gap</text>
+<text class="f10 b w1 d8" x="10" y="29">5 · Report all three</text>
+<text class="f11 b" x="10" y="14">Compare two groups</text>
+<path class="f-grp k2" d="M60 150L60 146.9L65 145.7L70 144.1L75 142L80 139.4L85 136.3L90 132.5L95 128.2L100 123.3L105 118L110 112.2L115 106.4L120 100.5L125 95L130 90L135 85.8L140 82.6L145 80.7L150 80L155 80.7L160 82.6L165 85.8L170 90L175 95L180 100.5L185 106.4L190 112.2L195 118L200 123.3L205 128.2L210 132.5L215 136.3L220 139.4L225 142L230 144.1L235 145.7L240 146.9L240 150Z" />
+<path class="f-mat k2" d="M110 150L110 146.9L115 145.7L120 144.1L125 142L130 139.4L135 136.3L140 132.5L145 128.2L150 123.3L155 118L160 112.2L165 106.4L170 100.5L175 95L180 90L185 85.8L190 82.6L195 80.7L200 80L205 80.7L210 82.6L215 85.8L220 90L225 95L230 100.5L235 106.4L240 112.2L245 118L250 123.3L255 128.2L260 132.5L265 136.3L270 139.4L275 142L280 144.1L285 145.7L290 146.9L290 150Z" />
+<path class="f-ord k4 w5 d4" d="M110 150L110 146.9L115 145.7L120 144.1L125 142L130 139.4L135 136.3L140 132.5L145 128.2L150 123.3L155 118L160 112.2L165 106.4L170 100.5L175 95L180 100.5L185 106.4L190 112.2L195 118L200 123.3L205 128.2L210 132.5L215 136.3L220 139.4L225 142L230 144.1L235 145.7L240 146.9L240 150Z" />
+<path class="s-grp" d="M60 146.9L65 145.7L70 144.1L75 142L80 139.4L85 136.3L90 132.5L95 128.2L100 123.3L105 118L110 112.2L115 106.4L120 100.5L125 95L130 90L135 85.8L140 82.6L145 80.7L150 80L155 80.7L160 82.6L165 85.8L170 90L175 95L180 100.5L185 106.4L190 112.2L195 118L200 123.3L205 128.2L210 132.5L215 136.3L220 139.4L225 142L230 144.1L235 145.7L240 146.9" />
+<path class="s-mat" d="M110 146.9L115 145.7L120 144.1L125 142L130 139.4L135 136.3L140 132.5L145 128.2L150 123.3L155 118L160 112.2L165 106.4L170 100.5L175 95L180 90L185 85.8L190 82.6L195 80.7L200 80L205 80.7L210 82.6L215 85.8L220 90L225 95L230 100.5L235 106.4L240 112.2L245 118L250 123.3L255 128.2L260 132.5L265 136.3L270 139.4L275 142L280 144.1L285 145.7L290 146.9" />
+<path class="bx" d="M20 150H340" />
+<text class="f10 b" x="40" y="116">group A</text>
+<text class="f10 b e" x="330" y="116">group B</text>
+<path class="s-grp dsh w7 d2" d="M150 150V68" />
+<path class="s-mat dsh w7 d2" d="M200 150V68" />
+<path class="s-src dr p7 d2" pathLength="1" d="M153 62L197 62M190.7 58.96L197 62L190.7 65.04" />
+<path class="s-src dr p7 d2" pathLength="1" d="M197 62L153 62M159.3 65.04L153 62L159.3 58.96" />
+<text class="f10 b m w7 d2" x="175" y="52">gap</text>
+<text class="f10 mu m w7 d2" x="150" y="166">mean A</text>
+<text class="f10 mu m w7 d2" x="200" y="166">mean B</text>
+<text class="f10 b m w5 d4" x="175" y="134">overlap</text>
+<path class="bx w3 d6" d="M20 262H340" />
+<path class="s-out w3 d6" d="M90 226V270" />
+<text class="f10 b e w3 d6" x="84" y="222">no difference</text>
+<rect class="f-src k4 w3 d6" x="105" y="243" width="70" height="6" rx="3" />
+<circle class="f-src k4 w3 d6" cx="140" cy="246" r="5" />
+<text class="f10 b m w3 d6" x="140" y="238">interval</text>
+<text class="f10 mu e w3 d6" x="340" y="278">difference between the groups</text>
+<g class="w1 d8"><rect class="f-src k2" x="14" y="290" width="65" height="18" rx="9" /><text class="f11 b m" x="46.5" y="303">p: real?</text></g>
+<g class="w1 d8"><rect class="f-grp k2" x="89" y="290" width="104" height="18" rx="9" /><text class="f11 b m" x="141" y="303">size: how big?</text></g>
+<g class="w1 d8"><rect class="f-out k2" x="203" y="290" width="136" height="18" rx="9" /><text class="f11 b m" x="271" y="303">interval: how sure?</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="tgp-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="tgp-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="tgp-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="tgp-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="tgp-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="tgp-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="tgp-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="tgp-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="tgp-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="tgp-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="tgp-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="tgp-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="tgp-r1">1</label><label class="sa-sb sb2" for="tgp-r2">2</label><label class="sa-sb sb3" for="tgp-r3">3</label><label class="sa-sb sb4" for="tgp-r4">4</label><label class="sa-sb sb5" for="tgp-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-grp w1 tmp">Each group has its own pile of values: a center and a spread.<span class="sa-chs"><span class="sa-ch pl">group A and group B</span></span></div>
+<div class="c-src w2 d2 tmp">The gap between the means is what you compare; with random assignment it estimates the effect.<span class="sa-chs"><span class="sa-ch pl">the gap</span></span></div>
+<div class="c-mat w2 d4 tmp">The more the piles overlap, the smaller the gap is next to the spread: Cohen’s d measures that.<span class="sa-chs"><span class="sa-ch pl">the overlap</span></span></div>
+<div class="c-src w2 d6 tmp">The interval says which gaps the data do not rule out: look at where 0 sits in it.<span class="sa-chs"><span class="sa-ch pl">a difference line, 0, an interval</span></span></div>
+<div class="c-out w1 d8">Report the p-value, the size and the interval together: none of the three can stand in for the others.<span class="sa-chs"><span class="sa-ch pl">three things to report</span></span></div>
+</div>
+<p class="ca-cap">Two groups give two piles. The gap between their means is what you test; how much the piles overlap shows how big it is next to the spread; an interval around the gap shows how sure you are.</p>
+<ol class="sa-steps">
+<li>Two groups, two piles</li>
+<li>The gap between the means</li>
+<li>The overlap next to the gap</li>
+<li>An interval around the gap</li>
+<li>Report all three</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: the test of two proportions, the test of two means, the size of a gap next to its p-value, and the verdict for a manager. The setup cell gave `assign` and `full`, the 20,177 people who signed up by June 16 and so have 14 days of follow-up, with their `platform` and `activity`: the `session_start` and `add_expense` events in those 14 days, every recorded event, retried duplicates included.
+
+<OpenInColab />
+
+Which test? It depends on what you compare:
+
+| what you compare | test | SciPy |
+|---|---|---|
+| two shares (buyers, clicks) | z test of two proportions, or the chi-square test of a table of counts | `stats.chi2_contingency(table, correction=False)` |
+| two means (events, dollars) | Welch's t-test | `stats.ttest_ind(a, b, equal_var=False)` |
+| two skewed samples, when a mean is the wrong summary | Mann-Whitney U test | `stats.mannwhitneyu(a, b)` |
+
+Three or more groups need ANOVA (means) or chi-square (counts), not covered here.
+
+### 1. Two proportions
+
+**Idea.** For two shares, H0 says both groups share one rate. If it is true, the best estimate pools both groups, and the gap between the two sample rates wobbles by a standard error with a formula. Then z and the p-value go as in C8. The other common choice is the chi-square test of a table of counts; the SciPy documentation says `correction=False` turns off the continuity correction it applies to 2 by 2 tables. The interval of the difference uses each group's own rate.
+
+**Try it.** Test `paywall_v2` by hand, as a table of counts, and with an interval for the difference:
+
+```python
+pw = assign[assign["experiment"] == "paywall_v2"]
+ctrl = pw.loc[pw["variant"] == "control", "converted"]
+var = pw.loc[pw["variant"] == "variant", "converted"]
+n0, n1 = len(ctrl), len(var)
+c0, c1 = int(ctrl.sum()), int(var.sum())                             # buyers
+p0, p1 = c0 / n0, c1 / n1                                            # conversion rates
+print(n0, n1, c0, c1, round(p0, 4), round(p1, 4))
+pooled = (c0 + c1) / (n0 + n1)
+se = np.sqrt(pooled * (1 - pooled) * (1 / n0 + 1 / n1))
+z = (p1 - p0) / se
+p_value = 2 * stats.norm.sf(abs(z))
+print(round(float(pooled), 4), round(float(se), 4), round(float(z), 2), round(float(p_value), 3))
+table = [[c1, n1 - c1], [c0, n0 - c0]]
+chi2 = stats.chi2_contingency(table, correction=False)
+print(round(float(chi2.statistic), 2), round(float(z ** 2), 2), round(float(chi2.pvalue), 3))
+diff = p1 - p0
+se_diff = np.sqrt(p0 * (1 - p0) / n0 + p1 * (1 - p1) / n1)
+low, high = diff - 1.96 * se_diff, diff + 1.96 * se_diff
+print(round(float(100 * diff), 2), round(float(100 * low), 2), round(float(100 * high), 2), round(float(100 * diff / p0), 1))
+```
+
+**Predict:** `paywall_v2` gave 12.7 and 15.3 percent. Will the p-value be above or below 0.05? Will the chi-square test of the table agree with the z test? And will the 95 percent interval of the difference stay above 0, with its low end above 1 point?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2706 2713 343 415 0.1268 0.153
+0.1399 0.0094 2.78 0.005
+7.74 7.74 0.005
+2.62 0.78 4.47 20.7
+```
+
+<figure>
+<svg viewBox="0 0 360 236" width="360" role="img" aria-labelledby="cg-lift-t cg-lift-d">
+<title id="cg-lift-t">Conversion in the two groups of paywall_v2, and the difference with its 95 percent interval</title>
+<desc id="cg-lift-d">Top: a scale of conversion from 10 to 18 percent with a green dot for the control group at 12.7 percent and a purple dot for the variant group at 15.3 percent. Bottom: a scale of the difference in percentage points from -1 to 6. A blue dot marks +2.62 and a blue bar runs from +0.78 to +4.47. An ochre line marks no difference at 0 and a dashed gray line marks a lift of +1 point, which lies inside the bar.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Share who bought Plus within 14 days</text>
+<text x="14" y="54" font-size="10">control</text>
+<circle cx="173.6" cy="51" r="5" fill="#00a07a" />
+<text x="183.6" y="54.5" font-size="10" font-weight="600">12.7%</text>
+<text x="14" y="78" font-size="10">variant</text>
+<circle cx="255.5" cy="75" r="5" fill="#9a6be0" />
+<text x="265.5" y="78.5" font-size="10" font-weight="600">15.3%</text>
+<path d="M90 92 L340 92" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M90 92 L90 96" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="90" y="107" font-size="10" text-anchor="middle" fill-opacity="0.8">10%</text>
+<path d="M152.5 92 L152.5 96" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="152.5" y="107" font-size="10" text-anchor="middle" fill-opacity="0.8">12%</text>
+<path d="M215 92 L215 96" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="215" y="107" font-size="10" text-anchor="middle" fill-opacity="0.8">14%</text>
+<path d="M277.5 92 L277.5 96" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="277.5" y="107" font-size="10" text-anchor="middle" fill-opacity="0.8">16%</text>
+<path d="M340 92 L340 96" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="107" font-size="10" text-anchor="middle" fill-opacity="0.8">18%</text>
+<text x="14" y="138" font-size="10.5" font-weight="600">The difference, variant minus control</text>
+<path d="M82.9 150 L82.9 176" fill="none" stroke="#ad9100" stroke-width="2" stroke-opacity="1" />
+<path d="M125.7 156 L125.7 176" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<rect x="116.1" y="164" width="158.2" height="6" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<circle cx="195.2" cy="167" r="5" fill="#0072b2" />
+<text x="116.1" y="182" font-size="10" text-anchor="middle" fill-opacity="0.8">+0.78</text>
+<text x="195.2" y="182" font-size="10" text-anchor="middle" fill-opacity="0.8">+2.62</text>
+<text x="274.3" y="182" font-size="10" text-anchor="middle" fill-opacity="0.8">+4.47</text>
+<path d="M40 190 L340 190" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M40 190 L40 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="40" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">-1</text>
+<path d="M82.9 190 L82.9 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="82.9" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M125.7 190 L125.7 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="125.7" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+1</text>
+<path d="M168.6 190 L168.6 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="168.6" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+2</text>
+<path d="M211.4 190 L211.4 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="211.4" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+3</text>
+<path d="M254.3 190 L254.3 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="254.3" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+4</text>
+<path d="M297.1 190 L297.1 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="297.1" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+5</text>
+<path d="M340 190 L340 194" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="205" font-size="10" text-anchor="middle" fill-opacity="0.8">+6</text>
+<text x="190" y="222" font-size="10" text-anchor="middle">difference in conversion (points)</text>
+<text x="78.9" y="150" font-size="10" text-anchor="end" font-weight="600">none</text>
+<text x="129.7" y="150" font-size="10" font-weight="600">+1 point bar</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the gap is +2.62 points, z is 2.78 and p is 0.005, below 0.05. The chi-square statistic, 7.74, is $$z^2$$, and its p-value is the same. The interval of the difference runs from +0.78 to +4.47 points: it stays above 0, and its low end is under 1 point. In relative terms, the variant has 20.7 percent more buyers than control.
+
+In symbols, the test statistic for two proportions is
+
+$$
+z = \frac{\hat{p}_1 - \hat{p}_0}{\sqrt{\hat{p}\,(1 - \hat{p})\left(\frac{1}{n_0} + \frac{1}{n_1}\right)}}, \qquad \hat{p} = \frac{c_0 + c_1}{n_0 + n_1}
+$$
+
+where $$\hat{p}_0$$, $$\hat{p}_1$$ are the rates of control and variant, $$n_0$$, $$n_1$$ their sizes, $$c_0$$, $$c_1$$ their buyers and $$\hat{p}$$ the pooled rate. For `paywall_v2`, $$\hat{p} = 0.1399$$ and the denominator is 0.00942, so $$z = (0.1530 - 0.1268) / 0.00942 \approx 2.78$$. The interval of the difference is
+
+$$
+(\hat{p}_1 - \hat{p}_0) \pm 1.96 \sqrt{\frac{\hat{p}_0(1-\hat{p}_0)}{n_0} + \frac{\hat{p}_1(1-\hat{p}_1)}{n_1}}
+$$
+
+For `paywall_v2`, the square root is 0.00942, so the interval is
+
+$$
+0.0262 \pm 1.96 \times 0.00942 \approx 0.0262 \pm 0.0185 = [0.0078,\ 0.0447]
+$$
+
+### 2. Two means
+
+**Idea.** For two means, H0 says both groups have the same mean. Welch's t-test divides the gap of the means by a standard error that keeps each group's own spread, so it needs neither equal spreads nor equal sizes; the NIST handbook calls its degrees of freedom robust for unequal sizes and variances. Activity counts are skewed, but with thousands of people the means behave as in lesson C6. SciPy's `ttest_ind(..., equal_var=False)` runs Welch's test, and its result has a `confidence_interval` method for the difference.
+
+**Try it.** Compare the activity of iOS and Android people by hand and with SciPy, then try a test that does not use the means:
+
+```python
+ios = full.loc[full["platform"] == "ios", "activity"].to_numpy()
+android = full.loc[full["platform"] == "android", "activity"].to_numpy()
+print(len(ios), len(android), round(float(ios.mean()), 2), round(float(android.mean()), 2), round(float(ios.mean() - android.mean()), 2))
+se_w = np.sqrt(ios.var(ddof=1) / len(ios) + android.var(ddof=1) / len(android))
+t_hand = (ios.mean() - android.mean()) / se_w
+welch = stats.ttest_ind(ios, android, equal_var=False)
+print(round(float(se_w), 3), round(float(t_hand), 2), round(float(welch.statistic), 2), f"{welch.pvalue:.1e}", round(float(welch.df)))
+ci = welch.confidence_interval(confidence_level=0.95)
+print(round(float(ci.low), 2), round(float(ci.high), 2))
+print(f"{stats.mannwhitneyu(ios, android).pvalue:.1e}")
+print(round(float((ios == 0).mean()), 3), round(float((android == 0).mean()), 3))
+```
+
+**Predict:** iOS people are more active than Android people in their first 14 days. Will Welch's test give a p-value above or below 0.001? Will the 95 percent interval of the difference of the means reach 0.5 events?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+7196 6508 3.3 2.86 0.44
+0.066 6.7 6.7 2.2e-11 13701
+0.31 0.57
+2.5e-15
+0.217 0.276
+```
+
+<figure>
+<svg viewBox="0 0 360 232" width="360" role="img" aria-labelledby="cg-activity-t cg-activity-d">
+<title id="cg-activity-t">Activity in the first 14 days of iOS and Android people</title>
+<desc id="cg-activity-d">Paired bars, one pair for each number of events from 0 to 11 and 12 or more, for 7,196 iOS people (green) and 6,508 Android people (purple), as a share of the people of each platform. Both are tallest at 0 and fall away to the right, and the green bars lie lower at 0 and a little higher from 1 event on. Dashed lines mark the means: 2.86 for Android and 3.30 for iOS, 0.44 apart.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Share of people with each number of events</text>
+<path d="M40 170 L346 170" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="34" y="173.5" font-size="10" text-anchor="end" fill-opacity="0.8">0%</text>
+<path d="M40 137 L346 137" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="140.5" font-size="10" text-anchor="end" fill-opacity="0.8">10%</text>
+<path d="M40 104 L346 104" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="107.5" font-size="10" text-anchor="end" fill-opacity="0.8">20%</text>
+<path d="M40 71 L346 71" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="34" y="74.5" font-size="10" text-anchor="end" fill-opacity="0.8">30%</text>
+<rect x="44" y="98.5" width="9.5" height="71.5" fill="#00a07a" fill-opacity="0.9" />
+<rect x="54.5" y="79" width="9.5" height="91" fill="#9a6be0" fill-opacity="0.9" />
+<text x="54" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<rect x="67.1" y="104.4" width="9.5" height="65.6" fill="#00a07a" fill-opacity="0.9" />
+<rect x="77.6" y="106" width="9.5" height="64" fill="#9a6be0" fill-opacity="0.9" />
+<text x="77.1" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">1</text>
+<rect x="90.2" y="121.3" width="9.5" height="48.7" fill="#00a07a" fill-opacity="0.9" />
+<rect x="100.7" y="123.4" width="9.5" height="46.6" fill="#9a6be0" fill-opacity="0.9" />
+<text x="100.2" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">2</text>
+<rect x="113.2" y="134.9" width="9.5" height="35.1" fill="#00a07a" fill-opacity="0.9" />
+<rect x="123.7" y="135.9" width="9.5" height="34.1" fill="#9a6be0" fill-opacity="0.9" />
+<text x="123.2" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">3</text>
+<rect x="136.3" y="142.7" width="9.5" height="27.3" fill="#00a07a" fill-opacity="0.9" />
+<rect x="146.8" y="146.4" width="9.5" height="23.6" fill="#9a6be0" fill-opacity="0.9" />
+<text x="146.3" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">4</text>
+<rect x="159.4" y="150.9" width="9.5" height="19.1" fill="#00a07a" fill-opacity="0.9" />
+<rect x="169.9" y="152.2" width="9.5" height="17.8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="169.4" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">5</text>
+<rect x="182.5" y="154.2" width="9.5" height="15.8" fill="#00a07a" fill-opacity="0.9" />
+<rect x="193" y="157.2" width="9.5" height="12.8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="192.5" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">6</text>
+<rect x="205.5" y="160" width="9.5" height="10" fill="#00a07a" fill-opacity="0.9" />
+<rect x="216" y="160.8" width="9.5" height="9.2" fill="#9a6be0" fill-opacity="0.9" />
+<text x="215.5" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">7</text>
+<rect x="228.6" y="162.2" width="9.5" height="7.8" fill="#00a07a" fill-opacity="0.9" />
+<rect x="239.1" y="162.3" width="9.5" height="7.7" fill="#9a6be0" fill-opacity="0.9" />
+<text x="238.6" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">8</text>
+<rect x="251.7" y="164.3" width="9.5" height="5.7" fill="#00a07a" fill-opacity="0.9" />
+<rect x="262.2" y="164.6" width="9.5" height="5.4" fill="#9a6be0" fill-opacity="0.9" />
+<text x="261.7" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">9</text>
+<rect x="274.8" y="165" width="9.5" height="5" fill="#00a07a" fill-opacity="0.9" />
+<rect x="285.3" y="166.5" width="9.5" height="3.5" fill="#9a6be0" fill-opacity="0.9" />
+<text x="284.8" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">10</text>
+<rect x="297.8" y="166" width="9.5" height="4" fill="#00a07a" fill-opacity="0.9" />
+<rect x="308.3" y="166.5" width="9.5" height="3.5" fill="#9a6be0" fill-opacity="0.9" />
+<text x="307.8" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">11</text>
+<rect x="320.9" y="155.6" width="9.5" height="14.4" fill="#00a07a" fill-opacity="0.9" />
+<rect x="331.4" y="159.3" width="9.5" height="10.7" fill="#9a6be0" fill-opacity="0.9" />
+<text x="330.9" y="184" font-size="10" text-anchor="middle" fill-opacity="0.8">12+</text>
+<path d="M119.9 52 L119.9 170" fill="none" stroke="#9a6be0" stroke-width="1.5" stroke-opacity="1" stroke-dasharray="3 3" />
+<path d="M130.1 52 L130.1 170" fill="none" stroke="#00a07a" stroke-width="1.5" stroke-opacity="1" stroke-dasharray="3 3" />
+<text x="115.9" y="48" font-size="10" text-anchor="end" font-weight="600">Android mean 2.86</text>
+<text x="134.1" y="36" font-size="10" font-weight="600">iOS mean 3.30</text>
+<text x="190" y="200" font-size="10" text-anchor="middle">session_start plus add_expense events in the first 14 days</text>
+<rect x="14" y="214" width="12" height="8" fill="#00a07a" fill-opacity="0.9" />
+<text x="32" y="221.5" font-size="10">iOS, 7,196 people</text>
+<rect x="160" y="214" width="12" height="8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="178" y="221.5" font-size="10">Android, 6,508 people</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* iOS people average 3.30 events and Android people 2.86, a difference of 0.44. The t statistic is 6.7 by hand and from SciPy, with about 13,701 degrees of freedom, and p is 2.2e-11. The interval of the difference runs from 0.31 to 0.57, so it reaches 0.5. The Mann-Whitney test, whose null is that the two samples come from the same distribution, gives p near 2.5e-15. Yet the groups overlap a great deal: 21.7 percent of iOS people and 27.6 percent of Android people have no event at all.
+
+In symbols, Welch's statistic is
+
+$$
+t = \frac{\bar{x}_1 - \bar{x}_2}{\sqrt{\dfrac{s_1^2}{n_1} + \dfrac{s_2^2}{n_2}}}
+$$
+
+where $$\bar{x}$$, $$s$$ and $$n$$ are a group's mean, standard deviation (dividing by $$n-1$$) and size. For iOS (group 1) and Android (group 2), with 3.299 and 2.856, 4.086 and 3.657, and 7,196 and 6,508 people, the denominator is 0.0661 and $$t = 0.443 / 0.0661 \approx 6.70$$.
+
+### 3. The size of the gap, next to the p-value
+
+**Idea.** To say how big a gap is, report it in the data's own units with its interval, as in units 1 and 2. When the units do not tell the reader how big that is, add Cohen's d: the gap in units of the pooled standard deviation. Sullivan and Feinn give 0.2 as small, 0.5 as medium and 0.8 as large, ballpark categories to read in context.
+
+**Try it.** Print $$s_p$$ and $$d$$ for iOS against Android, then repeat the test with 50, 200, 800 and 3,200 people picked at random from each platform (seed 8):
+
+```python
+def cohens_d(a, b):
+    """The difference of the means in units of the pooled standard deviation."""
+    pooled_sd = np.sqrt(((len(a) - 1) * a.var(ddof=1) + (len(b) - 1) * b.var(ddof=1)) / (len(a) + len(b) - 2))
+    return (a.mean() - b.mean()) / pooled_sd
+
+
+sd_pooled = np.sqrt(((len(ios) - 1) * ios.var(ddof=1) + (len(android) - 1) * android.var(ddof=1)) / (len(ios) + len(android) - 2))
+print(round(float(sd_pooled), 2), round(float(cohens_d(ios, android)), 2))
+rng = np.random.default_rng(8)
+for size in (50, 200, 800, 3200):
+    a = rng.choice(ios, size=size, replace=False)
+    b = rng.choice(android, size=size, replace=False)
+    print(size, f"{stats.ttest_ind(a, b, equal_var=False).pvalue:.2g}", round(float(cohens_d(a, b)), 2))
+```
+
+**Predict:** as the groups shrink, what happens to the p-value, and what happens to d?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+3.89 0.11
+50 0.13 0.31
+200 0.096 0.17
+800 0.0063 0.14
+3200 1.6e-09 0.15
+```
+
+<figure>
+<svg viewBox="0 0 360 330" width="360" role="img" aria-labelledby="cg-size-t cg-size-d">
+<title id="cg-size-t">The p-value and Cohen's d of the iOS and Android gap, for 50 to all people in each group</title>
+<desc id="cg-size-d">Two panels over the same five group sizes: 50, 200, 800 and 3,200 people picked at random from each platform, and everyone. Top: the p-value on a log scale, 0.13, 0.096, 0.0063, 1.6e-9 and 2.2e-11, falling with the size and crossing a red dashed line at 0.05 between 200 and 800. Bottom: Cohen's d, 0.31, 0.17, 0.14, 0.15 and 0.11, which in this draw (seed 8) hovers between 0.11 and 0.17 once the groups have 200 people or more and stays under a dashed line at 0.2.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">p-value (log scale)</text>
+<path d="M48 36 L346 36" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="39.5" font-size="10" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M48 63.5 L346 63.5" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="67" font-size="10" text-anchor="end" fill-opacity="0.8">0.001</text>
+<path d="M48 91 L346 91" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="94.5" font-size="10" text-anchor="end" fill-opacity="0.8">1e-6</text>
+<path d="M48 118.5 L346 118.5" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="122" font-size="10" text-anchor="end" fill-opacity="0.8">1e-9</text>
+<path d="M48 146 L346 146" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="149.5" font-size="10" text-anchor="end" fill-opacity="0.8">1e-12</text>
+<path d="M48 47.9 L346 47.9" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="344" y="43.9" font-size="10" text-anchor="end" font-weight="600">0.05</text>
+<path d="M74 44.2 L136 45.3 L198 56.2 L260 116.8 L322 133.7" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.6" />
+<circle cx="74" cy="44.2" r="4" fill="#0072b2" />
+<text x="74" y="36.2" font-size="10" text-anchor="middle" font-weight="600">0.13</text>
+<circle cx="136" cy="45.3" r="4" fill="#0072b2" />
+<text x="136" y="37.3" font-size="10" text-anchor="middle" font-weight="600">0.096</text>
+<circle cx="198" cy="56.2" r="4" fill="#0072b2" />
+<text x="198" y="48.2" font-size="10" text-anchor="middle" font-weight="600">0.0063</text>
+<circle cx="260" cy="116.8" r="4" fill="#0072b2" />
+<text x="260" y="108.8" font-size="10" text-anchor="middle" font-weight="600">1.6e-9</text>
+<circle cx="322" cy="133.7" r="4" fill="#0072b2" />
+<text x="322" y="125.7" font-size="10" text-anchor="middle" font-weight="600">2.2e-11</text>
+<text x="14" y="178" font-size="10.5" font-weight="600">Cohen's d</text>
+<path d="M48 290 L346 290" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="42" y="293.5" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M48 240 L346 240" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="243.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.2</text>
+<path d="M48 190 L346 190" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="42" y="193.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.4</text>
+<path d="M48 240 L346 240" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<text x="344" y="236" font-size="10" text-anchor="end" font-weight="600">0.2, a small effect</text>
+<path d="M74 213.3 L136 248.3 L198 255.8 L260 252.2 L322 261.5" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.6" />
+<circle cx="74" cy="213.3" r="4" fill="#0072b2" />
+<text x="74" y="229.3" font-size="10" text-anchor="middle" font-weight="600">0.31</text>
+<circle cx="136" cy="248.3" r="4" fill="#0072b2" />
+<text x="136" y="264.3" font-size="10" text-anchor="middle" font-weight="600">0.17</text>
+<circle cx="198" cy="255.8" r="4" fill="#0072b2" />
+<text x="198" y="271.8" font-size="10" text-anchor="middle" font-weight="600">0.14</text>
+<circle cx="260" cy="252.2" r="4" fill="#0072b2" />
+<text x="260" y="268.2" font-size="10" text-anchor="middle" font-weight="600">0.15</text>
+<circle cx="322" cy="261.5" r="4" fill="#0072b2" />
+<text x="322" y="277.5" font-size="10" text-anchor="middle" font-weight="600">0.11</text>
+<text x="74" y="306" font-size="10" text-anchor="middle" fill-opacity="0.8">50</text>
+<text x="136" y="306" font-size="10" text-anchor="middle" fill-opacity="0.8">200</text>
+<text x="198" y="306" font-size="10" text-anchor="middle" fill-opacity="0.8">800</text>
+<text x="260" y="306" font-size="10" text-anchor="middle" fill-opacity="0.8">3,200</text>
+<text x="322" y="306" font-size="10" text-anchor="middle" fill-opacity="0.8">all</text>
+<text x="197" y="322" font-size="10" text-anchor="middle">people picked from each platform</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* with all 7,196 and 6,508 people the p-value is 2.2e-11 and d is 0.11. The p-value rises as the groups shrink, from 1.6e-09 with 3,200 people to 0.13 with 50. Cohen's d moves much less: in this draw (seed 8) it stays between 0.11 and 0.17 from 200 people up, and jumps to 0.31 with 50 because small samples are noisy. A p-value mixes the size of the gap with the number of people: Sullivan and Feinn write, "The level of significance by itself does not predict effect size", and the ASA says the same of importance.
+
+In symbols:
+
+$$
+d = \frac{\bar{x}_1 - \bar{x}_2}{s_p}, \qquad s_p = \sqrt{\frac{(n_1 - 1)\,s_1^2 + (n_2 - 1)\,s_2^2}{n_1 + n_2 - 2}}
+$$
+
+where $$s_p$$ is the pooled standard deviation. For iOS and Android, $$s_p = 3.89$$ and $$d = 0.443 / 3.89 \approx 0.11$$.
+
+Put the two comparisons side by side:
+
+| | paywall_v2 conversion | iOS against Android activity |
+|---|---|---|
+| p-value | 0.005 | 2.2e-11 |
+| the gap, with its 95% interval | +2.62 points (+0.78 to +4.47) | +0.44 events (0.31 to 0.57) |
+| Cohen's d | not needed: points are clear units | 0.11, under the 0.2 mark for small |
+
+The activity gap has by far the smaller p-value and is the smaller gap: about half an event in two weeks. Statistical significance says a gap is not luck; **practical significance** asks whether it is big enough to change a decision.
+
+Platform was not assigned at random, so the activity gap describes two groups of people and does not show that the platform causes it (see the next lesson).
+
+### 4. The verdict for a manager
+
+**Idea.** A manager needs a decision, not a test statistic. Two sentences do it. The first says what happened in business units, with the interval. The second says what to do and what stays uncertain, against a bar the team states. Every number comes from a variable. Suppose the team keeps a redesign only if it adds at least 1 point; the bar is an assumption of this example.
+
+**Try it.** Build the two sentences for `paywall_v2` from the numbers of unit 1:
+
+```python
+bar = 1.0
+verdict = (f"paywall_v2 raised 14-day conversion from {100 * p0:.1f}% to {100 * p1:.1f}%, {100 * diff:.1f} points more (95% interval {100 * low:.1f} to {100 * high:.1f} points, p = {p_value:.3f}). "
+           f"The lift is probably above the {bar:.0f}-point bar, but the interval's low end, {100 * low:.1f} points, is below it, so the gain could be smaller than the estimate.")
+print(verdict)
+```
+
+**Predict:** write two sentences for the product manager about `paywall_v2`. What must the first hold, and what must the second do?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+paywall_v2 raised 14-day conversion from 12.7% to 15.3%, 2.6 points more (95% interval 0.8 to 4.5 points, p = 0.005). The lift is probably above the 1-point bar, but the interval's low end, 0.8 points, is below it, so the gain could be smaller than the estimate.
+```
+
+</details>
+
+*Why:* the first sentence gives the two rates, the gap, its interval and the p-value, so a manager sees the size and its range. The second compares the interval with the bar, a variable too: the lift is probably above it, but the low end, 0.8, is below, so the gain could be smaller than the estimate. It never says "significant" without a size. `paywall_v2` has more to tell, in *Designing an A/B test*: when the lift appears, who is in each group and what else it changes.
+
+<Aside type="tip" title="Remember">
+
+- Shares: z or chi-square. Means: Welch. Skewed samples: Mann-Whitney.
+- Report together the p-value (is the gap real?), the gap with its interval (how big, how sure) and, when units do not tell, Cohen's d.
+- The p-value shrinks as groups grow, and the gap does not: a small p-value is not a big gap. Judge size against a bar from the decision.
+- A verdict has two sentences: what happened, in business units with an interval, and what to do, with the caveat.
+- A gap between groups nobody assigned describes the groups; it does not show an effect.
+
+**Common trap:** reading "significant" as "important": iOS against Android has p = 2.2e-11 and d = 0.11.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-comparing-groups-1">
+
+**Do people who signed up in Europe buy Plus more often than people in Asia Pacific?** Buying means a purchase within 14 days. The counts and the pooled rate are given. Finish the test: the standard error under the null, z for Europe minus Asia Pacific, and the two-sided p-value. Expected: `answer_1` is [z, p], rounded to 2 and 3 decimals.
+
+```python
+europe = full[full["region"] == "europe"]["bought"]                  # given: 14-day conversion of people in Europe
+asia = full[full["region"] == "asia_pacific"]["bought"]              # given: and in Asia Pacific
+n_e, c_e = len(europe), int(europe.sum())
+n_a, c_a = len(asia), int(asia.sum())
+pooled_ea = (c_e + c_a) / (n_e + n_a)                                # given: the pooled rate
+# the standard error of the gap under the null, then z for Europe minus Asia Pacific, then the two-sided p-value
+answer_1 = None  # replace None with [z, p]: z rounded to 2 decimals, p to 3
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 1: `se = np.sqrt(pooled * (1 - pooled) * (1 / n0 + 1 / n1))`, then `z = (p1 - p0) / se`, then `2 * stats.norm.sf(abs(z))`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+se_ea = np.sqrt(pooled_ea * (1 - pooled_ea) * (1 / n_e + 1 / n_a))
+z_ea = (c_e / n_e - c_a / n_a) / ...
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+se_ea = np.sqrt(pooled_ea * (1 - pooled_ea) * (1 / n_e + 1 / n_a))
+z_ea = (c_e / n_e - c_a / n_a) / se_ea
+answer_1 = [round(float(z_ea), 2), round(float(2 * stats.norm.sf(abs(z_ea))), 3)]
+```
+
+722 of 5,638 people in Europe bought (12.8 percent) against 430 of 3,639 in Asia Pacific (11.8): z = 1.41, p = 0.158. The 95 percent interval of the 0.99-point gap, -0.37 to 2.35, still holds 2 points. One tail only would give 0.079.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-comparing-groups-2">
+
+**How much more active are web people than iOS people?** Before you start, say what the result looks like: a difference, the two ends of its interval and one standardized size. Run Welch's test on the activity of the web people and the iOS people (all of `full`), and set `answer_2` to [difference of the means web minus iOS, low and high end of its 95 percent interval, Cohen's d], each rounded to 2 decimals. Write the code in the empty cell. Expected: `answer_2` is a list of four numbers.
+
+<details>
+<summary>Hint</summary>
+
+Build `web` from `full` as unit 2 built `ios`, call `stats.ttest_ind(web, ios, equal_var=False)`, ask the result for `.confidence_interval(confidence_level=0.95)`, and use `cohens_d` from unit 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A difference of a bit under one event, an interval a little either side of it, and a d between 0.2 and 0.3."*
+
+```python
+web = full.loc[full["platform"] == "web", "activity"].to_numpy()
+res_w = stats.ttest_ind(web, ios, equal_var=False)
+```
+
+</details>
+
+<Solution>
+
+```python
+web = full.loc[full["platform"] == "web", "activity"].to_numpy()
+res_w = stats.ttest_ind(web, ios, equal_var=False)
+ci_w = res_w.confidence_interval(confidence_level=0.95)
+answer_2 = [round(float(web.mean() - ios.mean()), 2), round(float(ci_w.low), 2), round(float(ci_w.high), 2), round(float(cohens_d(web, ios)), 2)]
+```
+
+Web people average 4.29 events against 3.30 on iOS: a difference of 0.99, interval 0.84 to 1.14, and d = 0.22, about twice the iOS and Android gap. The check cell reports the other order of the groups as a hint. Platform was not assigned at random. Web people come through other channels, so this gap describes the groups and does not show an effect of the platform (see the next lesson).
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a report says "the variant is significantly better, p = 0.005". Which two things does a manager still need?
+
+   <details>
+   <summary>answer</summary>
+
+   The size of the gap with its interval, and what it means for the decision: the p-value says only that the gap is not luck.
+
+   </details>
+
+<Exercise id="core-comparing-groups-3">
+
+**Spot the flaw.** The team planned to read `paywall_v2` on its home market, `north_america`, on its own. A colleague says the lift there is not significant, because the 95 percent intervals of the two groups' conversion rates overlap. Fix the line that sets `significant` so that it follows from the test of the difference, with a bar of 0.05. Then `answer_3` is [p-value rounded to 3 decimals, significant or not]. Expected: a list of a number and True or False.
+
+```python
+na = pw.merge(users[["user_id", "region"]], on="user_id")
+na = na[na["region"] == "north_america"]                             # given: the home market, read on its own as planned before the test
+n0_na, n1_na = int((na["variant"] == "control").sum()), int((na["variant"] == "variant").sum())
+c0_na = int(na.loc[na["variant"] == "control", "converted"].sum())
+c1_na = int(na.loc[na["variant"] == "variant", "converted"].sum())
+pooled_na = (c0_na + c1_na) / (n0_na + n1_na)
+z_na = (c1_na / n1_na - c0_na / n0_na) / np.sqrt(pooled_na * (1 - pooled_na) * (1 / n0_na + 1 / n1_na))
+p_na = float(2 * stats.norm.sf(abs(z_na)))                           # given: the p-value of the difference
+
+
+def interval(c, n):
+    p = c / n
+    s = np.sqrt(p * (1 - p) / n)
+    return float(p - 1.96 * s), float(p + 1.96 * s)
+
+
+(lo0, hi0), (lo1, hi1) = interval(c0_na, n0_na), interval(c1_na, n1_na)
+significant = hi0 < lo1 or hi1 < lo0           # colleague: "significant when the two intervals do not overlap"
+answer_3 = [round(p_na, 3), significant]
+```
+
+<details>
+<summary>Hint</summary>
+
+Print `lo0, hi0, lo1, hi1` and `p_na`, then compare what the intervals say with what `p_na` says.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+significant = p_na < ...
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+significant = p_na < 0.05
+```
+
+In north_america, 143 of 1,129 control people bought (12.7 percent, interval 10.7 to 14.6) and 180 of 1,150 in the variant (15.7 percent, interval 13.6 to 17.8). The intervals overlap by a point, yet p = 0.041: the standard error of a difference is smaller than the sum of the two margins, so the test of the difference finds a gap that overlapping intervals hide.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can choose a test for two shares and two means, run it, report the gap with its interval and p-value, tell a significant gap from an important one, and write the verdict in two sentences.*
+Test: Exercise core-comparing-groups-3, done from the notebook without opening the hints.
+
+The pattern to remember: **a verdict names the gap in business units, with its interval, and the decision it supports; the p-value only says the gap is not luck.** Next comes *Correlation is not causation*, where a gap between groups meets the question of why.
