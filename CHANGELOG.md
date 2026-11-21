@@ -268,6 +268,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
+- Lesson drawings (charts, diagrams, animation frames) grow with the column up to 520px and sit in its center, instead of a fixed 360px on the left; narrow tables sit in the center too (owner choice, 2026-11-21).
 - *Telling the story* (C15) cites the ASA statement on p-values from its journal article (Wasserstein & Lazar, 2016) instead of the ASA press release, as *Hypothesis tests and p-values, honestly* already does (owner decision, 2026-11-21).
 - Homepage history slider: the two round arrow buttons became one outlined pill with thin chevrons and a counter of the centered card ("02 / 12").
 - Choose your track (SPEC D50, owner decision, 2026-11-20): the grouped bar charts are removed; the four radars stay, now with each score printed beside its skill label.
