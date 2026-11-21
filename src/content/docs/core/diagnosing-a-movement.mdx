@@ -1,0 +1,783 @@
+---
+id: core-diagnosing-a-movement
+title: Diagnosing a metric that moved
+short_title: 'Diagnosing a movement'
+description: 'Walk from "the metric dropped" to a cause in a fixed order: the pipeline, the calendar, the segments, then a change of mix against a change of rate.'
+stage: core
+order: 130
+level: intermediate
+duration: 40
+objectives:
+  - Rule out the pipeline and the calendar before you explain a movement
+  - Split a movement by segment and see whether a share or a rate moved
+  - Separate a change of mix from a change inside the segments
+  - Write the diagnosis and its next step in plain words
+prerequisites:
+  - core-defining-metrics
+  - core-correlation-and-causation
+  - core-comparing-groups
+  - python-pandas-dates-and-resample
+  - python-pandas-merge-and-validate
+datasets:
+  - app-events
+notebook: notebooks/core/core-diagnosing-a-movement.ipynb
+reviewed: 2026-11-21
+sources:
+  - title: 'Dmitriev, Gupta, Kim and Vaz, A Dirty Dozen: Twelve Common Metric Interpretation Pitfalls in Online Controlled Experiments, KDD 2017 (accessed 2026-11-20)'
+    url: https://exp-platform.com/Documents/2017-08%20KDDMetricInterpretationPitfalls.pdf
+  - title: 'U.S. Office of Personnel Management: Federal holidays, the 2026 schedule (accessed 2026-11-20)'
+    url: https://www.opm.gov/policy-data-oversight/pay-leave/federal-holidays/
+status: published
+---
+
+## The question
+
+The team of a budgeting app, a fictional app whose log is the dataset `app-events`, gets three alerts this spring:
+
+| what moved | the numbers |
+|---|---|
+| paywall views, counted as `view_paywall` events | 2,379 in the four weeks before May 18, 1,619 in the four weeks from May 18 |
+| return visits from `north_america` on Monday, May 25 | 57, where the four Mondays around it average 109.75 |
+| 14-day conversion of new signups | 12.95% for people who signed up from March 9 to April 12, 9.88% from April 13 to June 7 |
+
+Which of the three is a real problem, and what caused it? By the end you can walk from a moving number to its cause in a fixed order and tell a change of mix from a change of rate.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Defining a metric before you compute it*](/core/defining-metrics/) (C12) you fixed what a number means. Here the definition stays and the number moves.
+
+**Diverge.** In *Comparing two groups* (C9) the groups were made by a coin. Here the two groups are two periods, and unit 4 shows what that can hide.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Defining a metric before you compute it*](/core/defining-metrics/) (C12), May's conversion came out differently as a cohort reading and as a calendar reading. What separates the two?
+
+   <details>
+   <summary>answer</summary>
+
+   A cohort reading follows each person for the same window from their own signup. A calendar reading counts what happened in the period, so its numerator and its denominator can describe different people.
+
+   </details>
+
+2. In *Correlation is not causation* (C10), a gap shrank inside the groups of a third column. What made the gap?
+
+   <details>
+   <summary>answer</summary>
+
+   The groups: a gap that shrinks when you compare like with like was made by who was in each group.
+
+   </details>
+
+## The big idea
+
+A blended rate can fall while every group holds still, if the mix of the groups moves: so before you ask what got worse, ask who is in the number.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="mix-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="mix" id="mix-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="mix" id="mix-r1" aria-label="Step 1 of 5: Two groups, two rates" />
+<input class="sa-r r2 o2" type="radio" name="mix" id="mix-r2" aria-label="Step 2 of 5: One blended rate" />
+<input class="sa-r r3 o4" type="radio" name="mix" id="mix-r3" aria-label="Step 3 of 5: The mix changes, the rates do not" />
+<input class="sa-r r4 o6" type="radio" name="mix" id="mix-r4" aria-label="Step 4 of 5: The blend drops" />
+<input class="sa-r r5 o8" type="radio" name="mix" id="mix-r5" aria-label="Step 5 of 5: Mix, not rate" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-grp"><small>A share</small><span><i class="w1 tmp hl">70%</i><i class="w1 d2 tmp">70%</i><i class="w2 d3 tmp hl">30%</i><i class="w4 d5">30%</i></span></span><span class="sa-n c-grp"><small>A rate</small><span><i class="w1 tmp hl">80%</i><i class="w7 d2">80%</i></span></span><span class="sa-n c-mat"><small>B rate</small><span><i class="w1 tmp hl">20%</i><i class="w7 d2">20%</i></span></span><span class="sa-n c-src"><small>blend</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">62%</i><i class="w2 d3 tmp">62%</i><i class="w2 d5 tmp hl">38%</i><i class="w2 d7">38%</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 262" width="360" role="img" aria-labelledby="mix-t mix-d">
+<title id="mix-t">The blended rate falls when the mix moves, even if each group holds still</title>
+<desc id="mix-d">Two rectangles side by side as wide as the share of people in each group and as tall as its rate: group A is wide and tall, group B narrow and short. A blue line across the picture marks the blended rate. The widths then change, B becomes wide and A narrow, while the heights stay the same. The blue line drops, and the old line stays as a dashed gray one. The text says that no group got worse.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Two groups, two rates</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · One blended rate</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">3 · The mix changes, the rates do not</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · The blend drops</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Mix, not rate</text>
+<text class="f11 b" x="10" y="14">Same rates, new mix</text>
+<text class="f10 mu" x="34" y="48">rate ↑</text>
+<path class="bx" d="M30 200H330" />
+<rect class="f-grp k2 w2 tmp" x="30" y="80" width="210" height="120" />
+<rect class="f-mat k2 w2 tmp" x="240" y="170" width="90" height="30" />
+<rect class="f-grp k2 w6 d3" x="30" y="80" width="90" height="120" />
+<rect class="f-mat k2 w6 d3" x="120" y="170" width="210" height="30" />
+<text class="f10 b m w2 tmp" x="135" y="216">group A</text>
+<text class="f10 b m w2 tmp" x="285" y="216">group B</text>
+<text class="f10 b m w6 d3" x="75" y="216">group A</text>
+<text class="f10 b m w6 d3" x="225" y="216">group B</text>
+<text class="f10 b" x="36" y="94">80%</text>
+<text class="f10 b w2 tmp" x="246" y="184">20%</text>
+<text class="f10 b w6 d3" x="126" y="184">20%</text>
+<path class="s-src w3 d2 tmp" d="M30 107H330" />
+<path class="s-ord dsh w4 d5" d="M30 107H330" />
+<path class="s-src w4 d5" d="M30 143H330" />
+<text class="f10 b e w3 d2 tmp" x="330" y="101">overall rate</text>
+<text class="f10 b e w4 d5" x="330" y="137">overall rate</text>
+<path class="s-flt dr p4 d5" pathLength="1" d="M200 113L200 131M203.04 124.7L200 131L196.96 124.7" />
+<text class="f10 mu e" x="330" y="232">share of people →</text>
+<text class="f10 m w2 d7" x="190" y="256">no group got worse; the mix moved</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="mix-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="mix-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="mix-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="mix-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="mix-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="mix-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="mix-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="mix-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="mix-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="mix-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="mix-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="mix-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="mix-r1">1</label><label class="sa-sb sb2" for="mix-r2">2</label><label class="sa-sb sb3" for="mix-r3">3</label><label class="sa-sb sb4" for="mix-r4">4</label><label class="sa-sb sb5" for="mix-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-grp w1 tmp">Each group has its own rate, and a share of the people: how wide it is.<span class="sa-chs"><span class="sa-ch pl">group A and group B</span></span></div>
+<div class="c-src w1 d2 tmp">The blended rate is the average of the group rates, each counted as often as its people.<span class="sa-chs"><span class="sa-ch pl">the overall rate</span></span></div>
+<div class="c-mat w2 d3 tmp">The shares change: more of the people are in the group with the lower rate. The heights stay.<span class="sa-chs"><span class="sa-ch ch">the shares change</span><span class="sa-ch mi">no rate changes</span></span></div>
+<div class="c-flt w2 d5 tmp">The overall rate falls only because the mix moved: that is a change of mix, not of rate.<span class="sa-chs"><span class="sa-ch mi">the overall rate falls</span></span></div>
+<div class="c-out w2 d7">Split by group before you explain a fall: the same drop can need a different answer.<span class="sa-chs"><span class="sa-ch pl">the verdict</span></span></div>
+</div>
+<p class="ca-cap">A made-up miniature: group A converts at 80%, group B at 20%, in both periods. When B becomes most of the people, the blended rate falls from 62% to 38%.</p>
+<ol class="sa-steps">
+<li>Two groups, two rates</li>
+<li>One blended rate</li>
+<li>The mix changes, the rates do not</li>
+<li>The blend drops</li>
+<li>Mix, not rate</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 40 minutes, 5 new ideas: the pipeline check, the calendar check, the split by segment, mix against rate, and the verdict. The Data cell of the notebook builds `users` with the columns `platform`, `bought` and `onboarded` (0 or 1, each within 14 days of the signup) and three windows of signups with a full follow-up: `base` (March 9 to April 12, the five weeks before a marketing campaign), `camp` (April 13 to June 7, the campaign) and `after` (June 8 to 16). Work from the cheapest and commonest cause to the dearest.
+
+<OpenInColab />
+
+### 1. Is the pipeline telling the truth
+
+**Idea.** Before you explain a movement, check that the number still measures the same thing.
+
+**Try it.** Count the paywall views in the four weeks before May 18 and in the four weeks from May 18, by event name:
+
+```python
+paywall = events[events["event_name"].str.contains("paywall")]        # every event whose name contains "paywall"
+windows = {"Apr 20 to May 17": ("2026-04-20", "2026-05-18"), "May 18 to Jun 14": ("2026-05-18", "2026-06-15")}
+for label, (start, stop) in windows.items():
+    rows = paywall[(paywall["event_ts"] >= start) & (paywall["event_ts"] < stop)]
+    print(label, rows["event_name"].value_counts().to_dict(), len(rows))
+renamed = paywall[paywall["event_name"] != "view_paywall"]            # the names other than view_paywall
+print(renamed["platform"].value_counts().to_dict(), renamed["event_ts"].min())
+```
+
+**Predict:** by `view_paywall` alone the views fell by about a third between the two windows. The cell counts the events whose name contains "paywall", by name, in the same two windows. Did people look at the paywall about a third less often?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+Apr 20 to May 17 {'view_paywall': 2379} 2379
+May 18 to Jun 14 {'view_paywall': 1619, 'paywall_viewed': 914} 2533
+{'ios': 1303} 2026-05-18 02:14:23
+```
+
+<figure>
+<svg viewBox="0 0 360 150" width="360" role="img" aria-labelledby="dg-ren-t dg-ren-d">
+<title id="dg-ren-t">Paywall views in the four weeks before May 18 and from May 18, by event name</title>
+<desc id="dg-ren-d">Two horizontal bars. Apr 20 to May 17: 2,379 views, all under the name view_paywall, in green. May 18 to Jun 14: 1,619 under view_paywall in green plus 914 under paywall_viewed in purple, 2,533 in all. A dashed line marks 2,379, which the second bar passes.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Paywall views, four weeks before and from May 18</text>
+<text x="14" y="38" font-size="10">Apr 20 to May 17</text>
+<rect x="14" y="44" width="237.9" height="16" fill="#00a07a" fill-opacity="0.9" />
+<text x="257.9" y="56.5" font-size="10" font-weight="600">2,379</text>
+<text x="14" y="84" font-size="10">May 18 to Jun 14</text>
+<rect x="14" y="90" width="161.9" height="16" fill="#00a07a" fill-opacity="0.9" />
+<rect x="175.9" y="90" width="91.4" height="16" fill="#9a6be0" fill-opacity="0.9" />
+<text x="273.3" y="102.5" font-size="10" font-weight="600">2,533</text>
+<path d="M251.9 36 L251.9 112" fill="none" stroke="#ad9100" stroke-width="1.5" stroke-opacity="1" stroke-dasharray="4 3" />
+<rect x="14" y="128" width="12" height="8" fill="#00a07a" fill-opacity="0.9" />
+<text x="32" y="135.5" font-size="10">view_paywall</text>
+<rect x="130" y="128" width="12" height="8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="148" y="135.5" font-size="10">paywall_viewed</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* by the old name the views fell 32 percent, from 2,379 to 1,619. From May 18 the iOS app sends `paywall_viewed` for the same event: 914 rows in the second window, 1,303 in all, every one on iOS. Over both names there are 2,533, 6.5 percent more than before. Nothing about behavior changed: the metric lost a name, and the definition must list every name of the event. The names are one of three ways a pipeline can fake a movement; the next check shows the other two.
+
+**Try it.** On March 17 the collector was down for part of the afternoon. Count that day's events per hour by when they happened and by when they were received, then measure the lag:
+
+```python
+day = events[(events["event_ts"] >= "2026-03-17") & (events["event_ts"] < "2026-03-18")]
+arrived = events[(events["received_at"] >= "2026-03-17") & (events["received_at"] < "2026-03-18")]
+per_hour = pd.DataFrame({"happened": day.groupby(day["event_ts"].dt.hour).size(), "received": arrived.groupby(arrived["received_at"].dt.hour).size()}).fillna(0).astype(int)
+for hour in range(13, 22):
+    print(f"{hour:02d}:00  happened {per_hour.loc[hour, 'happened']:>3}  received {per_hour.loc[hour, 'received']:>3}")
+lag_hours = (events["received_at"] - events["event_ts"]).dt.total_seconds() / 3600
+outage = (events["event_ts"] >= "2026-03-17 14:00") & (events["event_ts"] < "2026-03-17 20:00")
+print(int(outage.sum()), int((lag_hours >= 1).sum()), int(((lag_hours >= 1) & ~outage).sum()), int((lag_hours < 0).sum()))
+```
+
+**Predict:** counted by the time of receipt, what will the hourly count do between 14:00 and 19:59, and what will it do at 20:00? Will counting by the time the events happened look the same?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+13:00  happened  43  received  43
+14:00  happened  39  received   0
+15:00  happened  43  received   0
+16:00  happened  29  received   1
+17:00  happened  47  received   0
+18:00  happened  54  received   0
+19:00  happened  28  received   0
+20:00  happened  46  received 286
+21:00  happened  42  received  42
+240 1135 912 30
+```
+
+<figure>
+<svg viewBox="0 0 360 288" width="360" role="img" aria-labelledby="dg-out-t dg-out-d">
+<title id="dg-out-t">Events on March 17 per hour: when they happened and when they were received</title>
+<desc id="dg-out-d">Two panels with the hours 13 to 21 of March 17 on the same scale. Top, by the hour the events happened: between 28 and 54 events in every hour. Bottom, by the hour they were received: 43 at 13, then 0, 0, 1, 0, 0 and 0 from 14 to 19 in red, then 286 at 20 in red, then 42 at 21.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Events by the hour they happened</text>
+<rect x="26" y="100.5" width="24" height="11.5" fill="#0072b2" fill-opacity="0.9" />
+<text x="38" y="96.5" font-size="10" text-anchor="middle" font-weight="600">43</text>
+<text x="38" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">13h</text>
+<rect x="62" y="101.6" width="24" height="10.4" fill="#0072b2" fill-opacity="0.9" />
+<text x="74" y="97.6" font-size="10" text-anchor="middle" font-weight="600">39</text>
+<text x="74" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">14h</text>
+<rect x="98" y="100.5" width="24" height="11.5" fill="#0072b2" fill-opacity="0.9" />
+<text x="110" y="96.5" font-size="10" text-anchor="middle" font-weight="600">43</text>
+<text x="110" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">15h</text>
+<rect x="134" y="104.3" width="24" height="7.7" fill="#0072b2" fill-opacity="0.9" />
+<text x="146" y="100.3" font-size="10" text-anchor="middle" font-weight="600">29</text>
+<text x="146" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">16h</text>
+<rect x="170" y="99.5" width="24" height="12.5" fill="#0072b2" fill-opacity="0.9" />
+<text x="182" y="95.5" font-size="10" text-anchor="middle" font-weight="600">47</text>
+<text x="182" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">17h</text>
+<rect x="206" y="97.6" width="24" height="14.4" fill="#0072b2" fill-opacity="0.9" />
+<text x="218" y="93.6" font-size="10" text-anchor="middle" font-weight="600">54</text>
+<text x="218" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">18h</text>
+<rect x="242" y="104.5" width="24" height="7.5" fill="#0072b2" fill-opacity="0.9" />
+<text x="254" y="100.5" font-size="10" text-anchor="middle" font-weight="600">28</text>
+<text x="254" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">19h</text>
+<rect x="278" y="99.7" width="24" height="12.3" fill="#0072b2" fill-opacity="0.9" />
+<text x="290" y="95.7" font-size="10" text-anchor="middle" font-weight="600">46</text>
+<text x="290" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">20h</text>
+<rect x="314" y="100.8" width="24" height="11.2" fill="#0072b2" fill-opacity="0.9" />
+<text x="326" y="96.8" font-size="10" text-anchor="middle" font-weight="600">42</text>
+<text x="326" y="125" font-size="10" text-anchor="middle" fill-opacity="0.8">21h</text>
+<path d="M20 112 L352 112" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="154" font-size="10.5" font-weight="600">Events by the hour they were received</text>
+<rect x="26" y="240.5" width="24" height="11.5" fill="#0072b2" fill-opacity="0.9" />
+<text x="38" y="236.5" font-size="10" text-anchor="middle" font-weight="600">43</text>
+<text x="38" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">13h</text>
+<rect x="62" y="252" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="74" y="246.5" font-size="10" text-anchor="middle" font-weight="600">0</text>
+<text x="74" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">14h</text>
+<rect x="98" y="252" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="110" y="246.5" font-size="10" text-anchor="middle" font-weight="600">0</text>
+<text x="110" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">15h</text>
+<rect x="134" y="251.7" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="146" y="246.5" font-size="10" text-anchor="middle" font-weight="600">1</text>
+<text x="146" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">16h</text>
+<rect x="170" y="252" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="182" y="246.5" font-size="10" text-anchor="middle" font-weight="600">0</text>
+<text x="182" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">17h</text>
+<rect x="206" y="252" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="218" y="246.5" font-size="10" text-anchor="middle" font-weight="600">0</text>
+<text x="218" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">18h</text>
+<rect x="242" y="252" width="24" height="1.5" fill="#c0392b" fill-opacity="0.9" />
+<text x="254" y="246.5" font-size="10" text-anchor="middle" font-weight="600">0</text>
+<text x="254" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">19h</text>
+<rect x="278" y="175.7" width="24" height="76.3" fill="#c0392b" fill-opacity="0.9" />
+<text x="290" y="171.7" font-size="10" text-anchor="middle" font-weight="600">286</text>
+<text x="290" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">20h</text>
+<rect x="314" y="240.8" width="24" height="11.2" fill="#0072b2" fill-opacity="0.9" />
+<text x="326" y="236.8" font-size="10" text-anchor="middle" font-weight="600">42</text>
+<text x="326" y="265" font-size="10" text-anchor="middle" fill-opacity="0.8">21h</text>
+<path d="M20 252 L352 252" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="190" y="280" font-size="10" text-anchor="middle">hour of March 17 (UTC)</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* by the time of receipt the count is 0, 0, 1, 0, 0 and 0 from 14:00 to 19:59 and 286 at 20:00. By the time the events happened nothing is missing: the 240 events of those six hours arrived after the collector came back. A dashboard by arrival time shows a hole and a spike, and neither is behavior. The last line counts the rest: 1,135 events arrived an hour or more after they happened, 223 of the 240 outage events and 912 others, and 30 carry a time later than their arrival, a phone clock that ran ahead. So a pipeline fakes a movement through what rows are called, when they arrive and how many times they arrive (the copies of C12). If a pipeline check explains the movement, stop: it is the data.
+
+### 2. Is it the calendar
+
+**Idea.** A calendar moves numbers by itself: the day of the week, the first days of a month, a holiday. Compare a day with the same weekday. The U.S. Office of Personnel Management lists Memorial Day, 2026, as Monday, May 25.
+
+**Try it.** Count the return visits (`session_start`) on five Mondays, for people in `north_america` and for people in the other three regions:
+
+```python
+visits = events[events["event_name"] == "session_start"].merge(users[["user_id", "region"]], on="user_id")
+visits = visits[visits["event_ts"].dt.dayofweek == 0]                        # Mondays only: compare a weekday with the same weekday
+visits["day"] = visits["event_ts"].dt.strftime("%Y-%m-%d")
+mondays = ["2026-05-11", "2026-05-18", "2026-05-25", "2026-06-01", "2026-06-08"]
+mon = visits[visits["day"].isin(mondays)]
+na = mon[mon["region"] == "north_america"].groupby("day").size()
+other = mon[mon["region"] != "north_america"].groupby("day").size()
+for day in mondays:
+    print(day, int(na[day]), int(other[day]))
+around = [d for d in mondays if d != "2026-05-25"]
+print(float(na[around].mean()), float(other[around].mean()))
+late_rows = events[(events["received_at"] - events["event_ts"]) >= pd.Timedelta(hours=1)]     # events received an hour or more after they happened
+print([int((late_rows["event_ts"].dt.strftime("%Y-%m-%d") == day).sum()) for day in mondays])
+```
+
+**Predict:** will the holiday show in both groups, in one, or in neither?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2026-05-11 105 139
+2026-05-18 103 144
+2026-05-25 57 138
+2026-06-01 116 162
+2026-06-08 115 153
+109.75 149.5
+[6, 6, 6, 4, 8]
+```
+
+<figure>
+<svg viewBox="0 0 360 236" width="360" role="img" aria-labelledby="dg-mem-t dg-mem-d">
+<title id="dg-mem-t">Return visits on five Mondays, north_america against the other three regions</title>
+<desc id="dg-mem-d">Paired bars for five Mondays. north_america in green: 105, 103, 57, 116 and 115 visits. The other three regions in purple: 139, 144, 138, 162 and 153. On May 25, Memorial Day, marked in red, the green bar is about half as tall as on the other Mondays while the purple bar is close to theirs.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Return visits (session_start) on five Mondays</text>
+<rect x="22" y="111.9" width="22" height="74.1" fill="#00a07a" fill-opacity="0.9" />
+<rect x="48" y="87.9" width="22" height="98.1" fill="#9a6be0" fill-opacity="0.9" />
+<text x="33" y="107.9" font-size="10" text-anchor="middle" font-weight="600">105</text>
+<text x="59" y="83.9" font-size="10" text-anchor="middle" font-weight="600">139</text>
+<text x="46" y="200" font-size="10" text-anchor="middle" fill-opacity="0.8">May 11</text>
+<rect x="88" y="113.3" width="22" height="72.7" fill="#00a07a" fill-opacity="0.9" />
+<rect x="114" y="84.4" width="22" height="101.6" fill="#9a6be0" fill-opacity="0.9" />
+<text x="99" y="109.3" font-size="10" text-anchor="middle" font-weight="600">103</text>
+<text x="125" y="80.4" font-size="10" text-anchor="middle" font-weight="600">144</text>
+<text x="112" y="200" font-size="10" text-anchor="middle" fill-opacity="0.8">May 18</text>
+<rect x="154" y="145.8" width="22" height="40.2" fill="#00a07a" fill-opacity="0.9" />
+<rect x="180" y="88.6" width="22" height="97.4" fill="#9a6be0" fill-opacity="0.9" />
+<text x="165" y="141.8" font-size="10" text-anchor="middle" font-weight="600">57</text>
+<text x="191" y="84.6" font-size="10" text-anchor="middle" font-weight="600">138</text>
+<text x="178" y="200" font-size="10" text-anchor="middle" fill-opacity="0.8">May 25</text>
+<rect x="220" y="104.1" width="22" height="81.9" fill="#00a07a" fill-opacity="0.9" />
+<rect x="246" y="71.6" width="22" height="114.4" fill="#9a6be0" fill-opacity="0.9" />
+<text x="231" y="100.1" font-size="10" text-anchor="middle" font-weight="600">116</text>
+<text x="257" y="67.6" font-size="10" text-anchor="middle" font-weight="600">162</text>
+<text x="244" y="200" font-size="10" text-anchor="middle" fill-opacity="0.8">Jun 1</text>
+<rect x="286" y="104.8" width="22" height="81.2" fill="#00a07a" fill-opacity="0.9" />
+<rect x="312" y="78" width="22" height="108" fill="#9a6be0" fill-opacity="0.9" />
+<text x="297" y="100.8" font-size="10" text-anchor="middle" font-weight="600">115</text>
+<text x="323" y="74" font-size="10" text-anchor="middle" font-weight="600">153</text>
+<text x="310" y="200" font-size="10" text-anchor="middle" fill-opacity="0.8">Jun 8</text>
+<rect x="148" y="50" width="60" height="140" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" rx="4" />
+<text x="178" y="46" font-size="10" text-anchor="middle" font-weight="600">Memorial Day</text>
+<path d="M14 186 L350 186" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="14" y="212" width="12" height="8" fill="#00a07a" fill-opacity="0.9" />
+<text x="32" y="219.5" font-size="10">north_america</text>
+<rect x="140" y="212" width="12" height="8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="158" y="219.5" font-size="10">the other three regions</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* on May 25 the visits from `north_america` were 57, against an average of 109.75 on the four Mondays around it: about half. The other three regions had 138, just under the 139 to 162 of the other four Mondays. One region and one day: June 1 is back to 116. The last line counts the events received an hour or more late, by the day they happened: 6, 6, 6, 4 and 8. There is no jump in late events on May 25, and no name changed: it is not the pipeline. Rule it in for that alert only.
+
+### 3. Where did it move
+
+**Idea.** If the data and the calendar are clean, split the movement by a *segment*: a column that describes each person and was fixed before the outcome, such as channel, platform or region. Compare the two periods inside each segment and look at two things: the segment's share of the people and its own rate. Dmitriev and colleagues use segments to see whether a problem touches everyone or one group.
+
+**Try it.** Split the five weeks before April 13 and the weeks from April 13 by channel, by platform and by region:
+
+```python
+def split(col):
+    """Per segment: its share of the people and its conversion."""
+    for seg in sorted(base[col].unique()):
+        b, c = base[base[col] == seg], camp[camp[col] == seg]
+        print(f"  {seg:<15} share {100 * len(b) / len(base):4.1f}% -> {100 * len(c) / len(camp):4.1f}%   conversion {100 * b['bought'].mean():4.1f}% -> {100 * c['bought'].mean():4.1f}%")
+
+
+for col in ["channel", "platform", "region"]:
+    print(col)
+    split(col)
+```
+
+**Predict:** the 14-day conversion fell from 12.95 to 9.88 percent. In which split will every segment's conversion hold almost still while the shares move?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+channel
+  app_store       share 25.2% -> 16.9%   conversion 10.6% ->  8.8%
+  organic_search  share 30.2% -> 20.9%   conversion 14.0% -> 13.0%
+  paid_search     share 15.4% -> 10.4%   conversion  7.9% ->  9.6%
+  paid_social     share  9.9% -> 37.7%   conversion  3.3% ->  4.0%
+  referral        share 19.3% -> 14.1%   conversion 23.3% -> 22.5%
+platform
+  android         share 30.5% -> 35.0%   conversion  8.1% ->  5.4%
+  ios             share 34.4% -> 38.1%   conversion 14.9% -> 10.3%
+  web             share 35.1% -> 26.8%   conversion 15.3% -> 15.1%
+region
+  asia_pacific    share 16.8% -> 18.1%   conversion 12.8% ->  9.2%
+  europe          share 29.3% -> 27.7%   conversion 14.4% -> 10.6%
+  latin_america   share 12.4% -> 12.5%   conversion 13.1% ->  9.3%
+  north_america   share 41.5% -> 41.7%   conversion 11.9% ->  9.9%
+```
+
+<figure>
+<svg viewBox="0 0 360 372" width="360" role="img" aria-labelledby="dg-spl-t dg-spl-d">
+<title id="dg-spl-t">Share of the people and 14-day conversion of each channel, before and during the campaign</title>
+<desc id="dg-spl-d">Two panels with one pair of horizontal bars for each of five channels, green for the five weeks before the campaign and purple for the campaign. Top, the share of the people: app_store 25.2 then 16.9 percent, organic_search 30.2 then 20.9, paid_search 15.4 then 10.4, paid_social 9.9 then 37.7 and referral 19.3 then 14.1. Bottom, the 14-day conversion: app_store 10.6 then 8.8 percent, organic_search 14.0 then 13.0, paid_search 7.9 then 9.6, paid_social 3.3 then 4.0 and referral 23.3 then 22.5.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Share of the people</text>
+<text x="14" y="43" font-size="10">app_store</text>
+<rect x="112" y="32" width="112" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="229" y="41" font-size="10">25.2%</text>
+<rect x="112" y="44" width="75.1" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="192.1" y="53" font-size="10" font-weight="600">16.9%</text>
+<text x="14" y="73" font-size="10">organic_search</text>
+<rect x="112" y="62" width="134.2" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="251.2" y="71" font-size="10">30.2%</text>
+<rect x="112" y="74" width="92.9" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="209.9" y="83" font-size="10" font-weight="600">20.9%</text>
+<text x="14" y="103" font-size="10">paid_search</text>
+<rect x="112" y="92" width="68.4" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="185.4" y="101" font-size="10">15.4%</text>
+<rect x="112" y="104" width="46.2" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="163.2" y="113" font-size="10" font-weight="600">10.4%</text>
+<text x="14" y="133" font-size="10">paid_social</text>
+<rect x="112" y="122" width="44" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="161" y="131" font-size="10">9.9%</text>
+<rect x="112" y="134" width="167.6" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="284.6" y="143" font-size="10" font-weight="600">37.7%</text>
+<text x="14" y="163" font-size="10">referral</text>
+<rect x="112" y="152" width="85.8" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="202.8" y="161" font-size="10">19.3%</text>
+<rect x="112" y="164" width="62.7" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="179.7" y="173" font-size="10" font-weight="600">14.1%</text>
+<path d="M112 26 L112 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="192" font-size="10.5" font-weight="600">14-day conversion</text>
+<text x="14" y="221" font-size="10">app_store</text>
+<rect x="112" y="210" width="75.7" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="192.7" y="219" font-size="10">10.6%</text>
+<rect x="112" y="222" width="62.9" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="179.9" y="231" font-size="10" font-weight="600">8.8%</text>
+<text x="14" y="251" font-size="10">organic_search</text>
+<rect x="112" y="240" width="100" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="217" y="249" font-size="10">14.0%</text>
+<rect x="112" y="252" width="92.9" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="209.9" y="261" font-size="10" font-weight="600">13.0%</text>
+<text x="14" y="281" font-size="10">paid_search</text>
+<rect x="112" y="270" width="56.4" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="173.4" y="279" font-size="10">7.9%</text>
+<rect x="112" y="282" width="68.6" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="185.6" y="291" font-size="10" font-weight="600">9.6%</text>
+<text x="14" y="311" font-size="10">paid_social</text>
+<rect x="112" y="300" width="23.6" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="140.6" y="309" font-size="10">3.3%</text>
+<rect x="112" y="312" width="28.6" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="145.6" y="321" font-size="10" font-weight="600">4.0%</text>
+<text x="14" y="341" font-size="10">referral</text>
+<rect x="112" y="330" width="166.4" height="10" fill="#00a07a" fill-opacity="0.9" />
+<text x="283.4" y="339" font-size="10">23.3%</text>
+<rect x="112" y="342" width="160.7" height="10" fill="#9a6be0" fill-opacity="0.9" />
+<text x="277.7" y="351" font-size="10" font-weight="600">22.5%</text>
+<path d="M112 204 L112 354" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="14" y="356" width="12" height="8" fill="#00a07a" fill-opacity="0.9" />
+<text x="32" y="363.5" font-size="10">before the campaign</text>
+<rect x="160" y="356" width="12" height="8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="178" y="363.5" font-size="10">during the campaign</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* only the channel split has rates that hold still while the shares move: `paid_social` goes from 9.9% to 37.7% of the people, converting at 3.3% and then 4.0%. The platform split tells another story: web holds (15.3% to 15.1%) while iOS falls from 14.9% to 10.3% and Android from 8.1% to 5.4%. The region split says it fell everywhere, by 2.0 to 3.8 points, with hardly a share moving: a global fault. Three splits, three stories. Platform stands in for channel: C10 showed that web people come mostly through organic search and referral, iOS people through the app store and paid social. A split is a clue, not the cause.
+
+### 4. Mix or rate
+
+**Idea.** A blended rate is the sum, over the segments, of each one's share of the people times its own rate. It can change because the shares moved (the *mix*), because the rates moved (the *rate*), or both. To split them, give the later people the earlier rates and see where the blend lands: the distance covered is the mix part, and what remains is the rate part. This is one choice of order; the Why gives the other.
+
+**Try it.** The campaign weeks with the old channel rates, and the standard error of the rate part:
+
+```python
+w0, w1 = base["channel"].value_counts(normalize=True), camp["channel"].value_counts(normalize=True)      # shares of the people
+r0, r1 = base.groupby("channel")["bought"].mean(), camp.groupby("channel")["bought"].mean()             # conversion by channel
+n0, n1 = base["channel"].value_counts(), camp["channel"].value_counts()
+before, during = base["bought"].mean(), camp["bought"].mean()
+counterfactual = (w1 * r0).sum()                                    # the later shares with the earlier rates
+mix_part, rate_part = counterfactual - before, during - counterfactual
+print(f"{100 * before:.2f} {100 * during:.2f} {100 * (during - before):.2f}")
+print(f"{100 * counterfactual:.2f} {100 * mix_part:.2f} {100 * rate_part:.2f}")
+se = np.sqrt((w1 ** 2 * (r1 * (1 - r1) / n1 + r0 * (1 - r0) / n0)).sum())      # the standard error of the rate part
+print(f"{100 * se:.2f}", round(float(rate_part / se), 2))
+# the other order: the earlier shares for the rate part, so the mix part is what is left, at the later rates
+rate_early = (w0 * (r1 - r0)).sum()
+mix_late = (during - before) - rate_early
+interaction = rate_part - rate_early                                # the part that depends on both changes at once
+se_early = np.sqrt((w0 ** 2 * (r1 * (1 - r1) / n1 + r0 * (1 - r0) / n0)).sum())
+print(f"{100 * mix_late:.2f} {100 * rate_early:.2f} {100 * interaction:+.2f}")
+print(f"{100 * se_early:.2f}", round(float(rate_early / se_early), 2))
+```
+
+**Predict:** give the campaign people the conversion of each channel from the five weeks before, and keep the channel mix of the campaign. What conversion would the campaign weeks have had: closer to 12.95 or to 9.88 percent?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+12.95 9.88 -3.07
+10.09 -2.86 -0.21
+0.60 -0.35
+-2.48 -0.59 +0.38
+0.68 -0.87
+```
+
+<figure>
+<svg viewBox="0 0 360 252" width="360" role="img" aria-labelledby="dg-wat-t dg-wat-d">
+<title id="dg-wat-t">From 12.95 to 9.88 percent: the part from the mix and the part inside the channels</title>
+<desc id="dg-wat-d">A step chart of the 14-day conversion in percent on a scale from 9 to 13. A blue bar for the five weeks before the campaign reaches 12.95. A red step down of 2.86 points, the change of mix, leads to 10.09, the conversion the campaign weeks would have had with the old channel rates. A gray step down of 0.21 points, the change inside the channels, leads to a blue bar at 9.88. A whisker on the gray step marks one standard error, 0.60 points, which is longer than the step.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">14-day conversion, percent (the scale starts at 9)</text>
+<rect x="26" y="61.9" width="40" height="148.1" fill="#0072b2" fill-opacity="0.9" />
+<text x="50" y="56.9" font-size="10" text-anchor="middle" font-weight="600">12.95</text>
+<rect x="110" y="61.9" width="40" height="107.2" fill="#c0392b" fill-opacity="0.9" />
+<text x="130" y="183.1" font-size="10" text-anchor="middle" font-weight="600">-2.86</text>
+<rect x="190" y="169.1" width="40" height="7.9" fill="currentColor" fill-opacity="0.45" />
+<text x="186" y="177.2" font-size="10" text-anchor="end" font-weight="600">-0.21</text>
+<path d="M210 199.5 L210 154.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.9" />
+<path d="M204 154.5 L216 154.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.9" />
+<path d="M204 199.5 L216 199.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.9" />
+<rect x="270" y="177" width="40" height="33" fill="#0072b2" fill-opacity="0.9" />
+<text x="290" y="172" font-size="10" text-anchor="middle" font-weight="600">9.88</text>
+<path d="M70 61.9 L110 61.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3" />
+<path d="M150 169.1 L190 169.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3" />
+<path d="M230 177 L270 177" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3" />
+<path d="M30 210 L330 210" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="50" y="226" font-size="10" text-anchor="middle" fill-opacity="0.8">before</text>
+<text x="130" y="226" font-size="10" text-anchor="middle" fill-opacity="0.8">mix of people</text>
+<text x="210" y="226" font-size="10" text-anchor="middle" fill-opacity="0.8">inside channels</text>
+<text x="290" y="226" font-size="10" text-anchor="middle" fill-opacity="0.8">during</text>
+<text x="224" y="150.5" font-size="10">± 1 SE (0.60)</text>
+<text x="190" y="246" font-size="10" text-anchor="middle">mix part, then rate part, in percentage points</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* with the old rates and the new mix the blend would have been 10.09 percent: the mix part is 10.09 − 12.95 = −2.86 points of the −3.07, and the rate part is 9.88 − 10.09 = −0.21, a third of its standard error (0.60 points): noise. The order is a choice, because the two changes also act together. With the earlier shares for the rate part, the rate part is −0.59 (standard error 0.68, so still about one) and the mix part −2.48; the difference, +0.38 points, is their interaction. Either way most of the fall is who signed up: say which order you used before you say how much the mix explains.
+
+In symbols, with $$k$$ a segment, $$w_k$$ its share of the people, $$r_k$$ its conversion, $$n_k$$ its number of people, and the subscripts 0 for the earlier period and 1 for the later one, the blend is $$\sum_k w_k r_k$$ and
+
+$$
+\text{mix} = \sum_k (w_{k,1} - w_{k,0})\, r_{k,0}, \qquad \text{rate} = \sum_k w_{k,1}\,(r_{k,1} - r_{k,0})
+$$
+
+The two add up to the change of the blend. The other order uses $$w_{k,0}$$ in the rate part and $$r_{k,1}$$ in the mix part, and the two orders differ by the interaction $$\sum_k (w_{k,1} - w_{k,0})(r_{k,1} - r_{k,0})$$. The standard error of the rate part, with the later shares fixed, is
+
+$$
+\text{SE} = \sqrt{\sum_k w_{k,1}^{2}\left(\frac{r_{k,1}(1 - r_{k,1})}{n_{k,1}} + \frac{r_{k,0}(1 - r_{k,0})}{n_{k,0}}\right)}
+$$
+
+### 5. Say it, and say what would show you wrong
+
+**Idea.** A diagnosis has five parts: what moved, with its two numbers; where; why, with the size of each cause; how sure; and what would show it wrong, a prediction that can fail. Then name the next step.
+
+**Try it.** If the mix explains the drop, it should reverse when the mix does. Check the people who signed up after the campaign stopped, then print the diagnosis from the variables of unit 4:
+
+```python
+print(len(after), f"{100 * (after['channel'] == 'paid_social').mean():.1f}%", f"{100 * after['bought'].mean():.1f}%")
+verdict = (f"Conversion fell {100 * (before - during):.2f} points, from {100 * before:.2f}% to {100 * during:.2f}%. {100 * -mix_part:.2f} points come from who signed up: "
+           f"paid_social went from {100 * w0['paid_social']:.1f}% to {100 * w1['paid_social']:.1f}% of the signups. The other {100 * -rate_part:.2f} points, inside the channels, are within noise (standard error {100 * se:.2f}).")
+print(verdict)
+```
+
+**Predict:** the campaign stopped on June 7. If a change of mix explains the drop, what should happen to the `paid_social` share and to the conversion of the people who signed up from June 8 to 16?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1078 9.3% 14.7%
+Conversion fell 3.07 points, from 12.95% to 9.88%. 2.86 points come from who signed up: paid_social went from 9.9% to 37.7% of the signups. The other 0.21 points, inside the channels, are within noise (standard error 0.60).
+```
+
+</details>
+
+*Why:* the `paid_social` share is back to 9.3 percent and conversion to 14.7 percent, from 1,078 people: the prediction could have failed and did not. It even passes the 12.95 before the campaign, which Exercise 1 splits. The next step is a test, not a chart: report conversion by channel, so that a changed mix cannot look like a failing product.
+
+<Aside type="tip" title="Remember">
+
+- Check in this order: the pipeline (names, gaps, late and repeated rows), the calendar (the same weekday, a holiday for those who keep it), the segments, then mix against rate.
+- Split by a column fixed before the outcome and look at both the shares and the rates. Two splits can tell two stories.
+- The mix part has an order: say it, and read the rate part against its standard error.
+- State a prediction that can fail, and test it on the next data.
+
+**Common trap:** "it fell in every region, so it is a global fault". Every region fell by 2.0 to 3.8 points while the channel mix alone explains 2.86 of the 3.07.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-diagnosing-a-movement-1">
+
+**After the campaign ended, conversion recovered. How much of the climb is mix and how much is rate?** Split the change from the campaign weeks to the people who signed up from June 8 to 16 into its mix part and its rate part, by channel, in the order of unit 4: the mix part is the later shares with the earlier rates, minus the earlier blend; the rate part is the later shares times the change of each rate. The shares and rates are given. Write the two sums in points. Expected: `answer_1` is [mix, rate], each rounded to 2 decimals.
+
+```python
+shares_camp = camp["channel"].value_counts(normalize=True)           # given: shares of the campaign weeks
+shares_after = after["channel"].value_counts(normalize=True)         # given: shares of June 8 to 16
+rate_camp = camp.groupby("channel")["bought"].mean()                 # given: conversion by channel, campaign weeks
+rate_after = after.groupby("channel")["bought"].mean()               # given: and June 8 to 16
+# the mix part and the rate part of the change in conversion, in points
+answer_1 = None  # replace None with [mix, rate]: points, each rounded to 2 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 4: the mix part is `((w1 - w0) * r0).sum()` there, the later shares with the earlier rates minus the earlier blend, and the rate part is `(w1 * (r1 - r0)).sum()`. Use the variables of this exercise, and multiply by 100 for points.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+mix_part = ((shares_after - shares_camp) * rate_camp).sum()
+rate_part = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+mix_part = ((shares_after - shares_camp) * rate_camp).sum()
+rate_part = (shares_after * (rate_after - rate_camp)).sum()
+answer_1 = [round(float(100 * mix_part), 2), round(float(100 * rate_part), 2)]
+rate_other = (shares_camp * (rate_after - rate_camp)).sum()          # the other order: the earlier shares for the rate part
+print(round(float(100 * (mix_part + rate_part - rate_other)), 2), round(float(100 * rate_other), 2))
+```
+
+```text
+3.96 0.82
+```
+
+The mix part is +2.65 points and the rate part +2.13, in the order of unit 4. The other order gives 3.96 and 0.82: the interaction is 1.31 points, large here because the shares moved a lot, so the split depends on the order and the total, 4.78, does not. The paid_social share fell from 37.7% to 9.3%, which lifts the blend. The standard error of the rate part is 1.13 points, so 2.13 is 1.88 standard errors: not clearly more than chance.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-diagnosing-a-movement-2">
+
+**Does the same walk explain the fall of onboarding?** The share of people who finish onboarding within 14 days (an `onboarding_complete` event; the column `onboarded` is 0 or 1) also fell between the five weeks before April 13 and the campaign weeks. Before you start, say what the result looks like: four numbers. Use the decomposition of unit 4 on `onboarded` and set `answer_2` to [change, mix part, rate part, standard error of the rate part], in points, each rounded to 2 decimals. Write the code in the empty cell. Expected: `answer_2` is a list of four numbers.
+
+<details>
+<summary>Hint</summary>
+
+Unit 4 with the column `onboarded` in place of `bought`: shares, rates and counts by channel for `base` and `camp`, the old rates with the new shares, the two parts, and the standard error of the rate part.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A drop of about a dozen points, a mix part that is most of it, and a rate part with its standard error."*
+
+```python
+t0, t1 = base["onboarded"].mean(), camp["onboarded"].mean()
+q0, q1 = base.groupby("channel")["onboarded"].mean(), camp.groupby("channel")["onboarded"].mean()
+```
+
+</details>
+
+<Solution>
+
+```python
+t0, t1 = base["onboarded"].mean(), camp["onboarded"].mean()
+q0, q1 = base.groupby("channel")["onboarded"].mean(), camp.groupby("channel")["onboarded"].mean()
+counter = (w1 * q0).sum()
+se_o = np.sqrt((w1 ** 2 * (q1 * (1 - q1) / n1 + q0 * (1 - q0) / n0)).sum())
+answer_2 = [round(float(100 * (t1 - t0)), 2), round(float(100 * (counter - t0)), 2), round(float(100 * (t1 - counter)), 2), round(float(100 * se_o), 2)]
+```
+
+Onboarding fell from 74.2% to 62.2%, 12.02 points. The change of mix explains 8.35 of them. The rate part, -3.67 points, is about 3 standard errors (the standard error is 1.19 points), so something besides the mix lowered onboarding inside the channels; look for a group with zero onboarding.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the four checks of a diagnosis in order, and say what each one rules out.
+
+   <details>
+   <summary>answer</summary>
+
+   The pipeline (names, gaps, late and repeated rows: the number no longer measures the same thing), the calendar (weekday, month start, holiday: behavior with a known cause), the segments (where it moved), and mix against rate (whether who is in the number changed, or what they do).
+
+   </details>
+
+<Exercise id="core-diagnosing-a-movement-3">
+
+**Spot the flaw.** A colleague reads the change of conversion inside each channel and says that every channel that moved by a point or more got better or worse. The p-value of each channel's change is given. Fix the line that decides which channels moved so that it follows from the p-value, with a bar of 0.05, and set `answer_3` to [number of channels that moved, the smallest p-value rounded to 2 decimals]. Expected: `answer_3` is a whole number and a number.
+
+```python
+# given: channels (the five channels), change (the change of conversion in each) and p_values (the p-value of each change)
+moved = [channel for channel in channels if abs(change[channel]) >= 0.01]     # colleague: "moved = changed by a point or more"
+answer_3 = [len(moved), round(min(p_values.values()), 2)]
+```
+
+<details>
+<summary>Hint</summary>
+
+Print `p_values` next to `change`. How many channels have a p-value below 0.05?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+moved = [channel for channel in channels if p_values[channel] < ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+moved = [channel for channel in channels if p_values[channel] < 0.05]
+answer_3 = [len(moved), round(min(p_values.values()), 2)]
+```
+
+Three channels changed by a point or more (app_store -1.81, organic_search -1.03 and paid_search +1.71 points), yet no change is larger than chance: the smallest p-value is 0.14, for app_store. A size cutoff ignores how many people each channel has.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can walk from a moving number to a cause in order, split by segment, tell a change of mix from a change of rate with the order and the sizes of both, and write the diagnosis with a prediction that could fail.*
+Test: Exercise core-diagnosing-a-movement-2, done from the notebook without opening the hints.
+
+The pattern to remember: **rule out the data, then the calendar, then split; before you ask what got worse, ask who is in the number.** Next comes [*Designing an A/B test*](/core/experiments-ab-testing/) (C14), where you choose who is in the number.
