@@ -1,0 +1,510 @@
+---
+id: sql-reading-er-diagrams
+title: Reading an entity-relationship diagram
+short_title: Reading ER diagrams
+description: Read crow's foot lines in both directions, tell one-to-one, one-to-many and many-to-many apart, and use a diagram to predict what a join keeps.
+stage: sql
+order: 185
+level: beginner
+duration: 25
+objectives:
+  - Read a crow's foot line in both directions, one sentence for each end
+  - Tell one-to-one, one-to-many, many-to-many and self-reference links apart
+  - Check a cardinality against the data with a count
+  - Predict from a diagram what an INNER JOIN drops and how many rows a join returns
+prerequisites:
+  - sql-relational-model
+datasets:
+  - cafe-sales
+reviewed: 2026-11-21
+sources:
+  - title: 'DuckDB documentation: Constraints'
+    url: https://duckdb.org/docs/stable/sql/constraints
+  - title: 'DuckDB documentation: FROM and JOIN clauses'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/from
+  - title: 'Object Management Group: Unified Modeling Language (UML) 2.5.1'
+    url: https://www.omg.org/spec/UML/2.5.1
+status: draft
+---
+
+TODO(owner): Draft for your edit (D24). Open questions: (1) the lesson comes before the join lessons, so the last unit asks the learner to copy four join queries and read only their row counts; keep that, or move the join counts to *INNER JOIN: pairing rows on a key* (S19)? (2) The crow's foot symbols are our drawing convention, and the line about Chen notation (boxes, diamonds, ovals) has no opened source: add one or cut the line. (3) The cafe-sales data has no one-to-one link, so that kind is shown on the abstract figure only; a one-to-one example would need a new table. (4) `reviewed` is a placeholder; set it when you publish.
+
+A diagram is a map of the keys you met in *Tables, keys and grain* (S18). You read one like a sentence, then check it against the data. Every query on this page runs in the editor under it: press Run.
+
+## The question
+
+A new teammate sends you a diagram of the cafe database and asks, before writing any SQL:
+
+> If I join `orders` to `customers`, will I lose any orders? And if I join `orders` to `order_items`, how many rows will I have?
+
+You can answer both from the diagram, then check. The first rows of `customers`, with the referrals in the last column:
+
+| customer_id | signup_date | city | loyalty_tier | referred_by |
+|---:|---|---|---|---:|
+| 3 | 2025-06-06 | Oakland | gold | |
+| 6 | 2025-06-12 | Alameda | bronze | 3 |
+| 15 | 2025-06-29 | Oakland | silver | 1 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Tables, keys and grain* (S18), which column of `order_items` is its primary key, which are foreign keys, and what is one row?
+
+   <details>
+   <summary>Answer</summary>
+
+   `order_item_id` is the primary key. `order_id` and `product_id` are foreign keys. One row is one product line inside one order.
+
+   </details>
+
+2. Write the query that shows `store_id` is not a key of `orders`.
+
+   <details>
+   <summary>Answer</summary>
+
+   `SELECT COUNT(*), COUNT(DISTINCT store_id) FROM orders;`. A key has two equal counts; here the second is far smaller, because a store repeats on many orders.
+
+   </details>
+
+## The big idea
+
+A diagram draws each table as a box and each key link as a line, and the **mark at each end of the line** says how many rows to expect on that side.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="er-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="er" id="er-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="er" id="er-r1" aria-label="Step 1 of 5: A line from the PK to the FK" />
+<input class="sa-r r2 o3" type="radio" name="er" id="er-r2" aria-label="Step 2 of 5: Read from P: how many C rows?" />
+<input class="sa-r r3 o5" type="radio" name="er" id="er-r3" aria-label="Step 3 of 5: Read from C: how many P rows?" />
+<input class="sa-r r4 o6" type="radio" name="er" id="er-r4" aria-label="Step 4 of 5: INNER JOIN: C3 has no pair" />
+<input class="sa-r r5 o8" type="radio" name="er" id="er-r5" aria-label="Step 5 of 5: LEFT JOIN from C keeps C3" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>P rows</small><span><i class="w1 tmp hl">2</i><i class="w7 d2">2</i></span></span><span class="sa-n c-out"><small>C rows</small><span><i class="w1 tmp hl">3</i><i class="w7 d2">3</i></span></span><span class="sa-n c-flt"><small>INNER</small><span><i class="w5 tmp">—</i><i class="w1 d6 tmp hl">2</i><i class="w2 d7">2</i></span></span><span class="sa-n c-mat"><small>LEFT</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">3</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 224" width="360" role="img" aria-labelledby="er-t er-d">
+<title id="er-t">Read a line from both ends</title>
+<desc id="er-d">Two tables, P and C. A line joins the primary key column of P to the foreign key column of C. The end at P has a bar and a circle: zero or one. The end at C has a three-pronged foot and a circle: zero or many. Read from P: P1 has two C rows and P2 has none. Read from C: C1 and C2 each have one P row, and C3 has an empty key and no P row. An inner join drops C3. A left join keeps C3 with an empty P side.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A line from the PK to the FK</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Read from P: how many C rows?</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · Read from C: how many P rows?</text>
+<text class="f10 b w1 d6 tmp" x="10" y="29">4 · INNER JOIN: C3 has no pair</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · LEFT JOIN from C keeps C3</text>
+<text class="f11 b" x="10" y="14">Read a line from both ends</text>
+<path class="ln dr p8" pathLength="1" d="M56 64H65.5M61 58V70M72.5 64H206M213 64H226M216 64L226 58M216 64L226 70" />
+<circle class="ln" cx="69" cy="64" r="3.5" />
+<circle class="ln" cx="209.5" cy="64" r="3.5" />
+<text class="f10 b mo" x="60" y="52">0..1</text>
+<text class="f10 b mo e" x="222" y="52">0..&#42;</text>
+<text class="f10 b" x="10" y="68">P · PK</text>
+<text class="f10 b" x="232" y="68">C · FK</text>
+<g><rect class="f-src k2" x="10" y="84" width="90" height="24" rx="6" /><rect class="f-src k4 w2 d2 tmp" x="10" y="84" width="90" height="24" rx="6" /><text class="f11 m" x="55" y="100">P1</text></g>
+<g><rect class="f-src k2" x="10" y="134" width="90" height="24" rx="6" /><rect class="f-flt k3 w1 d3 tmp" x="10" y="134" width="90" height="24" rx="6" /><text class="f11 m" x="55" y="150">P2</text></g>
+<g><rect class="f-src k2" x="232" y="84" width="44" height="24" rx="6" /><rect class="f-src k4 w2 d2 tmp" x="232" y="84" width="44" height="24" rx="6" /><text class="f11 m" x="254" y="100">P1</text></g>
+<g><rect class="f-out k2" x="278" y="84" width="44" height="24" rx="6" /><rect class="f-out k3 w4 d2 tmp" x="278" y="84" width="44" height="24" rx="6" /><text class="f11 m" x="300" y="100">C1</text></g>
+<g><rect class="f-src k2" x="232" y="114" width="44" height="24" rx="6" /><rect class="f-src k4 w2 d2 tmp" x="232" y="114" width="44" height="24" rx="6" /><text class="f11 m" x="254" y="130">P1</text></g>
+<g><rect class="f-out k2" x="278" y="114" width="44" height="24" rx="6" /><rect class="f-out k3 w4 d2 tmp" x="278" y="114" width="44" height="24" rx="6" /><text class="f11 m" x="300" y="130">C2</text></g>
+<rect class="bx dsh" x="232" y="144" width="44" height="24" />
+<g><rect class="f-out k2" x="278" y="144" width="44" height="24" rx="6" /><rect class="f-flt k3 w3 d4 tmp" x="278" y="144" width="44" height="24" rx="6" /><text class="f11 m" x="300" y="160">C3</text></g>
+<text class="f10 w2 d2 tmp" x="108" y="100">P1: two C rows</text>
+<text class="f10 b f-flt w1 d3 tmp" x="108" y="150">P2: no C rows</text>
+<text class="f10 e w2 d4 tmp" x="222" y="130">C1, C2: one P row</text>
+<text class="f10 b f-flt e w1 d5 tmp" x="222" y="160">C3: no P row</text>
+<text class="f10 b f-flt w1 d6 tmp" x="10" y="196">INNER JOIN: C3 dropped</text>
+<text class="f10 b w2 d7" x="10" y="196">LEFT JOIN: C3 kept, P empty</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="er-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="er-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="er-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="er-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="er-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="er-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="er-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="er-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="er-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="er-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="er-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="er-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="er-r1">1</label><label class="sa-sb sb2" for="er-r2">2</label><label class="sa-sb sb3" for="er-r3">3</label><label class="sa-sb sb4" for="er-r4">4</label><label class="sa-sb sb5" for="er-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-mat w1 tmp">The line joins the key column of P to the foreign key column of C. Each end carries a mark.<span class="sa-chs"><span class="sa-ch pl">P: 2 rows</span><span class="sa-ch pl">C: 3 rows</span></span></div>
+<div class="c-src w2 d2 tmp">Stand at P: the mark at the C end says how many C rows one P row can have. A circle allows none.<span class="sa-chs"><span class="sa-ch pl">P1: two C rows</span><span class="sa-ch pl">P2: none</span></span></div>
+<div class="c-out w2 d4 tmp">Stand at C: the mark at the P end says how many P rows one C row can have. A circle allows none.<span class="sa-chs"><span class="sa-ch pl">C1, C2: one P row</span><span class="sa-ch pl">C3: none</span></span></div>
+<div class="c-flt w1 d6 tmp">An inner join returns only the rows that find a partner on the other side.<span class="sa-chs"><span class="sa-ch mi">C3 dropped</span><span class="sa-ch ch">2 rows left</span></span></div>
+<div class="c-mat w2 d7">A left join returns every row of its left table, with empty columns where no partner exists.<span class="sa-chs"><span class="sa-ch pl">C3 back, P side empty</span><span class="sa-ch ch">3 rows</span></span></div>
+</div>
+<p class="ca-cap">Each end of the line counts the rows of the table it touches. A circle means zero is allowed: a P row with no C rows, or a C row with no P row.</p>
+<ol class="sa-steps">
+<li>A line from the PK to the FK</li>
+<li>Read from P: how many C rows?</li>
+<li>Read from C: how many P rows?</li>
+<li>INNER JOIN: C3 has no pair</li>
+<li>LEFT JOIN from C keeps C3</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Press Run on each query. Counts cover all 1,800 orders (the canceled one included) and all 3,287 lines.
+
+### 1. Read one line twice
+
+**Idea.** A line joins a primary key (PK) to the foreign key (FK) that names it. Read it from each table in turn: "Each *this* has *how many* of *that*." The mark nearest a table says how many of that table's rows go with one row at the other end. A bar means one, a circle means zero, a three-pronged foot means many.
+
+<figure>
+<svg viewBox="0 0 360 222" width="360" role="img" aria-labelledby="erk-title erk-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="erk-title">The four ends of a crow's foot line</title>
+<desc id="erk-desc">Four short lines, each leaving a table box. A single bar means exactly one, labeled 1. A bar and a circle mean zero or one, labeled 0..1. A bar and a three-pronged foot mean one or many, labeled 1..&#42;. A circle and a three-pronged foot mean zero or many, labeled 0..&#42;.</desc>
+<text x="10" y="18" font-size="14" font-weight="600">Four ends, four meanings</text>
+<rect x="20" y="40" width="60" height="24" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-opacity="0.6" />
+<g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M80 52L91 52M85 46L85 58M90 46L90 58" /><path d="M91 52H150" /></g>
+<text x="86" y="43" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" font-weight="600">1</text>
+<text x="50" y="56" text-anchor="middle" font-size="10" opacity="0.8">table</text>
+<text x="160" y="56" font-size="11"><tspan font-family="ui-monospace, Menlo, Consolas, monospace" font-weight="600">1</tspan>: exactly one</text>
+<rect x="20" y="74" width="60" height="24" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-opacity="0.6" />
+<g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M80 86L89.5 86M85 80L85 92M89.5 86a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" /><path d="M96.5 86H150" /></g>
+<text x="86" y="77" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" font-weight="600">0..1</text>
+<text x="50" y="90" text-anchor="middle" font-size="10" opacity="0.8">table</text>
+<text x="160" y="90" font-size="11"><tspan font-family="ui-monospace, Menlo, Consolas, monospace" font-weight="600">0..1</tspan>: zero or one</text>
+<rect x="20" y="108" width="60" height="24" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-opacity="0.6" />
+<g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M80 120L90 120M90 120L80 114M90 120L80 120M90 120L80 126M94 114L94 126" /><path d="M94 120H150" /></g>
+<text x="86" y="111" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" font-weight="600">1..&#42;</text>
+<text x="50" y="124" text-anchor="middle" font-size="10" opacity="0.8">table</text>
+<text x="160" y="124" font-size="11"><tspan font-family="ui-monospace, Menlo, Consolas, monospace" font-weight="600">1..&#42;</tspan>: one or many</text>
+<rect x="20" y="142" width="60" height="24" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-opacity="0.6" />
+<g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M80 154L90 154M90 154L80 148M90 154L80 154M90 154L80 160M90 154L93 154M93 154a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" /><path d="M100 154H150" /></g>
+<text x="86" y="145" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" font-weight="600">0..&#42;</text>
+<text x="50" y="158" text-anchor="middle" font-size="10" opacity="0.8">table</text>
+<text x="160" y="158" font-size="11"><tspan font-family="ui-monospace, Menlo, Consolas, monospace" font-weight="600">0..&#42;</tspan>: zero or many</text>
+<text x="10" y="196" font-size="11" opacity="0.8">The mark nearest a table says how many of that table's rows</text>
+<text x="10" y="211" font-size="11" opacity="0.8">go with one row of the table at the other end.</text>
+</svg>
+</figure>
+
+Read the line between `stores` and `orders` on the next diagram: each order has exactly one store, and each store has zero or many orders.
+
+<figure>
+<svg viewBox="0 0 360 520" width="360" role="img" aria-labelledby="er5-title er5-desc" font-family="inherit" font-size="12" fill="currentColor">
+<title id="er5-title">The five cafe-sales tables as an entity-relationship diagram</title>
+<desc id="er5-desc">Five tables, each a box with its primary key (PK) and foreign keys (FK). Each line runs from a primary key to the foreign key that names it, with crow's foot symbols at both ends. Each order has exactly one store; each store has zero or many orders. Each order has zero or one customer; each customer has zero or many orders. Each customer has zero or one referrer, another customer, and each customer refers zero or many customers. Each order line has exactly one order; each order has one or many lines. Each order line has exactly one product; each product has zero or many lines. Orders and products are therefore many-to-many through order_items.</desc>
+<text x="10" y="18" font-size="14" font-weight="600">cafe-sales as an ER diagram</text>
+<rect x="60" y="30" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="60" y="30" width="150" height="42" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<line x1="60" y1="52" x2="210" y2="52" stroke="currentColor" stroke-opacity="0.6" />
+<text x="68" y="45" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">stores</text>
+<text x="68" y="66" font-size="10"><tspan font-weight="700">PK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">store_id</tspan></text>
+<rect x="60" y="102" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="60" y="102" width="150" height="62" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<line x1="60" y1="124" x2="210" y2="124" stroke="currentColor" stroke-opacity="0.6" />
+<text x="68" y="117" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">customers</text>
+<text x="68" y="138" font-size="10"><tspan font-weight="700">PK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">customer_id</tspan></text>
+<text x="68" y="158" font-size="10"><tspan font-weight="700">FK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">referred_by</tspan></text>
+<rect x="60" y="194" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="60" y="194" width="150" height="82" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<line x1="60" y1="216" x2="210" y2="216" stroke="currentColor" stroke-opacity="0.6" />
+<text x="68" y="209" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">orders</text>
+<text x="68" y="230" font-size="10"><tspan font-weight="700">PK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">order_id</tspan></text>
+<text x="68" y="250" font-size="10"><tspan font-weight="700">FK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">customer_id</tspan></text>
+<text x="68" y="270" font-size="10"><tspan font-weight="700">FK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">store_id</tspan></text>
+<rect x="60" y="306" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="60" y="306" width="150" height="82" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<line x1="60" y1="328" x2="210" y2="328" stroke="currentColor" stroke-opacity="0.6" />
+<text x="68" y="321" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">order_items</text>
+<text x="68" y="342" font-size="10"><tspan font-weight="700">PK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">order_item_id</tspan></text>
+<text x="68" y="362" font-size="10"><tspan font-weight="700">FK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">order_id</tspan></text>
+<text x="68" y="382" font-size="10"><tspan font-weight="700">FK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">product_id</tspan></text>
+<rect x="60" y="416" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="60" y="416" width="150" height="42" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<line x1="60" y1="438" x2="210" y2="438" stroke="currentColor" stroke-opacity="0.6" />
+<text x="68" y="431" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">products</text>
+<text x="68" y="452" font-size="10"><tspan font-weight="700">PK</tspan> <tspan font-family="ui-monospace, Menlo, Consolas, monospace">product_id</tspan></text>
+<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+<path d="M210 62L221 62M215 56L215 68M220 56L220 68" />
+<path d="M210 266L220 266M220 266L210 260M220 266L210 266M220 266L210 272M220 266L223 266M223 266a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M221 62H262V266H230" />
+<path d="M210 134L219.5 134M215 128L215 140M219.5 134a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M210 246L220 246M220 246L210 240M220 246L210 246M220 246L210 252M220 246L223 246M223 246a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M226.5 134H242V246H230" />
+<path d="M60 134L50.5 134M55 128L55 140M43.5 134a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M60 154L50 154M50 154L60 148M50 154L60 154M50 154L60 160M50 154L47 154M40 154a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M43.5 134H22V154H40" />
+<path d="M60 226L49 226M55 220L55 232M50 220L50 232" />
+<path d="M60 358L50 358M50 358L60 352M50 358L60 358M50 358L60 364M46 352L46 364" />
+<path d="M49 226H22V358H46" />
+<path d="M210 448L221 448M215 442L215 454M220 442L220 454" />
+<path d="M210 378L220 378M220 378L210 372M220 378L210 378M220 378L210 384M220 378L223 378M223 378a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0" />
+<path d="M221 448H242V378H230" />
+</g>
+<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" font-weight="600">
+<text x="214" y="53" text-anchor="start">1</text>
+<text x="214" y="281" text-anchor="start">0..&#42;</text>
+<text x="214" y="125" text-anchor="start">0..1</text>
+<text x="214" y="237" text-anchor="start">0..&#42;</text>
+<text x="56" y="125" text-anchor="end">0..1</text>
+<text x="56" y="169" text-anchor="end">0..&#42;</text>
+<text x="56" y="217" text-anchor="end">1</text>
+<text x="56" y="373" text-anchor="end">1..&#42;</text>
+<text x="214" y="463" text-anchor="start">1</text>
+<text x="214" y="369" text-anchor="start">0..&#42;</text>
+</g>
+<text x="10" y="492" font-size="11" opacity="0.8">PK primary key, FK foreign key. Some columns are left out.</text>
+<text x="10" y="506" font-size="11" opacity="0.8">Each line runs from a PK row to the FK row that names it.</text>
+</svg>
+</figure>
+
+**Predict:** the diagram says each order has exactly one store. How many orders will have an empty `store_id`, and how many different stores will the column use?
+
+**Try it:**
+
+<RunSQL query={`SELECT COUNT(*) AS orders,
+       COUNT(store_id) AS with_store,
+       COUNT(DISTINCT store_id) AS stores_used
+FROM orders;`} />
+
+Expected: 1 row, 3 columns. *Why:* the result is `1800 | 1800 | 3`. "Exactly one" means never empty, and no row breaks it. The three stores all have orders, yet the diagram says "zero or many": a new store has none. A diagram states the rule the design allows; a count shows only what the rows hold today.
+
+### 2. A circle means "may be empty"
+
+**Idea.** A circle beside a bar sets the minimum to zero: the foreign key may be empty, or a parent may have no children. A bar alone sets the minimum to one.
+
+On the `orders` and `customers` line the diagram has `0..1` at the customers end and `0..*` at the orders end.
+
+**Predict:** how many orders have an empty `customer_id`? And do all 150 customers appear in `orders`?
+
+**Try it:** the orders with no customer.
+
+<RunSQL query={`SELECT * FROM orders WHERE customer_id IS NULL;`} />
+
+Expected: 6 columns. *Why:* the empty `customer_id` is the walk-in order 1335 of *Bring in a value by key with XLOOKUP* (E8), a visit without a loyalty card. That is the `0..1`.
+
+**Try it:** the other end.
+
+<RunSQL query={`SELECT COUNT(DISTINCT customer_id) AS customers_who_ordered FROM orders;`} />
+
+Expected: 1 row, 1 column. *Why:* compare it with the 150 rows of `customers`: the difference is the `0..*` circle, customers with no order at all.
+
+### 3. Many on both sides needs a middle table
+
+**Idea.** One order holds several products, and one product is on many orders. A single column cannot hold that, so a table in the middle, a **link table**, holds one row for each pair. Its foreign keys point to both parents. Read each line of the link table separately: the diagram shows `order_items` with one order and one product per row.
+
+The kinds of link, from their marks:
+
+| Marks at the two ends | Kind | Where the foreign key sits |
+|---|---|---|
+| single and single | one-to-one | the child's foreign key is also its primary key or unique; cafe-sales has none |
+| single and many | one-to-many | on the many side: `stores` to `orders` |
+| many on both sides, through a table | many-to-many | in the link table: `orders`, `order_items`, `products` |
+| a table with itself | self-reference | in the same table: `customers.referred_by` |
+
+**Predict:** the line from `orders` to `order_items` has `1..*` at the `order_items` end. What are the fewest and the most lines one order has?
+
+**Try it:**
+
+<RunSQL query={`WITH per_order AS (
+  SELECT order_id, COUNT(*) AS lines
+  FROM order_items
+  GROUP BY order_id
+)
+SELECT MIN(lines) AS fewest, MAX(lines) AS most, COUNT(*) AS orders_with_lines
+FROM per_order;`} />
+
+Expected: 1 row, 3 columns. *Why:* the minimum of one holds (every order has a line), and orders with lines add up to all 1,800. The maximum is the largest count today. The `*` in the diagram sets no upper limit, so it is a design rule, not a measurement.
+
+*Excel:* a link table is the long list you get when you give each order and product pair its own row, the tidy layout of *Rows, columns and tidy layout* (E1).
+
+### 4. A table can point at itself
+
+**Idea.** A self-reference holds a key of the same table. On the diagram it is a line that leaves a box and comes back to it. `customers.referred_by` holds the `customer_id` of the customer who made the referral. Read it the same way: each customer has zero or one referrer, and each customer refers zero or many others.
+
+**Predict:** how many customers have no referrer?
+
+**Try it:**
+
+<RunSQL query={`SELECT COUNT(*) AS without_referrer FROM customers WHERE referred_by IS NULL;`} />
+
+Expected: 1 row, 1 column. *Why:* that is the `0..1` circle at the referrer end, a row with no parent. The other customers each name one parent, a customer of the same table.
+
+### 5. Plan a join before you write it
+
+**Idea.** Before a join, read the line three times. Which two keys match? What is one row afterwards: with a many end, one row per child. And does an optional end matter? An INNER JOIN keeps only pairs that match, so a row whose key is empty or has no partner disappears. A LEFT JOIN keeps every row of the table on its left. The DuckDB documentation: "A join that is not OUTER is INNER (only rows that get paired are returned)."
+
+The join syntax comes in the next lessons (*INNER JOIN: pairing rows on a key*, S19, and *LEFT JOIN and finding rows with no match*, S20). Here you only run the four queries and read their row counts.
+
+**Predict** from what the first four units showed. Write four numbers before you run anything: (a) `orders` INNER JOIN `customers`; (b) `orders` LEFT JOIN `customers`; (c) `customers` LEFT JOIN `orders`; (d) `orders` INNER JOIN `order_items`.
+
+**Try it:**
+
+<RunSQL query={`SELECT COUNT(*) AS rows_a
+FROM orders AS o
+INNER JOIN customers AS c ON c.customer_id = o.customer_id;`} />
+
+<RunSQL query={`SELECT COUNT(*) AS rows_b
+FROM orders AS o
+LEFT JOIN customers AS c ON c.customer_id = o.customer_id;`} />
+
+<RunSQL query={`SELECT COUNT(*) AS rows_c
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.customer_id;`} />
+
+<RunSQL query={`SELECT COUNT(*) AS rows_d
+FROM orders AS o
+INNER JOIN order_items AS i ON i.order_id = o.order_id;`} />
+
+Expected: each 1 row, 1 column. *Why:* (a) loses the walk-in order, so 1,799. (b) keeps all 1,800: its missing customer comes back empty. (c) starts from 150 customers and keeps the 5 who never ordered once each, next to the 1,799 orders that have a customer: 1,804. (d) gives one row per line, 3,287, because the child end is many. *Excel:* an `XLOOKUP` that finds no key returns `#N/A` (E8); an INNER JOIN drops that row, a LEFT JOIN keeps it with an empty cell.
+
+<Aside type="note" title="Other diagrams: recognition only">
+
+You will meet two other notations. **Chen notation** draws entities as boxes, relationships as diamonds and attributes as ovals. A **UML class diagram** is a software-design drawing; it writes the same counts as numbers at the line ends, and the UML specification gives the form `lower..upper`, where `*` is an unlimited upper bound and a lone `*` stands for `0..*`.
+
+| In UML | What it looks like | In tables |
+|---|---|---|
+| Multiplicity `1`, `0..1`, `1..*`, `*` | numbers at the ends of a line | `\|\|`, `o\|`, `\|<`, `o<`: the four marks of this lesson |
+| Association | a plain line | a foreign key (one-to-many) or a link table (many-to-many) |
+| Aggregation | a hollow diamond at the whole's end; "shared" parts | an ordinary foreign key; the specification leaves the exact meaning to the application area |
+| Composition | a filled diamond | a foreign key on the part's table, usually required; the specification says parts go when the whole is deleted, which you must write as a rule |
+| Inheritance (generalization) | a hollow triangle pointing at the general class | one table with a type column, or one table for each subtype: see *Designing tables: a workflow* |
+
+You will not draw a UML diagram here.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- Read each line twice, once from each table: "each *this* has *how many* of *that*".
+- A bar means one, a circle means zero, a foot means many. The mark nearest a table counts that table's rows.
+- Many-to-many always has a link table in the middle, with a foreign key to each parent.
+- Before a join: which keys match, what one row is afterwards, and whether an optional end makes INNER and LEFT disagree.
+
+**Common trap: "the symbols describe the data."** They describe the rule the design allows. All three stores have orders today, but the line still says zero or many, and only a constraint (S31) makes the database refuse a row that breaks the rule. Check a mark with a count, and do not read a count as a rule.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-reading-er-diagrams-1">
+
+**Is the pair `(order_id, product_id)` a key of the link table `order_items`?** Expected: 1 row, 2 columns: `3287 | 3287`.
+
+Done for you: the number of rows.
+
+<RunSQL query={`SELECT COUNT(*) AS row_count FROM order_items;`} />
+
+Now finish it: add a second column that counts the different pairs, then say what the two equal numbers mean for a product on an order.
+
+<details>
+<summary>Hint</summary>
+
+`COUNT(DISTINCT ...)` accepts several columns when you put them in parentheses.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS row_count,
+       COUNT(DISTINCT (order_id, ...)) AS distinct_pairs
+FROM order_items;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS row_count,
+       COUNT(DISTINCT (order_id, product_id)) AS distinct_pairs
+FROM order_items;
+```
+
+`3287 | 3287`. No pair repeats, so in these rows a product appears at most once on an order, and the pair of foreign keys could serve as the key of the link table. The table has its own one-column key, `order_item_id`, instead.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-reading-er-diagrams-2">
+
+**How many orders have one line, two lines and three lines?**
+
+Before you run anything, write one comment in the editor: what the `1..*` at the `order_items` end predicts for the smallest group, and what it does not predict for the largest. Then write the query.
+
+Expected shape, to check your comment against: 3 rows, 2 columns (the number of lines, the number of orders). The orders add up to all 1,800, the canceled one included.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Count the lines of each order first, then count how many orders share each count: two levels of counting.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"Each possible number of lines, with the number of orders that have exactly that many."*
+
+</details>
+
+<Solution>
+
+```sql
+WITH per_order AS (
+  SELECT order_id, COUNT(*) AS lines
+  FROM order_items
+  GROUP BY order_id
+)
+SELECT lines, COUNT(*) AS orders
+FROM per_order
+GROUP BY lines
+ORDER BY lines;
+```
+
+`1 | 664`, `2 | 785`, `3 | 351`, and 664 + 785 + 351 = 1,800. The `1..*` predicts that no order has zero lines, and the smallest group confirms it. It does not say three is the most: the largest group is a measurement, and a bigger basket would not break the diagram.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: read the four marks `||`, `o|`, `|<` and `o<` as words, and say what an INNER JOIN does to a row whose foreign key is empty.
+
+<details>
+<summary>Answer</summary>
+
+Exactly one, zero or one, one or many, zero or many. An INNER JOIN drops a row whose foreign key is empty, because nothing pairs with it; a LEFT JOIN keeps it, with empty columns from the other table.
+
+</details>
+
+<Exercise id="sql-reading-er-diagrams-3">
+
+**Spot the flaw.** A colleague reads the loop on `customers` and says "each customer refers zero or many others, so counting `referred_by` counts the customers who referred someone". The query gives 30 and the report says "30 referrers".
+
+<RunSQL query={`SELECT COUNT(referred_by) AS referrers FROM customers;`} />
+
+Expected from that query: 1 row, 1 column: `30`. What does the 30 count, and what is the right query?
+
+<Solution>
+
+`COUNT(referred_by)` counts the rows whose `referred_by` is filled: customers who *have* a referrer, which is the `0..1` end of the loop. The question is about the other end, customers who referred someone, and a customer who referred two others is counted twice. Count the different values:
+
+```sql
+SELECT COUNT(DISTINCT referred_by) AS referrers FROM customers;
+```
+
+Expected: 1 row, 1 column: `29`. Customer 24 referred two customers, 30 and 34, so 30 customers have a referrer and 29 customers referred someone. Count the end you were asked about.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read a crow's foot line in both directions, name the kind of link, check a mark with a count, and say from the diagram which rows an INNER JOIN will drop.*
+Test: Exercise sql-reading-er-diagrams-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **read each line twice, then count to check the mark.**

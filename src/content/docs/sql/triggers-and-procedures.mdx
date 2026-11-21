@@ -1,0 +1,501 @@
+---
+id: sql-triggers-and-procedures
+title: Triggers and stored procedures
+short_title: Triggers, procedures
+description: Know what a trigger and a stored procedure do, when teams use them, what they cost, and which of them DuckDB, SQLite and PostgreSQL have.
+stage: sql
+order: 325
+level: intermediate
+duration: 28
+objectives:
+  - Say what a trigger does, and when it fires (before or after, per row or per statement)
+  - Say what a stored procedure is, and how a DuckDB macro differs from one
+  - Name three jobs that triggers do and three costs they bring
+  - Choose a simpler tool, such as a transaction or a view, when it does the job
+prerequisites:
+  - sql-modify-data-transactions
+  - sql-views
+  - sql-create-table-constraints
+  - sql-inner-join
+datasets:
+  - cafe-sales
+reviewed: 2026-11-21
+sources:
+  - title: 'DuckDB documentation: CREATE TRIGGER statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_trigger
+  - title: 'DuckDB documentation: CREATE MACRO statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_macro
+  - title: 'DuckDB documentation: Statements overview'
+    url: https://duckdb.org/docs/stable/sql/statements/overview
+  - title: 'PostgreSQL documentation: CREATE TRIGGER'
+    url: https://www.postgresql.org/docs/current/sql-createtrigger.html
+  - title: 'PostgreSQL documentation: PL/pgSQL trigger functions'
+    url: https://www.postgresql.org/docs/current/plpgsql-trigger.html
+  - title: 'PostgreSQL documentation: User-defined procedures'
+    url: https://www.postgresql.org/docs/current/xproc.html
+  - title: 'PostgreSQL documentation: CREATE PROCEDURE'
+    url: https://www.postgresql.org/docs/current/sql-createprocedure.html
+  - title: 'PostgreSQL documentation: Privileges'
+    url: https://www.postgresql.org/docs/current/ddl-priv.html
+  - title: 'SQLite documentation: CREATE TRIGGER'
+    url: https://www.sqlite.org/lang_createtrigger.html
+  - title: 'SQLite documentation: SQL features that SQLite does not implement'
+    url: https://www.sqlite.org/omitted.html
+  - title: 'SQLite documentation: SQL as understood by SQLite (list of statements)'
+    url: https://www.sqlite.org/lang.html
+status: draft
+---
+
+TODO(owner): Draft for your edit (D24). Open questions: (1) The in-page editor runs DuckDB 1.4.3, which has no triggers, while DuckDB 2.0 added `CREATE TRIGGER`; the owner brief said DuckDB had none, and the 2.0 documentation says otherwise. The trigger blocks below are therefore read only, with their results copied from runs on DuckDB 2.0.0, SQLite 3.53.1 (through Python) and PostgreSQL 16; the lesson does not use a notebook because the SQL stage has none (D43). Do you want a Colab path for this one lesson (a SPEC change), or keep the read-only blocks and turn them into editor blocks when the page's engine reaches 2.0? (2) Why analytics teams avoid logic in triggers is taught through costs the documentation shows (statements a trigger blocks, privileges it runs with); a hiring-market or practice source would strengthen it. (3) The PostgreSQL blocks were run on version 16 and the pages are the current ones. (4) `reviewed` is a placeholder; set it when you publish.
+
+In *Saving a query as a view* (S28) you met the word trigger in one box. Here you see what one does, what the other half of the title, a stored procedure, is, and why you will often not write either. Blocks marked **Read only** do not run in the editor: this page's editor has no triggers, so their results are copied from runs on the engine named above each one. Every other block runs in the editor: press Run.
+
+## The question
+
+The owner of the cafes asks:
+
+> Last month someone raised a price and nobody wrote it down. Can the database keep a log of every price change by itself?
+
+The first rows of the `products` table, the prices that change:
+
+| product_id | product_name | category | unit_price_usd |
+|---:|---|---|---:|
+| 1 | Espresso | coffee | 3.00 |
+| 2 | Americano | coffee | 3.50 |
+| 3 | Latte | coffee | 4.50 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Inserting, updating and deleting safely* (S32), write the four lines that change a price and write its log row so that both happen or neither does.
+
+   <details>
+   <summary>Answer</summary>
+
+   `BEGIN;`, the `UPDATE`, the `INSERT` into the log, then `COMMIT;`. If anything fails before the commit, `ROLLBACK;` undoes both.
+
+   </details>
+
+2. In S28, what does a view store, and when does it run?
+
+   <details>
+   <summary>Answer</summary>
+
+   A query, not rows. It runs each time something reads it.
+
+   </details>
+
+## The big idea
+
+A **trigger** is a rule the database runs by itself whenever a table changes, and a **stored procedure** is a saved set of statements that you run on purpose, by name.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="tg-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="tg" id="tg-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="tg" id="tg-r1" aria-label="Step 1 of 4: A table with a rule on it" />
+<input class="sa-r r2 o3" type="radio" name="tg" id="tg-r2" aria-label="Step 2 of 4: A change arrives" />
+<input class="sa-r r3 o5" type="radio" name="tg" id="tg-r3" aria-label="Step 3 of 4: The rule fires by itself" />
+<input class="sa-r r4 o8" type="radio" name="tg" id="tg-r4" aria-label="Step 4 of 4: The rule writes a log row" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>T rows</small><span><i class="w1 tmp hl">2</i><i class="w7 d2">2</i></span></span><span class="sa-n c-out"><small>changed</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">1</i><i class="w5 d4">1</i></span></span><span class="sa-n c-mat"><small>fired</small><span><i class="w3 tmp">—</i><i class="w2 d4 tmp hl">1</i><i class="w3 d6">1</i></span></span><span class="sa-n c-out"><small>log rows</small><span><i class="w5 tmp">—</i><i class="w3 d6 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 188" width="360" role="img" aria-labelledby="tg-t tg-d">
+<title id="tg-t">A trigger is a rule on a table that runs when the table changes</title>
+<desc id="tg-d">A table T holds two rows, and a rule is attached to it: on update, write a log row. A row of T changes. The rule fires by itself and an arrow runs from the rule to a second table L, the log. L then holds one log row describing the change.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A table with a rule on it</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · A change arrives</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">3 · The rule fires by itself</text>
+<text class="f10 b w3 d6" x="10" y="29">4 · The rule writes a log row</text>
+<text class="f11 b" x="10" y="14">Change a table, the rule runs</text>
+<text class="f10 b" x="20" y="62">T</text>
+<text class="f10 b" x="240" y="62">L: the log</text>
+<g><rect class="f-src k2" x="20" y="72" width="100" height="24" rx="6" /><text class="f11 m" x="70" y="88">Row 1</text></g>
+<g><rect class="f-src k2" x="20" y="102" width="100" height="24" rx="6" /><rect class="f-out k3 w7 d2" x="20" y="102" width="100" height="24" rx="6" /><text class="f11 m" x="70" y="118">Row 2</text></g>
+<rect class="s-out u1 d2 tmp" x="16" y="98" width="108" height="32" rx="8" />
+<g><rect class="f-mat k2" x="20" y="144" width="161" height="18" rx="9" /><text class="f11 b m" x="100.5" y="157">rule: on UPDATE, log it</text></g>
+<rect class="s-mat u2 d4 tmp" x="16" y="140" width="164" height="26" rx="13" />
+<rect class="bx dsh" x="240" y="72" width="100" height="24" />
+<path class="s-mat dr p5 d4" pathLength="1" d="M184 153L238 90M231.59 92.8L238 90L236.21 96.77" />
+<g class="w3 d6"><rect class="f-out k3" x="240" y="72" width="100" height="24" rx="6" /><text class="f11 m" x="290" y="88">Row 2 logged</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="tg-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="tg-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="tg-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="tg-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="tg-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="tg-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="tg-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="tg-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="tg-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="tg-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="tg-r1">1</label><label class="sa-sb sb2" for="tg-r2">2</label><label class="sa-sb sb3" for="tg-r3">3</label><label class="sa-sb sb4" for="tg-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-mat w1 tmp">A trigger is a rule attached to a table. It does nothing until the table changes.<span class="sa-chs"><span class="sa-ch pl">T: 2 rows</span><span class="sa-ch pl">a rule on T</span></span></div>
+<div class="c-out w2 d2 tmp">An insert, update or delete on the table is the event the rule waits for.<span class="sa-chs"><span class="sa-ch ch">Row 2 changed</span></span></div>
+<div class="c-mat w2 d4 tmp">The database runs the rule inside the same statement, so no one has to remember it.<span class="sa-chs"><span class="sa-ch pl">the rule ran once</span></span></div>
+<div class="c-out w3 d6">The rule runs its own statement. Here that writes one row to another table.<span class="sa-chs"><span class="sa-ch pl">L: 1 log row</span></span></div>
+</div>
+<p class="ca-cap">A trigger is attached to a table. When the table changes, the database runs the rule itself, as part of the same change.</p>
+<ol class="sa-steps">
+<li>A table with a rule on it</li>
+<li>A change arrives</li>
+<li>The rule fires by itself</li>
+<li>The rule writes a log row</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Six small steps. Press Run on the blocks that run; read the others. The scratch tables you make leave the cafe-sales tables alone.
+
+### 1. Do it by hand first
+
+**Idea.** Two statements that belong together, a change and its log row, are kept together only by the person who writes them. A transaction (S32) makes them succeed or fail as one, but it cannot make someone write both.
+
+**Try it:** raise Espresso by 25 cents and log it, in one transaction.
+
+<RunSQL query={`CREATE OR REPLACE TABLE menu AS
+SELECT product_id, product_name, category, unit_price_usd FROM products;
+CREATE OR REPLACE TABLE price_log (
+  product_id INTEGER,
+  old_price_usd DECIMAL(5,2),
+  new_price_usd DECIMAL(5,2)
+);
+BEGIN;
+INSERT INTO price_log
+SELECT product_id, unit_price_usd, unit_price_usd + 0.25 FROM menu WHERE product_id = 1;
+UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE product_id = 1;
+COMMIT;
+SELECT * FROM price_log;`} />
+
+Expected: 1 row, 3 columns: `1 | 3.00 | 3.25`.
+
+**Predict:** a colleague raises Americano by 25 cents with only the `UPDATE`. How many rows will `price_log` hold afterwards?
+
+**Try it:**
+
+<RunSQL query={`UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE product_id = 2;
+SELECT COUNT(*) AS log_rows FROM price_log;`} />
+
+Expected: 1 row, 1 column. *Why:* the log still holds only Espresso. Nothing tied the log to the table, so the price changed and no row says so.
+
+### 2. A trigger runs the second statement for you
+
+**Idea.** A trigger belongs to a table. It names an **event** (`INSERT`, `UPDATE` or `DELETE`), a **timing** (`BEFORE` or `AFTER` the change) and a **granularity**: `FOR EACH ROW` runs once for every changed row, `FOR EACH STATEMENT` runs once per statement. The DuckDB documentation: "The CREATE TRIGGER statement registers a trigger: a set of SQL statements that run automatically in response to INSERT, UPDATE, or DELETE events on a table." A statement-level trigger can read the rows that changed, as they were before and after, through **transition tables**.
+
+**Read only.** DuckDB 2.0, on the `menu` and `price_log` tables of unit 1:
+
+```sql
+CREATE TRIGGER log_price
+AFTER UPDATE ON menu
+REFERENCING OLD TABLE AS o NEW TABLE AS n
+FOR EACH STATEMENT
+  INSERT INTO price_log
+  SELECT n.product_id, o.unit_price_usd, n.unit_price_usd
+  FROM o JOIN n ON o.product_id = n.product_id
+  WHERE o.unit_price_usd <> n.unit_price_usd;
+```
+
+**Predict:** one `UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE category = 'coffee';` changes every coffee row. How many rows will `price_log` hold afterwards, counting from an empty log? And after a second `UPDATE` with `WHERE category = 'soda'`, which matches nothing?
+
+<details>
+<summary>Reveal the result</summary>
+
+Run on DuckDB 2.0.0, `SELECT COUNT(*) FROM price_log;` after each `UPDATE`:
+
+```text
+after the coffee update: 7
+after the soda update:   7
+```
+
+The first three log rows, by `product_id`: `1 | 3.00 | 3.25`, `2 | 3.50 | 3.75`, `3 | 4.50 | 4.75`.
+
+</details>
+
+*Why:* the trigger ran once for the statement and its transition tables held the seven coffee rows, so seven log rows appeared with no second statement from anyone. The soda update changed nothing, so there was nothing to log.
+
+### 3. The same job in three engines
+
+**Idea.** Every engine has its own syntax for the same rule. Compare the three, and note what each can and cannot do.
+
+**Read only.** SQLite 3.53.1, through Python's `sqlite3` (the table `menu` and the log as in unit 1):
+
+```sql
+CREATE TRIGGER log_price AFTER UPDATE OF unit_price_usd ON menu
+WHEN OLD.unit_price_usd <> NEW.unit_price_usd
+BEGIN
+  INSERT INTO price_log VALUES (OLD.product_id, OLD.unit_price_usd, NEW.unit_price_usd);
+END;
+```
+
+**Read only.** PostgreSQL 16: the trigger calls a function written in its own language, PL/pgSQL.
+
+```sql
+CREATE FUNCTION log_price_change() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO price_log (product_id, old_price_usd, new_price_usd)
+  VALUES (OLD.product_id, OLD.unit_price_usd, NEW.unit_price_usd);
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER log_price
+AFTER UPDATE OF unit_price_usd ON menu
+FOR EACH ROW
+WHEN (OLD.unit_price_usd IS DISTINCT FROM NEW.unit_price_usd)
+EXECUTE FUNCTION log_price_change();
+```
+
+Both logged the same 7 rows for the coffee update.
+
+| | DuckDB 2.0 | SQLite | PostgreSQL |
+|---|---|---|---|
+| What the trigger runs | one SQL statement | statements between `BEGIN` and `END` | a function, usually PL/pgSQL |
+| Per row, per statement | both, with limits: row-level `BEFORE` and row-level `UPDATE` triggers are not supported yet | per row only | both |
+| Stored procedures | none: macros (unit 5) | none in its list of statements | `CREATE PROCEDURE` and `CALL` |
+
+A trigger written for one engine is rewritten for the next. That is the first cost.
+
+### 4. Keep a total in sync
+
+**Idea.** A **derived value** is one you can always compute from other rows, such as the total of an order. If you also store it, something must update it whenever a line changes: a trigger can, or you can compute it fresh in a view (S28) and store nothing.
+
+**Predict:** order 1001 has three lines. You add a fourth line, one Americano, to a copy of its lines. What total does the stored table show, and what total does the view show?
+
+**Try it:**
+
+<RunSQL query={`CREATE OR REPLACE TABLE lines_copy AS
+SELECT * FROM order_items WHERE order_id = 1001;
+CREATE OR REPLACE TABLE totals_copy AS
+SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS total_usd
+FROM lines_copy AS i JOIN products AS p ON p.product_id = i.product_id
+GROUP BY i.order_id;
+CREATE OR REPLACE VIEW totals_view AS
+SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS total_usd
+FROM lines_copy AS i JOIN products AS p ON p.product_id = i.product_id
+GROUP BY i.order_id;
+INSERT INTO lines_copy VALUES (9001, 1001, 2, 1, 0.00);
+SELECT 'stored table' AS source, total_usd FROM totals_copy
+UNION ALL
+SELECT 'view', total_usd FROM totals_view;`} />
+
+Expected: 2 rows, 2 columns. *Why:* the stored table never heard about the new line, while the view reads the lines each time it runs. A trigger on `lines_copy` would have rewritten the stored total on every insert, update and delete of a line, which is more work on every change and logic that no one sees when they read the table. The view needs neither.
+
+### 5. A procedure is a saved bundle you call
+
+**Idea.** A **stored procedure** is a named set of statements kept in the database. You run it with `CALL`, passing values, and everything in it can change data. DuckDB has no `CREATE PROCEDURE` in its list of statements. Its nearest tool is a **macro**: a saved expression or query with parameters. The DuckDB documentation says a table macro's expression "can be a SELECT statement", so a macro reads and returns; it does not bundle changes.
+
+**Try it:** two macros, one for a calculation and one for a query, then a macro that tries to change data.
+
+<RunSQL query={`CREATE OR REPLACE MACRO line_amount(qty, price, discount) AS qty * price - discount;
+CREATE OR REPLACE MACRO store_sales(s) AS TABLE
+  SELECT o.order_id, o.status, SUM(line_amount(i.quantity, p.unit_price_usd, i.discount_usd)) AS amount_usd
+  FROM orders AS o
+  JOIN order_items AS i ON i.order_id = o.order_id
+  JOIN products AS p ON p.product_id = i.product_id
+  WHERE o.store_id = s
+  GROUP BY o.order_id, o.status;
+SELECT COUNT(*) AS orders, ROUND(SUM(amount_usd), 2) AS amount_usd FROM store_sales(3);`} />
+
+Expected: 1 row, 2 columns. *Why:* `store_sales(3)` runs the saved query for store 3. Now the macro that changes data:
+
+<RunSQL query={`CREATE OR REPLACE MACRO log_change(p) AS TABLE
+  INSERT INTO price_log SELECT product_id, unit_price_usd, unit_price_usd FROM menu WHERE product_id = p;`} />
+
+Expected: an error saying there is a syntax error at or near "INSERT". *Why:* a macro's body is a query or an expression, not a statement that changes data.
+
+**Read only.** PostgreSQL 16 has procedures. This one bundles the log row and the update, and `CALL` runs both:
+
+```sql
+CREATE PROCEDURE change_price(p_id integer, new_price numeric)
+LANGUAGE SQL
+BEGIN ATOMIC
+  INSERT INTO price_log (product_id, old_price_usd, new_price_usd)
+  SELECT product_id, unit_price_usd, new_price FROM menu WHERE product_id = p_id;
+  UPDATE menu SET unit_price_usd = new_price WHERE product_id = p_id;
+END;
+
+CALL change_price(1, 3.50);
+```
+
+Run on PostgreSQL 16, with Espresso at 3.00: the log holds `1 | 3.00 | 3.50`, and `menu` holds 3.50. The PostgreSQL documentation: "While a function is called as part of a query or DML command, a procedure is called in isolation using the CALL command." A procedure is run on purpose; a trigger runs whether you remember it or not.
+
+### 6. What they cost
+
+**Idea.** A trigger or procedure moves rules from the queries into the database. That saves repeating them, and it hides them. Each cost below comes from the documentation of the engine named.
+
+| Cost | What the documentation shows |
+|---|---|
+| A write does more than it says | PostgreSQL: a trigger "can skip the operation for the current row, or change the row being inserted" when it fires before the change |
+| Other statements are limited | DuckDB 2.0: `MERGE INTO` "is not supported on tables with triggers" |
+| Rules differ by vendor | unit 3: DuckDB, SQLite and PostgreSQL write the same rule three ways |
+| Security | PostgreSQL: a trigger runs "with the privileges of users who modify" the table, so who may create one matters |
+| Hard to see | the table definition does not show triggers; DuckDB lists them in `duckdb_triggers()` |
+
+An analytics team usually rebuilds its numbers from the raw tables each time, with views and scheduled transformations, so logic in a trigger is a hidden second source of numbers. A transactional system that must log every change, as in unit 2, is where triggers still earn their keep.
+
+<Aside type="tip" title="Remember">
+
+- A trigger is a rule on a table: event, timing (before or after), and granularity (per row or per statement).
+- A stored procedure is a saved bundle you `CALL`; DuckDB has macros, which read and return but do not change data.
+- A stored total goes stale unless something updates it; a view never does.
+- Every engine writes triggers its own way, so they do not move between databases.
+
+**Common trap: "a trigger is free, it just runs."** It runs inside your `INSERT`, `UPDATE` or `DELETE`, in the same transaction, on every change, and nobody reading the table sees it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-triggers-and-procedures-1">
+
+**Wrap a price with tax in a macro.** Expected: the check returns 2 rows, 2 columns: Espresso `3.26` and Avocado Toast `9.22`, with the 8.5 percent rate.
+
+Done for you: a macro with the rate written inside it, and the check.
+
+<RunSQL query={`CREATE OR REPLACE MACRO price_with_tax(price) AS ROUND(price * 1.085, 2);
+SELECT product_name, price_with_tax(unit_price_usd) AS with_tax
+FROM products WHERE product_id IN (1, 14) ORDER BY product_id;`} />
+
+Now finish it: give the macro a second parameter `rate` that defaults to `0.085`, so the same call still works, then call it with `rate := 0.10` for Espresso.
+
+<details>
+<summary>Hint</summary>
+
+A default is written `rate := 0.085` in the parameter list. In a call, a named argument is written the same way.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE OR REPLACE MACRO price_with_tax(price, rate := 0.085) AS ROUND(price * (1 + ...), 2);
+```
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE MACRO price_with_tax(price, rate := 0.085) AS ROUND(price * (1 + rate), 2);
+SELECT product_name, price_with_tax(unit_price_usd) AS with_tax
+FROM products WHERE product_id IN (1, 14) ORDER BY product_id;
+SELECT price_with_tax(3.00, rate := 0.10) AS espresso_at_10_percent;
+```
+
+`3.26` and `9.22` as before, then `3.30`. The rate moved out of the formula into a parameter, which is what a procedure's parameters are for. The macro is still only an expression: it returns a number and changes nothing.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-triggers-and-procedures-2">
+
+**Log a delete by hand.** The cafe drops the three tea items from the `menu` table of unit 1. Keep the deleted rows in a table `deleted_menu`, in one transaction.
+
+Before you run anything, write as a comment which two statements the transaction holds and in which order, and why the order matters. Then write it, and check both tables. Needs `menu` from unit 1.
+
+Expected shape, to check your comment against: a `menu` with 13 rows afterwards and a `deleted_menu` with 3 rows.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Copy the rows into `deleted_menu` first, with the same `WHERE` as the delete, then delete them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"One transaction: create and fill `deleted_menu` from the tea rows, delete the tea rows, commit; then two counts."*
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE TABLE deleted_menu AS SELECT * FROM menu WHERE false;
+BEGIN;
+INSERT INTO deleted_menu SELECT * FROM menu WHERE category = 'tea';
+DELETE FROM menu WHERE category = 'tea';
+COMMIT;
+SELECT 'menu' AS table_name, COUNT(*) AS row_count FROM menu
+UNION ALL
+SELECT 'deleted_menu', COUNT(*) FROM deleted_menu;
+```
+
+`menu | 13` and `deleted_menu | 3`. The copy goes first, because once the rows are deleted there is nothing left to copy. A `DELETE` trigger would do the copy for you, from the `OLD` rows; by hand, the two `WHERE` clauses must agree, and nothing checks that they do.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what are the three parts of a trigger's definition, and what does a macro do that a stored procedure also does?
+
+<details>
+<summary>Answer</summary>
+
+Event (`INSERT`, `UPDATE`, `DELETE`), timing (`BEFORE` or `AFTER`) and granularity (per row or per statement). A macro, like a procedure, is a saved, named piece of SQL with parameters that you call by name; unlike a procedure, it only returns a value or rows.
+
+</details>
+
+<Exercise id="sql-triggers-and-procedures-3">
+
+**Spot the flaw.** A colleague logs a price change by hand, for Latte only, and checks the log: it should hold one row for one change.
+
+<RunSQL query={`CREATE OR REPLACE TABLE menu_b AS
+SELECT product_id, product_name, unit_price_usd FROM products;
+CREATE OR REPLACE TABLE log_b (
+  product_id INTEGER,
+  old_price_usd DECIMAL(5,2),
+  new_price_usd DECIMAL(5,2)
+);
+BEGIN;
+INSERT INTO log_b
+SELECT product_id, unit_price_usd, unit_price_usd + 0.50 FROM menu_b;
+UPDATE menu_b SET unit_price_usd = unit_price_usd + 0.50 WHERE product_id = 3;
+COMMIT;
+SELECT COUNT(*) AS log_rows FROM log_b;`} />
+
+Expected from that query: 1 row, 1 column: `16`. What went wrong, and what is the fix?
+
+<Solution>
+
+The `UPDATE` has a `WHERE`, and the `INSERT` that logs it does not: it logged all 16 products, 15 of them with a change that never happened. Two statements, two `WHERE` clauses, and nothing makes them agree. The fix is the same condition on both:
+
+```sql
+CREATE OR REPLACE TABLE menu_b AS
+SELECT product_id, product_name, unit_price_usd FROM products;
+CREATE OR REPLACE TABLE log_b (
+  product_id INTEGER,
+  old_price_usd DECIMAL(5,2),
+  new_price_usd DECIMAL(5,2)
+);
+BEGIN;
+INSERT INTO log_b
+SELECT product_id, unit_price_usd, unit_price_usd + 0.50 FROM menu_b WHERE product_id = 3;
+UPDATE menu_b SET unit_price_usd = unit_price_usd + 0.50 WHERE product_id = 3;
+COMMIT;
+SELECT COUNT(*) AS log_rows FROM log_b;
+```
+
+Expected: `1`. This is the job a trigger takes over: it reads exactly the rows the statement changed, through `OLD` and `NEW`, so there is no second `WHERE` to get wrong.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what a trigger and a stored procedure do, read one trigger definition, and say which simpler tool, a transaction, a view or a macro, I would try first.*
+Test: Exercise sql-triggers-and-procedures-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **a trigger runs when data changes, a procedure runs when you call it, and a view runs when you read.**
