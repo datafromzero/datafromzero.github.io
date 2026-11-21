@@ -1,11 +1,11 @@
-// Concept animation (SPEC D41, no real data) for decluttering a chart (core lesson C15). Metaphor: a default chart carries things the reader does not need;
-// take them away, keep one color for the one bar that matters, and let the title say what to see. A made-up bar chart with five bars A to E (heights in px
-// 60, 80, 70, 130, 75 on one baseline); the picture claims no number.
+// Concept animation (SPEC D41, no real data) for decluttering a chart (core lesson C15). Metaphor: a default chart carries marks the reader does not need;
+// take away the marks that carry nothing, keep one color for the one bar that matters, and let the title say what to see. A made-up bar chart with five bars A to E
+// (heights in px 60, 80, 70, 130, 75 on one baseline); the picture claims no number.
 // 8 s loop of 8 phases in four steps: 1 to 2 the default chart (five colors, five gridlines, a frame, a legend, the generic title "Chart title");
-// 3 to 4 the gridlines, frame, legend and rainbow go and the bars turn gray; 5 to 6 bar D takes the one highlight color; 7 to 8 the generic title is
-// replaced by a title that states the point.
-// Facts: none beyond the order of the edits, which the lesson shows on app-events. Counters count what is drawn: colors 5, then 1, then 2;
-// gridlines 5, then 0; the title is "generic", then "takeaway".
+// 3 to 4 the marks that carry nothing go and the bars turn gray; 5 to 6 bar D takes the one highlight color; 7 to 8 the generic title is replaced by one that
+// states the point. Step 2 is worded generically on purpose: the lesson asks the learner which marks can go, so the captions never name them.
+// Facts: none beyond the order of the edits, which the lesson shows on app-events. Counters count what is drawn: colors 5, then 1, then 2; extra marks
+// (five gridlines, the frame and the legend: 7) then 0; the title is "generic", then "the point".
 // The step label is drawn by the generator at the top left (up to about 150 px wide); the chart title sits below it at y = 56.
 import { anim, tint } from '../lib/step-animation.mjs';
 
@@ -19,19 +19,19 @@ export default function make({ id = 'cdc' } = {}) {
 		id,
 		h: 300,
 		loop: { cycle: 8 },
-		title: 'Take away what does not help, keep one color, and let the title say the point',
+		title: 'Take away what carries nothing, keep one color, and let the title say the point',
 		desc:
-			'A made-up bar chart with five bars labeled A to E. At first it is a default chart: every bar has its own color, five gridlines cross it, a frame surrounds it, a legend sits at the top right and the title is just the words Chart title. Then the gridlines, frame and legend disappear and the bars turn gray. Then bar D, the tallest, takes one blue highlight color. Last, the title is replaced by a sentence that says bar D is the highest.',
-		caption: 'Edit a chart in this order: remove what does not help, give one color to the bar that matters, and write the point into the title.',
+			'A made-up bar chart with five bars labeled A to E. At first it is a default chart: every bar has its own color, five gridlines cross it, a frame surrounds it, a legend sits at the top right and the title is just the words Chart title. Then the marks that carry nothing disappear and the bars turn gray. Then bar D, the tallest, takes one blue highlight color. Last, the title is replaced by a sentence that says bar D is the highest.',
+		caption: 'Edit a chart in this order: take away the marks that carry nothing, give one color to the bar that matters, and write the point into the title.',
 		phases: [
-			[1, 'The default chart', { role: 'ord', key: 'A default chart brings a rainbow, gridlines, a frame and a legend before it says anything.', changes: [['+', '5 colors'], ['+', '5 gridlines']] }],
-			[3, 'Remove what does not help', { role: 'flt', key: 'Take away what the reader does not need: the lines, the frame, the legend and the rainbow.', changes: [['−', '5 gridlines'], ['−', '4 colors']] }],
+			[1, 'The default chart', { role: 'ord', key: 'Start from the default chart and list what it draws besides the data.', changes: [['+', '5 colors'], ['+', '7 extra marks']] }],
+			[3, 'Take away marks that carry nothing', { role: 'flt', key: 'Remove each mark that carries no data and does not help the reader read the chart.', changes: [['−', 'marks that carry nothing'], ['~', 'colors reduced']] }],
 			[5, 'One color for the point', { role: 'src', key: 'Give a color only to the bar that matters and leave the rest gray.', changes: [['+', '1 highlight']] }],
 			[7, 'The title says the point', { role: 'out', key: 'Put the takeaway in the title, so the reader knows what to look for before looking.', changes: [['~', 'the title states the point']] }],
 		],
 		counters: [
 			{ label: 'colors', role: 'src', values: [[1, 5], [3, 1], [5, 2]] },
-			{ label: 'gridlines', role: 'flt', values: [[1, 5], [3, 0]] },
+			{ label: 'extras', role: 'flt', values: [[1, 7], [3, 0]] },
 			{ label: 'title', role: 'out', values: [[1, 'generic'], [7, 'the point']] },
 		],
 	});
