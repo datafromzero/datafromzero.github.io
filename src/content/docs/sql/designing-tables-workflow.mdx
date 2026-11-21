@@ -1,0 +1,571 @@
+---
+id: sql-designing-tables-workflow
+title: 'Designing tables: a workflow'
+short_title: Designing tables
+description: 'From a plain description to tested tables: entities, links, keys, constraints, then sample rows and the questions the design must answer.'
+stage: sql
+order: 370
+level: intermediate
+duration: 33
+objectives:
+  - Turn user stories and a plain description into entities, relationships and cardinalities
+  - Map one-to-many, many-to-many, one-to-one and optional links to tables and keys
+  - Choose between a lookup table and a CHECK list, and between a generated and a natural key
+  - Test a design with sample rows and the questions it must answer
+  - Read the catalog to confirm the constraints you built
+prerequisites:
+  - sql-reading-er-diagrams
+  - sql-normalization
+  - sql-create-table-constraints
+  - sql-left-join-anti-join
+  - sql-group-by-having
+reviewed: 2026-11-21
+sources:
+  - title: 'DuckDB documentation: CREATE TABLE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_table
+  - title: 'DuckDB documentation: Constraints'
+    url: https://duckdb.org/docs/stable/sql/constraints
+  - title: 'DuckDB documentation: CREATE SEQUENCE statement'
+    url: https://duckdb.org/docs/stable/sql/statements/create_sequence
+  - title: 'DuckDB documentation: Information schema'
+    url: https://duckdb.org/docs/stable/sql/meta/information_schema
+  - title: 'DuckDB documentation: DuckDB tables (duckdb_constraints)'
+    url: https://duckdb.org/docs/stable/sql/meta/duckdb_table_functions#duckdb_constraints
+  - title: 'PostgreSQL documentation: Identity columns'
+    url: https://www.postgresql.org/docs/current/ddl-identity-columns.html
+  - title: 'SQLite documentation: SQLite Autoincrement'
+    url: https://www.sqlite.org/autoinc.html
+status: published
+---
+
+You have read tables other people built and made two of your own. Here you design a whole small database from a description, in the order a team would: on paper first, then in `CREATE TABLE`, then with rows that try to break it. The tables you create stay until you leave the page, so run the blocks in order. Run a block that makes a table twice and the database says it already exists: press **Reset data**, then start again from the top.
+
+## The question
+
+A community center runs evening workshops and asks you for a database. The team wrote three user stories first, because the stories decide what the model must hold and when to stop:
+
+> - As a member, I want to join a workshop and see whether I am confirmed or on the waiting list.
+> - As the organizer, I want to see which workshops are full and which have no instructor yet.
+> - As the organizer, I want to find the members who have not signed up for anything.
+
+The details behind them: each workshop has a title, a level (beginner or intermediate), a start time, a seat limit and, once we have found one, an instructor. An instructor can teach several workshops, and a member can join several. For each sign-up we keep the day and whether it is confirmed or on the waiting list.
+
+Nothing exists yet. By the end you will have five tables that answer those three questions, and rows that prove it.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Reading an entity-relationship diagram*](/sql/reading-er-diagrams/), a line has a circle with a bar at one end and a crow's foot with a circle at the other. Read it in both directions.
+
+   <details>
+   <summary>Answer</summary>
+
+   The circle-and-bar end says "zero or one" and the foot-and-circle end says "zero or many", each counted on the table it touches. The foreign key sits in the table at the foot end.
+
+   </details>
+
+2. In *Normalization: one fact in one place* (S36), a wide table repeated an address on every row. What did you do to it?
+
+   <details>
+   <summary>Answer</summary>
+
+   Moved the repeated fact into a table of its own with a key, and left a foreign key behind in the old table.
+
+   </details>
+
+## The big idea
+
+A design passes through three levels over the same facts: conceptual (words to boxes and lines), logical (boxes to tables with keys) and physical (tables to the rules and types one database checks).
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="df-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="df" id="df-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="df" id="df-r1" aria-label="Step 1 of 5: Words: what must it say?" />
+<input class="sa-r r2 o3" type="radio" name="df" id="df-r2" aria-label="Step 2 of 5: Boxes and a line" />
+<input class="sa-r r3 o4" type="radio" name="df" id="df-r3" aria-label="Step 3 of 5: Keys: PK in A, PK and FK in B" />
+<input class="sa-r r4 o6" type="radio" name="df" id="df-r4" aria-label="Step 4 of 5: Rules the database checks" />
+<input class="sa-r r5 o8" type="radio" name="df" id="df-r5" aria-label="Step 5 of 5: A test row tries a rule" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>facts</small><span><i class="w1 tmp hl">2</i><i class="w7 d2">2</i></span></span><span class="sa-n c-mat"><small>boxes</small><span><i class="w1 tmp">—</i><i class="w2 d2 tmp hl">2</i><i class="w5 d4">2</i></span></span><span class="sa-n c-out"><small>keys</small><span><i class="w3 tmp">—</i><i class="w1 d4 tmp hl">3</i><i class="w4 d5">3</i></span></span><span class="sa-n c-grp"><small>rules</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">2</i><i class="w2 d7">2</i></span></span><span class="sa-n c-flt"><small>tests</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 252" width="360" role="img" aria-labelledby="df-t df-d">
+<title id="df-t">A design passes from words to boxes to rules to a test</title>
+<desc id="df-d">Two plain sentences say each A has many B and each B has one A. They become two boxes, A and B, with a line between them: exactly one at A, zero or many at B. Each box gets a key column: a primary key in A, a primary key and a foreign key in B, and the foreign key names the primary key. Two rules appear: a key is unique and never empty, and a foreign key must name an existing A. A test row whose foreign key names an A that does not exist tries the foreign key rule.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Words: what must it say?</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Boxes and a line</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · Keys: PK in A, PK and FK in B</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · Rules the database checks</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · A test row tries a rule</text>
+<text class="f11 b" x="10" y="14">Words, boxes, keys, rules, test</text>
+<g class="w1 tmp"><rect class="f-src k2" x="60" y="64" width="240" height="28" rx="6" /><text class="f11 m" x="180" y="82">each A has many B</text></g>
+<g class="w1 tmp"><rect class="f-src k2" x="60" y="104" width="240" height="28" rx="6" /><text class="f11 m" x="180" y="122">each B has one A</text></g>
+<g class="w7 d2"><rect class="s-mat" x="30" y="60" width="120" height="112" rx="6" /><text class="f11 b" x="40" y="77">A</text></g>
+<g class="w7 d2"><rect class="s-mat" x="210" y="60" width="120" height="112" rx="6" /><text class="f11 b" x="220" y="77">B</text></g>
+<path class="cf dr p2 d2 tmp" pathLength="1" d="M159 85L190.5 85" />
+<g class="w2 d2 tmp"><path class="cf" d="M155 80L155 90M159 80L159 90M150 85L159 85M201 85L210 90M201 85L210 80M210 85L197.5 85" /><circle class="cf" cx="194" cy="85" r="3.5" /><text class="cv m" x="180" y="79">has</text></g>
+<g class="w5 d4"><rect class="f-out k3" x="40" y="126" width="100" height="22" rx="6" /><text class="f11 m" x="90" y="141">PK a</text></g>
+<g class="w5 d4"><rect class="f-out k3" x="220" y="96" width="100" height="22" rx="6" /><text class="f11 m" x="270" y="111">PK b</text></g>
+<g class="w5 d4"><rect class="f-src k3" x="220" y="126" width="100" height="22" rx="6" /><text class="f11 m" x="270" y="141">FK a</text></g>
+<path class="cf dr p5 d4" pathLength="1" d="M159 137L190.5 137" />
+<g class="w5 d4"><path class="cf" d="M155 132L155 142M159 132L159 142M150 137L159 137M201 137L210 142M201 137L210 132M210 137L197.5 137" /><circle class="cf" cx="194" cy="137" r="3.5" /><text class="cv m" x="180" y="131">has</text></g>
+<g class="w4 d5"><rect class="f-grp k2" x="30" y="184" width="120" height="24" rx="6" /><text class="f10 m" x="90" y="200">key: unique, not empty</text></g>
+<g class="w4 d5"><rect class="f-grp k2" x="210" y="184" width="120" height="24" rx="6" /><text class="f10 m" x="270" y="200">FK: must exist in A</text></g>
+<g class="w2 d7"><rect class="f-flt k3" x="210" y="218" width="120" height="24" rx="6" /><text class="f10 m" x="270" y="234">row: FK = a9</text></g>
+<text class="f10 b f-flt e w2 d7" x="200" y="234">what does it say?</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="df-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="df-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="df-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="df-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="df-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="df-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="df-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="df-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="df-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="df-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="df-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="df-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="df-r1">1</label><label class="sa-sb sb2" for="df-r2">2</label><label class="sa-sb sb3" for="df-r3">3</label><label class="sa-sb sb4" for="df-r4">4</label><label class="sa-sb sb5" for="df-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Start from plain sentences about the business: who has how many of what.<span class="sa-chs"><span class="sa-ch pl">2 sentences</span></span></div>
+<div class="c-mat w2 d2 tmp">Each noun becomes a box, and each sentence a line with a mark at both ends.<span class="sa-chs"><span class="sa-ch pl">2 boxes</span><span class="sa-ch pl">1 line</span></span></div>
+<div class="c-out w1 d4 tmp">A primary key names each row. The foreign key in B holds the key of an A row.<span class="sa-chs"><span class="sa-ch pl">3 key columns</span></span></div>
+<div class="c-grp w2 d5 tmp">A rule is written once, in the table, and the database applies it to every row.<span class="sa-chs"><span class="sa-ch pl">2 rules</span></span></div>
+<div class="c-flt w2 d7">Try rows that should fail, and read what the database answers.<span class="sa-chs"><span class="sa-ch pl">1 test row</span></span></div>
+</div>
+<p class="ca-cap">Say the facts in words, draw boxes and lines, give each table its keys, add the rules, then try a row that breaks them.</p>
+<ol class="sa-steps">
+<li>Words: what must it say?</li>
+<li>Boxes and a line</li>
+<li>Keys: PK in A, PK and FK in B</li>
+<li>Rules the database checks</li>
+<li>A test row tries a rule</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Five small steps. Press Run on each query. The **conceptual** level says what the domain is: entities and relationships, with no keys or types. The **logical** level adds attributes, keys and normalized tables, still for no particular database. The **physical** level is the real `CREATE TABLE` of one engine, and the Data Engineer track goes deeper into it. Here are the five tables, drawn from the stories: the nouns became boxes, the links became lines.
+
+<figure>
+<svg viewBox="0 0 360 396" width="360" role="img" aria-labelledby="erw-title erw-desc" font-family="inherit" font-size="11.5" fill="currentColor">
+<title id="erw-title">The five workshop tables as an entity-relationship diagram</title>
+<desc id="erw-desc">Five boxes for the community workshops, each listing its keys. Every link line runs from the primary key row of the parent table to the foreign key row of the child table, carries a verb read from the parent to the child, and ends in crow's foot symbols: two bars mean exactly one, a circle and a bar zero or one, a crow's foot and a bar one or many, a crow's foot and a circle zero or many. levels groups workshops: each level groups one or many workshops and each workshop is grouped by exactly one level. instructors teaches workshops: each instructor teaches one or many workshops and each workshop is taught by zero or one instructor. workshops has signups: each workshop has zero or many sign-ups and each sign-up is for exactly one workshop. members makes signups: each member makes zero or many sign-ups and each sign-up is made by exactly one member. Members and workshops are many-to-many, and signups sits between them: its two foreign keys together are its primary key.</desc>
+<text x="10" y="20" font-size="14" font-weight="600">Community workshops: five tables</text>
+<rect x="40" y="36" width="100" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="40" y="36" width="100" height="66" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="46" y="51" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">levels</text>
+<text x="46" y="74"><tspan font-weight="700">PK</tspan> level_id</text>
+<text x="46" y="94" opacity="0.6" font-size="11">1 more column</text>
+<rect x="40" y="116" width="100" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="40" y="116" width="100" height="66" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="46" y="131" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">instructors</text>
+<text x="46" y="154"><tspan font-weight="700">PK</tspan> instructor_id</text>
+<text x="46" y="174" opacity="0.6" font-size="11">2 more columns</text>
+<rect x="196" y="76" width="120" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="196" y="76" width="120" height="106" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="202" y="91" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">workshops</text>
+<text x="202" y="114"><tspan font-weight="700">PK</tspan> workshop_id</text>
+<text x="202" y="134"><tspan font-weight="700">FK</tspan> level_id</text>
+<text x="202" y="154"><tspan font-weight="700">FK</tspan> instructor_id</text>
+<text x="202" y="174" opacity="0.6" font-size="11">3 more columns</text>
+<rect x="196" y="216" width="120" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="196" y="216" width="120" height="86" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="202" y="231" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">signups</text>
+<text x="202" y="254"><tspan font-weight="700">PK FK</tspan> member_id</text>
+<text x="202" y="274"><tspan font-weight="700">PK FK</tspan> workshop_id</text>
+<text x="202" y="294" opacity="0.6" font-size="11">2 more columns</text>
+<rect x="40" y="216" width="100" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<rect x="40" y="216" width="100" height="66" fill="none" stroke="currentColor" stroke-opacity="0.45" />
+<text x="46" y="231" font-weight="600" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">members</text>
+<text x="46" y="254"><tspan font-weight="700">PK</tspan> member_id</text>
+<text x="46" y="274" opacity="0.6" font-size="11">2 more columns</text>
+<g class="cf" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M149 70L168 70L168 130L183 130M145 65L145 75M149 65L149 75M140 70L149 70M187 130L196 135M187 130L196 125M196 130L183 130M183 135L183 125" /></g><text class="cv" x="168" y="103.5" text-anchor="middle">groups</text>
+<g class="cf" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M155.5 150L183 150M145 145L145 155M140 150L148.5 150M187 150L196 155M187 150L196 145M196 150L183 150M183 155L183 145" /><circle cx="152" cy="150" r="3.5" /></g><text class="cv" x="168" y="144" text-anchor="middle">teaches</text>
+<g class="cf" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M325 110L346 110L346 270L335.5 270M321 105L321 115M325 105L325 115M316 110L325 110M325 270L316 265M325 270L316 275M316 270L328.5 270" /><circle cx="332" cy="270" r="3.5" /></g><text class="cv" x="346" y="193.5" text-anchor="middle">has</text>
+<g class="cf" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M149 250L176.5 250M145 245L145 255M149 245L149 255M140 250L149 250M187 250L196 255M187 250L196 245M196 250L183.5 250" /><circle cx="180" cy="250" r="3.5" /></g><text class="cv" x="168" y="244" text-anchor="middle">makes</text>
+<text x="10" y="322" opacity="0.8" font-size="11">PK primary key, FK foreign key. Two bars: exactly one.</text>
+<text x="10" y="336" opacity="0.8" font-size="11">A circle: zero. A crow's foot: many.</text>
+<text x="10" y="350" opacity="0.8" font-size="11">Read a verb from the one side: each member makes</text>
+<text x="10" y="364" opacity="0.8" font-size="11">zero or many sign-ups. Read it back: each sign-up is</text>
+<text x="10" y="378" opacity="0.8" font-size="11">made by exactly one member.</text>
+</svg>
+</figure>
+
+### 1. Put the key on the many side
+
+**Idea.** A **foreign key** goes in the table on the *many* side of a one-to-many link, and points at the *one* side. Many workshops share one instructor, so `workshops` holds `instructor_id`. A foreign key that may be empty makes the link optional. A **lookup table** is a small table of allowed values that other tables point at: here `levels`. Normalize as you go: the instructor's name lives once, in `instructors`, not on every workshop (S36).
+
+**Try it:** build the three tables and give them rows. Workshop 3 has no instructor yet.
+
+<RunSQL query={`CREATE TABLE levels (
+  level_id INTEGER PRIMARY KEY,
+  level_name VARCHAR NOT NULL UNIQUE
+);
+CREATE TABLE instructors (
+  instructor_id INTEGER PRIMARY KEY,
+  full_name VARCHAR NOT NULL,
+  email VARCHAR NOT NULL UNIQUE
+);
+CREATE TABLE workshops (
+  workshop_id INTEGER PRIMARY KEY,
+  title VARCHAR NOT NULL,
+  level_id INTEGER NOT NULL REFERENCES levels (level_id),
+  instructor_id INTEGER REFERENCES instructors (instructor_id),
+  starts_at TIMESTAMP NOT NULL,
+  capacity INTEGER NOT NULL CHECK (capacity > 0)
+);
+INSERT INTO levels VALUES (1, 'beginner'), (2, 'intermediate');
+INSERT INTO instructors VALUES
+  (1, 'Maya Ortiz', 'maya@example.org'),
+  (2, 'Ken Ruiz', 'ken@example.org');
+INSERT INTO workshops VALUES
+  (1, 'Sourdough basics', 1, 1, '2027-01-09 10:00', 2),
+  (2, 'Knife skills', 1, 2, '2027-01-10 14:00', 3),
+  (3, 'Laminated dough', 2, NULL, '2027-01-16 10:00', 2);
+SELECT workshop_id, title, level_id, instructor_id FROM workshops ORDER BY workshop_id;`} />
+
+Expected: 3 rows, 4 columns; the third row has an empty `instructor_id`.
+
+**Predict:** a fourth workshop names level 9, which the lookup table does not have. Accepted or refused, and what will the message say?
+
+<RunSQL query={`INSERT INTO workshops VALUES (4, 'Pasta by hand', 9, 1, '2027-01-17 10:00', 4);`} />
+
+Expected: one outcome, either an inserted row or an error message. *Why:* it is refused: the message says the foreign key is violated because the key "level_id: 9" does not exist in the referenced table. The database checks every foreign key against the parent table. A `CHECK` list such as `CHECK (level IN ('beginner', 'intermediate'))` would refuse it too, but a new level then needs a schema change, while a lookup table needs only a new row, and it can carry more columns later.
+
+### 2. Let the database make the key
+
+**Idea.** A **surrogate key** is a number with no meaning, made by the database, such as `member_id`. A **natural key** is a real-world value that identifies a row, such as an email. Use the surrogate as the primary key and keep the natural one as `UNIQUE`: people change their emails. DuckDB makes numbers with a **sequence**, a counter you attach to a column as its `DEFAULT`: `nextval('member_seq')` gives the next number.
+
+**Try it:**
+
+<RunSQL query={`CREATE SEQUENCE member_seq START 1;
+CREATE TABLE members (
+  member_id INTEGER PRIMARY KEY DEFAULT nextval('member_seq'),
+  email VARCHAR NOT NULL UNIQUE,
+  joined_on DATE NOT NULL
+);
+INSERT INTO members (email, joined_on) VALUES
+  ('ana@example.org', '2026-10-02'),
+  ('ben@example.org', '2026-10-09'),
+  ('chloe@example.org', '2026-10-15')
+RETURNING member_id, email;`} />
+
+Expected: 3 rows, 2 columns; the ids are 1, 2 and 3. Now a member whose email already exists:
+
+<RunSQL query={`INSERT INTO members (email, joined_on) VALUES ('ana@example.org', '2026-11-01');`} />
+
+Expected: an error saying the duplicate key `email: ana@example.org` violates the unique constraint.
+
+**Predict:** the next good member is Dev. What `member_id` does Dev get?
+
+<RunSQL query={`INSERT INTO members (email, joined_on) VALUES ('dev@example.org', '2026-11-02') RETURNING member_id;`} />
+
+Expected: 1 row, 1 column. *Why:* the refused insert still took a number from the sequence, so ids are unique but not gap-free: never use the largest id as a count.
+
+**Try it:** the keyword other databases use.
+
+<RunSQL query={`CREATE TABLE guests (guest_id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR);`} />
+
+Expected: an error saying there is a syntax error at or near "AUTOINCREMENT". *Why:* DuckDB takes its numbers from a sequence instead. The other engines differ: PostgreSQL has `GENERATED ... AS IDENTITY` columns, and in SQLite an `INTEGER PRIMARY KEY` column becomes the row's automatic id (see their documentation under Sources).
+
+### 3. Make a table for the pair
+
+**Idea.** A many-to-many link needs a table in the middle, one row for each pair, with a foreign key to each side. A fact that describes the *pair* belongs in that table, not in either parent: when someone signed up, and whether they are confirmed, describe a member and a workshop together.
+
+**Try it:**
+
+<RunSQL query={`CREATE TABLE signups (
+  member_id INTEGER NOT NULL REFERENCES members (member_id),
+  workshop_id INTEGER NOT NULL REFERENCES workshops (workshop_id),
+  signed_up_on DATE NOT NULL,
+  status VARCHAR NOT NULL CHECK (status IN ('confirmed', 'waitlist', 'canceled')),
+  PRIMARY KEY (member_id, workshop_id)
+);
+INSERT INTO signups VALUES
+  (1, 1, '2026-12-01', 'confirmed'),
+  (2, 1, '2026-12-02', 'confirmed'),
+  (3, 1, '2026-12-03', 'waitlist'),
+  (1, 2, '2026-12-05', 'confirmed');
+SELECT * FROM signups ORDER BY member_id, workshop_id;`} />
+
+Expected: 4 rows, 4 columns.
+
+**Predict:** Ana (member 1) signs up again for workshop 1, this time as `waitlist`. Accepted or refused?
+
+<RunSQL query={`INSERT INTO signups VALUES (1, 1, '2026-12-09', 'waitlist');`} />
+
+Expected: one outcome, either an inserted row or an error message. *Why:* it is refused: the message names the duplicate key "member_id: 1, workshop_id: 1". One pair, one row: the pair of foreign keys is the primary key, and a primary key forbids a repeat. A different status for Ana would have to change her existing row, which is what an update is for.
+
+<Aside type="note" title="Translation patterns and their trade-offs">
+
+| In the description | Table design | Trade-off |
+|---|---|---|
+| An entity: a noun with facts of its own | a table with a primary key | none |
+| One-to-many | foreign key on the many side | none: the default |
+| Many-to-many | junction table; facts about the pair live there | one more table to join |
+| One-to-one | foreign key that is also the primary key, or `UNIQUE`; or merge the two tables | a separate table keeps rare columns out; merging saves a join |
+| Optional link | nullable foreign key | every join to it must keep rows with `LEFT JOIN` |
+| Categorical attribute: a fixed set of values | a lookup table that the other table points at, or a `CHECK` list | a lookup adds a value with a row; a `CHECK` list changes the table |
+| Multi-valued attribute: several values for one row | its own table, one row for each value, with a foreign key back | one more table; a list inside one cell breaks the one-fact-per-cell rule of S36 |
+| Generalization: a member and an instructor are both people | one table with a type column | unused columns stay empty; the Data Engineer track goes deeper into other choices |
+
+</Aside>
+
+**Try it:** a multi-valued attribute. An instructor can have several phone numbers, so each number gets its own row.
+
+<RunSQL query={`CREATE TABLE instructor_phones (
+  instructor_id INTEGER NOT NULL REFERENCES instructors (instructor_id),
+  phone VARCHAR NOT NULL,
+  PRIMARY KEY (instructor_id, phone)
+);
+INSERT INTO instructor_phones VALUES (1, '555-0101'), (1, '555-0102'), (2, '555-0103');
+SELECT i.full_name, COUNT(*) AS phones
+FROM instructors AS i
+JOIN instructor_phones AS p ON p.instructor_id = i.instructor_id
+GROUP BY i.full_name
+ORDER BY i.full_name;`} />
+
+Expected: 2 rows, 2 columns. *Why:* one instructor has two rows and the other one, and no cell holds a list.
+
+### 4. Ask the design your questions
+
+**Idea.** A design is not finished until it answers the questions it was built for. Write the three questions as queries before you trust the tables, and let the optional link tell you which join to use.
+
+**Predict:** which workshop is full, and which has no instructor yet? The seat limit is `capacity`; a seat is taken by a `confirmed` sign-up.
+
+**Try it:** seats taken against seats offered.
+
+<RunSQL query={`SELECT w.title, w.capacity,
+       SUM(CASE WHEN s.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed
+FROM workshops AS w
+LEFT JOIN signups AS s ON s.workshop_id = w.workshop_id
+GROUP BY w.workshop_id, w.title, w.capacity
+ORDER BY w.workshop_id;`} />
+
+Expected: 3 rows, 3 columns. *Why:* a workshop with no sign-up must stay in the answer with a count of zero, so the join is a `LEFT JOIN` (S21). Only Sourdough basics is full: 2 of 2.
+
+**Try it:** who teaches what, including the workshop without an instructor.
+
+<RunSQL query={`SELECT w.title, i.full_name AS instructor
+FROM workshops AS w
+LEFT JOIN instructors AS i ON i.instructor_id = w.instructor_id
+ORDER BY w.workshop_id;`} />
+
+Expected: 3 rows, 2 columns. *Why:* Laminated dough has an empty instructor, and an `INNER JOIN` would have returned 2 rows: the optional link is what decides the join. The third question, members with no sign-up, is the anti join of S21, and Dev is the answer.
+
+### 5. Read the catalog
+
+**Idea.** The **catalog** is the database's own description of itself, in tables you can query. `information_schema.columns` lists columns, and DuckDB's `duckdb_constraints()` lists keys and checks. A design is done when the catalog matches the diagram.
+
+**Predict:** how many foreign keys will the catalog list?
+
+**Try it:**
+
+<RunSQL query={`SELECT table_name, constraint_type, constraint_column_names, referenced_table
+FROM duckdb_constraints()
+WHERE constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY', 'UNIQUE', 'CHECK')
+ORDER BY table_name, constraint_type;`} />
+
+Expected: 16 rows, 4 columns, counted for the tables of units 1 to 3 only. *Why:* the foreign keys are `workshops` to `levels` and to `instructors`, `signups` to `members` and to `workshops`, and `instructor_phones` to `instructors`. A column with no rule at all would not show up here: only what you wrote shows.
+
+<RunSQL query={`SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'signups'
+ORDER BY ordinal_position;`} />
+
+Expected: 4 rows, 3 columns.
+
+<Aside type="tip" title="Remember">
+
+- Five steps: words, boxes and lines, keys (normalize as you go), `CREATE TABLE` with its constraints, then rows that try to break it. The first two are conceptual, the next logical, the `CREATE TABLE` physical; the user stories set the scope.
+- A foreign key goes on the many side; a many-to-many link gets a table, and facts about the pair live in it. An optional link is a nullable foreign key that needs a `LEFT JOIN`.
+- Use a generated key as the primary key and keep the natural one `UNIQUE`; generated numbers have gaps.
+- Test with the questions the design was built for.
+
+**Common trap: "a refused row leaves no trace."** The row is refused, but the sequence has already moved: ids can skip numbers.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-designing-tables-workflow-1">
+
+**Add a one-to-one link: an optional profile for each member.** Needs `members` from unit 2. Expected: the version below returns 2 rows, 2 columns, and includes a profile for member 99, who does not exist.
+
+Done for you: the table without its link, and two rows.
+
+<RunSQL query={`CREATE TABLE member_profiles (
+  member_id INTEGER PRIMARY KEY,
+  bio VARCHAR
+);
+INSERT INTO member_profiles VALUES (1, 'Likes rye'), (99, 'Nobody');
+SELECT * FROM member_profiles ORDER BY member_id;`} />
+
+Now finish it: make `member_id` also a foreign key to `members`, drop the table (`DROP TABLE member_profiles;`) and build it again. Insert a profile for member 1, then one for member 99, then a second one for member 1, and say which rule refuses each.
+
+<details>
+<summary>Hint</summary>
+
+Add `REFERENCES members (member_id)` after the type. A column that is the primary key cannot repeat.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE TABLE member_profiles (
+  member_id INTEGER PRIMARY KEY REFERENCES ...,
+  bio VARCHAR
+);
+```
+
+</details>
+
+<Solution>
+
+```sql
+DROP TABLE member_profiles;
+CREATE TABLE member_profiles (
+  member_id INTEGER PRIMARY KEY REFERENCES members (member_id),
+  bio VARCHAR
+);
+INSERT INTO member_profiles VALUES (1, 'Likes rye');
+INSERT INTO member_profiles VALUES (99, 'Nobody');
+INSERT INTO member_profiles VALUES (1, 'Second profile');
+```
+
+The first insert works. The row for member 99 is refused by the foreign key: no such member. The second row for member 1 is refused by the primary key: one profile per member. A foreign key that is also the primary key is the one-to-one pattern, and optional because a member may have no row.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-designing-tables-workflow-2">
+
+**A library lends copies of books.** A book has a title and an author name. A book has several copies, each with a shelf code. A member borrows copies; a loan records the day it was borrowed, the day it is due, and the day it was returned, which stays empty until the copy comes back.
+
+Before you run anything, write as comments: the tables, each link with its kind, and which column is empty on a loan that is still open. Then write the `CREATE TABLE` statements, insert one book with one copy and one loan, and show that a loan for a copy that does not exist is refused. The `members` table of unit 2 is already there.
+
+Expected shape, to check your comments against: three new tables, and a catalog query for foreign keys that lists 3 rows for them.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Walk the description: which nouns are entities, and which link is one-to-many and which is many-to-many? The loan is the pair of a member and a copy, with its own dates.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"books; copies, with a foreign key to books; loans, with foreign keys to members and copies, and a returned date that may be empty."*
+
+</details>
+
+<Solution>
+
+```sql
+CREATE TABLE books (
+  book_id INTEGER PRIMARY KEY,
+  title VARCHAR NOT NULL,
+  author VARCHAR NOT NULL
+);
+CREATE TABLE copies (
+  copy_id INTEGER PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES books (book_id),
+  shelf_code VARCHAR NOT NULL
+);
+CREATE TABLE loans (
+  loan_id INTEGER PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members (member_id),
+  copy_id INTEGER NOT NULL REFERENCES copies (copy_id),
+  borrowed_on DATE NOT NULL,
+  due_on DATE NOT NULL,
+  returned_on DATE
+);
+INSERT INTO books VALUES (1, 'Bread Science', 'A. Baker');
+INSERT INTO copies VALUES (1, 1, 'B-12');
+INSERT INTO loans VALUES (1, 1, 1, '2026-11-01', '2026-11-22', NULL);
+INSERT INTO loans VALUES (2, 1, 99, '2026-11-01', '2026-11-22', NULL);
+```
+
+The last insert is refused by the foreign key: there is no copy 99. A book to its copies is one-to-many, and a member to a copy is many-to-many through `loans`, which holds the dates because they belong to the pair. `returned_on` is empty on an open loan, so it is the only nullable column. Check:
+
+```sql
+SELECT table_name, referenced_table FROM duckdb_constraints()
+WHERE constraint_type = 'FOREIGN KEY' AND table_name IN ('copies', 'loans')
+ORDER BY table_name, referenced_table;
+```
+
+`copies` to `books`, `loans` to `copies`, `loans` to `members`: 3 rows.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the five steps of the workflow in order, say which level (conceptual, logical or physical) each belongs to, and say where the foreign key goes for a one-to-many link.
+
+<details>
+<summary>Answer</summary>
+
+The words of the description; boxes and lines for the entities and relationships; keys, checked against normalization; `CREATE TABLE` with its constraints; then tests with sample rows and questions. The first two are conceptual, keys and normalizing logical, and `CREATE TABLE` physical. The foreign key goes on the many side.
+
+</details>
+
+<Exercise id="sql-designing-tables-workflow-3">
+
+**Spot the flaw.** A colleague builds the sign-up table with its foreign keys but no primary key, and counts the seats taken in workshop 1, which has room for 2 people.
+
+<RunSQL query={`CREATE OR REPLACE TABLE signups_loose (
+  member_id INTEGER NOT NULL,
+  workshop_id INTEGER NOT NULL,
+  signed_up_on DATE NOT NULL,
+  status VARCHAR NOT NULL
+);
+INSERT INTO signups_loose VALUES
+  (1, 1, '2026-12-01', 'confirmed'),
+  (1, 1, '2026-12-02', 'confirmed'),
+  (2, 1, '2026-12-03', 'confirmed');
+SELECT COUNT(*) AS seats_taken FROM signups_loose WHERE workshop_id = 1 AND status = 'confirmed';`} />
+
+Expected from that query: 1 row, 1 column: `3`. What is wrong with the design, and what is the fix?
+
+<Solution>
+
+Two people hold the three seats: member 1 signed up twice and the table let it happen, because nothing says one row per pair. The count is of rows, and the rows are wrong, so a workshop that is not full looks over-full. Declare the pair as the primary key, as in unit 3, and the second row is refused:
+
+```sql
+CREATE OR REPLACE TABLE signups_loose (
+  member_id INTEGER NOT NULL,
+  workshop_id INTEGER NOT NULL,
+  signed_up_on DATE NOT NULL,
+  status VARCHAR NOT NULL,
+  PRIMARY KEY (member_id, workshop_id)
+);
+INSERT INTO signups_loose VALUES (1, 1, '2026-12-01', 'confirmed');
+INSERT INTO signups_loose VALUES (1, 1, '2026-12-02', 'confirmed');
+INSERT INTO signups_loose VALUES (2, 1, '2026-12-03', 'confirmed');
+SELECT COUNT(*) AS seats_taken FROM signups_loose WHERE workshop_id = 1 AND status = 'confirmed';
+```
+
+Run the lines one at a time: the second insert is refused with a duplicate key message, and the count is `2`. A constraint catches the mistake at the door; a query afterwards can only find it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can turn a description into tables: entities, links with their kinds, keys, constraints, and sample rows that prove the questions can be answered.*
+Test: Exercise sql-designing-tables-workflow-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **describe, draw, key, build, then try to break it.**

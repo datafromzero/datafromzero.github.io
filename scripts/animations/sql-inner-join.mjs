@@ -1,4 +1,4 @@
-// S19 INNER JOIN: the 7 order_items lines of orders 1001 to 1003 against 5 of the 16 products of cafe-sales v1, five steps
+// S20 INNER JOIN: the 7 order_items lines of orders 1001 to 1003 against 5 of the 16 products of cafe-sales v1, five steps
 // the learner advances one at a time: the two tables, ON matches product 1, then 6, then 10 and 15, then product 16 has
 // nothing to pair with. The result is drawn grouped by product so each match appends rows in one block (a join promises
 // no row order). Parts only fade in at their own slot, so text never overlaps at any moment.

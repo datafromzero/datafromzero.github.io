@@ -26,7 +26,7 @@ describe('SQL cheatsheet', () => {
 		assert.deepEqual(sheetProblems(sqlCheatsheet, published('sql')), []);
 	});
 	test('the three parts follow D40 and every part has entries', () => {
-		assert.deepEqual(sqlCheatsheet.parts.map((p) => codeRange(p.codes)), [[1, 17], [18, 30], [31, 35]]);
+		assert.deepEqual(sqlCheatsheet.parts.map((p) => codeRange(p.codes)), [[1, 17], [18, 32], [33, 39]]);
 		for (const p of sqlCheatsheet.parts) assert.ok(p.items.some((i) => !isFigure(i)));
 	});
 	test('has the three drawings and a pattern for every part of the stage', () => {

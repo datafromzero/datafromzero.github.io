@@ -1,0 +1,415 @@
+---
+id: sql-access-and-injection
+title: 'Who can see what: roles, grants and SQL injection'
+short_title: Access and injection
+description: Share only some columns and rows with a view, read roles and GRANT in PostgreSQL, see how a query built from strings breaks, and fix it with parameters.
+stage: sql
+order: 300
+level: intermediate
+duration: 25
+objectives:
+  - Share only some columns and rows of a table through a view
+  - Read GRANT and REVOKE statements, and say what least privilege means
+  - Explain how a query built by gluing strings together can be taken over
+  - Fix it with a parameterized query
+prerequisites:
+  - sql-views
+  - sql-where-filtering
+  - sql-text-functions
+datasets:
+  - cafe-sales
+reviewed: 2026-11-21
+sources:
+  - title: 'PostgreSQL documentation: Database roles'
+    url: https://www.postgresql.org/docs/current/user-manag.html
+  - title: 'PostgreSQL documentation: Privileges'
+    url: https://www.postgresql.org/docs/current/ddl-priv.html
+  - title: 'PostgreSQL documentation: GRANT'
+    url: https://www.postgresql.org/docs/current/sql-grant.html
+  - title: 'OWASP SQL Injection Prevention Cheat Sheet'
+    url: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  - title: 'DuckDB documentation: Securing DuckDB'
+    url: https://duckdb.org/docs/stable/operations_manual/securing_duckdb/overview
+  - title: 'DuckDB documentation: Prepared statements'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/prepared_statements
+  - title: 'DuckDB documentation: Utility functions (query)'
+    url: https://duckdb.org/docs/stable/sql/functions/utility
+  - title: 'Python documentation: sqlite3, placeholders'
+    url: https://docs.python.org/3/library/sqlite3.html
+  - title: 'SQLite documentation: SQL features that SQLite does not implement'
+    url: https://www.sqlite.org/omitted.html
+status: published
+---
+
+In *Saving a query as a view* (S29) you chose which columns to share. Here the question is who may see what, and what happens when the text of a query comes from a person you do not know. Blocks marked **Read only** do not run in the editor, and their results are copied from a run on the engine named above them. Every other block runs in the editor: press Run.
+
+## The question
+
+A partner who runs the Harbor cafe asks for a feed of its orders, and the cafe also has a small web form where staff look up a store by name. Two worries:
+
+> Can the partner see only Harbor, and not who our customers are? And what if someone types something strange into the lookup form?
+
+The `stores` table behind the form is small:
+
+| store_id | store_name | city | opened_on |
+|---:|---|---|---|
+| 1 | Old Town | Oakland | 2023-05-12 |
+| 2 | Campus | Berkeley | 2024-09-03 |
+| 3 | Harbor | Alameda | 2026-04-01 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Saving a query as a view* (S29), what does `SELECT *` on a view return when the view lists only some columns?
+
+   <details>
+   <summary>Answer</summary>
+
+   Only the columns the view lists. The others cannot be reached through the view.
+
+   </details>
+
+2. Write the clause that keeps only the rows of store 3.
+
+   <details>
+   <summary>Answer</summary>
+
+   `WHERE store_id = 3`.
+
+   </details>
+
+## The big idea
+
+Two habits keep data safe: give each person only the access the job needs, and never let typed text become part of the query's own wording.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ij-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="ij" id="ij-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="ij" id="ij-r1" aria-label="Step 1 of 4: A query with a gap for a value" />
+<input class="sa-r r2 o3" type="radio" name="ij" id="ij-r2" aria-label="Step 2 of 4: Glue: typed text fills the gap" />
+<input class="sa-r r3 o4" type="radio" name="ij" id="ij-r3" aria-label="Step 3 of 4: The database reads one text" />
+<input class="sa-r r4 o8" type="radio" name="ij" id="ij-r4" aria-label="Step 4 of 4: A parameter: query and value apart" />
+<svg class="sa-svg ca-svg" viewBox="0 0 360 220" width="360" role="img" aria-labelledby="ij-t ij-d">
+<title id="ij-t">Typed text glued into a query becomes part of it; a parameter stays a value</title>
+<desc id="ij-d">A query has a gap for a value. Typed text fills the gap, glued into the query text, and the database reads the whole line as SQL. Below, a second query keeps a placeholder, and the typed text travels separately from the query and fills the placeholder.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · A query with a gap for a value</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Glue: typed text fills the gap</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · The database reads one text</text>
+<text class="f10 b w4 d5" x="10" y="29">4 · A parameter: query and value apart</text>
+<text class="f11 b" x="10" y="14">Glue it, or send it apart</text>
+<text class="f10 b" x="10" y="58">Glued</text>
+<g><rect class="f-src k2" x="10" y="66" width="176" height="28" rx="6" /><text class="f11 m" x="98" y="84">SELECT … WHERE name =</text></g>
+<rect class="bx dsh" x="190" y="66" width="110" height="28" />
+<text class="f10 w1 tmp" x="190" y="112">a gap for a value</text>
+<g class="w7 d2"><rect class="f-flt k3" x="190" y="66" width="110" height="28" rx="6" /><text class="f11 m" x="245" y="84">typed text</text></g>
+<text class="f10 b f-flt w2 d2 tmp" x="190" y="112">glued into the text</text>
+<rect class="s-flt u1 d4 tmp" x="6" y="62" width="298" height="36" rx="10" />
+<text class="f10 b f-flt w1 d4 tmp" x="190" y="112">one text, all read as SQL</text>
+<text class="f10 b w4 d5" x="10" y="152">Parameter</text>
+<g class="w4 d5"><rect class="f-src k2" x="10" y="160" width="176" height="28" rx="6" /><text class="f11 m" x="98" y="178">SELECT … WHERE name = &#36;1</text></g>
+<g class="w4 d5"><rect class="f-out k3" x="210" y="160" width="100" height="28" rx="6" /><text class="f11 m" x="260" y="178">typed text</text></g>
+<path class="s-out dr p3 d6" pathLength="1" d="M206 174L190 174M196.3 177.04L190 174L196.3 170.96" />
+<text class="f10 b w3 d6" x="210" y="206">value sent apart</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ij-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ij-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ij-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ij-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ij-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ij-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ij-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ij-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ij-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ij-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ij-r1">1</label><label class="sa-sb sb2" for="ij-r2">2</label><label class="sa-sb sb3" for="ij-r3">3</label><label class="sa-sb sb4" for="ij-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">A query has a fixed shape and a gap where a value goes.<span class="sa-chs"><span class="sa-ch pl">query text</span><span class="sa-ch pl">a gap</span></span></div>
+<div class="c-flt w2 d2 tmp">Gluing puts the typed text inside the query text itself.<span class="sa-chs"><span class="sa-ch pl">typed text in the query</span></span></div>
+<div class="c-flt w1 d4 tmp">The database receives one piece of text and reads all of it as SQL.<span class="sa-chs"><span class="sa-ch ch">one text sent</span></span></div>
+<div class="c-out w4 d5">The query keeps a placeholder, and the value travels apart from it.<span class="sa-chs"><span class="sa-ch pl">value sent apart</span></span></div>
+</div>
+<p class="ca-cap">Glued into the text, typed words become part of the query text. As a parameter, the value is sent apart from the query.</p>
+<ol class="sa-steps">
+<li>A query with a gap for a value</li>
+<li>Glue: typed text fills the gap</li>
+<li>The database reads one text</li>
+<li>A parameter: query and value apart</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+Four small steps. Press Run on the blocks that run; read the others.
+
+### 1. Show only some columns and rows
+
+**Idea.** A view can leave out columns and, with a `WHERE`, rows. The partner reads the view and never the table. Leaving out `customer_id` matters: a customer number is a pseudonym, a stand-in for a name, and *Data types, units and how data was collected* (C1) showed that a pseudonymous id still counts as personal data, because anyone who holds the list that links ids to people can undo it.
+
+**Predict:** the partner's view lists five columns of `orders` for store 3. How many orders will it show, and from how many different stores?
+
+**Try it:**
+
+<RunSQL query={`CREATE OR REPLACE VIEW harbor_orders AS
+SELECT order_id, store_id, ordered_at, status, payment_method
+FROM orders
+WHERE store_id = 3;
+SELECT COUNT(*) AS orders, COUNT(DISTINCT store_id) AS stores FROM harbor_orders;`} />
+
+Expected: 1 row, 2 columns. *Why:* the `WHERE` is inside the view, so every reader gets Harbor's rows and nothing else.
+
+**Predict:** the partner asks the view for `customer_id`. What happens?
+
+<RunSQL query={`SELECT customer_id FROM harbor_orders;`} />
+
+Expected: one outcome, either rows or an error message. *Why:* it is an error saying `customer_id` is not found, because the view never listed it. A view is a convenient shape; whether it is a lock depends on the database. The next unit shows one where it is.
+
+### 2. Roles, grants and least privilege
+
+**Idea.** Some databases keep accounts. In PostgreSQL a **role** is an account or a group of accounts. A **privilege** is permission to do one thing to one object, such as `SELECT` on a view. `GRANT` gives a privilege and `REVOKE` takes it back. **Least privilege** means starting from no access and granting only what the job needs. The PostgreSQL documentation: "For most kinds of objects, the initial state is that only the owner (or a superuser) can do anything with the object."
+
+DuckDB keeps no accounts: its security page says it "executes SQL with the full privileges of the user running it". The editor shows it:
+
+<RunSQL query={`GRANT SELECT ON harbor_orders TO harbor_partner;`} />
+
+Expected: an error saying there is a syntax error at or near "GRANT". SQLite has none either: its documentation says the commands would be meaningless for an embedded engine that only uses the operating system's file permissions.
+
+**Read only.** PostgreSQL 16, with the `orders` table of cafe-sales in a schema called `cafe`. The first lines make the view of unit 1 and point the session at the schema:
+
+```sql
+SET search_path TO cafe;
+CREATE VIEW harbor_orders AS
+SELECT order_id, store_id, ordered_at, status, payment_method
+FROM orders WHERE store_id = 3;
+
+CREATE ROLE harbor_partner LOGIN;
+GRANT USAGE ON SCHEMA cafe TO harbor_partner;
+GRANT SELECT ON harbor_orders TO harbor_partner;
+
+SET ROLE harbor_partner;
+SELECT COUNT(*) FROM harbor_orders;
+SELECT COUNT(*) FROM orders;
+SELECT customer_id FROM harbor_orders;
+DELETE FROM harbor_orders;
+```
+
+**Predict:** which of the four statements will the partner's role be allowed to run?
+
+<details>
+<summary>Reveal the result</summary>
+
+Run on PostgreSQL 16, in the order written:
+
+```text
+SELECT COUNT(*) FROM harbor_orders;       355
+SELECT COUNT(*) FROM orders;              ERROR:  permission denied for table orders
+SELECT customer_id FROM harbor_orders;    ERROR:  column "customer_id" does not exist
+DELETE FROM harbor_orders;                ERROR:  permission denied for view harbor_orders
+```
+
+After `REVOKE SELECT ON harbor_orders FROM harbor_partner;`, even the first statement fails with `permission denied for view harbor_orders`.
+
+</details>
+
+*Why:* the role holds one privilege, `SELECT` on the view. It cannot read the table, even though the view reads it, and it cannot change anything. The OWASP cheat sheet gives the same advice for applications: grant the account only `SELECT` on a view that omits the sensitive fields, and note that "PostgreSQL normally checks underlying table access using the view owner's privileges".
+
+### 3. How a query built from strings breaks
+
+**Idea.** **SQL injection** happens when text that came from outside becomes part of the SQL text itself. The OWASP definition: "A SQL injection attack occurs when untrusted data (usually strings) becomes part of a query's SQL syntax, modifying the logic of the SQL request." The risky habit is gluing a typed value into a query with `||` or `+`.
+
+To see it safely, the editor plays both parts. `build_query` plays the application, gluing a typed store name into a query. DuckDB's `query()` then runs the text it is given, as a badly written application would; its documentation warns that it "allows invoking arbitrary queries". It reads only the `stores` table here.
+
+**Predict:** staff type `Campus`; then someone types `x' OR '1'='1`. What will the two glued query texts look like?
+
+**Try it:**
+
+<RunSQL query={`CREATE OR REPLACE MACRO build_query(name) AS
+  'SELECT store_id, store_name FROM stores WHERE store_name = ''' || name || '''';
+SELECT build_query('Campus') AS typed_campus,
+       build_query('x'' OR ''1''=''1') AS typed_trick;`} />
+
+Expected: 1 row, 2 columns. *Why:* in SQL a doubled quote inside a string stands for one quote, so the second argument is the text `x' OR '1'='1`. Glued in, the typed quote closes the string early and the rest becomes part of the `WHERE`.
+
+**Predict:** the application now runs each text. How many rows does the second one return?
+
+**Try it:**
+
+<RunSQL query={`SELECT * FROM query(build_query('Campus'));`} />
+
+<RunSQL query={`SELECT * FROM query(build_query('x'' OR ''1''=''1'));`} />
+
+Expected: each 2 columns (`store_id`, `store_name`). *Why:* the first finds Campus; the second returns every store, because `'1'='1'` is true on every row and the `OR` turned the lookup into "everything". Here the damage is a list of public store names. With a real account that can read customer tables or change data, the same trick reads or changes those, as OWASP warns: depending on the privileges, an attack can read data, modify it, and even run administration commands. The two lessons meet here: least privilege limits the damage.
+
+### 4. The fix: send the value separately
+
+**Idea.** A **parameterized query** keeps the query's wording and the value apart: the query has a placeholder (`$1` or `?`), and the value travels on its own. The OWASP advice: "Define the SQL structure separately from its data values and bind those values through the database API." DuckDB's documentation: prepared statements are "useful for preventing SQL injections".
+
+**Predict:** the same two typed texts, now sent as values. How many rows will each return?
+
+**Try it:**
+
+<RunSQL query={`PREPARE find_store AS
+  SELECT store_id, store_name FROM stores WHERE store_name = $1;
+EXECUTE find_store('Campus');`} />
+
+<RunSQL query={`EXECUTE find_store('x'' OR ''1''=''1');`} />
+
+Expected: each 2 columns. *Why:* the first gives Campus. The second looks for a store literally named `x' OR '1'='1`, and there is none, so no rows: the database can only treat the typed text as a value, and the quote is just a character. Run the second block after the first, because `find_store` stays prepared until you leave the page.
+
+**Read only.** In an application the same idea is a placeholder and a separate value. Python with DuckDB, and with its built-in `sqlite3`:
+
+```python
+con.execute("SELECT store_id, store_name FROM stores WHERE store_name = ?", [name])
+cur.execute("SELECT store_id, store_name FROM stores WHERE store_name = ?", (name,))
+```
+
+With `name = "x' OR '1'='1"` both returned no rows, and the glued version of the same lookup returned all three stores. The Python documentation advises always using placeholders instead of string formatting to bind Python values to SQL statements, to avoid SQL injection attacks.
+
+A placeholder stands for a value only, never a table name, a column name or `ASC`. OWASP's answer for those is to map the user's choice to a short list of fixed words that your code owns and reject anything else, and to keep binding every value even after you validate it.
+
+<Aside type="tip" title="Remember">
+
+- Share through a view that lists only the columns and rows the reader needs, and remember it is a lock only where the database grants on the view instead of the table.
+- A role starts with nothing: `GRANT` what the job needs, `REVOKE` what it no longer does.
+- Never glue typed text into a query. Send values as parameters.
+- A placeholder is for values. For table or column names, choose from a fixed list.
+
+**Common trap: "I removed the name, so the data is safe to share."** A customer number or a city and a signup day can still point to a person. Share the fewest columns, and keep the list that links ids to people away from the people who do not need it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="sql-access-and-injection-1">
+
+**Share the cafe's payment mix without the customers.** Make a view `payment_mix` that shows, for each store, the payment method and how many orders used it, and nothing about customers. Expected: 9 rows, 3 columns (`store_id`, `payment_method`, `orders`), counting all 1,800 orders.
+
+Done for you: the grouping, without the view.
+
+<RunSQL query={`SELECT store_id, payment_method, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id, payment_method
+ORDER BY store_id, payment_method;`} />
+
+Now finish it: wrap the query in `CREATE OR REPLACE VIEW payment_mix AS ...` (without the `ORDER BY`), then read the view back and check that the orders add up to 1,800.
+
+<details>
+<summary>Hint</summary>
+
+`CREATE VIEW ... AS` takes the whole query; read the view with `SELECT SUM(orders) FROM payment_mix;`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE OR REPLACE VIEW payment_mix AS
+SELECT store_id, payment_method, COUNT(*) AS orders
+FROM orders
+GROUP BY ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+CREATE OR REPLACE VIEW payment_mix AS
+SELECT store_id, payment_method, COUNT(*) AS orders
+FROM orders
+GROUP BY store_id, payment_method;
+SELECT SUM(orders) AS all_orders FROM payment_mix;
+```
+
+`1800`. The view lists no customer column, and each row is a count of orders, so no row stands for one person. That is the safest shape to hand over: totals, not rows.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="sql-access-and-injection-2">
+
+**Rewrite a glued lookup with a parameter.** The lookup form for products glues a typed product name into `SELECT product_id, product_name FROM products WHERE product_name = '...'`.
+
+Before you run anything, write as a comment what typing `x' OR '1'='1` would do to the glued version. Then prepare a parameterized version of the lookup, run it for `Espresso`, and run it again for `x' OR '1'='1`. Expected shape, to check your comment against: the second run returns the columns with no rows, and the first returns 1 row.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+`PREPARE name AS SELECT ... WHERE product_name = $1;` then `EXECUTE name('Espresso');`. A quote inside a string literal is written twice.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output: *"A prepared statement with one placeholder; one run that returns Espresso and one that returns nothing."*
+
+</details>
+
+<Solution>
+
+```sql
+PREPARE find_product AS
+  SELECT product_id, product_name FROM products WHERE product_name = $1;
+EXECUTE find_product('Espresso');
+EXECUTE find_product('x'' OR ''1''=''1');
+```
+
+The first returns `1 | Espresso`; the second returns no rows. Glued, the typed text would have given `WHERE product_name = 'x' OR '1'='1'`, true on all 16 products, so the form would list the whole menu. With the placeholder the quote is only a character in a name that does not exist.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what does least privilege mean, and what is the one thing a placeholder cannot stand for?
+
+<details>
+<summary>Answer</summary>
+
+Start with no access and grant only what the job needs. A placeholder stands for a value, not a table name, a column name or a keyword such as `ASC`.
+
+</details>
+
+<Exercise id="sql-access-and-injection-3">
+
+**Spot the flaw.** Staff want to choose how the store list is sorted, and a developer tries to pass the column as a parameter.
+
+<RunSQL query={`PREPARE sorted AS SELECT store_name, opened_on FROM stores ORDER BY $1;`} />
+
+Expected from that query: an error saying the parameter is not supported in the `ORDER BY` clause. The developer's next idea is to glue the typed column name into the query text instead. Why is that the wrong way out, and what is the right one?
+
+<Solution>
+
+A placeholder stands for a value, never for a column name or a keyword, which is why the database refuses it here. Gluing the typed name into the text would reopen the hole of unit 3: the typed text becomes part of the query. OWASP's answer for structure is an allow-list: map the user's choice to a few fixed words that your own query holds, and ignore anything else.
+
+```sql
+PREPARE sorted_stores AS
+  SELECT store_name, opened_on FROM stores
+  ORDER BY CASE WHEN $1 = 'opened' THEN opened_on END DESC,
+           CASE WHEN $1 = 'name' THEN store_name END;
+EXECUTE sorted_stores('opened');
+EXECUTE sorted_stores('x; DROP TABLE stores');
+```
+
+The first run lists Harbor, Campus, Old Town (newest first). The second text matches no choice, so the rows come back unsorted and nothing else runs.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can share only some columns and rows through a view, read a `GRANT`, say how glued strings let typed text change a query, and fix it with a parameter.*
+Test: Exercise sql-access-and-injection-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **grant the least, and send values apart from the query.**
