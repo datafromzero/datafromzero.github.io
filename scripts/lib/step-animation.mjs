@@ -278,10 +278,10 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 		},
 		/**
 		 * A crow's foot link (lib/erd.mjs): an orthogonal polyline `points` from the parent's key row to the child's key row, with the
-		 * cardinality symbol and label of each end (`a` at the first point, `b` at the last: '1', '0..1', '1..*', '0..*').
-		 * opts: { sideA, sideB ('above' | 'below' for a horizontal end, 'left' | 'right' for a vertical one), c (extra class on the line,
-		 * for example 'dsh'), labels (false: draw no labels) }. With fx.draw the line draws along its length and the symbols and
-		 * labels fade in with it; any other effect applies to all of it.
+		 * symbol of each end (`a` at the first point, `b` at the last: '1', '0..1', '1..*', '0..*', never written as numbers) and the
+		 * relationship name `opts.verb` (required: a short active verb phrase read from parent to child, "takes", "contains") on the middle
+		 * segment. opts: { verb, verbAt (segment index), c (extra class on the line, for example 'dsh') }. With fx.draw the line draws
+		 * along its length and the symbols and the verb fade in with it; any other effect applies to all of it.
 		 */
 		link(points, a, b, opts = {}, fx) {
 			const lk = erdLink(points, a, b, opts);
@@ -291,7 +291,8 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 			api.g(solid, () => {
 				api.path(lk.sym, `cf${extra}`);
 				for (const c of lk.circles) push(`<circle class="cf${extra}" cx="${c.cx}" cy="${c.cy}" r="${c.r}" />`);
-				if (opts.labels !== false) for (const l of lk.labels) api.text(l.x, l.y, l.text, 'cl', undefined, l.anchor === 'end' ? 'e' : 's');
+				api.text(lk.verb.x, lk.verb.y, lk.verb.text, 'cv', undefined, 'm');
+				if (lk.verb.tri) api.path(lk.verb.tri, 'ct');
 			});
 		},
 		/** A small filled pill with bold text; (x, y) is its top left, or its top right with align 'e'. */

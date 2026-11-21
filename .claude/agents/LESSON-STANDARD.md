@@ -256,46 +256,59 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
 
 ## Entity-relationship diagrams (crow's foot)
 
-Owner decision, 2026-11-21 (choice: crow's foot symbols plus a small text label). Every figure that draws tables as boxes and joins them by
-lines (an ER diagram, a star schema, a link table, a normalization split, in a hand-drawn SVG or a concept animation) follows the convention
-of dbdiagram, DBeaver, Lucidchart and MySQL Workbench (Information Engineering notation). Figures that show row matches (join steppers,
-shaded-column data grids) or a pipeline of query steps are not ER diagrams and do not use it.
+Owner decisions, 2026-11-21: tables joined by lines follow the convention of dbdiagram, DBeaver, Lucidchart and MySQL Workbench (crow's foot,
+Information Engineering), and the symbols are the whole cardinality notation, with a verb phrase on every link. Every figure that draws
+tables as boxes and joins them by lines (an ER diagram, a star schema, a link table, a normalization split, in a hand-drawn SVG or a
+concept animation) follows it. Figures that show row matches (join steppers, shaded-column data grids) or a pipeline of query steps are
+not ER diagrams and do not use it.
 
 1. **Row to row.** A link line starts at the parent's primary-key (PK) row and ends at the child's foreign-key (FK) row, at the vertical
-   center of each row, on the box edge. It is orthogonal (horizontal and vertical segments only) and never crosses a box. A self-reference
-   (`customers.referred_by`) loops out of one side of the box from the FK row back to the PK row of the same box.
-2. **Ends use crow's foot symbols**, drawn at the box edge where the line meets it, 10 px wide:
+   center of each row, on the box edge. It is orthogonal (horizontal and vertical segments only), never crosses a box and never carries an
+   arrowhead. Prefer a straight line: put the PK row and the FK row at the same height. A self-reference (`customers.referred_by`) loops out of
+   one side of the box from the PK row to the FK row of the same box.
+2. **Ends use crow's foot symbols only**, drawn at the box edge where the line meets it, 10 px wide. The only bounds are zero, one and many:
 
-   | Label | Meaning | Symbol (from the box edge) |
-   | --- | --- | --- |
-   | `1` | exactly one | two bars |
-   | `0..1` | zero or one | bar, then a circle |
-   | `1..*` | one or many | crow's foot, then a bar |
-   | `0..*` | zero or many | crow's foot, then a circle |
+   | Meaning | Symbol (from the box edge) |
+   | --- | --- |
+   | exactly one | two bars |
+   | zero or one | bar, then a circle |
+   | one or many | crow's foot, then a bar |
+   | zero or many | crow's foot, then a circle |
 
-   The symbol beside a table says how many rows of that table go with one row of the table at the other end: `1` beside `stores` and
-   `1..*` beside `orders` read "an order has exactly one store; a store has one or many orders".
-3. **A label beside each end**: a small mono label (`1`, `0..1`, `1..*`, `0..*`) in the muted token, on the side of the line away from the
-   neighbouring symbols; the `cl` class in `src/styles/step-animation.css` styles it and the `cf` class draws lines and symbols in the text color.
+   **No numbers beside the symbols.** `1`, `0..1`, `1..*` and `0..*` are UML multiplicity, a different notation: it uses plain lines with the
+   multiplicity written at each end (OMG UML 2.5.1, 11.5.4), and it appears only in the lesson that teaches reading ER diagrams, in its own
+   diagram, never mixed with crow's feet. The symbol beside a table says how many rows of that table go with one row of the table at the
+   other end: two bars beside `stores` and a crow's foot beside `orders` read "an order has exactly one store; a store has one or many orders".
+3. **A verb phrase on every link**, the name of the relationship (Visio: the name is a verb that briefly describes the association; UML: a
+   name string near the middle of the line, not near an end, with a reading triangle). It sits on the middle segment of the line: centered
+   above a horizontal one, centered on a vertical one (a halo in the page color lets the line break around it). It is active, lowercase,
+   one or two words, at most 14 characters: takes, places, contains, appears in, refers, holds, sells, buys, describes, has, pairs with.
+   It reads **from the parent (the PK end) to the child (the FK end)**: "each customer places zero or many orders". The other way it turns
+   passive: "each order is placed by zero or one customer". A legend or caption of every figure gives both readings once. When the reading
+   direction runs upward or to the left, a small filled triangle stands **beside the label** (never on the line) and points the way the verb
+   reads; downward and to the right need none.
 4. **Cardinalities come from the data and the constraints**, checked with queries on `datasets/…/v1/` (DuckDB) and reported by count: a
-   nullable FK gives `0..1` at the parent end (count the NULLs); every parent with at least one child in the data gives `1..*` at the child end,
-   a parent with none gives `0..*` (count the parents with no child). Cafe-sales, verified: `orders.store_id` and `order_items.order_id` and
-   `order_items.product_id` never NULL and never orphan; `orders.customer_id` NULL on 1 of 1,800 orders, 5 of 150 customers with no order;
-   every order has 1 to 3 lines; 1 of 16 products (16, Pumpkin Spice Latte) has no line; `customers.referred_by` NULL on 120 of 150, no orphan,
-   121 customers referred nobody (a referrer has 1 or 2). In a star schema every dimension to fact link is `1` to `0..*` when the fact has an
-   unknown member for a missing key (the core star lesson); where the fact key can be NULL (the SQL star: 1 line with no customer) the
-   dimension end is `0..1`.
-5. **Drawing.** PK and FK markers on the rows as before; lines and symbols are `currentColor` (a refused or highlighted link may use a clause
-   color in an animation); legible in light and dark at 360 px drawn width (the page scales a drawing up to 520 px): text at least 10 px, boxes
-   at most two columns, the end stub of a link at least 30 px so symbol and label fit, FK rows 28 px apart where several links reach one box so
-   labels never touch the next symbol. Route links through the gap between the columns and the side margins (about 32 px); order the
-   channels so two links never cross. `<svg>` keeps `role="img"`, `<title>` and `<desc>`; the `<desc>` spells every cardinality in words
-   ("exactly one store (1) for each order, one or many orders (1..&#42;) for each store") and, like any figure `<desc>`, never states the
-   answer to a Predict or exercise that comes later. Write `*` as `&#42;` in SVG text.
-6. **Tooling.** `scripts/lib/erd.mjs` holds the geometry: `link(points, a, b, opts)` returns the line, the symbols and the labels, and
-   `svg(link)` renders them for a hand-drawn figure. In a concept animation call `a.link(points, a, b, opts, fx)` (an `fx` with `draw: true`
-   draws the line and fades the symbols in). Change the generator, then run `node scripts/refresh-concept-figures.mjs` and revert unrelated
-   rewrites. Look at every changed figure in light and dark at 390 px, and at every step of an animation, before it ships.
+   nullable FK gives a circle and a bar at the parent end (count the NULLs); every parent with at least one child in the data gives a
+   bar at the child end, a parent with none gives a circle (count the parents with no child). Cafe-sales, verified: `orders.store_id`,
+   `order_items.order_id` and `order_items.product_id` never NULL and never orphan; `orders.customer_id` NULL on 1 of 1,800 orders, 5 of 150
+   customers with no order; every order has 1 to 3 lines; 1 of 16 products (16, Pumpkin Spice Latte) has no line; `customers.referred_by`
+   NULL on 120 of 150, no orphan, 121 customers referred nobody (a referrer has 1 or 2). In a star schema every dimension to fact link is
+   exactly one to zero or many when the fact has an unknown member for a missing key (the core star lesson); where the fact key can be NULL
+   (the SQL star: 1 line with no customer) the dimension end is zero or one.
+5. **Drawing.** PK and FK markers on the rows; lines and symbols are `currentColor` (a refused or highlighted link may use a clause color in an
+   animation); legible in light and dark at 360 px drawn width (the page scales a drawing up to 520 px): text at least 10 px, boxes at most two
+   columns, the end stub of a link at least 30 px so the symbol fits, and a verb needs about 5 px a character on its segment (9 px more for
+   the triangle), so leave 56 px or more between two columns for `appears in`. A figure whose links would be too short to carry the verb
+   moves a verb to a longer segment (`verbAt`) or widens the gap, it never drops the verb. `<svg>` keeps `role="img"`, `<title>` and
+   `<desc>`; the `<desc>` spells every link in words, verb and cardinalities ("stores takes orders: each store takes one or many orders and
+   each order is taken by exactly one store") and, like any figure `<desc>`, never states the answer to a Predict or exercise that comes
+   later. Write `*` as `&#42;` in SVG text.
+6. **Tooling.** `scripts/lib/erd.mjs` holds the geometry: `link(points, a, b, { verb })` returns the line, the symbols, the verb and the
+   triangle (it throws without a verb, or when the verb does not fit), and `svg(link)` renders them for a hand-drawn figure. In a concept
+   animation call `a.link(points, a, b, { verb }, fx)` (an `fx` with `draw: true` draws the line and fades the symbols and the verb in). The
+   symbols are named `'1'`, `'0..1'`, `'1..*'` and `'0..*'` in code only; nothing prints them. Change the generator, then run
+   `node scripts/refresh-concept-figures.mjs` and revert unrelated rewrites. Look at every changed figure in light and dark at 390 px, and
+   at every step of an animation, before it ships.
 
 ## Python stage (D45, D46): teaching rules
 
