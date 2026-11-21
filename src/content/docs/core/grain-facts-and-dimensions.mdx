@@ -1,0 +1,429 @@
+---
+id: core-grain-facts-and-dimensions
+title: Grain, facts and dimensions
+short_title: Grain and facts
+description: Split a business process into facts (events and measures) and dimensions (who, what, where, when), and fix the grain first.
+stage: core
+order: 170
+level: intermediate
+duration: 26
+objectives:
+  - State the grain of a business process in one sentence
+  - Separate measures from descriptive attributes
+  - Tell a fact table from a dimension table
+  - Explain how a wrong grain breaks every number
+prerequisites:
+  - sql-normalization
+  - sql-join-fanout
+  - sql-self-and-multi-table-joins
+  - sql-conditional-aggregation
+  - core-modeling-the-domain
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-grain-facts-and-dimensions.ipynb
+reviewed: 2026-11-21
+sources:
+  - title: 'Kimball Group: Grain (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/grain/
+  - title: 'Kimball Group: Fact Table Structure (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/fact-table-structure/
+  - title: 'Kimball Group: Dimension Table Structure (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/dimension-table-structure/
+  - title: 'Kimball Group: Degenerate Dimensions (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/degenerate-dimension/
+status: published
+---
+
+## The question
+
+The owner of the cafes asks two things in one message:
+
+> How many orders did each cafe take in each month? And which two products are bought together most often? Can one table answer both?
+
+The first rows of the lines of the orders, with the date and cafe of each (some columns left out):
+
+| order_item_id | order_id | store_id | order_date | product_id | quantity | amount_usd |
+|---:|---:|---:|---|---:|---:|---:|
+| 5001 | 1001 | 2 | 2026-01-01 | 10 | 1 | 3.25 |
+| 5002 | 1001 | 2 | 2026-01-01 | 6 | 1 | 4.75 |
+| 5003 | 1001 | 2 | 2026-01-01 | 1 | 2 | 6.00 |
+| 5004 | 1002 | 1 | 2026-01-01 | 10 | 1 | 3.25 |
+
+By the end you can say the grain of a table in one sentence, sort the columns into measures and descriptions, and count orders without counting lines.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Modeling the domain before the tables*](/core/modeling-the-domain/) (C16) you said what one row of each table stands for, and saw a total grow when an order's number was added once for every line. Here you choose the grain of a table before you build it.
+
+**Diverge.** There the tables were given. Unit 1 builds the same sales at three grains, and one of the owner's questions fits only one of them.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Modeling the domain before the tables*](/core/modeling-the-domain/) (C16), what does a many-to-many relationship become, and where does a fact about the pair go?
+
+   <details>
+   <summary>answer</summary>
+
+   A table of its own, with a foreign key for each side. A fact about the pair, such as a quantity, goes in that table.
+
+   </details>
+
+2. Write the query that counts the lines of `order_items` and the orders they belong to.
+
+   <details>
+   <summary>answer</summary>
+
+   `SELECT COUNT(*), COUNT(DISTINCT order_id) FROM order_items;` The result is 3,287 lines and 1,800 orders.
+
+   </details>
+
+## The big idea
+
+Units and sales add up from a fine grain into any coarser one, and a coarse table can never be split back.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="gr-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="gr" id="gr-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="gr" id="gr-r1" aria-label="Step 1 of 5: One row per line" />
+<input class="sa-r r2 o3" type="radio" name="gr" id="gr-r2" aria-label="Step 2 of 5: Lines add up into order rows" />
+<input class="sa-r r3 o4" type="radio" name="gr" id="gr-r3" aria-label="Step 3 of 5: Both levels give the same total" />
+<input class="sa-r r4 o6" type="radio" name="gr" id="gr-r4" aria-label="Step 4 of 5: Splitting back does not work" />
+<input class="sa-r r5 o8" type="radio" name="gr" id="gr-r5" aria-label="Step 5 of 5: Keep the finest grain you need" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>line rows</small><span><i class="w1 tmp hl">4</i><i class="w7 d2">4</i></span></span><span class="sa-n c-out"><small>order rows</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">1</i><i class="w1 d3 tmp hl">2</i><i class="w5 d4">2</i></span></span><span class="sa-n c-mat"><small>total</small><span><i class="w3 tmp">—</i><i class="w1 d4 tmp hl">same</i><i class="w4 d5">same</i></span></span><span class="sa-n c-flt"><small>split back</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">no</i><i class="w2 d7">no</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 262" width="360" role="img" aria-labelledby="gr-t gr-d">
+<title id="gr-t">A fine grain adds up to a coarse one, but never splits back</title>
+<desc id="gr-d">Four line rows, L1 to L4, each with a value m1 to m4. L1, L2 and L3 add up into one order row, O1, and L4 becomes the order row O2. Both levels add up to the same total, m1 plus m2 plus m3 plus m4. A dashed arrow from O1 back toward three empty seats is crossed out: the sum of three values does not say which three values made it.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · One row per line</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Lines add up into order rows</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · Both levels give the same total</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · Splitting back does not work</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Keep the finest grain you need</text>
+<text class="f11 b" x="10" y="14">Add up, never split back</text>
+<g><rect class="f-src k3" x="10" y="58" width="64" height="24" rx="6" /><text class="f11 m" x="42" y="74">L1 · m1</text></g>
+<g><rect class="f-src k3" x="78" y="58" width="64" height="24" rx="6" /><text class="f11 m" x="110" y="74">L2 · m2</text></g>
+<g><rect class="f-src k3" x="146" y="58" width="64" height="24" rx="6" /><text class="f11 m" x="178" y="74">L3 · m3</text></g>
+<g><rect class="f-src k3" x="262" y="58" width="64" height="24" rx="6" /><text class="f11 m" x="294" y="74">L4 · m4</text></g>
+<g class="w7 d2"><rect class="f-out k3" x="10" y="150" width="200" height="24" rx="6" /><text class="f11 m" x="110" y="166">O1 · m1 + m2 + m3</text></g>
+<g class="w6 d3"><rect class="f-out k3" x="262" y="150" width="64" height="24" rx="6" /><text class="f11 m" x="294" y="166">O2 · m4</text></g>
+<path class="s-out dr p7 d2" pathLength="1" d="M42 82L42 148M45.04 141.7L42 148L38.96 141.7" />
+<path class="s-out dr p7 d2" pathLength="1" d="M110 82L110 148M113.04 141.7L110 148L106.96 141.7" />
+<path class="s-out dr p7 d2" pathLength="1" d="M178 82L178 148M181.04 141.7L178 148L174.96 141.7" />
+<path class="s-out dr p6 d3" pathLength="1" d="M294 82L294 148M297.04 141.7L294 148L290.96 141.7" />
+<text class="f10 b m w1 d4 tmp" x="180" y="212">both levels add up to m1 + m2 + m3 + m4</text>
+<rect class="bx dsh w4 d5" x="10" y="220" width="64" height="24" />
+<rect class="bx dsh w4 d5" x="78" y="220" width="64" height="24" />
+<rect class="bx dsh w4 d5" x="146" y="220" width="64" height="24" />
+<text class="f11 b m w4 d5" x="42" y="236">?</text>
+<text class="f11 b m w4 d5" x="110" y="236">?</text>
+<text class="f11 b m w4 d5" x="178" y="236">?</text>
+<path class="s-flt dsh dr p4 d5" pathLength="1" d="M110 176L110 218M113.04 211.7L110 218L106.96 211.7" />
+<text class="f10 b f-flt m w4 d5" x="250" y="200">no way back</text>
+<text class="f10 b m w2 d7" x="280" y="242">finest grain you need</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="gr-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="gr-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="gr-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="gr-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="gr-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="gr-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="gr-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="gr-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="gr-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="gr-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="gr-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="gr-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="gr-r1">1</label><label class="sa-sb sb2" for="gr-r2">2</label><label class="sa-sb sb3" for="gr-r3">3</label><label class="sa-sb sb4" for="gr-r4">4</label><label class="sa-sb sb5" for="gr-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">The grain says what one row stands for. Here one row is one line.<span class="sa-chs"><span class="sa-ch pl">4 line rows</span></span></div>
+<div class="c-out w2 d2 tmp">Adding the lines of each order gives a coarser table: one row per order.<span class="sa-chs"><span class="sa-ch pl">2 order rows</span><span class="sa-ch ch">each order row holds a sum</span></span></div>
+<div class="c-mat w1 d4 tmp">Adding up loses no value: every level of grain has the same total.<span class="sa-chs"><span class="sa-ch ch">total unchanged</span></span></div>
+<div class="c-flt w2 d5 tmp">A sum does not say which values made it, so the detail is gone for good.<span class="sa-chs"><span class="sa-ch mi">the three lines are not recoverable</span></span></div>
+<div class="c-out w2 d7">Keep the finest grain the questions need: coarser tables can be added up from it.<span class="sa-chs"><span class="sa-ch pl">a rule for choosing the grain</span></span></div>
+</div>
+<p class="ca-cap">Additive values such as units and sales, added up from a fine grain, give any coarser grain. A coarse table cannot be turned back into the detail it was added from.</p>
+<ol class="sa-steps">
+<li>One row per line</li>
+<li>Lines add up into order rows</li>
+<li>Both levels give the same total</li>
+<li>Splitting back does not work</li>
+<li>Keep the finest grain you need</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 26 minutes, 3 new ideas: choosing a grain, measures against descriptions, and counting events at the grain of a line. The queries run in the page, and the notebook runs the same ones in DuckDB.
+
+<OpenInColab />
+
+### 1. Choose the grain
+
+**Idea.** The *grain* of a fact table says what one row stands for, and it comes before the columns. A *fact table* holds the numbers an event produced, one row for each event. Kimball Group's page on grain says that different grains must not be mixed in the same fact table. Choose the finest grain the questions need.
+
+**Try it.** Build the sales at three grains: one row for each line, for each order and for each cafe and month. The second and third are added up from the first.
+
+<RunSQL query={`CREATE OR REPLACE TABLE sales_line AS
+SELECT i.order_item_id, i.order_id, o.store_id, CAST(o.ordered_at AS DATE) AS order_date,
+       i.product_id, i.quantity,
+       i.quantity * p.unit_price_usd - i.discount_usd AS amount_usd
+FROM order_items AS i
+JOIN orders AS o ON o.order_id = i.order_id
+JOIN products AS p ON p.product_id = i.product_id;
+
+CREATE OR REPLACE TABLE sales_order AS
+SELECT order_id, store_id, order_date, COUNT(*) AS lines, SUM(quantity) AS units, SUM(amount_usd) AS amount_usd
+FROM sales_line
+GROUP BY order_id, store_id, order_date;
+
+CREATE OR REPLACE TABLE sales_store_month AS
+SELECT store_id, month(order_date) AS month, COUNT(*) AS orders, SUM(units) AS units, SUM(amount_usd) AS amount_usd
+FROM sales_order
+GROUP BY store_id, month(order_date);
+
+SELECT 'built' AS note;`} />
+
+Expected: 1 row, 1 column: the note `built`.
+
+**Try it.** The three tables side by side:
+
+<RunSQL query={`SELECT 'line' AS grain, COUNT(*) AS rows, ROUND(SUM(amount_usd), 2) AS sales FROM sales_line
+UNION ALL SELECT 'order', COUNT(*), ROUND(SUM(amount_usd), 2) FROM sales_order
+UNION ALL SELECT 'store-month', COUNT(*), ROUND(SUM(amount_usd), 2) FROM sales_store_month;`} />
+
+**Predict:** how many rows will each of the three tables have?
+
+Expected: 3 rows, 3 columns.
+
+*Why:* 3,287, 1,800 and 15 rows, and the same 22,754.25 dollars in each (the canceled order and order 2075 included). Adding up lost no money, because units and sales are measures that add: the sum of the parts is the whole. What it lost is every distinction that the coarser grain does not name.
+
+**Try it.** The owner's second question, which two products are bought together most often, from the line table. Two lines of the same order, a pair, are matched with a self-join:
+
+<RunSQL query={`SELECT pa.product_name AS first_product, pb.product_name AS second_product, COUNT(*) AS orders
+FROM sales_line AS a
+JOIN sales_line AS b ON b.order_id = a.order_id AND b.product_id > a.product_id
+JOIN products AS pa ON pa.product_id = a.product_id
+JOIN products AS pb ON pb.product_id = b.product_id
+GROUP BY pa.product_name, pb.product_name
+ORDER BY orders DESC, first_product, second_product
+LIMIT 3;`} />
+
+**Predict:** will the most common pair be two drinks, or a drink with something to eat?
+
+Expected: 3 rows, 3 columns.
+
+*Why:* Americano with Latte comes first, in 51 orders, then Latte with Cappuccino and Latte with Cold Brew, 49 each. The best-selling pair is two drinks. Neither coarser table has a product column, so this question has nothing to stand on in them: the detail was added up, and a sum cannot be split back into the values it came from. The first question, orders for each cafe and month, can be answered from all three tables. The line grain answers both, which is why you start from the finest grain the questions need.
+
+### 2. Measures and descriptions
+
+**Idea.** An event leaves two kinds of column in a table. A *measure* is a number the event produced, which you add up or average over many rows. A *description* says who, what, where or when: the cafe, the product, the customer, the day. Kimball Group's pages say that a fact table holds numeric measures and keys to its dimensions, and that queries filter and group by the attributes of a *dimension table*. A column that only names the row, such as `order_item_id`, is a key. Ask of each numeric column: does adding it up over many rows answer a question?
+
+**Try it.** Add up four numbers of the lines, with the price of each line's product:
+
+<RunSQL query={`SELECT ROUND(SUM(p.unit_price_usd), 2) AS sum_of_prices,
+       SUM(i.quantity) AS units,
+       ROUND(SUM(i.quantity * p.unit_price_usd), 2) AS gross,
+       ROUND(SUM(i.discount_usd), 2) AS discounts,
+       ROUND(SUM(i.quantity * p.unit_price_usd - i.discount_usd), 2) AS sales
+FROM order_items AS i
+JOIN products AS p ON p.product_id = i.product_id;`} />
+
+**Predict:** which of the numbers is the sales of the cafes, and what does the sum of the prices measure?
+
+Expected: 1 row, 5 columns.
+
+*Why:* 14,453.25 for the sum of the prices, 5,162 units, 22,838.25 gross, 84.00 in discounts and 22,754.25 in sales, for all 1,800 orders: the canceled order and order 2075 are in it. Quantity, discount and amount are the measures. The sum of the prices measures nothing: it adds the price of a product once for every line and ignores how many units were bought. The price describes the product. The amount of a line is the measure: quantity times price, less the discount. This dataset holds one price for each product, so the amount could be rebuilt from the product table; a shop whose menu prices change stores the amount with the event, so that an old sale keeps the price it was paid at.
+
+### 3. Counting events at the grain of a line
+
+**Idea.** At the line grain, a row is a line, not an order. The order id stays in the fact table as a key with no table of its own: Kimball Group call it a *degenerate dimension*; their example is an invoice number on the line items of an invoice.
+
+**Try it.** The lines of mobile orders, and the mobile orders:
+
+<RunSQL query={`SELECT COUNT(*) AS mobile_lines,
+       COUNT(DISTINCT i.order_id) AS mobile_orders
+FROM order_items AS i
+JOIN orders AS o ON o.order_id = i.order_id
+WHERE o.payment_method = 'mobile';`} />
+
+**Predict:** `COUNT(*)` here counts rows of the join. Will it be close to the number of mobile orders, or well above it?
+
+Expected: 1 row, 2 columns.
+
+*Why:* 1,006 lines in 546 mobile orders, so `COUNT(*)` is 84 percent too high. The orders table agrees with the second number. The payment is an attribute of the order, repeated on each of its lines: harmless to filter by, wrong to count rows of. To count orders at this grain, count the distinct order ids; at a given grain, `COUNT(*)` counts the thing the grain names.
+
+<Aside type="tip" title="Remember">
+
+- Say the grain in one sentence before you add a column: one row for each order line.
+- Keep the finest grain the questions need: units and sales can be added up from it into coarser tables, never split back.
+- A measure is a number you add up or average; a description says who, what, where or when; a key names a row.
+- Count orders with `COUNT(DISTINCT order_id)` at the line grain; `COUNT(*)` counts lines.
+
+**Common trap:** adding up a number that does not belong to the grain. The sum of the unit prices of 3,287 lines is 14,453.25, and it means nothing.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-grain-facts-and-dimensions-1">
+
+**A fourth grain: one row for each product and day.** Finish the table `sales_product_day` from `sales_line` (unit 1 builds it; run that block first). The starter stops with an error: the table is meant to hold one row for each product and day, and its `GROUP BY` does not say so yet. Then add a query that checks the table: its rows, its units and its sales, which must equal the units and the sales of `sales_line`. Expected: 1 row, 3 columns. In the notebook, `answer_1` is [rows, units, sales], sales rounded to 2 decimals.
+
+<RunSQL query={`-- grain: one row for each product and day
+CREATE OR REPLACE TABLE sales_product_day AS
+SELECT product_id, order_date, SUM(quantity) AS units, SUM(amount_usd) AS amount_usd
+FROM sales_line
+GROUP BY product_id;`} />
+
+<details>
+<summary>Hint</summary>
+
+The error names the column that is not in the `GROUP BY`. The columns of the `GROUP BY` are the grain.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+GROUP BY product_id, ...;
+
+SELECT COUNT(*) AS rows, SUM(units) AS units, ROUND(SUM(...), 2) AS sales
+FROM sales_product_day;
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+CREATE OR REPLACE TABLE sales_product_day AS
+SELECT product_id, order_date, SUM(quantity) AS units, SUM(amount_usd) AS amount_usd
+FROM sales_line
+GROUP BY product_id, order_date;
+
+SELECT COUNT(*) AS rows, SUM(units) AS units, ROUND(SUM(amount_usd), 2) AS sales
+FROM sales_product_day;
+```
+
+1,819 rows, 5,162 units and 22,754.25 dollars: fewer rows than the 3,287 lines, the same units and the same money. A `GROUP BY` that lists exactly the columns of the grain makes every row stand for one product and one day.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-grain-facts-and-dimensions-2">
+
+**How many orders hold both a coffee and a bakery item?** Before you start, say what the result looks like: one whole number. The categories are in `products`; each order is a group of lines. Write the query in the editor. Expected: 1 row, 1 column. In the notebook, `answer_2` is a whole number.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Group the lines by order. For each order, count its coffee lines and its bakery lines with `COUNT(*) FILTER (WHERE ...)`, and keep the orders where both counts are above zero. Then count those orders.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A number between 300 and 400."*
+
+```sql
+SELECT COUNT(*) AS orders
+FROM (SELECT i.order_id
+      FROM order_items AS i
+      JOIN products AS p ON p.product_id = i.product_id
+      GROUP BY i.order_id
+      HAVING ...);
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS orders
+FROM (SELECT i.order_id
+      FROM order_items AS i
+      JOIN products AS p ON p.product_id = i.product_id
+      GROUP BY i.order_id
+      HAVING COUNT(*) FILTER (WHERE p.category = 'coffee') > 0
+         AND COUNT(*) FILTER (WHERE p.category = 'bakery') > 0);
+```
+
+352 of the 1,800 orders. Only the line grain knows which products an order holds; a table with one row for each order could not answer it. Counting the lines of a coffee and a bakery product without grouping by order would count lines, not orders.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a table has one row for each cafe and month. Name one question it can answer and one it cannot.
+
+   <details>
+   <summary>answer</summary>
+
+   It can give the sales of a cafe in a month. It cannot give the sales of a product, or of a day, because that detail was added up and cannot be split back.
+
+   </details>
+
+<Exercise id="core-grain-facts-and-dimensions-3">
+
+**Spot the flaw.** A colleague reports the customers who ordered in the second quarter (April to June) by counting the customers of each month and adding the three counts. Run it. Expected: 1 row, 1 column. What is wrong, and how many customers ordered in the second quarter? In the notebook, `answer_3` is that number.
+
+<RunSQL query={`SELECT SUM(customers) AS customers_in_q2
+FROM (SELECT month(ordered_at) AS month, COUNT(DISTINCT customer_id) AS customers
+      FROM orders
+      WHERE ordered_at >= TIMESTAMP '2026-04-01'
+      GROUP BY month(ordered_at));`} />
+
+<details>
+<summary>Hint</summary>
+
+A customer who ordered in April and again in May is in the April count and in the May count. What does the sum do with that customer?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(DISTINCT customer_id) AS customers_in_q2
+FROM orders
+WHERE ...;
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+SELECT COUNT(DISTINCT customer_id) AS customers_in_q2
+FROM orders
+WHERE ordered_at >= TIMESTAMP '2026-04-01';
+```
+
+The colleague got 370, but only 144 customers ordered in the quarter (all statuses). A count of distinct customers does not add up from months to a quarter: a customer who came in two months is counted twice in the sum. Units and sales add; a distinct count has to be made again at the grain you want, from the rows below it. The monthly table is the wrong source for a question about the quarter.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say the grain of a table in one sentence, keep the finest grain the questions need, tell a measure from a description and a key, and count orders at the grain of a line without counting lines.*
+Test: Exercise core-grain-facts-and-dimensions-2, done from the notebook without opening the hints.
+
+The pattern to remember: **say the grain, put each number at its grain, and add up, never split back.** Next comes [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18), where the questions choose the grain and the dimensions.

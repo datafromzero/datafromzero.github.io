@@ -135,7 +135,7 @@ A **trigger** is a rule the database runs by itself whenever a table changes, an
 <div class="sa-now" aria-hidden="true">
 <div class="c-mat w1 tmp">A trigger is a rule attached to a table. It does nothing until the table changes.<span class="sa-chs"><span class="sa-ch pl">T: 2 rows</span><span class="sa-ch pl">a rule on T</span></span></div>
 <div class="c-out w2 d2 tmp">An insert, update or delete on the table is the event the rule waits for.<span class="sa-chs"><span class="sa-ch ch">Row 2 changed</span></span></div>
-<div class="c-mat w2 d4 tmp">The database runs the rule inside the same statement, so no one has to remember it.<span class="sa-chs"><span class="sa-ch pl">the rule ran once</span></span></div>
+<div class="c-mat w2 d4 tmp">The database runs the rule inside the same statement, so no one has to remember it.<span class="sa-chs"><span class="sa-ch pl">rule fired</span></span></div>
 <div class="c-out w3 d6">The rule runs its own statement. Here that writes one row to another table.<span class="sa-chs"><span class="sa-ch pl">L: 1 log row</span></span></div>
 </div>
 <p class="ca-cap">A trigger is attached to a table. When the table changes, the database runs the rule itself, as part of the same change.</p>
@@ -153,7 +153,7 @@ Six small steps. Press Run on the blocks that run; read the others. The scratch 
 
 ### 1. Do it by hand first
 
-**Idea.** Two statements that belong together, a change and its log row, are kept together only by the person who writes them. A transaction (S32) makes them succeed or fail as one, but it cannot make someone write both.
+**Idea.** A change and its log row are two statements. A transaction (S32) makes two statements succeed or fail as one.
 
 **Try it:** raise Espresso by 25 cents and log it, in one transaction.
 
@@ -175,18 +175,18 @@ Expected: 1 row, 3 columns: `1 | 3.00 | 3.25`.
 
 **Predict:** a colleague raises Americano by 25 cents with only the `UPDATE`. How many rows will `price_log` hold afterwards?
 
-**Try it:**
+**Try it** (needs `menu` and `price_log` from the block above):
 
 <RunSQL query={`UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE product_id = 2;
 SELECT COUNT(*) AS log_rows FROM price_log;`} />
 
-Expected: 1 row, 1 column. *Why:* the log still holds only Espresso. Nothing tied the log to the table, so the price changed and no row says so.
+Expected: 1 row, 1 column. *Why:* the log still holds only Espresso. Nothing tied the log to the table: only the person writing the statements keeps the two together, so the price changed and no row says so.
 
 ### 2. A trigger runs the second statement for you
 
 **Idea.** A trigger belongs to a table. It names an **event** (`INSERT`, `UPDATE` or `DELETE`), a **timing** (`BEFORE` or `AFTER` the change) and a **granularity**: `FOR EACH ROW` runs once for every changed row, `FOR EACH STATEMENT` runs once per statement. The DuckDB documentation: "The CREATE TRIGGER statement registers a trigger: a set of SQL statements that run automatically in response to INSERT, UPDATE, or DELETE events on a table." A statement-level trigger can read the rows that changed, as they were before and after, through **transition tables**.
 
-**Read only.** DuckDB 2.0, on the `menu` and `price_log` tables of unit 1:
+**Read only.** DuckDB 2.0, on a fresh copy of `menu` (the first statement of unit 1) and an empty `price_log`:
 
 ```sql
 CREATE TRIGGER log_price
@@ -199,12 +199,12 @@ FOR EACH STATEMENT
   WHERE o.unit_price_usd <> n.unit_price_usd;
 ```
 
-**Predict:** one `UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE category = 'coffee';` changes every coffee row. How many rows will `price_log` hold afterwards, counting from an empty log? And after a second `UPDATE` with `WHERE category = 'soda'`, which matches nothing?
+**Predict:** one `UPDATE menu SET unit_price_usd = unit_price_usd + 0.25 WHERE category = 'coffee';` changes every coffee row. How many rows will `price_log` hold afterwards? And after a second `UPDATE` with `WHERE category = 'soda'`, which matches nothing?
 
 <details>
 <summary>Reveal the result</summary>
 
-Run on DuckDB 2.0.0, `SELECT COUNT(*) FROM price_log;` after each `UPDATE`:
+Run on DuckDB 2.0.0, on the fresh `menu` and empty `price_log` above, `SELECT COUNT(*) FROM price_log;` after each `UPDATE`:
 
 ```text
 after the coffee update: 7
@@ -221,7 +221,7 @@ The first three log rows, by `product_id`: `1 | 3.00 | 3.25`, `2 | 3.50 | 3.75`,
 
 **Idea.** Every engine has its own syntax for the same rule. Compare the three, and note what each can and cannot do.
 
-**Read only.** SQLite 3.53.1, through Python's `sqlite3` (the table `menu` and the log as in unit 1):
+**Read only.** SQLite 3.53.1, through Python's `sqlite3` (a fresh `menu` and an empty `price_log`, as above):
 
 ```sql
 CREATE TRIGGER log_price AFTER UPDATE OF unit_price_usd ON menu
@@ -261,7 +261,7 @@ A trigger written for one engine is rewritten for the next. That is the first co
 
 ### 4. Keep a total in sync
 
-**Idea.** A **derived value** is one you can always compute from other rows, such as the total of an order. If you also store it, something must update it whenever a line changes: a trigger can, or you can compute it fresh in a view (S28) and store nothing.
+**Idea.** A **derived value** is one you can always compute from other rows, such as the total of an order. You can keep it in a table or compute it in a view (S28).
 
 **Predict:** order 1001 has three lines. You add a fourth line, one Americano, to a copy of its lines. What total does the stored table show, and what total does the view show?
 
@@ -282,7 +282,7 @@ SELECT 'stored table' AS source, total_usd FROM totals_copy
 UNION ALL
 SELECT 'view', total_usd FROM totals_view;`} />
 
-Expected: 2 rows, 2 columns. *Why:* the stored table never heard about the new line, while the view reads the lines each time it runs. A trigger on `lines_copy` would have rewritten the stored total on every insert, update and delete of a line, which is more work on every change and logic that no one sees when they read the table. The view needs neither.
+Expected: 2 rows, 2 columns. *Why:* the stored table never heard about the new line, so something has to update it whenever a line changes, while the view reads the lines each time it runs. A trigger on `lines_copy` would have rewritten the stored total on every insert, update and delete of a line, which is more work on every change and logic that no one sees when they read the table. The view needs neither.
 
 ### 5. A procedure is a saved bundle you call
 
@@ -352,7 +352,7 @@ An analytics team usually rebuilds its numbers from the raw tables each time, wi
 
 <Exercise id="sql-triggers-and-procedures-1">
 
-**Wrap a price with tax in a macro.** Expected: the check returns 2 rows, 2 columns: Espresso `3.26` and Avocado Toast `9.22`, with the 8.5 percent rate.
+**Wrap a price with tax in a macro.** Expected: the check returns 2 rows, 2 columns: Espresso `3.26` and Avocado Toast `9.22`, with an example rate of 8.5 percent.
 
 Done for you: a macro with the rate written inside it, and the check.
 
@@ -399,7 +399,7 @@ SELECT price_with_tax(3.00, rate := 0.10) AS espresso_at_10_percent;
 
 **Log a delete by hand.** The cafe drops the three tea items from the `menu` table of unit 1. Keep the deleted rows in a table `deleted_menu`, in one transaction.
 
-Before you run anything, write as a comment which two statements the transaction holds and in which order, and why the order matters. Then write it, and check both tables. Needs `menu` from unit 1.
+Before you run anything, write as a comment which two statements the transaction holds and in which order, and why the order matters. Then write it, and check both tables. Needs `menu` from unit 1, which unit 1 already changed: Espresso and Americano cost 25 cents more.
 
 Expected shape, to check your comment against: a `menu` with 13 rows afterwards and a `deleted_menu` with 3 rows.
 

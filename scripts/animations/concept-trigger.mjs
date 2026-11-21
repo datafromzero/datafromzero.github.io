@@ -17,7 +17,7 @@ export default function make({ id = 'tg' } = {}) {
 		phases: [
 			[1, 'A table with a rule on it', { role: 'mat', key: 'A trigger is a rule attached to a table. It does nothing until the table changes.', changes: [['+', 'T: 2 rows'], ['+', 'a rule on T']] }],
 			[2, 'A change arrives', { role: 'out', key: 'An insert, update or delete on the table is the event the rule waits for.', changes: [['~', 'Row 2 changed']] }],
-			[4, 'The rule fires by itself', { role: 'mat', key: 'The database runs the rule inside the same statement, so no one has to remember it.', changes: [['+', 'the rule ran once']] }],
+			[4, 'The rule fires by itself', { role: 'mat', key: 'The database runs the rule inside the same statement, so no one has to remember it.', changes: [['+', 'rule fired']] }],
 			[6, 'The rule writes a log row', { role: 'out', key: 'The rule runs its own statement. Here that writes one row to another table.', changes: [['+', 'L: 1 log row']] }],
 		],
 		counters: [

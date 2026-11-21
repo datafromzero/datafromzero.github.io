@@ -44,6 +44,8 @@
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
 
+import { link as erdLink } from './erd.mjs';
+
 const MAX_STEPS = 6;
 const ROLES = ['src', 'mat', 'flt', 'grp', 'out', 'win', 'ord'];
 
@@ -273,6 +275,24 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 			const hx = (d) => x2 - 7 * Math.cos(a + d);
 			const hy = (d) => y2 - 7 * Math.sin(a + d);
 			api.path(`M${num(x1)} ${num(y1)}L${num(x2)} ${num(y2)}M${num(hx(0.45))} ${num(hy(0.45))}L${num(x2)} ${num(y2)}L${num(hx(-0.45))} ${num(hy(-0.45))}`, c, fx);
+		},
+		/**
+		 * A crow's foot link (lib/erd.mjs): an orthogonal polyline `points` from the parent's key row to the child's key row, with the
+		 * cardinality symbol and label of each end (`a` at the first point, `b` at the last: '1', '0..1', '1..*', '0..*').
+		 * opts: { sideA, sideB ('above' | 'below' for a horizontal end, 'left' | 'right' for a vertical one), c (extra class on the line,
+		 * for example 'dsh'), labels (false: draw no labels) }. With fx.draw the line draws along its length and the symbols and
+		 * labels fade in with it; any other effect applies to all of it.
+		 */
+		link(points, a, b, opts = {}, fx) {
+			const lk = erdLink(points, a, b, opts);
+			const extra = opts.c ? ` ${opts.c}` : '';
+			const solid = fx?.draw ? { in: fx.in, ...(fx.hide ? { hide: fx.hide } : {}) } : fx;
+			api.path(lk.line, `cf${extra}`, fx);
+			api.g(solid, () => {
+				api.path(lk.sym, `cf${extra}`);
+				for (const c of lk.circles) push(`<circle class="cf${extra}" cx="${c.cx}" cy="${c.cy}" r="${c.r}" />`);
+				if (opts.labels !== false) for (const l of lk.labels) api.text(l.x, l.y, l.text, 'cl', undefined, l.anchor === 'end' ? 'e' : 's');
+			});
 		},
 		/** A small filled pill with bold text; (x, y) is its top left, or its top right with align 'e'. */
 		badge(x, y, text, role, fx, align = 's') {
