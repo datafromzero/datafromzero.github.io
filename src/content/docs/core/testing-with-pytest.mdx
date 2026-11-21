@@ -1,0 +1,567 @@
+---
+id: core-testing-with-pytest
+title: Testing on known answers with pytest
+short_title: Testing with pytest
+description: Write pytest tests on small cafe tables with edge rows, catch a join that drops or doubles rows, and take expected answers from another route.
+stage: core
+order: 270
+level: intermediate
+duration: 30
+objectives:
+  - Write a test function with an assert and run it with pytest
+  - Build a small table whose answer you know, with edge rows such as the last second of a month and a missing value
+  - Catch a join that silently drops or doubles rows
+  - Take the expected answer from another route, and say what continuous integration does with your tests
+prerequisites:
+  - core-debugging-and-retries
+  - core-environments-and-dependencies
+  - python-ai-assisted-code
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'pytest documentation: Get started (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/getting-started.html
+  - title: 'pytest documentation: How to write and report assertions (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/how-to/assert.html
+  - title: 'pytest documentation: How to use fixtures (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/how-to/fixtures.html
+  - title: 'pandas documentation: DataFrame.merge (accessed 2026-11-21)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html
+  - title: 'uv documentation: Managing dependencies, development dependencies (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/dependencies/
+  - title: 'GitHub Docs: Continuous integration (accessed 2026-11-21)'
+    url: https://docs.github.com/en/actions/get-started/continuous-integration
+status: draft
+---
+
+TODO(owner): Team draft (D24) for you to edit and approve; `reviewed` and `status` are yours to set. Changes from the stub: the objectives now say what the four units do ("catch a transform that drops or doubles rows" became unit 3, "explain CI" is a paragraph of unit 4 with no workflow built); the prerequisites add the environments lesson (`uv add --dev`) and P27 (its `assert` and "tiny table, second route" checks are what this lesson moves into a file); the sources lose the pandas `assert_frame_equal` page, which no unit uses, and the MLOps Zoomcamp repository (not opened), and add the pandas merge page, the uv page and the GitHub CI page. Doubts: (1) the repository names are those of C26 (`cafe-report`, package `cafe_report`, `report.py` with `read_orders`, `in_month`, `order_totals` and `store_sales`); align them with the C22 to C25 text. (2) The exit status of pytest is not taught (the pytest page that lists the exit codes was not opened). (3) The expected answers of unit 4 and the exercises come from the SQL playground route, named as plain text (`/sql/playground/`) because the links validator rejects a link to that custom page; the page says to run the query there, and the numbers were checked with DuckDB 2.0.0 and pandas 3.1.1 on Python 3.13, with pytest 9.2.0. (4) Floating-point money: the April sums happen to be exact in binary, so `approx` is not needed for them; the lesson uses it as the safe habit and does not claim it is needed here.
+
+## The question
+
+Last week the owner changed the month filter, and nobody saw that March had lost 8 orders until the till report disagreed. The owner asks:
+
+> Can the program check itself every time I change it? And can it catch the kind of mistake that only shows on the first and last day of a month?
+
+A tiny table is enough to show where such a mistake hides. These five orders have a known April: the first moment and the last second of the month, a walk-in with no customer, and the first moment of May.
+
+| order_id | customer_id | store_id | ordered_at |
+|---:|---:|---:|---|
+| 1 | 7 | 1 | 2026-03-31 23:59:59 |
+| 2 | 8 | 1 | 2026-04-01 00:00:00 |
+| 3 | | 2 | 2026-04-15 12:30:00 |
+| 4 | 8 | 2 | 2026-04-30 23:59:59 |
+| 5 | 9 | 3 | 2026-05-01 00:00:00 |
+
+By the end you can write tests that run on tables like this one, see what a failed test tells you, and trust a test because its answer came from somewhere else.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Using an AI assistant for Python, with checks*](/python/ai-assisted-code/) (P27) you asserted a draft against a tiny table whose answer you had worked out by hand, and against a second route. A test file keeps the same checks and runs them all with one command.
+
+**Diverge.** In a notebook a failed `assert` stops the cell and you look at it. Unit 2 shows what pytest does with the tests that come after a failure.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In P27, what two checks did the draft have to pass before you trusted it?
+
+   <details>
+   <summary>answer</summary>
+
+   The answer you worked out by hand on a tiny table, and the answer of a second route on the full table.
+
+   </details>
+
+2. In *When it breaks: errors, retries and debugging* (C26), the script counted 250 March orders instead of 258. Which cut of the month was wrong? Write the two lines of the version that is right.
+
+   <details>
+   <summary>answer</summary>
+
+   The end: `<= end` with `end` at midnight of March 31 dropped the orders of that day. The right version cuts at the first moment of the next month and uses `<`:
+
+   `end = start + pd.offsets.MonthBegin(1)` and `orders["ordered_at"] < end`
+
+   </details>
+
+## The big idea
+
+A test runs your code on rows whose answer you know and fails when the result differs.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ka-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="ka" id="ka-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="ka" id="ka-r1" aria-label="Step 1 of 4: Rows small enough to check by hand" />
+<input class="sa-r r2 o4" type="radio" name="ka" id="ka-r2" aria-label="Step 2 of 4: The code runs and makes a result" />
+<input class="sa-r r3 o6" type="radio" name="ka" id="ka-r3" aria-label="Step 3 of 4: The known answer comes from elsewhere" />
+<input class="sa-r r4 o8" type="radio" name="ka" id="ka-r4" aria-label="Step 4 of 4: assert: the two must be equal" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>rows</small><span><i class="w2 tmp hl">3</i><i class="w6 d3">3</i></span></span><span class="sa-n c-out"><small>results</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">1</i><i class="w4 d5">1</i></span></span><span class="sa-n c-grp"><small>expected</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">1</i><i class="w2 d7">1</i></span></span><span class="sa-n c-mat"><small>compared</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 258" width="360" role="img" aria-labelledby="ka-t ka-d">
+<title id="ka-t">A test runs the code on rows you can check by hand and compares with a known answer</title>
+<desc id="ka-d">A small table of three input rows, Row 1, Row 2 and an edge row, feeds an arrow into a box named code, whose arrow leads to a chip named result. Below, a box named second route leads to a chip named expected. Two arrows from result and expected meet in a box named assert, labeled must be equal.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Rows small enough to check by hand</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · The code runs and makes a result</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · The known answer comes from elsewhere</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · assert: the two must be equal</text>
+<text class="f11 b" x="10" y="14">Run it on rows with a known answer</text>
+<g><rect class="s-src" x="10" y="44" width="104" height="116" rx="6" /><text class="f11 b" x="20" y="61">input rows</text></g>
+<g><rect class="f-src k2" x="20" y="70" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="85">Row 1</text></g>
+<g><rect class="f-src k2" x="20" y="98" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="113">Row 2</text></g>
+<g><rect class="f-flt k3" x="20" y="126" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="141">edge row</text></g>
+<path class="s-out dr p6 d3" pathLength="1" d="M114 102L148 102M141.7 98.96L148 102L141.7 105.04" />
+<g class="w6 d3"><rect class="s-out" x="150" y="82" width="80" height="40" rx="6" /><text class="f11 b" x="160" y="99">code</text></g>
+<path class="s-out dr p5 d4" pathLength="1" d="M230 102L258 102M251.7 98.96L258 102L251.7 105.04" />
+<g class="w5 d4"><rect class="f-out k3" x="260" y="90" width="90" height="24" rx="6" /><text class="f11 m" x="305" y="106">result</text></g>
+<g class="w4 d5"><rect class="s-grp" x="10" y="184" width="104" height="56" rx="6" /><text class="f11 b" x="20" y="201">second route</text></g>
+<text class="f10 mu w4 d5" x="20" y="226">by hand or SQL</text>
+<path class="s-grp dr p3 d6" pathLength="1" d="M114 212L258 212M251.7 208.96L258 212L251.7 215.04" />
+<g class="w3 d6"><rect class="f-grp k3" x="260" y="200" width="90" height="24" rx="6" /><text class="f11 m" x="305" y="216">expected</text></g>
+<path class="s-mat dr p2 d7" pathLength="1" d="M305 116L305 148M308.04 141.7L305 148L301.96 141.7" />
+<path class="s-mat dr p2 d7" pathLength="1" d="M305 200L305 172M301.96 178.3L305 172L308.04 178.3" />
+<g class="w2 d7"><rect class="s-mat" x="240" y="150" width="110" height="22" rx="6" /><text class="f11 b" x="250" y="167">assert</text></g>
+<text class="f10 b e w1 d8" x="190" y="166">must be equal</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ka-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ka-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ka-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ka-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ka-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ka-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ka-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ka-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ka-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ka-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ka-r1">1</label><label class="sa-sb sb2" for="ka-r2">2</label><label class="sa-sb sb3" for="ka-r3">3</label><label class="sa-sb sb4" for="ka-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">Choose a few rows, with one edge row, whose right answer you can work out yourself.<span class="sa-chs"><span class="sa-ch pl">3 input rows</span></span></div>
+<div class="c-out w2 d3 tmp">The code under test runs on those rows and returns a result.<span class="sa-chs"><span class="sa-ch pl">code</span><span class="sa-ch pl">a result</span></span></div>
+<div class="c-grp w2 d5 tmp">The expected answer comes from another route, not from the code under test.<span class="sa-chs"><span class="sa-ch pl">a second route</span><span class="sa-ch pl">expected</span></span></div>
+<div class="c-mat w2 d7">assert compares the result with the expected answer, and the test fails when they differ.<span class="sa-chs"><span class="sa-ch pl">assert</span></span></div>
+</div>
+<p class="ca-cap">A test feeds the code rows whose answer you know from another route, then asserts that the result and the known answer are equal.</p>
+<ol class="sa-steps">
+<li>Rows small enough to check by hand</li>
+<li>The code runs and makes a result</li>
+<li>The known answer comes from elsewhere</li>
+<li>assert: the two must be equal</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a test function, edge rows and a fixture, guards against dropped and doubled rows, and an answer from another route. Work in the repository of C26 (`cafe-report`), in the terminal.
+
+### 1. A test is a function with an assert
+
+**Idea.** A test is a function that builds a small input, calls your code and asserts the answer you know. pytest finds your tests, runs each one and prints a dot for every test that holds. It is a development tool, so it goes in the development group of the project and never into what the program needs to run.
+
+**Try it.** Add pytest, then save the first test as `tests/test_report.py`:
+
+```bash
+uv add --dev pytest
+```
+
+```python
+import pandas as pd
+
+from cafe_report.report import order_totals
+
+
+def test_order_totals_is_quantity_times_price_minus_discount():
+    items = pd.DataFrame(
+        {
+            "order_id": [1, 1, 2],
+            "product_id": [10, 1, 10],
+            "quantity": [1, 2, 3],
+            "discount_usd": [0.0, 0.0, 1.0],
+        }
+    )
+    products = pd.DataFrame({"product_id": [1, 10], "unit_price_usd": [3.0, 3.25]})
+    totals = order_totals(items, products)
+    assert totals["amount"].tolist() == [9.25, 8.75]
+```
+
+Run `uv run pytest -q`. Then rename the file to `tests/check_report.py` and run it again. Rename it back.
+
+**Predict:** What do the two runs print?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ uv run pytest -q
+.                                                                        [100%]
+1 passed in 0.23s
+$ uv run pytest -q
+
+no tests ran in 0.01s
+```
+
+The time differs on your machine. After the first command, `pyproject.toml` has a new group:
+
+```toml
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+```
+
+</details>
+
+*Why:* the answer was worked out by hand from two prices of the menu, Espresso 3.00 and Croissant 3.25: order 1 is 1 × 3.25 + 2 × 3.00 = 9.25 and order 2 is 3 × 3.25 − 1.00 = 8.75. pytest runs files of the form `test_*.py` or `*_test.py`, and functions whose names start with `test_`, so `check_report.py` was never looked at. A file pytest does not collect gives "no tests ran", not a pass. The uv page says that a development dependency is local only and is not part of the requirements when the project is published, and that `uv run` includes the `dev` group by default.
+
+### 2. Edge rows, a fixture, and a failure report
+
+**Idea.** The mistakes that survive a first look sit at the edges of a rule: the first moment and the last second of a month, a value that is missing. Put those rows in the table. A fixture is a function marked `@pytest.fixture` that builds a table once for each test; a test asks for it by writing its name as an argument.
+
+**Try it.** Add the five orders of the question as a fixture, and a test that April keeps orders 2, 3 and 4. Put `import pytest` at the top, change the import to `from cafe_report.report import in_month, order_totals`, and keep the first test.
+
+```python
+@pytest.fixture
+def orders():
+    return pd.DataFrame(
+        {
+            "order_id": [1, 2, 3, 4, 5],
+            "customer_id": [7, 8, None, 8, 9],
+            "store_id": [1, 1, 2, 2, 3],
+            "ordered_at": pd.to_datetime(
+                [
+                    "2026-03-31 23:59:59",
+                    "2026-04-01 00:00:00",
+                    "2026-04-15 12:30:00",
+                    "2026-04-30 23:59:59",
+                    "2026-05-01 00:00:00",
+                ]
+            ),
+            "status": ["completed"] * 5,
+        }
+    )
+
+
+def test_in_month_keeps_the_first_moment_and_the_last_second(orders):
+    april = in_month(orders, "2026-04")
+    assert april["order_id"].tolist() == [2, 3, 4]
+```
+
+It passes. Now put the bug of C26 back into `in_month` in `report.py`: replace the line that sets `end` by `end = start + pd.offsets.MonthEnd(0)` and the last line by `return orders[(orders["ordered_at"] >= start) & (orders["ordered_at"] <= end)]`, and run `uv run pytest -q`.
+
+**Predict:** Which test fails, and which order does the report say is missing?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ uv run pytest -q
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+___________ test_in_month_keeps_the_first_moment_and_the_last_second ___________
+
+(the fixture table, shortened by pytest, is left out)
+
+    def test_in_month_keeps_the_first_moment_and_the_last_second(orders):
+        april = in_month(orders, "2026-04")
+>       assert april["order_id"].tolist() == [2, 3, 4]
+E       assert [2, 3] == [2, 3, 4]
+E         
+E         Right contains one more item: 4
+E         Use -v to get more diff
+
+tests/test_report.py:44: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_report.py::test_in_month_keeps_the_first_moment_and_the_last_second
+1 failed, 1 passed in 0.23s
+```
+
+</details>
+
+*Why:* the test for the edge row fails and the other test still runs and passes, so one run tells you everything that is broken. The `>` marks the failing line and the `E` lines show the two values, the result `[2, 3]` and the known answer `[2, 3, 4]`, with the item that is missing: order 4, at 23:59:59 on April 30, after the midnight that the buggy `end` stops at. pytest's assert report shows the intermediate values, so you do not write a message. Put the right two lines back.
+
+### 3. Guard the joins that drop or double rows
+
+**Idea.** A merge can change the number of rows without an error: a key that repeats in one table matches a line twice, and an inner join drops every row that finds no partner. Two guards cover it. The first is the check you ask pandas to make (`validate="many_to_one"` in `order_totals` makes it refuse a repeated key in `products`), and a test that the check fires, with `pytest.raises`. The second is a count: the rows that went in come out.
+
+**Try it.** Add two tests, with `import pytest` and `store_sales` in the import. The second takes the orders 2, 3 and 4 of the fixture, and gives totals only for 2 and 3, so order 4 has no lines:
+
+```python
+def test_a_repeated_product_row_is_refused():
+    items = pd.DataFrame(
+        {"order_id": [1], "product_id": [1], "quantity": [2], "discount_usd": [0.0]}
+    )
+    products = pd.DataFrame({"product_id": [1, 1], "unit_price_usd": [3.0, 3.0]})
+    with pytest.raises(pd.errors.MergeError):
+        order_totals(items, products)
+
+
+def test_an_order_without_lines_still_counts(orders):
+    totals = pd.DataFrame({"order_id": [2, 3], "amount": [6.0, 4.5]})
+    result = store_sales(orders.iloc[1:4], totals)
+    assert result["orders"].tolist() == [1, 2]
+    assert result["sales"].tolist() == [6.0, 4.5]
+```
+
+Four tests pass. Now break both guards in `report.py`: delete `, validate="many_to_one"` from the merge in `order_totals`, and change `how="left"` to `how="inner"` in `store_sales`. Run `uv run pytest -q`.
+
+**Predict:** How many tests fail, and what does the `E` line of each one say?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ uv run pytest -q
+..FF                                                                     [100%]
+=================================== FAILURES ===================================
+____________________ test_a_repeated_product_row_is_refused ____________________
+
+    def test_a_repeated_product_row_is_refused():
+        items = pd.DataFrame(
+            {"order_id": [1], "product_id": [1], "quantity": [2], "discount_usd": [0.0]}
+        )
+        products = pd.DataFrame({"product_id": [1, 1], "unit_price_usd": [3.0, 3.0]})
+>       with pytest.raises(pd.errors.MergeError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MergeError
+
+tests/test_report.py:52: Failed
+___________________ test_an_order_without_lines_still_counts ___________________
+
+(the fixture table, shortened by pytest, is left out)
+
+    def test_an_order_without_lines_still_counts(orders):
+        totals = pd.DataFrame({"order_id": [2, 3], "amount": [6.0, 4.5]})
+        result = store_sales(orders.iloc[1:4], totals)
+>       assert result["orders"].tolist() == [1, 2]
+E       assert [1, 1] == [1, 2]
+E         
+E         At index 1 diff: 1 != 2
+E         Use -v to get more diff
+
+tests/test_report.py:59: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_report.py::test_a_repeated_product_row_is_refused - Failed:...
+FAILED tests/test_report.py::test_an_order_without_lines_still_counts - asser...
+2 failed, 2 passed in 0.26s
+```
+
+</details>
+
+*Why:* without `validate` the repeated product row matched the line twice, which would have priced a line worth 6.00 (2 × 3.00) at 12.00, and nothing complained, so the test that the guard fires reports `DID NOT RAISE`. The pandas page says that `how="inner"` uses the keys found in both tables and `how="left"` the keys of the left one, so the inner join lost order 4 and store 2 counted 1 order instead of 2. Neither mistake raised an error; only a test that knew the answer could see it. Put both lines back.
+
+### 4. The answer comes from another route
+
+**Idea.** A test on the real file needs an answer you did not get from the code under test. Take it from a second route on the same data: a SQL query, or a PivotTable. For the sums of money, compare with `pytest.approx`, which the pytest page describes for floating-point values where small rounding errors are expected.
+
+**Try it.** Run this query in the SQL playground of this site, at `/sql/playground/`, which has the five tables loaded. It gives the completed orders and the sales of each cafe in April:
+
+```sql
+SELECT o.store_id,
+       COUNT(*) AS orders,
+       ROUND(SUM(t.amount), 2) AS sales
+FROM orders AS o
+LEFT JOIN (SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS amount
+           FROM order_items AS i
+           JOIN products AS p ON p.product_id = i.product_id
+           GROUP BY i.order_id) AS t ON t.order_id = o.order_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-05-01'
+GROUP BY o.store_id
+ORDER BY o.store_id;
+```
+
+Expected: 3 rows, 3 columns: stores 1, 2 and 3 with 123, 103 and 123 orders and 1,542.25, 1,252 and 1,596.5 dollars. Now add the same numbers as a test on the real files, with `from pathlib import Path` at the top of the file, `read_orders` in the import and this line below the imports:
+
+```python
+DATA = Path(__file__).resolve().parent.parent / "data"
+```
+
+```python
+def test_april_matches_the_answer_from_sql():
+    orders = in_month(read_orders(DATA / "orders.csv"), "2026-04")
+    items = pd.read_csv(DATA / "order_items.csv")
+    products = pd.read_csv(DATA / "products.csv")
+    result = store_sales(orders, order_totals(items, products))
+    assert result["store_id"].tolist() == [1, 2, 3]
+    assert result["orders"].tolist() == [123, 103, 123]
+    assert result["sales"].tolist() == pytest.approx([1542.25, 1252.00, 1596.50])
+```
+
+**Predict:** With the five tests of this lesson in the file, how many does `uv run pytest -q` report, and do they all pass?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ uv run pytest -q
+.....                                                                    [100%]
+5 passed in 0.35s
+```
+
+</details>
+
+*Why:* 1 + 1 + 2 + 1 = 5 tests, one dot each. The numbers in the last test were never produced by `store_sales`, so a mistake in it cannot hide in them: the SQL joined the lines to the prices on its own. April has 349 orders, all completed, and 123 + 103 + 123 is 349. Continuous integration is what GitHub's documentation describes as frequently committing code to a shared repository and building and testing it each time; its workflows can start when new code is pushed, and run linters and functional tests. You do not build one here. What makes it possible is that `uv run pytest` needs only the repository (code, lockfile and data), so a clean machine can run the same command and report the same dots.
+
+<Aside type="tip" title="Remember">
+
+- A test builds a small input, calls the code and asserts an answer you know.
+- Put the edge rows in the table: the first moment, the last second, a missing value.
+- A merge can drop or double rows without an error: test that its check fires, and count the rows.
+- Take the expected answer from another route, not from the code under test.
+- Read a failure from the `E` lines: the result, the known answer and what differs.
+
+**Common trap:** a test file that pytest does not collect. `no tests ran` is not a pass.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-testing-with-pytest-1">
+
+**Canceled orders do not count.** `store_sales` keeps only completed orders. Finish the test that proves it. The two lines to fill in are the number of orders and the sales of each cafe, worked out by hand from the table. Put the test in `tests/test_report.py`. Expected: the run reports one more test than before, and it passes.
+
+```python
+def test_store_sales_ignores_canceled_orders():
+    orders = pd.DataFrame(
+        {"order_id": [1, 2, 3], "store_id": [1, 1, 2], "status": ["completed", "canceled", "completed"]}
+    )
+    totals = pd.DataFrame({"order_id": [1, 2, 3], "amount": [5.0, 7.0, 4.5]})
+    result = store_sales(orders, totals)
+    assert result["orders"].tolist() == ...
+    assert result["sales"].tolist() == ...
+```
+
+<details>
+<summary>Hint</summary>
+
+Cross out the canceled order 2 first. Store 1 has one order left, and store 2 has one. Each list has one number for each store, in store order.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    assert result["orders"].tolist() == [1, ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+    assert result["orders"].tolist() == [1, 1]
+    assert result["sales"].tolist() == [5.0, 4.5]
+```
+
+Store 1 keeps order 1 (5.00) and drops the canceled order 2 (7.00); store 2 keeps order 3 (4.50). A run reports 6 passed with the five tests of the lesson.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-testing-with-pytest-2">
+
+**June, from another route.** Write a test on the real files for the average order of each cafe in June 2026, completed orders only: the sales of a cafe divided by its orders, rounded to 2 decimals. Before you start, say in one sentence what the result looks like: one list of three amounts in dollars, one for each cafe. Get the expected list from the SQL playground first (the query of unit 4, with the June dates and `ROUND(AVG(t.amount), 2) AS avg_order` in place of the sum), then write the test in `tests/test_report.py` from a blank line. Expected: the test passes, and the run reports one more test.
+
+<details>
+<summary>Hint</summary>
+
+Copy the shape of the April test in unit 4: read the orders of the month, build `store_sales`, then compare. The average is `result["sales"] / result["orders"]`, and a list of rounded floats compares with `==` when you round with `.round(2)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The SQL gives one average for each of the three cafes, and the test compares the same three numbers computed from the code's result."*
+
+```python
+def test_june_average_order_matches_sql():
+    orders = in_month(read_orders(DATA / "orders.csv"), "2026-06")
+    ...
+    average = (result["sales"] / result["orders"]).round(2)
+    assert average.tolist() == [...]
+```
+
+</details>
+
+<Solution>
+
+The query returns stores 1, 2 and 3 with 117, 125 and 111 orders and averages 12.19, 12.73 and 13.18 dollars.
+
+```python
+def test_june_average_order_matches_sql():
+    orders = in_month(read_orders(DATA / "orders.csv"), "2026-06")
+    items = pd.read_csv(DATA / "order_items.csv")
+    products = pd.read_csv(DATA / "products.csv")
+    result = store_sales(orders, order_totals(items, products))
+    average = (result["sales"] / result["orders"]).round(2)
+    assert average.tolist() == [12.19, 12.73, 13.18]
+```
+
+The expected list came from SQL that never calls `store_sales`, so the test checks the code and not itself.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which file names and which function names does pytest collect?
+
+   <details>
+   <summary>answer</summary>
+
+   Files of the form `test_*.py` or `*_test.py`, and functions whose names start with `test_`.
+
+   </details>
+
+<Exercise id="core-testing-with-pytest-3">
+
+**Spot the flaw.** A colleague changes `in_month` and runs the tests. In a scratch copy of `report.py`, the filter reads `(orders["ordered_at"] > start) & (orders["ordered_at"] <= end)` with `end` from `MonthBegin(1)`. The test below passes, and the colleague says April is safe. Run it with the `orders` fixture of unit 2. Expected: one dot. What is wrong with the test, and what is the fix?
+
+```python
+def test_in_month_gives_three_orders_in_april(orders):
+    assert len(in_month(orders, "2026-04")) == 3
+```
+
+<details>
+<summary>Hint</summary>
+
+The changed filter is strict at the start and inclusive at the end. Write down which of the five orders it keeps.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    assert in_month(orders, "2026-04")["order_id"].tolist() == ...
+```
+
+</details>
+
+<Solution>
+
+```python
+def test_in_month_gives_the_right_orders_in_april(orders):
+    assert in_month(orders, "2026-04")["order_id"].tolist() == [2, 3, 4]
+```
+
+With `>` the order at exactly midnight on April 1 is lost, and with `<=` the order at exactly midnight on May 1 is gained. The filter returns orders 3, 4 and 5, which are three rows, so the count test passes while the answer is wrong. Compared with `[2, 3, 4]`, the new test fails and reports `[3, 4, 5]`, with the first difference at index 0. A count says how many; a list of ids says which.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a test with a small known-answer table that has edge rows, read what a failed test reports, test that a join neither drops nor doubles rows, and take the expected answer from another route.*
+Test: Exercise core-testing-with-pytest-2, done without opening the hints.
+
+The pattern to remember: **a test is code run on rows whose answer you know, and the answer must come from somewhere other than the code.** Next comes *Logging, configuration and secrets* (C28), which makes the program tell you what it did and keeps its settings and keys out of the code.
