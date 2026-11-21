@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1360 nodes, 1466 edges, 159 communities (645 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 37, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 457, rule 10, script 129, skill 1, spec-section 25, starlight-component 6, style 7, symbol 248, template 2, token 12.
-- Edges: defines 248, imports 50, mentions 818, overrides 6, references 28, runs 11, specified-by 4, uses 264, uses-token 32, validated-by 5.
+- 1367 nodes, 1467 edges, 159 communities (651 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 38, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 463, rule 10, script 129, skill 1, spec-section 25, starlight-component 6, style 7, symbol 248, template 2, token 12.
+- Edges: defines 248, imports 50, mentions 819, overrides 6, references 28, runs 11, specified-by 4, uses 264, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -41,8 +41,8 @@ Label propagation; each community is named by its top-degree node.
 - **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C8 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
-- **C9 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
-- **C10 sync-research-issues.mjs** (10): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
+- **C9 sync-research-issues.mjs** (11): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
+- **C10 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 - **C11 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C12 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
 
