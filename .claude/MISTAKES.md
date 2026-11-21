@@ -472,6 +472,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-20 — Drafting C10, a reverse-causation illustration was built from timing (55.5% of the buyers' first-week events came after the purchase) and the Why said buying may have caused some of the activity, although the dataset README says Plus does not change visits; the figure is a timing artifact (buyers buy early, a median 0.49 days after signup). → **A reverse-causation illustration built from timing (how much activity falls after the outcome) must say only that the measure cannot separate direction; never suggest the outcome drove the activity when the dataset truth says otherwise.**
 
+- 2026-11-20 — Drafting C12 and C13 (Part 2): an Exercise 1 starter reassigned `s0, s1, r0, r1`, which Exercise 2 reused from the unit above (it silently gave other numbers); an exercise on April
+  would have been answered by the monthly table the lesson prints (signups and purchases are in it); and the README's "mix explains 2.8 of 3.0 points" subtracts rounded rates (the exact numbers
+  are 2.86 of 3.07). → **A starter never reassigns a name that a later cell uses (give its given variables their own names, and run the solved notebook top to bottom); before choosing an
+  exercise's slice, check that no table or output of the lesson already holds its numerators and denominators; recompute a README difference from unrounded values and report it.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
