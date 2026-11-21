@@ -25,3 +25,4 @@ Copies of the GitHub issues labelled `research`, refreshed by `npm run research:
 | [#88](88-working-with-ai-in-data-work-capability-map-failure-taxonomy.md) | open | Research: Working with AI in data work — capability map, failure taxonomy, and design for the core's last part |
 | [#89](89-database-internals-beyond-the-sql-stage-depth-per-role-place.md) | open | Research: Database internals beyond the SQL stage — depth per role, placement, and a DE-track module |
 | [#92](92-a-real-openly-licensed-case-study-for-the-advanced-core-caps.md) | open | Research: a real, openly licensed case study for the advanced-core capstone |
+| [#98](98-asa-p-value-statement-paraphrase-check-for-hypothesis-tests.md) | open | Research: ASA p-value statement — paraphrase check for "Hypothesis tests and p-values, honestly" |
