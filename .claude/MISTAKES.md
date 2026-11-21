@@ -472,6 +472,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-20 — Drafting C10, a reverse-causation illustration was built from timing (55.5% of the buyers' first-week events came after the purchase) and the Why said buying may have caused some of the activity, although the dataset README says Plus does not change visits; the figure is a timing artifact (buyers buy early, a median 0.49 days after signup). → **A reverse-causation illustration built from timing (how much activity falls after the outcome) must say only that the measure cannot separate direction; never suggest the outcome drove the activity when the dataset truth says otherwise.**
 
+- 2026-11-20 — Drafting C14 and C15: the stub said the Part 2 project step uses cafe-sales, which has no experiment; its sources were a book site and a blog list that supported none of the lesson's claims; a first Idea listed the very marks that its Predict asked the learner to remove; a simulated share of 0.1955 prints 0.19 on one NumPy and 0.20 on another. → **Check a stub's dataset claim against what the dataset contains and report the mismatch in a `TODO(owner)`; keep a source only if a claim of the lesson sits on a page you opened; write the Idea as the rule and put the list or outcome in the Why; print a simulated share to two decimals and say it is seed- and version-dependent, and keep a reference line off the labels of the bars (a bracket under the axis), then run the figure overlap check on the dev server at 390 and 1280 px.**
+
 ## Agents and reviews
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
