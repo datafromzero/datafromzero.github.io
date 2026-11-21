@@ -1,0 +1,633 @@
+---
+id: core-modeling-the-domain
+title: Modeling the domain before the tables
+short_title: Modeling the domain
+description: Describe the cafe business as entities and relationships, read an entity-relationship diagram, and turn it into tables with keys and a declared grain.
+stage: core
+order: 160
+level: intermediate
+duration: 35
+objectives:
+  - Name the entities, attributes and relationships of a small business from a plain description
+  - 'Read an entity-relationship diagram: entities, primary and foreign keys, one-to-many and many-to-many links'
+  - Turn a many-to-many relationship into a table of its own
+  - Put an attribute that belongs to a relationship on the right table
+  - Declare the grain of each table before writing CREATE TABLE
+prerequisites:
+  - sql-relational-model
+  - sql-normalization
+  - sql-create-table-constraints
+  - sql-join-fanout
+  - sql-ctes
+  - sql-left-join-anti-join
+  - sql-conditional-aggregation
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-modeling-the-domain.ipynb
+reviewed: 2026-11-20
+sources:
+  - title: 'Chen, The entity-relationship model: toward a unified view of data, ACM Transactions on Database Systems 1(1), 1976 (record opened 2026-11-21)'
+    url: https://doi.org/10.1145/320434.320440
+  - title: 'DuckDB documentation: Constraints (accessed 2026-11-21)'
+    url: https://duckdb.org/docs/2.0/sql/constraints.html
+  - title: 'DuckDB documentation: Information schema (accessed 2026-11-21)'
+    url: https://duckdb.org/docs/2.0/sql/meta/information_schema.html
+  - title: 'PostgreSQL documentation: Constraints (accessed 2026-11-21)'
+    url: https://www.postgresql.org/docs/current/ddl-constraints.html
+  - title: 'Kimball Group: Grain (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/grain/
+status: draft
+---
+
+TODO(owner): Draft by the team (D24), for you to edit. Changes to the stub: the duration is 35, not 30 (the body is about 3,600 words at 100 words a minute, of which 420 are the skip check that a learner may skip); the `notebook` field and the prerequisites `sql-join-fanout`, `sql-ctes`, `sql-left-join-anti-join` and `sql-conditional-aggregation` are added (units 2 and 4 use them); the sources edX, DDaT and the PostgreSQL page are replaced by the pages that carry a claim (the PostgreSQL page stays, for the many-to-many pattern; DuckDB and Kimball are new); `reviewed` is still the stub's date, set it when you publish. The skip check below asks one question for each lesson of Part 3, so questions 4 to 6 rest on the drafts of the framing, leakage and error-cost lessons and need a check when those are final. The Chen paper is cited from its Crossref record, because the ACM page refused access; only the claim that Chen proposed the model and its diagram is made. The notebook loads the data from the `v0.2.0` tag (the existing cafe-sales notebooks use `v0.1.0`; the files are identical). Doubts: the owner's description of the business in The question is the team's wording, not the owner's; `customers.city` and `stores.city` are treated as attributes, not as an entity, which is a design choice the lesson says out loud.
+
+## Can you skip Part 3?
+
+Part 3, Shapes of data, has six lessons, C16 to C21, and builds a star schema of the cafe data. Try these six questions without looking anything up; the numbers are made up. If all six answers are right, go on to Part 4, which starts with *Your laptop setup and the terminal*. If not, start here.
+
+1. A shop has `orders` (1,000 rows) and `order_items` (2,400 rows, one for each product on an order). You join them on `order_id` and add up an amount that sits on each order row. Is the total too big, too small or right?
+
+   <details>
+   <summary>answer</summary>
+
+   Too big. An order with three items appears three times in the join, so its amount is added three times.
+
+   </details>
+
+2. A course has many students and a student takes many courses. Each student gets a grade in each course. How many tables do you need, and which one holds the grade?
+
+   <details>
+   <summary>answer</summary>
+
+   Three: students, courses, and a table with one row for each student and course. The grade belongs to the pair, so it sits in that third table.
+
+   </details>
+
+3. A table has one row for each cafe and day, with the day's sales. Name a question it cannot answer.
+
+   <details>
+   <summary>answer</summary>
+
+   Anything finer than a day, such as the busiest hour or which products sell together. A coarse table cannot be split back into the detail it was added from.
+
+   </details>
+
+4. A model that predicts which new signups will buy a paid plan scores 92 percent on the rows it was built from. What do you compare it with before you believe it?
+
+   <details>
+   <summary>answer</summary>
+
+   A trivial baseline, such as always answering the most common outcome, on rows the model has never seen. The score on the rows it learned from says little.
+
+   </details>
+
+5. A model that predicts who will cancel uses a column `cancellation_date` and scores almost perfectly. What is wrong?
+
+   <details>
+   <summary>answer</summary>
+
+   Leakage. The column is filled only after a customer has canceled, so it holds the answer. A feature must be known at the moment of the prediction.
+
+   </details>
+
+6. Only 1 card payment in 100 is fraud. A model that says "not fraud" every time is right 99 percent of the time. Which number shows that it is useless?
+
+   <details>
+   <summary>answer</summary>
+
+   Recall: it catches none of the fraud cases. Accuracy hides rare events, so weigh each kind of error by what it costs.
+
+   </details>
+
+## The question
+
+The owner of the three cafes has a new analyst starting on Monday and writes:
+
+> Before anyone writes a query, tell the new person what we keep track of, how the pieces connect, and what one row of each stands for.
+
+This is how the owner describes the business:
+
+> We have three cafes. Some customers join the loyalty program, and a customer can be referred by another customer. Every visit to the till is an order, taken at one cafe and paid by card, mobile or cash. An order has one or more lines, each a product with a quantity and sometimes a discount. The menu lists the products, each with a category and a price.
+
+The data is `cafe-sales`, a fictional chain, and its tables already exist. These are the first three rows of one of them:
+
+| order_item_id | order_id | product_id | quantity | discount_usd |
+|---:|---:|---:|---:|---:|
+| 5001 | 1001 | 10 | 1 | 0.00 |
+| 5002 | 1001 | 6 | 1 | 0.00 |
+| 5003 | 1001 | 1 | 2 | 0.00 |
+
+By the end you can turn a description like the owner's into tables with keys, say what one row of each stands for, and show what a wrong grain does to a total.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Tables, keys and grain*](/sql/relational-model/) (S18) you read the five tables, their keys and what one row of each is. Here you go the other way: from the owner's words to the tables.
+
+**Diverge.** The tables you query are loaded from files and declare no keys. Unit 3 shows where a model needs them.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Tables, keys and grain*](/sql/relational-model/) (S18), which column of `order_items` points at `orders`, and what is such a column called?
+
+   <details>
+   <summary>answer</summary>
+
+   `order_id`. It is a foreign key: it holds the key of a row of `orders`.
+
+   </details>
+
+2. In [*Join fan-out: aggregate before you join*](/sql/join-fanout/) (S21), write the query that checks that `order_id` is unique in `orders`.
+
+   <details>
+   <summary>answer</summary>
+
+   `SELECT COUNT(*), COUNT(DISTINCT order_id) FROM orders;` Two equal numbers (1,800 and 1,800) mean one row for each key.
+
+   </details>
+
+## The big idea
+
+A link that joins many to many becomes a table of its own, with one key for each side and room for facts about the pair.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="lk-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="lk" id="lk-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="lk" id="lk-r1" aria-label="Step 1 of 5: Two tables, A and B" />
+<input class="sa-r r2 o3" type="radio" name="lk" id="lk-r2" aria-label="Step 2 of 5: Each side meets many of the other" />
+<input class="sa-r r3 o4" type="radio" name="lk" id="lk-r3" aria-label="Step 3 of 5: The links become rows of a table L" />
+<input class="sa-r r4 o5" type="radio" name="lk" id="lk-r4" aria-label="Step 4 of 5: Each row holds two keys" />
+<input class="sa-r r5 o8" type="radio" name="lk" id="lk-r5" aria-label="Step 5 of 5: A fact about the pair goes in L" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>tables</small><span><i class="w1 tmp hl">2</i><i class="w2 d2 tmp">2</i><i class="w1 d4 tmp hl">3</i><i class="w4 d5">3</i></span></span><span class="sa-n c-mat"><small>links</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">2</i><i class="w1 d3 tmp hl">3</i><i class="w1 d4 tmp hl">0</i><i class="w4 d5">0</i></span></span><span class="sa-n c-out"><small>L rows</small><span><i class="w3 tmp">—</i><i class="w1 d4 tmp hl">3</i><i class="w4 d5">3</i></span></span><span class="sa-n c-mat"><small>keys</small><span><i class="w4 tmp">—</i><i class="w1 d5 tmp hl">2 in L</i><i class="w3 d6">2 in L</i></span></span><span class="sa-n c-out"><small>facts</small><span><i class="w5 tmp">—</i><i class="w3 d6 hl">n</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 262" width="360" role="img" aria-labelledby="lk-t lk-d">
+<title id="lk-t">A many-to-many link becomes a table of its own</title>
+<desc id="lk-d">Table A has rows A1 and A2, table B has rows B1 and B2. Three lines join them: A1 to B1, A1 to B2 and A2 to B2, so each side meets many of the other. The lines turn into the rows of a new table L, one row for each link, each holding a key for A and a key for B. A bracket marks the two key columns. A value column n then fills in beside them: one fact for each pair.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Two tables, A and B</text>
+<text class="f10 b w2 d2 tmp" x="10" y="29">2 · Each side meets many of the other</text>
+<text class="f10 b w1 d4 tmp" x="10" y="29">3 · The links become rows of a table L</text>
+<text class="f10 b w1 d5 tmp" x="10" y="29">4 · Each row holds two keys</text>
+<text class="f10 b w3 d6" x="10" y="29">5 · A fact about the pair goes in L</text>
+<text class="f11 b" x="10" y="14">Many to many becomes a table</text>
+<g><rect class="s-src" x="10" y="50" width="84" height="128" rx="6" /><text class="f11 b" x="20" y="67">A</text></g>
+<g><rect class="s-src" x="266" y="50" width="84" height="128" rx="6" /><text class="f11 b" x="276" y="67">B</text></g>
+<g><rect class="f-src k3" x="20" y="82" width="64" height="24" rx="6" /><text class="f11 m" x="52" y="98">A1</text></g>
+<g><rect class="f-src k3" x="20" y="132" width="64" height="24" rx="6" /><text class="f11 m" x="52" y="148">A2</text></g>
+<g><rect class="f-src k3" x="276" y="82" width="64" height="24" rx="6" /><text class="f11 m" x="308" y="98">B1</text></g>
+<g><rect class="f-src k3" x="276" y="132" width="64" height="24" rx="6" /><text class="f11 m" x="308" y="148">B2</text></g>
+<path class="s-mat dr p2 d2 tmp" pathLength="1" d="M84 94H276" />
+<path class="s-mat dr p2 d2 tmp" pathLength="1" d="M84 98L276 140" />
+<path class="s-mat dr p1 d3 tmp" pathLength="1" d="M84 144H276" />
+<g class="w5 d4"><rect class="s-out" x="116" y="50" width="128" height="128" rx="6" /><text class="f11 b" x="126" y="67">L</text></g>
+<g class="w5 d4"><rect class="f-out k2" x="124" y="76" width="72" height="24" rx="6" /><text class="f11 m" x="160" y="92">A1 · B1</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="200" y="76" width="36" height="24" rx="6" /><text class="f11 m" x="218" y="92">n1</text></g>
+<g class="w5 d4"><rect class="f-out k2" x="124" y="106" width="72" height="24" rx="6" /><text class="f11 m" x="160" y="122">A1 · B2</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="200" y="106" width="36" height="24" rx="6" /><text class="f11 m" x="218" y="122">n2</text></g>
+<g class="w5 d4"><rect class="f-out k2" x="124" y="136" width="72" height="24" rx="6" /><text class="f11 m" x="160" y="152">A2 · B2</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="200" y="136" width="36" height="24" rx="6" /><text class="f11 m" x="218" y="152">n3</text></g>
+<rect class="s-mat dsh w4 d5" x="120" y="72" width="80" height="90" rx="6" />
+<text class="f10 b m w4 d5" x="160" y="196">two key columns</text>
+<text class="f10 b m w2 d7" x="180" y="232">n describes the pair, not A or B alone</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="lk-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="lk-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="lk-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="lk-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="lk-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="lk-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="lk-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="lk-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="lk-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="lk-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="lk-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="lk-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="lk-r1">1</label><label class="sa-sb sb2" for="lk-r2">2</label><label class="sa-sb sb3" for="lk-r3">3</label><label class="sa-sb sb4" for="lk-r4">4</label><label class="sa-sb sb5" for="lk-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Each kind of thing gets a table, and each row has its own key.<span class="sa-chs"><span class="sa-ch pl">table A: 2 rows</span><span class="sa-ch pl">table B: 2 rows</span></span></div>
+<div class="c-mat w2 d2 tmp">One A can go with many B, and one B with many A: a column on either table cannot hold it.<span class="sa-chs"><span class="sa-ch pl">3 links between A and B</span></span></div>
+<div class="c-out w1 d4 tmp">Every link becomes one row of a new table, with a key for A and a key for B.<span class="sa-chs"><span class="sa-ch pl">table L: 3 rows</span><span class="sa-ch mi">the lines are gone</span></span></div>
+<div class="c-mat w1 d5 tmp">A key column in L points at A, and the other points at B.<span class="sa-chs"><span class="sa-ch pl">2 key columns in L</span></span></div>
+<div class="c-out w3 d6">A value that belongs to the pair, not to A or B alone, sits in the link table.<span class="sa-chs"><span class="sa-ch pl">column n: 1 fact for each pair</span></span></div>
+</div>
+<p class="ca-cap">When each side can have many of the other, the link becomes a table with one key for each side. A fact about the pair, here n, belongs in that table.</p>
+<ol class="sa-steps">
+<li>Two tables, A and B</li>
+<li>Each side meets many of the other</li>
+<li>The links become rows of a table L</li>
+<li>Each row holds two keys</li>
+<li>A fact about the pair goes in L</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: entities and attributes, relationships and cardinality, a link table for many to many, and the grain. The queries run in the page, and the notebook runs the same ones in DuckDB and checks the exercises.
+
+<OpenInColab />
+
+### 1. Entities and attributes
+
+**Idea.** An *entity* is a kind of thing the business keeps facts about, such as a store. An *attribute* is one fact about a thing, such as the city of a store. A noun is an entity when the business keeps facts of its own about it; a noun that is only one fact about something else is an attribute. Each entity needs a *key*, a value that no two things share. Peter Chen proposed describing a business as entities and relationships, drawn as a diagram, in 1976.
+
+**Try it.** List the tables of the cafe database with their columns:
+
+<RunSQL query={`SELECT table_name,
+       COUNT(*) AS columns,
+       string_agg(column_name, ', ' ORDER BY ordinal_position) AS column_names
+FROM information_schema.columns
+WHERE table_schema = 'main'
+GROUP BY table_name
+ORDER BY table_name;`} />
+
+**Predict:** the owner's description names these nouns: store, customer, order, line, product, payment method, category, city and loyalty tier. Which of them would you give a table of its own?
+
+Expected: 3 columns (the table, its number of columns, their names).
+
+*Why:* five tables: `stores`, `customers`, `products`, `orders` and `order_items`. Payment method, category, city and loyalty tier are columns: the business keeps no facts of its own about them. The line is the surprise. The owner never calls it a thing, yet it has a table, because it carries facts of its own (a quantity and a discount). A noun can move from attribute to entity: if each category had a manager and a margin target, `category` would earn a table.
+
+### 2. Relationships and cardinality
+
+**Idea.** A *relationship* says how two entities connect, in a sentence with a verb: a store takes orders. Its *cardinality* says how many of one side go with one of the other: one store takes many orders, which is *one-to-many*. A one-to-many relationship is stored on the many side, in a *foreign key*, a column that holds the key of the one side. Each end can also allow none: a link may be optional.
+
+**Try it.** Count the orders of each customer, and the orders that have no customer:
+
+<RunSQL query={`SELECT COUNT(*) AS customers,
+       MIN(n) AS fewest_orders,
+       MAX(n) AS most_orders,
+       COUNT(*) FILTER (WHERE n = 0) AS never_ordered,
+       (SELECT COUNT(*) FROM orders WHERE customer_id IS NULL) AS orders_without_customer
+FROM (SELECT c.customer_id, COUNT(o.order_id) AS n
+      FROM customers AS c
+      LEFT JOIN orders AS o ON o.customer_id = c.customer_id
+      GROUP BY c.customer_id);`} />
+
+**Predict:** one customer can have many orders. What is the fewest orders a customer has, and can an order have no customer?
+
+Expected: 1 row, 5 columns.
+
+*Why:* of 150 customers, 5 never ordered and the most orders by one customer is 29. One order has no customer, a walk-in. So an order has zero or one customer, and a customer has zero or many orders. The diagram below says the same in pictures.
+
+<details>
+<summary>Explain it in your own words: why does <code>orders</code> hold the key of <code>stores</code>, and not <code>stores</code> the key of its orders?</summary>
+
+A store has hundreds of orders (Old Town has 729) and a cell holds one value. With the key on `orders`, each order row names its one store, and any number of orders can name the same store.
+
+</details>
+
+<figure>
+<svg viewBox="0 0 360 492" width="360" role="img" aria-labelledby="mdl-erd-t mdl-erd-d" font-family="inherit" fill="currentColor">
+<title id="mdl-erd-t">The five cafe-sales tables as an entity-relationship diagram</title>
+<desc id="mdl-erd-d">Five tables. Stores and customers are on top, orders is in the middle, order_items and products are at the bottom. A store has many orders and an order has one store. A customer has many orders and an order has zero or one customer. An order has many order items and an order item has one order. A product has many order items and an order item has one product. In each table the primary key is marked PK and each foreign key FK; the referred_by column of customers is a foreign key to customers itself.</desc>
+<text x="10" y="18" font-size="12" font-weight="600">The cafe database as an entity-relationship diagram</text>
+<rect x="10" y="34" width="150" height="84" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="10" y="34" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="18" y="49" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">stores</text>
+<text x="18" y="68" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_id</text>
+<text x="152" y="68" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="18" y="82" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_name</text>
+<text x="18" y="96" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">city</text>
+<text x="18" y="110" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">opened_on</text>
+<rect x="200" y="34" width="150" height="98" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="200" y="34" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="208" y="49" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">customers</text>
+<text x="208" y="68" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_id</text>
+<text x="342" y="68" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="208" y="82" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">signup_date</text>
+<text x="208" y="96" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">city</text>
+<text x="208" y="110" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">loyalty_tier</text>
+<text x="208" y="124" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">referred_by</text>
+<text x="342" y="124" font-size="9" font-weight="700" text-anchor="end">FK (self)</text>
+<rect x="75" y="190" width="210" height="112" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="75" y="190" width="210" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="83" y="205" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">orders</text>
+<text x="83" y="224" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_id</text>
+<text x="277" y="224" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="83" y="238" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_id</text>
+<text x="277" y="238" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="83" y="252" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_id</text>
+<text x="277" y="252" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="83" y="266" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">ordered_at</text>
+<text x="83" y="280" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">status</text>
+<text x="83" y="294" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">payment_method</text>
+<rect x="10" y="336" width="150" height="98" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="10" y="336" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="18" y="351" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">order_items</text>
+<text x="18" y="370" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_item_id</text>
+<text x="152" y="370" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="18" y="384" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_id</text>
+<text x="152" y="384" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="18" y="398" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_id</text>
+<text x="152" y="398" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="18" y="412" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">quantity</text>
+<text x="18" y="426" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">discount_usd</text>
+<rect x="200" y="336" width="150" height="84" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="200" y="336" width="150" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="208" y="351" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">products</text>
+<text x="208" y="370" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_id</text>
+<text x="342" y="370" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="208" y="384" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_name</text>
+<text x="208" y="398" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">category</text>
+<text x="208" y="412" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">unit_price_usd</text>
+<path d="M110 118V190" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="116" y="134" font-size="10" font-weight="600" text-anchor="start">1</text>
+<text x="116" y="184" font-size="10" font-weight="600" text-anchor="start">many</text>
+<path d="M250 132V190" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="256" y="148" font-size="10" font-weight="600" text-anchor="start">0 or 1</text>
+<text x="256" y="184" font-size="10" font-weight="600" text-anchor="start">many</text>
+<path d="M120 302V336" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="126" y="316" font-size="10" font-weight="600" text-anchor="start">1</text>
+<text x="126" y="331" font-size="10" font-weight="600" text-anchor="start">many</text>
+<path d="M160 380H200" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="162" y="374" font-size="10" font-weight="600" text-anchor="start">many</text>
+<text x="196" y="374" font-size="10" font-weight="600" text-anchor="end">1</text>
+<text x="10" y="456" font-size="10" fill-opacity="0.8">Beside a table: how many of its rows go with one row at the other end.</text>
+<text x="10" y="470" font-size="10" fill-opacity="0.8">PK: primary key. FK: foreign key, a column that</text>
+<text x="10" y="484" font-size="10" fill-opacity="0.8">holds the key of another table.</text>
+</svg>
+</figure>
+
+Read the labels beside a table as "how many of its rows go with one row at the other end". The `referred_by` column of `customers` is a foreign key to the same table: a customer can be referred by another customer, and about one in five were.
+
+### 3. A link table for many to many
+
+**Idea.** In a *many-to-many* relationship each side can have many of the other: an order holds many products, and a product is on many orders. No column on either table can store that. The link becomes a table of its own, with one foreign key for each side. A fact about the pair, such as how many units, belongs to neither side alone, so it sits in the link table. The PostgreSQL manual builds the same shape from `products`, `orders` and a third table, `order_items`.
+
+**Try it.** `order_items` is the link table of the cafe database. Count its lines, the orders and products they point at, and the different pairs of order and product:
+
+<RunSQL query={`SELECT COUNT(*) AS lines,
+       COUNT(DISTINCT order_id) AS orders,
+       COUNT(DISTINCT product_id) AS products,
+       COUNT(DISTINCT (order_id, product_id)) AS pairs
+FROM order_items;`} />
+
+**Predict:** will the number of pairs equal the number of lines? If it does, which two columns could be the primary key of the table?
+
+Expected: 1 row, 4 columns.
+
+*Why:* 3,287 lines, 1,800 orders, 15 products and 3,287 pairs. The pairs equal the lines, so no product appears on two lines of one order, and the pair (`order_id`, `product_id`) could be the key. It states a rule of the business, one line for each product on an order, where a second unit goes into `quantity`. The data also carries `order_item_id`, a key of its own. `quantity` and `discount_usd` describe the pair.
+
+**Try it.** The owner now wants to record which cafe stocks which product, and the day it started selling it. That is another many-to-many link. The tables you query declare no keys, and a foreign key needs a key to point at, so the block declares two first. Run it once; Reset data under the block starts again.
+
+**Predict:** the last statement repeats the first pair with another date. What happens?
+
+<RunSQL query={`ALTER TABLE stores ADD PRIMARY KEY (store_id);
+ALTER TABLE products ADD PRIMARY KEY (product_id);
+
+DROP TABLE IF EXISTS store_menu;
+CREATE TABLE store_menu (
+  store_id   INTEGER NOT NULL REFERENCES stores (store_id),
+  product_id INTEGER NOT NULL REFERENCES products (product_id),
+  listed_on  DATE,
+  PRIMARY KEY (store_id, product_id)
+);
+
+INSERT INTO store_menu VALUES (1, 3, DATE '2026-01-01');
+INSERT INTO store_menu VALUES (1, 3, DATE '2026-02-01');`} />
+
+Expected: an error saying the key is a duplicate and violates the primary key constraint. The first row went in; the second was refused.
+
+**Try it.** Ask the database what you declared. The query reads the information schema, which lists constraints and their columns:
+
+<RunSQL query={`SELECT tc.constraint_type, kcu.column_name, kcu.ordinal_position AS position
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.key_column_usage AS kcu
+  ON kcu.constraint_name = tc.constraint_name AND kcu.table_name = tc.table_name
+WHERE tc.table_name = 'store_menu'
+  AND tc.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY')
+ORDER BY tc.constraint_type, kcu.ordinal_position, kcu.column_name;`} />
+
+Expected: 4 rows, 3 columns.
+
+*Why:* two foreign keys, one for each side, and a primary key on the pair. `listed_on` is not in the key: it describes the pair. DuckDB requires a foreign key to point at a primary key or a unique column of another table, which is why the two keys came first.
+
+### 4. The grain, and what a wrong one costs
+
+**Idea.** The *grain* of a table is what one row stands for, said in one sentence: one row for each order line. State it before you write `CREATE TABLE`, because every key, join and total depends on it. The pages of Kimball Group on dimensional modeling use the word for fact tables: the grain says exactly what one row stands for. This idea is the first step of the next lesson, *Grain, facts and dimensions*.
+
+**Try it.** The total of each order, one row for each order, added up:
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS order_total
+  FROM order_items AS i
+  JOIN products AS p ON p.product_id = i.product_id
+  GROUP BY i.order_id
+)
+SELECT COUNT(*) AS rows, ROUND(SUM(order_total), 2) AS total
+FROM order_totals;`} />
+
+Expected: 1 row, 2 columns: the 1,800 orders and their total, 22,754.25 dollars, canceled order and order 2075 included.
+
+**Try it.** The same totals, joined to the lines of each order:
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT i.order_id, SUM(i.quantity * p.unit_price_usd - i.discount_usd) AS order_total
+  FROM order_items AS i
+  JOIN products AS p ON p.product_id = i.product_id
+  GROUP BY i.order_id
+)
+SELECT COUNT(*) AS rows, ROUND(SUM(t.order_total), 2) AS total
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+JOIN order_totals AS t ON t.order_id = o.order_id;`} />
+
+**Predict:** every line has its order, so the join is correct. Will the total stay the same, grow a little, or grow a lot?
+
+Expected: 1 row, 2 columns.
+
+*Why:* 3,287 rows and 48,443.50 dollars, 2.1 times the real total. The join result has one row for each line, but the number belongs to the order, so an order with three lines is added three times. Nothing raised an error. You met this total in *Join fan-out* (S21); now you can name the cause: a number measured at the grain of the order was added up at the grain of the line. Declare the grain of each table, and of each join result, before you add anything up.
+
+<Aside type="tip" title="Remember">
+
+- A noun the business keeps facts about is an entity; a noun that is one fact about something is an attribute.
+- A one-to-many link is a foreign key on the many side. Ask each end whether it allows none.
+- A many-to-many link is a table of its own, with a key for each side and the facts about the pair.
+- Say what one row stands for before `CREATE TABLE`.
+- A number measured at one grain and added up at another is counted once for every row it is repeated on.
+
+**Common trap:** "if I join the tables I need, the numbers will be right." The join of `orders` to `order_items` turns 22,754.25 dollars of sales into 48,443.50.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-modeling-the-domain-1">
+
+**Link the guests to the tastings.** The owner plans tasting events. A guest can sign up for many tastings, and a tasting has many guests. Each signup records how many seats the guest took. The two entity tables are given, with `rsvp` half built: finish it, so that it has one foreign key for each side and a primary key that allows one signup for each guest and tasting. The last query lists the constraints of `rsvp`. Expected: 4 rows, 3 columns. In the notebook, `answer_1` is the same list.
+
+<RunSQL query={`DROP TABLE IF EXISTS rsvp;
+DROP TABLE IF EXISTS guest;
+DROP TABLE IF EXISTS tasting;
+
+CREATE TABLE guest (guest_id INTEGER PRIMARY KEY, guest_name VARCHAR NOT NULL);
+CREATE TABLE tasting (tasting_id INTEGER PRIMARY KEY, held_on DATE NOT NULL);
+
+-- grain of rsvp: one row for each guest and tasting
+CREATE TABLE rsvp (
+  guest_id INTEGER NOT NULL REFERENCES guest (guest_id),
+  seats    INTEGER NOT NULL CHECK (seats > 0)
+);
+
+SELECT tc.constraint_type, kcu.column_name, kcu.ordinal_position AS position
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.key_column_usage AS kcu
+  ON kcu.constraint_name = tc.constraint_name AND kcu.table_name = tc.table_name
+WHERE tc.table_name = 'rsvp'
+  AND tc.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY')
+ORDER BY tc.constraint_type, kcu.ordinal_position, kcu.column_name;`} />
+
+<details>
+<summary>Hint</summary>
+
+Unit 3: a link table has one column with `REFERENCES` for each side, and a `PRIMARY KEY` over the pair. Here the second side is `tasting`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CREATE TABLE rsvp (
+  guest_id   INTEGER NOT NULL REFERENCES guest (guest_id),
+  tasting_id ...,
+  seats      INTEGER NOT NULL CHECK (seats > 0),
+  PRIMARY KEY (...)
+);
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+CREATE TABLE rsvp (
+  guest_id   INTEGER NOT NULL REFERENCES guest (guest_id),
+  tasting_id INTEGER NOT NULL REFERENCES tasting (tasting_id),
+  seats      INTEGER NOT NULL CHECK (seats > 0),
+  PRIMARY KEY (guest_id, tasting_id)
+);
+```
+
+The listing reads FOREIGN KEY `guest_id` and `tasting_id`, then PRIMARY KEY `guest_id` (position 1) and `tasting_id` (position 2). `seats` stays outside the key: it describes the pair. A primary key on `guest_id` alone would let each guest sign up for one tasting only, which the listing shows as one primary key row.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-modeling-the-domain-2">
+
+**Track the baristas.** The owner wants to record who works where and who is trained in what. A barista has a name and works at one cafe, and a cafe has many baristas. A barista can earn many certificates (such as latte art), and a certificate is held by many baristas, each with the day it was earned. Before you start, say what the result looks like: three tables, and for each a listing of its constraints. Write `barista` (with `barista_id` and its cafe, `store_id`), `certificate` (with `certificate_id`) and the link table `barista_certificate`, each with a comment that states its grain. Start with `DROP TABLE IF EXISTS` lines, children first, so that you can run the block again. The cafe is `stores`, which needs the keys of unit 3. Expected: for `barista_certificate`, 4 rows and 3 columns; for `barista`, 2 rows (a primary key and the foreign key to `stores`). In the notebook, `answer_2` is a dictionary with both listings.
+
+<RunSQL query={`-- Write your tables here, then list the constraints of each one with the query of unit 3.`} />
+
+<details>
+<summary>Hint</summary>
+
+Two relationships, two shapes. The cafe of a barista is one-to-many, so a column of `barista` holds the key of `stores`. Certificates are many-to-many, so they need a table of their own.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A barista table with a primary key and one foreign key, a certificate table with only a key, and a link table with two foreign keys and a primary key over the pair."*
+
+```sql
+CREATE TABLE barista (barista_id INTEGER PRIMARY KEY, barista_name VARCHAR NOT NULL, store_id INTEGER NOT NULL REFERENCES ...);
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- grain: one row for each barista
+CREATE TABLE barista (
+  barista_id   INTEGER PRIMARY KEY,
+  barista_name VARCHAR NOT NULL,
+  store_id     INTEGER NOT NULL REFERENCES stores (store_id)
+);
+-- grain: one row for each certificate
+CREATE TABLE certificate (
+  certificate_id INTEGER PRIMARY KEY,
+  title          VARCHAR NOT NULL
+);
+-- grain: one row for each barista and certificate
+CREATE TABLE barista_certificate (
+  barista_id     INTEGER NOT NULL REFERENCES barista (barista_id),
+  certificate_id INTEGER NOT NULL REFERENCES certificate (certificate_id),
+  earned_on      DATE NOT NULL,
+  PRIMARY KEY (barista_id, certificate_id)
+);
+```
+
+The cafe is one-to-many, so it is a column of `barista`; certificates are many-to-many, so they get a link table, and `earned_on` sits there because it belongs to the pair. A barista who works at two cafes would turn the first relationship into a second link table: a rule of the owner's description decides.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: say the grain of each of the five cafe tables in one sentence.
+
+   <details>
+   <summary>answer</summary>
+
+   `stores`: one row for each cafe. `customers`: one row for each loyalty customer. `products`: one row for each menu item. `orders`: one row for each visit to the till. `order_items`: one row for each product on an order.
+
+   </details>
+
+<Exercise id="core-modeling-the-domain-3">
+
+**Spot the flaw.** A colleague counts the customers who were referred by a gold customer and gets 1. Run it. Expected: 1 row, 1 column. What did the query count, and what is the fix? In the notebook, `answer_3` is the number of customers referred by a gold customer.
+
+<RunSQL query={`SELECT COUNT(*) AS referred_by_gold
+FROM customers AS c
+JOIN customers AS r ON c.customer_id = r.referred_by
+WHERE r.loyalty_tier = 'gold';`} />
+
+<details>
+<summary>Hint</summary>
+
+Which table row holds `referred_by`: the person who referred, or the person who was referred? Say what `c` and `r` are in the query.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+JOIN customers AS r ON c.referred_by = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+SELECT COUNT(*) AS referred_by_gold
+FROM customers AS c
+JOIN customers AS r ON c.referred_by = r.customer_id
+WHERE r.loyalty_tier = 'gold';
+```
+
+`referred_by` sits on the customer who was referred and holds the key of the referrer. The colleague matched `c.customer_id` to `r.referred_by`, so `r` is the referred customer and `c` the referrer: the query counts the gold customers who were referred by someone, 1. With the key matched the right way round, 4 customers were referred by a gold customer. A foreign key points from the many side to the one side: read it from the row that holds it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can turn a description of a business into entities, relationships and tables with keys, put a many-to-many link and its facts in a table of its own, say what one row of each table stands for, and explain why a wrong grain inflates a total.*
+Test: Exercise core-modeling-the-domain-2, done from the notebook without opening the hints.
+
+The pattern to remember: **name the things, say how they connect, give every table a grain sentence, and give a many-to-many link a table of its own.** Next comes *Grain, facts and dimensions* (C17), which sorts the columns of the line table into measures and descriptions.

@@ -486,7 +486,23 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-21 — Review of C14 and C15: a sample-size plan said "14 weeks" for a 14-day outcome without the follow-up, week 1 against weeks 2 to 8 was called a fade although the difference of the two gaps has p = 0.14 and the intervals overlap, a big-idea animation drew a fading bar and a guardrail past its limit before the Predicts, and an exercise answer (20.7) was already printed in C9. → **A sample-size plan for an outcome with a follow-up window adds the window to the duration ("14 whole weeks of signups, then 2 more"). A before/after or week-by-week split is called a fade or a change only after testing the difference of the two gaps, or after saying that the intervals overlap. A concept animation shows inputs and no pattern a Predict asks for (equal bars, a bar under its limit), and an exercise answer is grepped across `src/content/docs` before it is chosen.**
 
+- 2026-11-21 — Drafting C16 to C18 (Part 3, SQL and modeling lessons with a notebook): the first C17 Ideas and Predicts asked "do the totals agree?" and "can the coarser table answer?", which the big-idea
+  sentence and its concept animation already state; the C16 fan-out total (48,443.50) and the store totals chosen for an exercise were already printed in published lessons (S21, S28 and Python charts); a brief said
+  the cafe-sales notebooks load from `v0.2.0`, but they load from `v0.1.0` (the files are identical); the unit 3 block of C16 (`ALTER TABLE … ADD PRIMARY KEY`) fails when run a second time, and a notebook cell
+  that raises stops Run all. → **A Predict about a lesson's own concept (can a coarse table answer, do the totals agree) is already answered by the big idea: ask for a number or a choice the animation does not give
+  (the most common pair, how many rows). Grep every number of an exercise, including per-store and per-tier totals, across `src/content/docs` before choosing it, and say in the report when a brief requires a number
+  that an earlier lesson printed. Check which release tag the existing notebooks load before copying a brief. A DDL block that cannot run twice says "run it once" on the page, and the notebook's Data cell opens a
+  new connection so that Run all starts clean; a starter that fails on purpose goes through a helper that prints the error (`say_error`) instead of raising.**
+- 2026-11-21 — A surrogate-key star passes the three checks (rows, total, keys without a dimension row) even when the fact table is joined to the dimension on the natural key, if both key sets are the numbers 1 to 3:
+  the labels are shuffled and every total still adds up. → **When a lesson teaches surrogate keys, give them an order that differs from the natural keys (here the stores in alphabetical order), and teach the check
+  that compares a total for each group with the source, not only the grand total.**
+
 ## Agents and reviews
+
+- 2026-11-21 — `node scripts/refresh-concept-figures.mjs` rewrote `src/content/docs/sql/inner-join.mdx`, a lesson the batch did not own (a figure stale on `main`), and it would have gone into the commit. → **After the
+  refresh script, read `git status --short` and restore every file the batch does not own; report the stale figure to the lead.**
+- 2026-11-21 — In an isolated worktree the shell refused long commands (heredocs, `&` background starts, loops over paths) because the repository path contains "github", and each refusal cost a call. → **Write a
+  script file to the scratchpad with the Write tool and run it with one short command; start a dev server with the tool's own background option, not with `&`.**
 
 - 2026-11-18 — Parallel batches share the machine: a dev server asked for port 4399 moved to 4400, and the `curl` checks
   hit another batch's server, whose pages also answered 200. Batches also overwrote each other's scratch scripts of the

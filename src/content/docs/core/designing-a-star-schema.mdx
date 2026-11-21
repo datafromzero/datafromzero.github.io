@@ -1,0 +1,556 @@
+---
+id: core-designing-a-star-schema
+title: Designing a star schema from business questions
+short_title: Designing a star schema
+description: Start from the questions the business asks, choose the grain, derive the fact table, dimensions and keys, build the star in DuckDB and check it.
+stage: core
+order: 180
+level: intermediate
+duration: 35
+objectives:
+  - List the business questions a model must answer
+  - Choose the grain and the fact table
+  - Derive the dimensions and their keys
+  - Draw the star schema as a labeled diagram
+  - Check the design by writing the query a question needs
+prerequisites:
+  - core-grain-facts-and-dimensions
+  - sql-star-schema
+  - sql-left-join-anti-join
+  - sql-conditional-aggregation
+  - sql-dates-and-time
+  - sql-window-functions
+datasets:
+  - cafe-sales
+notebook: notebooks/core/core-designing-a-star-schema.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Kimball Group: Four-Step Dimensional Design Process (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/four-4-step-design-process/
+  - title: 'Kimball Group: Dimension Surrogate Keys (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/dimension-surrogate-key/
+  - title: 'Kimball Group: Fact Table Structure (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/fact-table-structure/
+  - title: 'Kimball Group: Dimension Table Structure (accessed 2026-11-21)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/dimension-table-structure/
+status: draft
+---
+
+TODO(owner): Draft by the team (D24), for you to edit. The Part 3 project step sits in this lesson, as you asked, not in the last lesson of the part (C21, the lesson on error-cost metrics, whose stub still says that Part 3 ends there with the star schema). Why here: the step uses only what the lessons on modeling, grain and the star teach, and the three lessons after this one (framing and baseline, leakage, error costs) never touch a star, so they would stand between the lessons that teach the star and the step that applies it; the checks are also easiest straight after unit 4. The cost: Part 3 no longer ends with its project step (D49 says each part does), and the stub of C21 still carries the old note. Other changes to the stub: the duration is 35, not 30 (the body is about 3,400 words at 100 words a minute, with the project step), the `description` says "build and check" instead of "on paper", the prerequisites gain `sql-star-schema`, `sql-left-join-anti-join`, `sql-conditional-aggregation`, `sql-dates-and-time` and `sql-window-functions` (units 2 to 4 use them), the `notebook` field is added, and the dbt page is dropped from the sources (no claim of the lesson sits on it; it was not opened) in favor of four Kimball Group pages that carry the claims; `reviewed` is still the stub's date. Design choices to confirm: the star keeps the canceled order (a status column in the fact table, not a dimension of its own); payment is a dimension of three rows, which a reader may find heavy; every dimension gets a surrogate key even where the source key is a clean integer, and the stores are keyed in alphabetical order on purpose, so that the two keys differ (Exercise 3 depends on it). The unit 1 and unit 4 questions are the team's wording of what an owner would ask.
+
+## The question
+
+The owner brings four questions to Monday's meeting:
+
+> 1. Which payment method do customers prefer at each cafe?
+> 2. Does the average order of a loyalty customer depend on the tier: bronze, silver or gold?
+> 3. Do weekends sell more coffee than weekdays?
+> 4. How many units does an order hold at each cafe, on weekdays and on weekends?
+
+Today every report joins the five tables again, and two people have already reached different totals. The owner wants one model, built once, that all four questions run on. The data is `cafe-sales`, the fictional chain.
+
+By the end you can turn questions like these into the grain, the fact table, the dimensions and their keys, build the star in DuckDB, and check it.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Star schema: facts and dimensions*](/sql/star-schema/) (S29) you built a fact table with one row for each order line and dimensions around it, and checked that a join kept every line.
+
+**Diverge.** There the tables were handed to you, with the keys of the source. Here the questions choose them, the dimensions get keys of their own, and unit 2 shows what that changes.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Grain, facts and dimensions* (C17), what does the grain of a fact table say, and which one do you choose when several questions need different detail?
+
+   <details>
+   <summary>answer</summary>
+
+   What one row stands for. Choose the finest grain the questions need, because it can be added up into the coarser ones.
+
+   </details>
+
+2. In [*Star schema: facts and dimensions*](/sql/star-schema/) (S29), write the query that checks that joining a fact table `fact_sales` to a dimension `dim_store` neither drops nor repeats a line, and say what you compare it with.
+
+   <details>
+   <summary>answer</summary>
+
+   `SELECT COUNT(*) FROM fact_sales AS f JOIN dim_store AS s ON s.store_id = f.store_id;` The count must equal the rows of `fact_sales`, 3,287.
+
+   </details>
+
+## The big idea
+
+Write the questions first: the numbers they ask for are the facts, each "by" word is a dimension, and the finest thing they count is the grain.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="qs-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="qs" id="qs-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="qs" id="qs-r1" aria-label="Step 1 of 4: Three questions" />
+<input class="sa-r r2 o2" type="radio" name="qs" id="qs-r2" aria-label="Step 2 of 4: The numbers asked for: the fact table" />
+<input class="sa-r r3 o6" type="radio" name="qs" id="qs-r3" aria-label="Step 3 of 4: Each &quot;by&quot; word is a dimension" />
+<input class="sa-r r4 o8" type="radio" name="qs" id="qs-r4" aria-label="Step 4 of 4: The finest thing counted sets the grain" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>questions</small><span><i class="w1 tmp hl">3</i><i class="w7 d2">3</i></span></span><span class="sa-n c-out"><small>facts</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">2</i><i class="w6 d3">2</i></span></span><span class="sa-n c-grp"><small>dims</small><span><i class="w2 tmp">—</i><i class="w1 d3 tmp hl">1</i><i class="w1 d4 tmp hl">2</i><i class="w2 d5 tmp hl">3</i><i class="w2 d7">3</i></span></span><span class="sa-n c-out"><small>grain</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1 e</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 262" width="360" role="img" aria-labelledby="qs-t qs-d">
+<title id="qs-t">The questions name the pieces of a star schema</title>
+<desc id="qs-d">Three questions in rows: Q1 total of m by X, Q2 total of m by Y and Q3 count of e by X and Z. A fact table appears below them and takes the numbers the questions ask for, m and e. Three dimension tables X, Y and Z slide in around it, each joined to the fact table by a key. A badge names the grain: one row for each e, the finest thing a question counts.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Three questions</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · The numbers asked for: the fact table</text>
+<text class="f10 b w4 d3 tmp" x="10" y="29">3 · Each "by" word is a dimension</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · The finest thing counted sets the grain</text>
+<text class="f11 b" x="10" y="14">The questions name the pieces</text>
+<g><rect class="f-src k2" x="10" y="44" width="200" height="22" rx="6" /><text class="f11 m" x="110" y="59">Q1 · total of m, by X</text></g>
+<g><rect class="f-src k2" x="10" y="72" width="200" height="22" rx="6" /><text class="f11 m" x="110" y="87">Q2 · total of m, by Y</text></g>
+<g><rect class="f-src k2" x="10" y="100" width="200" height="22" rx="6" /><text class="f11 m" x="110" y="115">Q3 · count of e, by X and Z</text></g>
+<g class="w7 d2"><rect class="s-out" x="120" y="176" width="120" height="52" rx="6" /><text class="f11 b" x="130" y="193">fact table</text></g>
+<g class="w7 d2"><rect class="f-out k3" x="130" y="196" width="100" height="24" rx="6" /><text class="f11 m" x="180" y="212">m  e</text></g>
+<g class="w2 d7"><rect class="f-out k2" x="91" y="136" width="129" height="18" rx="9" /><text class="f11 b m" x="155.5" y="149">grain: 1 row per e</text></g>
+<g class="w6 d3"><g class="mv m3 xn2 y0"><g><rect class="s-grp" x="30" y="176" width="80" height="52" rx="6" /><text class="f11 b" x="40" y="193">dim X</text></g></g></g>
+<path class="s-grp dr p5 d4" pathLength="1" d="M90 202H120" />
+<g class="w5 d4"><g class="mv m4 x2 y0"><g><rect class="s-grp" x="250" y="176" width="80" height="52" rx="6" /><text class="f11 b" x="260" y="193">dim Y</text></g></g></g>
+<path class="s-grp dr p4 d5" pathLength="1" d="M240 202H270" />
+<g class="w4 d5"><g class="mv m5 x0 y1"><g><rect class="s-grp" x="130" y="228" width="100" height="20" rx="6" /><text class="f11 b" x="140" y="245">dim Z</text></g></g></g>
+<path class="s-grp dr p3 d6" pathLength="1" d="M180 228V238" />
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="qs-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="qs-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="qs-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="qs-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="qs-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="qs-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="qs-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="qs-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="qs-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="qs-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="qs-r1">1</label><label class="sa-sb sb2" for="qs-r2">2</label><label class="sa-sb sb3" for="qs-r3">3</label><label class="sa-sb sb4" for="qs-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">List the questions the business asks before you draw any table.<span class="sa-chs"><span class="sa-ch pl">3 questions</span></span></div>
+<div class="c-out w1 d2 tmp">The things the questions add up or count are the facts: they go in one fact table.<span class="sa-chs"><span class="sa-ch pl">fact table</span><span class="sa-ch pl">facts m and e</span></span></div>
+<div class="c-grp w4 d3 tmp">Each word after "by" is a way to slice the facts: it becomes a dimension table.<span class="sa-chs"><span class="sa-ch pl">dimensions X, Y and Z</span><span class="sa-ch pl">one key to each</span></span></div>
+<div class="c-out w2 d7">The finest thing any question counts, here e, is the grain: one fact row for each.<span class="sa-chs"><span class="sa-ch pl">grain: one row for each e</span></span></div>
+</div>
+<p class="ca-cap">Write the questions first. The numbers they ask for are the facts, each "by" word is a dimension, and the finest thing they count is the grain.</p>
+<ol class="sa-steps">
+<li>Three questions</li>
+<li>The numbers asked for: the fact table</li>
+<li>Each "by" word is a dimension</li>
+<li>The finest thing counted sets the grain</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: from questions to the grain, the keys of a dimension, the fact table with its checks, and asking the questions of the star. The queries run in the page. The tables that units 2 and 3 create stay until you leave the page, so run those blocks in order; Reset data removes them. The notebook runs the same queries in DuckDB.
+
+<OpenInColab />
+
+### 1. From questions to the grain
+
+**Idea.** Kimball Group lists four decisions of a dimensional design, in this order: the business process, the grain, the dimensions and the facts. Here the process is selling. For each question, find the number it asks for and the words after "by". The numbers are the facts, the "by" words are the dimensions, and the finest thing any question counts sets the grain.
+
+**Predict:** for each of the four questions, which number does it ask for and which words follow "by"? Then: should one row of the fact table stand for an order or for an order line? The next query tests one of the two answers.
+
+**Try it.** How many orders hold products of more than one category?
+
+<RunSQL query={`SELECT COUNT(*) AS orders,
+       COUNT(*) FILTER (WHERE categories > 1) AS in_two_or_more_categories
+FROM (SELECT i.order_id, COUNT(DISTINCT p.category) AS categories
+      FROM order_items AS i
+      JOIN products AS p ON p.product_id = i.product_id
+      GROUP BY i.order_id);`} />
+
+Expected: 1 row, 2 columns.
+
+*Why:* 862 of the 1,800 orders hold two or more categories. Question 3 asks for coffee sales, and an order with a coffee and a croissant cannot be given one category, so one row for each order is too coarse. The fact table needs one row for each order line. Here is the reading of all four questions:
+
+| question | the number it asks for | the "by" words |
+|---|---|---|
+| 1 | orders | cafe, payment method |
+| 2 | average amount of an order | loyalty tier |
+| 3 | sales of coffee | weekend or weekday, product category |
+| 4 | units for each order | cafe, weekend or weekday |
+
+The facts are quantity and the amount of a line, and a count of orders by distinct order id (C17). The dimensions are the cafe, the customer, the day, the product and the payment: five.
+
+### 2. The keys of a dimension
+
+**Idea.** Give each dimension a *surrogate key*: an integer the warehouse assigns, with no meaning, kept beside the *natural key* of the source (`store_id`). Kimball Group give the reasons: natural keys can repeat when a dimension keeps history, they can clash between source systems, and surrogate keys let the warehouse own its keys. The fact table stores the surrogate key. An event whose dimension is missing needs a row to point at, an *unknown member* with key 0. The date dimension is the exception that the same page names: it can take a readable key, such as 20260101.
+
+**Try it.** Build the dimensions of cafe, customer and day. The first two get their keys in order of name or id, and the customer table gets its unknown member:
+
+<RunSQL query={`CREATE OR REPLACE TABLE dim_store AS
+SELECT CAST(row_number() OVER (ORDER BY store_name) AS INTEGER) AS store_key, store_id, store_name, city
+FROM stores;
+
+CREATE OR REPLACE TABLE dim_customer AS
+SELECT 0 AS customer_key, CAST(NULL AS INTEGER) AS customer_id, 'unknown' AS loyalty_tier, 'unknown' AS city
+UNION ALL
+SELECT CAST(row_number() OVER (ORDER BY customer_id) AS INTEGER), customer_id, loyalty_tier, city
+FROM customers;
+
+CREATE OR REPLACE TABLE dim_date AS
+SELECT CAST(strftime(d, '%Y%m%d') AS INTEGER) AS date_key, CAST(d AS DATE) AS full_date,
+       month(d) AS month, dayname(d) AS weekday, isodow(d) >= 6 AS is_weekend
+FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-06-30', INTERVAL 1 DAY) AS t(d);`} />
+
+Expected: no result rows.
+
+**Try it.** The rule of a dimension is one row for each key. Check it, with the rows next to the distinct keys:
+
+<RunSQL query={`SELECT 'dim_store' AS dimension, COUNT(*) AS rows, COUNT(DISTINCT store_key) AS distinct_keys FROM dim_store
+UNION ALL SELECT 'dim_customer', COUNT(*), COUNT(DISTINCT customer_key) FROM dim_customer
+UNION ALL SELECT 'dim_date', COUNT(*), COUNT(DISTINCT date_key) FROM dim_date
+ORDER BY dimension;`} />
+
+**Predict:** the source has 150 customers and the days run from January 1 to June 30. How many rows does each dimension have?
+
+Expected: 3 rows, 3 columns.
+
+*Why:* 3 stores, 151 customers (150, and the unknown member) and 181 days, each with as many distinct keys as rows. Now look at the store keys:
+
+<RunSQL query={`SELECT * FROM dim_store ORDER BY store_key;`} />
+
+Expected: 3 rows, 4 columns. *Why:* Campus has `store_key` 1 and `store_id` 2. The surrogate key follows the alphabet and the source key follows the order in which the cafes opened, so the two numbers differ on purpose.
+
+### 3. The fact table, and the checks that come with it
+
+**Idea.** The fact table has one row for each order line, the key of each dimension, the order id (a degenerate dimension, as in C17) and the measures, and nothing descriptive. You build it by joining each source row to each dimension on the natural key and keeping the surrogate key. A `LEFT JOIN` keeps the line of an order with no customer, and `COALESCE` sends it to key 0. Kimball Group describe a fact table the same way: numeric measures and foreign keys to its dimensions. Before anyone uses a star, it passes three checks: as many rows as the lines, as much money as the source, and no key without a row in its dimension.
+
+**Try it.** Build the fact table. `product_id` and `payment_method` stay as plain columns for now; the project step turns them into dimensions.
+
+<RunSQL query={`CREATE OR REPLACE TABLE fact_sale AS
+SELECT CAST(strftime(CAST(o.ordered_at AS DATE), '%Y%m%d') AS INTEGER) AS date_key,
+       s.store_key,
+       COALESCE(c.customer_key, 0) AS customer_key,
+       i.product_id, o.payment_method,
+       o.order_id, o.status AS order_status,
+       i.quantity, i.discount_usd,
+       i.quantity * p.unit_price_usd - i.discount_usd AS amount_usd
+FROM order_items AS i
+JOIN orders AS o ON o.order_id = i.order_id
+JOIN products AS p ON p.product_id = i.product_id
+JOIN dim_store AS s ON s.store_id = o.store_id
+LEFT JOIN dim_customer AS c ON c.customer_id = o.customer_id;
+
+SELECT COUNT(*) AS rows, ROUND(SUM(amount_usd), 2) AS sales FROM fact_sale;`} />
+
+**Predict:** the source has 3,287 lines worth 22,754.25 dollars. What does the fact table hold?
+
+Expected: 1 row, 2 columns.
+
+*Why:* `3287 | 22754.25`, the same as the source, canceled order and order 2075 included. Now the third check, the keys that find no row. A `LEFT JOIN` from the fact table to a dimension returns an empty key where nothing matched:
+
+<RunSQL query={`SELECT COUNT(*) FILTER (WHERE d.date_key IS NULL) AS no_date,
+       COUNT(*) FILTER (WHERE s.store_key IS NULL) AS no_store,
+       COUNT(*) FILTER (WHERE c.customer_key IS NULL) AS no_customer
+FROM fact_sale AS f
+LEFT JOIN dim_date AS d ON d.date_key = f.date_key
+LEFT JOIN dim_store AS s ON s.store_key = f.store_key
+LEFT JOIN dim_customer AS c ON c.customer_key = f.customer_key;`} />
+
+Expected: 1 row, 3 columns. *Why:* three zeros. The one line of the walk-in order points at customer key 0 instead of at nothing. The three checks passed, and the picture of the star so far:
+
+<figure>
+<svg viewBox="0 0 360 456" width="360" role="img" aria-labelledby="star-t star-d" font-family="inherit" fill="currentColor">
+<title id="star-t">The star schema built so far, with three dimensions</title>
+<desc id="star-d">A fact table, fact_sale, with 3,287 rows and the grain one row for each order line, sits in the middle. Above it are dim_date with 181 rows and dim_store with 3 rows; below it is dim_customer with 151 rows. Each dimension has one row for each key and many fact rows point at it. The fact table holds the keys date_key, store_key and customer_key, the plain columns product_id and payment_method, the order id and status, and the measures quantity, discount_usd and amount_usd. A dashed box marks the dimensions for product and payment, which come later.</desc>
+<text x="10" y="18" font-size="12" font-weight="600">The star built so far: one fact table, three dimensions</text>
+<rect x="10" y="32" width="165" height="98" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="10" y="32" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="18" y="47" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_date</text>
+<text x="167" y="47" font-size="9" text-anchor="end" fill-opacity="0.8">181 rows</text>
+<text x="18" y="66" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">date_key</text>
+<text x="167" y="66" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="18" y="80" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">full_date</text>
+<text x="18" y="94" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">month</text>
+<text x="18" y="108" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">weekday</text>
+<text x="18" y="122" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">is_weekend</text>
+<rect x="185" y="32" width="165" height="84" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="185" y="32" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="193" y="47" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_store</text>
+<text x="342" y="47" font-size="9" text-anchor="end" fill-opacity="0.8">3 rows</text>
+<text x="193" y="66" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_key</text>
+<text x="342" y="66" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="193" y="80" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_id</text>
+<text x="193" y="94" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_name</text>
+<text x="193" y="108" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">city</text>
+<rect x="10" y="170" width="340" height="114" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5" />
+<text x="18" y="187" font-size="12" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">fact_sale</text>
+<text x="342" y="187" font-size="9" text-anchor="end">3,287 rows</text>
+<text x="18" y="203" font-size="10">Grain: one row for each order line.</text>
+<text x="18" y="219" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">date_key</text>
+<text x="150" y="219" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="18" y="233" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">store_key</text>
+<text x="150" y="233" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="18" y="247" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_key</text>
+<text x="150" y="247" font-size="9" font-weight="700" text-anchor="end">FK</text>
+<text x="18" y="261" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">product_id</text>
+<text x="18" y="275" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">payment_method</text>
+<text x="190" y="219" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_id</text>
+<text x="190" y="233" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">order_status</text>
+<text x="190" y="247" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">quantity</text>
+<text x="190" y="261" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">discount_usd</text>
+<text x="190" y="275" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">amount_usd</text>
+<rect x="10" y="330" width="165" height="84" fill="none" stroke="currentColor" stroke-opacity="0.6" />
+<rect x="10" y="330" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="18" y="345" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">dim_customer</text>
+<text x="167" y="345" font-size="9" text-anchor="end" fill-opacity="0.8">151 rows</text>
+<text x="18" y="364" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_key</text>
+<text x="167" y="364" font-size="9" font-weight="700" text-anchor="end">PK</text>
+<text x="18" y="378" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">customer_id</text>
+<text x="18" y="392" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">loyalty_tier</text>
+<text x="18" y="406" font-size="10" font-family="ui-monospace, Menlo, Consolas, monospace">city</text>
+<rect x="185" y="330" width="165" height="84" fill="none" stroke="currentColor" stroke-opacity="0.6" stroke-dasharray="4 3" />
+<rect x="185" y="330" width="165" height="22" fill="currentColor" fill-opacity="0.12" stroke="none" />
+<text x="193" y="345" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">not built yet</text>
+<text x="193" y="366" font-size="10">dim_product and dim_payment</text>
+<text x="193" y="380" font-size="10">come in the project step.</text>
+<text x="193" y="394" font-size="10">For now product_id and</text>
+<text x="193" y="408" font-size="10">payment_method are plain.</text>
+<path d="M92 130V170" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="98" y="146" font-size="10" font-weight="600">1</text>
+<text x="98" y="164" font-size="10" font-weight="600">many</text>
+<path d="M267 116V170" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="273" y="132" font-size="10" font-weight="600">1</text>
+<text x="273" y="164" font-size="10" font-weight="600">many</text>
+<path d="M92 284V330" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="98" y="299" font-size="10" font-weight="600">many</text>
+<text x="98" y="324" font-size="10" font-weight="600">1</text>
+<text x="10" y="434" font-size="10" fill-opacity="0.8">Beside a table: how many of its rows go with one row at the other end.</text>
+<text x="10" y="448" font-size="10" fill-opacity="0.8">Customer key 0 is the unknown customer, for the order with no customer.</text>
+</svg>
+</figure>
+
+### 4. Ask the questions of the star
+
+**Idea.** A question to a star runs in four moves: start from the fact table, join the dimensions the question names, filter and group by their columns, and add up a measure. At the line grain an order is a group of rows, so count orders with `COUNT(DISTINCT order_id)`. Question 1 asks for payment by cafe; the payment is still a plain column of the fact table.
+
+**Try it.** Question 1, for the completed orders:
+
+<RunSQL query={`SELECT s.store_name, f.payment_method, COUNT(DISTINCT f.order_id) AS orders
+FROM fact_sale AS f
+JOIN dim_store AS s ON s.store_key = f.store_key
+WHERE f.order_status = 'completed'
+GROUP BY s.store_name, f.payment_method
+ORDER BY s.store_name, orders DESC, f.payment_method;`} />
+
+**Predict:** which payment method comes first at each cafe?
+
+Expected: 9 rows, 3 columns.
+
+*Why:* card first at all three, then mobile, then cash: at Campus 400, 209 and 106 orders. The nine numbers add up to 1,799, the completed orders of the source: a question on the star is checked against a number the source already gives. Question 2 is Exercise 1, question 4 is Exercise 2, and question 3 needs the product dimension, which the project step adds.
+
+<Aside type="tip" title="Remember">
+
+- Start from the questions: the numbers are the facts, the "by" words are the dimensions, the finest thing counted is the grain.
+- A dimension has a surrogate key beside the natural key, and a row 0 for what is unknown.
+- Build the fact table by joining each dimension on its natural key and keeping the surrogate key.
+- Check the star before use: rows, total, and keys without a row in their dimension.
+- At the line grain, count orders with `COUNT(DISTINCT order_id)`.
+
+**Common trap:** starting from the tables you have instead of the questions you must answer. One row for each order looks tidy, and 862 of the 1,800 orders hold two or more categories.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-designing-a-star-schema-1">
+
+**Question 2: the average order of each tier.** It needs the star of units 2 and 3. The starter counts the orders and adds up the sales for each tier, for every order. Finish it: keep only the completed orders and add the average amount of an order, the sales divided by the orders, rounded to 2 decimals as `avg_order`. Expected: 4 rows (bronze, gold, silver, unknown), 4 columns. In the notebook, `answer_1` holds the rows of your query.
+
+<RunSQL query={`SELECT c.loyalty_tier,
+       COUNT(DISTINCT f.order_id) AS orders,
+       ROUND(SUM(f.amount_usd), 2) AS sales
+FROM fact_sale AS f
+JOIN dim_customer AS c ON c.customer_key = f.customer_key
+GROUP BY c.loyalty_tier
+ORDER BY c.loyalty_tier;`} />
+
+<details>
+<summary>Hint</summary>
+
+Unit 4: the filter on `order_status` goes in a `WHERE` before the `GROUP BY`. The average of an order is a total divided by a count of distinct orders, not `AVG` of the lines.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT c.loyalty_tier, COUNT(DISTINCT f.order_id) AS orders, ROUND(SUM(f.amount_usd), 2) AS sales,
+       ROUND(SUM(f.amount_usd) / ..., 2) AS avg_order
+FROM fact_sale AS f
+JOIN dim_customer AS c ON c.customer_key = f.customer_key
+WHERE ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+SELECT c.loyalty_tier,
+       COUNT(DISTINCT f.order_id) AS orders,
+       ROUND(SUM(f.amount_usd), 2) AS sales,
+       ROUND(SUM(f.amount_usd) / COUNT(DISTINCT f.order_id), 2) AS avg_order
+FROM fact_sale AS f
+JOIN dim_customer AS c ON c.customer_key = f.customer_key
+WHERE f.order_status = 'completed'
+GROUP BY c.loyalty_tier
+ORDER BY c.loyalty_tier;
+```
+
+Bronze 12.75, gold 12.03, silver 12.65 and unknown 7.00 dollars. The tiers differ by at most 0.72 dollars, with the walk-in's one order of 7.00 apart. The filter matters for silver: the canceled order 1461 belongs to a silver customer, so the starter showed 582 orders and 7,353.50, and the completed orders are 581 and 7,348.50.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-designing-a-star-schema-2">
+
+**Question 4: units in an order, by cafe and kind of day.** Before you start, say what the result looks like: six rows, a cafe with weekday or weekend and a number of units. For the completed orders, divide the units by the orders (distinct order ids), rounded to 2 decimals as `units_per_order`. Write the query in the editor; it needs the star of units 2 and 3. Expected: 6 rows, 3 columns (cafe, `is_weekend`, `units_per_order`). In the notebook, `answer_2` holds the rows of your query.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Join the fact table to `dim_store` and `dim_date` on their keys, filter on `order_status`, and group by the cafe and `is_weekend`. A unit count divided by a count of distinct orders.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Six rows, each a cafe with weekday (false) or weekend (true), and a number between 2.7 and 3.0."*
+
+```sql
+SELECT s.store_name, d.is_weekend, ROUND(SUM(f.quantity) * 1.0 / ..., 2) AS units_per_order
+FROM fact_sale AS f
+JOIN dim_store AS s ON s.store_key = f.store_key
+JOIN dim_date AS d ON d.date_key = f.date_key
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT s.store_name, d.is_weekend,
+       ROUND(SUM(f.quantity) * 1.0 / COUNT(DISTINCT f.order_id), 2) AS units_per_order
+FROM fact_sale AS f
+JOIN dim_store AS s ON s.store_key = f.store_key
+JOIN dim_date AS d ON d.date_key = f.date_key
+WHERE f.order_status = 'completed'
+GROUP BY s.store_name, d.is_weekend
+ORDER BY s.store_name, d.is_weekend;
+```
+
+Campus 2.79 on weekdays and 2.94 on weekends, Harbor 2.90 and 2.99, Old Town 2.84 and 2.90. Every cafe is a little higher on weekends, by between 0.06 and 0.15 units; each ratio rests on 140 to 470 orders. Question 4 needed no new table: the grain and the dimensions chosen from the other questions already covered it, which is the point of building from the questions.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the three checks of a star before anyone uses it.
+
+   <details>
+   <summary>answer</summary>
+
+   As many rows in the fact table as lines in the source, the same total, and no key in the fact table without a row in its dimension.
+
+   </details>
+
+<Exercise id="core-designing-a-star-schema-3">
+
+**Spot the flaw.** A colleague totals the units of each cafe from the star and reports that Harbor, which opened on April 1, sold the most. Run it; it needs the star of units 2 and 3. Expected: 3 rows, 2 columns. The checks of unit 3 pass on this star, so what went wrong, and what does each cafe really sell? In the notebook, `answer_3` holds the rows of the fixed query.
+
+<RunSQL query={`SELECT s.store_name, SUM(f.quantity) AS units
+FROM fact_sale AS f
+JOIN dim_store AS s ON s.store_id = f.store_key
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+<details>
+<summary>Hint</summary>
+
+Compare the two sides of the `ON`. Which key does the fact table hold, and which column of `dim_store` is it matched against? Then add up the units of each store from `order_items` and `orders` and compare.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+JOIN dim_store AS s ON s.store_key = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- added to or changed in the starter:
+SELECT s.store_name, SUM(f.quantity) AS units
+FROM fact_sale AS f
+JOIN dim_store AS s ON s.store_key = f.store_key
+GROUP BY s.store_name
+ORDER BY s.store_name;
+```
+
+The colleague matched the surrogate key of the fact table (`store_key`) against the natural key of the dimension (`store_id`). The numbers 1, 2 and 3 exist on both sides, so every row finds a partner, the join returns 3,287 rows and the total is right, but the cafes are mislabeled. The right answer is Campus 2,036 units, Harbor 1,041 and Old Town 2,085; the starter gave Campus 1,041, Harbor 2,085 and Old Town 2,036. The check that catches it compares a total for each group with the source: the units of each cafe from `order_items` joined to `orders` and `stores` give the same three numbers as the fixed query. Row counts and grand totals cannot see a join that shuffles the labels.
+
+</Solution>
+
+</Exercise>
+
+## Project step: the star schema of the cafes
+
+Part 3 of the advanced core ends its project here. **The brief.** The owner wants the star finished and checked so that all four questions run on it. In the last section of the notebook, add `dim_product` and `dim_payment` the way unit 2 built the others (a surrogate key from `row_number()` in order of the product name and of the payment method, the natural key kept beside it), then rebuild `fact_sale` with five dimension keys and without the plain columns `product_id` and `payment_method`. Name these variables:
+
+- `fact_rows`, the rows of `fact_sale`.
+- `dim_rows`, a dictionary of the row counts of the five dimensions, with the keys `dim_store`, `dim_customer`, `dim_date`, `dim_product` and `dim_payment`.
+- `unmatched`, the number of fact rows whose key finds no row in its dimension, added up over the five dimensions.
+- `star_sales`, the sum of `amount_usd` of the fact table, rounded to 2 decimals.
+- `gold_avg_order`, the average amount of an order for the gold customers' completed orders, rounded to 2 decimals.
+- `coffee_weekend_pct`, the share of the completed coffee sales made on weekend days, in percent, rounded to 1 decimal.
+
+Then write `design` with an f-string, so that every number in it comes from a variable. The check cell compares the variables with known answers; you read the design.
+
+**Self-check list**, before you call it done:
+
+1. The first line states the grain in one sentence.
+2. It names the measures of the fact table and the five dimensions, with their row counts.
+3. It says how the star was checked: rows, total and unmatched keys, and a total for each group compared with the source.
+4. It names one question the star cannot answer and what would have to change.
+5. Every number comes from a cell: none is typed.
+
+<details>
+<summary>A model design, written by the model solution of the notebook</summary>
+
+```text
+Grain: one row for each order line of cafe-sales, January 1 to June 30, 2026: 3287 rows worth 22754.25 dollars, the canceled order and order 2075 included.
+Facts: quantity, discount_usd and amount_usd; order_id stays in the fact table as a key with no table of its own.
+Dimensions: store (3 rows), customer (151, key 0 for the order with no customer), date (181), product (16) and payment (3), each with a surrogate key beside the natural key.
+Checks: the fact table has the rows and the money of the source, 0 keys find no dimension row, and the units of each cafe match the source.
+Answers: the average completed order of a gold customer is 12.03 dollars; 37.4% of the completed coffee sales fall on weekend days.
+Limit: who referred whom is not in the star, so "do referred customers order more?" needs the referral relationship of the model brought in.
+```
+
+</details>
+
+**Can you do it?** *I can turn business questions into a grain, a fact table and dimensions with keys of their own, build the star in DuckDB, check its rows, its total and its keys, draw it, and answer a question through it.*
+Test: Exercise core-designing-a-star-schema-2, done from the notebook without opening the hints.
+
+The pattern to remember: **the questions choose the grain and the dimensions, and a star is not finished until its checks pass and a total for each group matches the source.** Part 3 continues with *Framing a prediction problem, splitting and a baseline*, where the same cafe data turns into rows for a model.
