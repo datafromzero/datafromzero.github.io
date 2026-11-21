@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1416 nodes, 1554 edges, 174 communities (653 isolated nodes).
+- 1416 nodes, 1556 edges, 174 communities (653 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 208, content-type 5, decision 52, dependency 25, design-section 15, doc 39, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 473, rule 10, script 146, skill 1, spec-section 25, starlight-component 6, style 7, symbol 265, template 2, token 12.
-- Edges: defines 265, imports 50, mentions 844, overrides 6, references 28, runs 11, specified-by 4, uses 309, uses-token 32, validated-by 5.
+- Edges: defines 265, imports 50, mentions 846, overrides 6, references 28, runs 11, specified-by 4, uses 309, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -26,8 +26,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 26 | .claude/MISTAKES.md:1 |
 | 13 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
-| 14 | `S7` Datasets | spec-section | 23 | SPEC.md:310 |
-| 15 | `design/README.md` | doc | 23 | design/README.md:1 |
+| 14 | `D44` Stage cheatsheets; a math blo… | decision | 23 | SPEC.md:71 |
+| 15 | `S7` Datasets | spec-section | 23 | SPEC.md:310 |
 
 ## Communities
 
@@ -57,11 +57,11 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/styles/math.css` -uses-token-> `token:--fg` (C72 to C21, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C15, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C25 to C41, design/README.md:181)
-- `M7` -mentions-> `D34` (C51 to C25, CLAUDE.md:65)
 - `M8` -mentions-> `D24` (C75 to C15, CLAUDE.md:66)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C151 to C2, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C50 to C51, src/lib/repo-files.ts:4)
 - `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C72 to C163, SPEC.md:78)
+- `DG6` -mentions-> `DG2` (C73 to C27, design/README.md:226)
 
 ## Decisions (SPEC §1)
 

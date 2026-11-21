@@ -3,9 +3,9 @@
  * tests share it. The page shows the stages as a short vertical rail; each stage with published lessons is a
  * native <details> that opens on its numbered lesson list, so a learner sees the big steps first.
  *
- * Lesson codes (E1, S12, DA3…) are a stage prefix plus `order / 10`. Orders use gaps of 10 (SPEC §5.1), so a code
- * never changes when a lesson is added later: a lesson inserted at order 25 becomes E2.5. Codes are labels only,
- * never part of a URL.
+ * Lesson codes (E1, S12, DA3…) are a stage prefix plus `order / 10`. Orders use gaps of 10 (SPEC §5.1) so a lesson
+ * can be inserted at order 25 (code E2.5) while it is a draft; when a stage is published the owner renumbers it to
+ * whole codes (the SQL stage did, D34). Codes are labels only, never part of a URL.
  */
 
 export interface StageDef {

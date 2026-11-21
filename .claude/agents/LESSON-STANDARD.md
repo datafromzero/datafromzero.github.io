@@ -55,7 +55,7 @@ Check yourself.
 **Status: pilot, waiting for the owner to approve or reject it.** Written for the owner's direction: "interleave theory
 and exercises so the learner can study easily, balancing knowledge and practice; no dry, wordy prose; animations must be
 beautiful and memorable; always stand where a learner who knows nothing about data analysis stands." Piloted on S8
-(`group-by-having`), S14 (`window-functions`) and S19 (`inner-join`). Until the owner decides, every other lesson keeps
+(`group-by-having`), S14 (`window-functions`) and S20 (`inner-join`). Until the owner decides, every other lesson keeps
 the shape above, and a lesson uses one shape or the other, never a mix. Everything outside "Shape" and "How it works"
 above (rules, figures, files, done means) applies unchanged.
 

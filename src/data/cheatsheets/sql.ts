@@ -218,7 +218,7 @@ QUALIFY ROW_NUMBER() OVER (
 		{
 			id: 'joins',
 			title: 'Data knowledge and joins',
-			codes: 'S18–S30',
+			codes: 'S18–S32',
 			items: [
 				{
 					lesson: 'relational-model',
@@ -401,7 +401,7 @@ WHERE status = 'completed';`,
 		{
 			id: 'database',
 			title: 'The database itself',
-			codes: 'S31–S35',
+			codes: 'S33–S39',
 			items: [
 				{
 					lesson: 'create-table-constraints',
