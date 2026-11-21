@@ -16,7 +16,8 @@ prerequisites:
   - core-defining-metrics
   - core-correlation-and-causation
   - core-comparing-groups
-  - sql-funnels
+  - python-pandas-dates-and-resample
+  - python-pandas-merge-and-validate
 datasets:
   - app-events
 notebook: notebooks/core/core-diagnosing-a-movement.ipynb
@@ -24,16 +25,12 @@ reviewed: 2026-11-16
 sources:
   - title: 'Dmitriev, Gupta, Kim and Vaz, A Dirty Dozen: Twelve Common Metric Interpretation Pitfalls in Online Controlled Experiments, KDD 2017 (accessed 2026-11-20)'
     url: https://exp-platform.com/Documents/2017-08%20KDDMetricInterpretationPitfalls.pdf
-  - title: 'Rodden, Hutchinson and Fu, Measuring the User Experience on a Large Scale: User-Centered Metrics for Web Applications, CHI 2010 (accessed 2026-11-20)'
-    url: https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/36299.pdf
   - title: 'U.S. Office of Personnel Management: Federal holidays, the 2026 schedule (accessed 2026-11-20)'
     url: https://www.opm.gov/policy-data-oversight/pay-leave/federal-holidays/
-  - title: 'SciPy documentation: scipy.stats.chi2_contingency (accessed 2026-11-20)'
-    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
 status: draft
 ---
 
-TODO(owner): team draft (D24). Set `reviewed` when you publish; the notebook needs the release tag `v0.2.0`. The stub's interview blogs were dropped (not primary) and its objectives and duration rewritten; `sql-funnels` stays a prerequisite although the draft uses no funnel. Against the dataset README, as computed in the notebook: the mix explains 2.86 of a 3.07-point fall (the README subtracts rounded rates and says 2.8 of 3.0); June 8 to 16 has 1,078 people in `users.csv`, not 1,074 (4 of the 10 people without events); its 149.5 visits from the other regions is right only for people who have a row in `users`. Exercise 2 names the 367 people of `signup_flow_v2` early, and C14 may want to hold that back. The split into a mix part and a rate part is classical (Kitagawa, 1955), but that paper was not opened, so it is not cited. C12 and C14 are named by title and not linked, because they are drafts.
+TODO(owner): team draft (D24). Set `reviewed` when you publish; the notebook needs the release tag `v0.2.0`. The stub's interview blogs were dropped (not primary); its objectives, prerequisites and duration were rewritten. The README says the mix explains "about 2.8 of the 3.0 points" from rounded rates; exactly, in the order of unit 4, it is 2.86 of 3.07 (2.48 in the other order). Its 1,074 people for June 8 to 16 are 1,078 rows in `users.csv` (4 of the 10 people without events), and its 149.5 visits from the other regions holds only for people with a row in `users`. C12 and C14 are named by title, not linked, because they are drafts.
 
 ## The question
 
@@ -45,7 +42,7 @@ The team of a budgeting app, a fictional app whose log is the dataset `app-event
 | return visits from `north_america` on Monday, May 25 | 57, where the four Mondays around it average 109.75 |
 | 14-day conversion of new signups | 12.95% for people who signed up from March 9 to April 12, 9.88% from April 13 to June 7 |
 
-Which of the three is a real problem, and what caused it? By the end you can walk from a moving number to its cause in a fixed order, tell a change of mix from a change of rate, and write the diagnosis in plain words.
+Which of the three is a real problem, and what caused it? By the end you can walk from a moving number to its cause in a fixed order and tell a change of mix from a change of rate.
 
 <Aside type="note" title="You already know this">
 
@@ -163,29 +160,28 @@ About 40 minutes, 5 new ideas: the pipeline check, the calendar check, the split
 
 ### 1. Is the pipeline telling the truth
 
-**Idea.** Before you explain a movement, check that the number still measures the same thing. A pipeline can fake a movement through what rows are called, when they arrive and how many times they arrive. Rodden, Hutchinson and Fu warn that a metric from logs is only as good as the logging of the actions it counts. The checks are cheap: a count by name, a count by the time of receipt, the lag between the two, and a look for copies (C12).
+**Idea.** Before you explain a movement, check that the number still measures the same thing.
 
 **Try it.** Count the paywall views in the four weeks before May 18 and in the four weeks from May 18, by event name:
 
 ```python
-paywall = events[events["event_name"].isin(["view_paywall", "paywall_viewed"])]
+paywall = events[events["event_name"].str.contains("paywall")]        # every event whose name contains "paywall"
 windows = {"Apr 20 to May 17": ("2026-04-20", "2026-05-18"), "May 18 to Jun 14": ("2026-05-18", "2026-06-15")}
 for label, (start, stop) in windows.items():
     rows = paywall[(paywall["event_ts"] >= start) & (paywall["event_ts"] < stop)]
-    counts = rows["event_name"].value_counts()
-    print(label, int(counts.get("view_paywall", 0)), int(counts.get("paywall_viewed", 0)), len(rows))
-renamed = paywall[paywall["event_name"] == "paywall_viewed"]
+    print(label, rows["event_name"].value_counts().to_dict(), len(rows))
+renamed = paywall[paywall["event_name"] != "view_paywall"]            # the names other than view_paywall
 print(renamed["platform"].value_counts().to_dict(), renamed["event_ts"].min())
 ```
 
-**Predict:** by `view_paywall` alone the views fell by about a third. Will the total over every event with a paywall view in its name fall by a third too?
+**Predict:** by `view_paywall` alone the views fell by about a third between the two windows. The cell counts the events whose name contains "paywall", by name, in the same two windows. Did people look at the paywall about a third less often?
 
 <details>
 <summary>Reveal the result</summary>
 
 ```text
-Apr 20 to May 17 2379 0 2379
-May 18 to Jun 14 1619 914 2533
+Apr 20 to May 17 {'view_paywall': 2379} 2379
+May 18 to Jun 14 {'view_paywall': 1619, 'paywall_viewed': 914} 2533
 {'ios': 1303} 2026-05-18 02:14:23
 ```
 
@@ -213,7 +209,7 @@ May 18 to Jun 14 1619 914 2533
 
 </details>
 
-*Why:* by the old name the views fell 32 percent, from 2,379 to 1,619. From May 18 the iOS app sends `paywall_viewed` for the same event: 914 rows in the second window, 1,303 in all, every one on iOS. Over both names there are 2,533, 6.5 percent more than before. Nothing about behavior changed: the metric lost a name, and the definition must list every name of the event.
+*Why:* by the old name the views fell 32 percent, from 2,379 to 1,619. From May 18 the iOS app sends `paywall_viewed` for the same event: 914 rows in the second window, 1,303 in all, every one on iOS. Over both names there are 2,533, 6.5 percent more than before. Nothing about behavior changed: the metric lost a name, and the definition must list every name of the event. The names are one of three ways a pipeline can fake a movement; the next check shows the other two.
 
 **Try it.** On March 17 the collector was down for part of the afternoon. Count that day's events per hour by when they happened and by when they were received, then measure the lag:
 
@@ -316,7 +312,7 @@ print(int(outage.sum()), int((lag_hours >= 1).sum()), int(((lag_hours >= 1) & ~o
 
 </details>
 
-*Why:* by the time of receipt the count is 0, 0, 1, 0, 0 and 0 from 14:00 to 19:59 and 286 at 20:00. By the time the events happened nothing is missing: the 240 events of those six hours arrived after the collector came back. A dashboard by arrival time shows a hole and a spike, and neither is behavior. The last line counts the rest: 1,135 events arrived an hour or more after they happened, 912 of them outside the outage, and 30 carry a time later than their arrival, a phone clock that ran ahead. If a pipeline check explains the movement, stop: it is the data.
+*Why:* by the time of receipt the count is 0, 0, 1, 0, 0 and 0 from 14:00 to 19:59 and 286 at 20:00. By the time the events happened nothing is missing: the 240 events of those six hours arrived after the collector came back. A dashboard by arrival time shows a hole and a spike, and neither is behavior. The last line counts the rest: 1,135 events arrived an hour or more after they happened, 223 of the 240 outage events and 912 others, and 30 carry a time later than their arrival, a phone clock that ran ahead. So a pipeline fakes a movement through what rows are called, when they arrive and how many times they arrive (the copies of C12). If a pipeline check explains the movement, stop: it is the data.
 
 ### 2. Is it the calendar
 
@@ -336,6 +332,8 @@ for day in mondays:
     print(day, int(na[day]), int(other[day]))
 around = [d for d in mondays if d != "2026-05-25"]
 print(float(na[around].mean()), float(other[around].mean()))
+late_rows = events[(events["received_at"] - events["event_ts"]) >= pd.Timedelta(hours=1)]     # events received an hour or more after they happened
+print([int((late_rows["event_ts"].dt.strftime("%Y-%m-%d") == day).sum()) for day in mondays])
 ```
 
 **Predict:** will the holiday show in both groups, in one, or in neither?
@@ -350,6 +348,7 @@ print(float(na[around].mean()), float(other[around].mean()))
 2026-06-01 116 162
 2026-06-08 115 153
 109.75 149.5
+[6, 6, 6, 4, 8]
 ```
 
 <figure>
@@ -396,17 +395,17 @@ print(float(na[around].mean()), float(other[around].mean()))
 
 </details>
 
-*Why:* on May 25 the visits from `north_america` were 57, against an average of 109.75 on the four Mondays around it: about half. The other three regions had 138, just under the 139 to 162 of the other four Mondays. One region and one day: June 1 is back to 116. Nothing arrived late and no name changed, so it is not the pipeline. Rule it in as the cause of that alert and do not carry it to the others.
+*Why:* on May 25 the visits from `north_america` were 57, against an average of 109.75 on the four Mondays around it: about half. The other three regions had 138, just under the 139 to 162 of the other four Mondays. One region and one day: June 1 is back to 116. The last line counts the events received an hour or more late, by the day they happened: 6, 6, 6, 4 and 8. There is no jump in late events on May 25, and no name changed: it is not the pipeline. Rule it in for that alert only.
 
 ### 3. Where did it move
 
-**Idea.** If the data and the calendar are clean, split the movement by a *segment*: a column that describes each person and was fixed before the outcome, such as channel, platform or region. Compare the two periods inside each segment and look at two things: the segment's share of the people and its own rate. Dmitriev and colleagues use segments to see whether a problem touches everyone or one group, and warn to read them with care.
+**Idea.** If the data and the calendar are clean, split the movement by a *segment*: a column that describes each person and was fixed before the outcome, such as channel, platform or region. Compare the two periods inside each segment and look at two things: the segment's share of the people and its own rate. Dmitriev and colleagues use segments to see whether a problem touches everyone or one group.
 
 **Try it.** Split the five weeks before April 13 and the weeks from April 13 by channel, by platform and by region:
 
 ```python
 def split(col):
-    """Per segment: the share of the people and the 14-day conversion, before and during the campaign."""
+    """Per segment: its share of the people and its conversion."""
     for seg in sorted(base[col].unique()):
         b, c = base[base[col] == seg], camp[camp[col] == seg]
         print(f"  {seg:<15} share {100 * len(b) / len(base):4.1f}% -> {100 * len(c) / len(camp):4.1f}%   conversion {100 * b['bought'].mean():4.1f}% -> {100 * c['bought'].mean():4.1f}%")
@@ -509,55 +508,32 @@ region
 
 </details>
 
-*Why:* only the channel split has rates that hold still while the shares move: `paid_social` goes from 9.9% to 37.7% of the people, converting at 3.3% and then 4.0%. The platform split tells another story: web holds (15.3% to 15.1%) while iOS falls from 14.9% to 10.3% and Android from 8.1% to 5.4%, which reads like a problem of the apps. The region split says it fell everywhere, by 2.0 to 3.8 points, with hardly a share moving: a global fault. Three splits, three stories. A split is a clue, not the cause.
-
-**Try it.** What does the platform split stand for? The share of each channel's later-period people who signed up on a phone, then the p-value of iOS against web inside each channel that has web people:
-
-```python
-mix = pd.crosstab(camp["channel"], camp["platform"], normalize="index")
-print({channel: round(float(100 * (1 - mix.loc[channel, "web"])), 1) for channel in mix.index})
-for channel in ["organic_search", "paid_search", "paid_social", "referral"]:
-    d = full[full["channel"] == channel]
-    table = pd.crosstab(d["platform"], d["bought"]).loc[["web", "ios"]]
-    print(channel, table.sum(axis=1).tolist(), f"{stats.chi2_contingency(table, correction=False).pvalue:.4f}")
-```
-
-**Predict:** what share of the `paid_social` people in the later weeks signed up on a phone, iOS or Android?
-
-<details>
-<summary>Reveal the result</summary>
-
-```text
-{'app_store': 100.0, 'organic_search': 36.5, 'paid_search': 64.6, 'paid_social': 94.7, 'referral': 44.2}
-organic_search [3388, 800] 0.2143
-paid_search [939, 918] 0.2221
-paid_social [226, 2276] 0.1197
-referral [1916, 850] 0.0004
-```
-
-</details>
-
-*Why:* 94.7 percent of the `paid_social` people, and every `app_store` person, are on a phone, so the platform split saw the channel through the device. A segment tied to the cause shows its effect without being the cause. It is the same trap as Simpson's paradox in C10, where web led overall and iOS led inside the channels. The p-values are for iOS against web inside each channel, with every person who had a full follow-up: only `referral` is clearly more than chance (p = 0.0004; the other three are 0.2143, 0.2221 and 0.1197).
+*Why:* only the channel split has rates that hold still while the shares move: `paid_social` goes from 9.9% to 37.7% of the people, converting at 3.3% and then 4.0%. The platform split tells another story: web holds (15.3% to 15.1%) while iOS falls from 14.9% to 10.3% and Android from 8.1% to 5.4%. The region split says it fell everywhere, by 2.0 to 3.8 points, with hardly a share moving: a global fault. Three splits, three stories. Platform stands in for channel: C10 showed that web people come mostly through organic search and referral, iOS people through the app store and paid social. A split is a clue, not the cause.
 
 ### 4. Mix or rate
 
-**Idea.** A blended rate is the sum, over the segments, of each one's share of the people times its own rate. It can change because the shares moved (the *mix*), because the rates moved (the *rate*), or both. To split them, give the later people the earlier rates and see where the blend lands: the distance covered is the mix part, and what remains is the rate part.
+**Idea.** A blended rate is the sum, over the segments, of each one's share of the people times its own rate. It can change because the shares moved (the *mix*), because the rates moved (the *rate*), or both. To split them, give the later people the earlier rates and see where the blend lands: the distance covered is the mix part, and what remains is the rate part. This is one choice of order; the Why gives the other.
 
 **Try it.** The campaign weeks with the old channel rates, and the standard error of the rate part:
 
 ```python
-s0, s1 = base["channel"].value_counts(normalize=True), camp["channel"].value_counts(normalize=True)      # shares of the people
+w0, w1 = base["channel"].value_counts(normalize=True), camp["channel"].value_counts(normalize=True)      # shares of the people
 r0, r1 = base.groupby("channel")["bought"].mean(), camp.groupby("channel")["bought"].mean()             # conversion by channel
 n0, n1 = base["channel"].value_counts(), camp["channel"].value_counts()
 before, during = base["bought"].mean(), camp["bought"].mean()
-counterfactual = (s1 * r0).sum()                                    # the new mix with the old rates
+counterfactual = (w1 * r0).sum()                                    # the later shares with the earlier rates
 mix_part, rate_part = counterfactual - before, during - counterfactual
 print(f"{100 * before:.2f} {100 * during:.2f} {100 * (during - before):.2f}")
 print(f"{100 * counterfactual:.2f} {100 * mix_part:.2f} {100 * rate_part:.2f}")
-for channel in sorted(s0.index):
-    print(f"{channel:<15} mix {100 * (s1[channel] - s0[channel]) * r0[channel]:+.2f}  rate {100 * s1[channel] * (r1[channel] - r0[channel]):+.2f}")
-se = np.sqrt((s1 ** 2 * (r1 * (1 - r1) / n1 + r0 * (1 - r0) / n0)).sum())      # the standard error of the rate part
+se = np.sqrt((w1 ** 2 * (r1 * (1 - r1) / n1 + r0 * (1 - r0) / n0)).sum())      # the standard error of the rate part
 print(f"{100 * se:.2f}", round(float(rate_part / se), 2))
+# the other order: the earlier shares for the rate part, so the mix part is what is left, at the later rates
+rate_early = (w0 * (r1 - r0)).sum()
+mix_late = (during - before) - rate_early
+interaction = rate_part - rate_early                                # the part that depends on both changes at once
+se_early = np.sqrt((w0 ** 2 * (r1 * (1 - r1) / n1 + r0 * (1 - r0) / n0)).sum())
+print(f"{100 * mix_late:.2f} {100 * rate_early:.2f} {100 * interaction:+.2f}")
+print(f"{100 * se_early:.2f}", round(float(rate_early / se_early), 2))
 ```
 
 **Predict:** give the campaign people the conversion of each channel from the five weeks before, and keep the channel mix of the campaign. What conversion would the campaign weeks have had: closer to 12.95 or to 9.88 percent?
@@ -568,12 +544,9 @@ print(f"{100 * se:.2f}", round(float(rate_part / se), 2))
 ```text
 12.95 9.88 -3.07
 10.09 -2.86 -0.21
-app_store       mix -0.88  rate -0.31
-organic_search  mix -1.30  rate -0.22
-paid_search     mix -0.39  rate +0.18
-paid_social     mix +0.93  rate +0.24
-referral        mix -1.22  rate -0.11
 0.60 -0.35
+-2.48 -0.59 +0.38
+0.68 -0.87
 ```
 
 <figure>
@@ -609,18 +582,18 @@ referral        mix -1.22  rate -0.11
 
 </details>
 
-*Why:* with the old rates and the new mix the blend would have been 10.09 percent. So the mix part is 10.09 − 12.95 = −2.86 points of the −3.07, and the rate part is 9.88 − 10.09 = −0.21 points. The standard error of the rate part is 0.60 points, so −0.21 is a third of a standard error: noise. Almost all of the fall is who signed up, not what each channel did.
+*Why:* with the old rates and the new mix the blend would have been 10.09 percent: the mix part is 10.09 − 12.95 = −2.86 points of the −3.07, and the rate part is 9.88 − 10.09 = −0.21, a third of its standard error (0.60 points): noise. The order is a choice, because the two changes also act together. With the earlier shares for the rate part, the rate part is −0.59 (standard error 0.68, so still about one) and the mix part −2.48; the difference, +0.38 points, is their interaction. Either way most of the fall is who signed up: say which order you used before you say how much the mix explains.
 
-In symbols, with $$k$$ a segment, $$s_k$$ its share of the people, $$r_k$$ its conversion, $$n_k$$ its number of people, and the subscripts 0 for the earlier period and 1 for the later one, the blend is $$\sum_k s_k r_k$$ and
-
-$$
-\text{mix} = \sum_k (s_{k,1} - s_{k,0})\, r_{k,0}, \qquad \text{rate} = \sum_k s_{k,1}\,(r_{k,1} - r_{k,0})
-$$
-
-The two add up to the change of the blend. The standard error of the rate part, with the later shares fixed, is
+In symbols, with $$k$$ a segment, $$w_k$$ its share of the people, $$r_k$$ its conversion, $$n_k$$ its number of people, and the subscripts 0 for the earlier period and 1 for the later one, the blend is $$\sum_k w_k r_k$$ and
 
 $$
-\text{SE} = \sqrt{\sum_k s_{k,1}^{2}\left(\frac{r_{k,1}(1 - r_{k,1})}{n_{k,1}} + \frac{r_{k,0}(1 - r_{k,0})}{n_{k,0}}\right)}
+\text{mix} = \sum_k (w_{k,1} - w_{k,0})\, r_{k,0}, \qquad \text{rate} = \sum_k w_{k,1}\,(r_{k,1} - r_{k,0})
+$$
+
+The two add up to the change of the blend. The other order uses $$w_{k,0}$$ in the rate part and $$r_{k,1}$$ in the mix part, and the two orders differ by the interaction $$\sum_k (w_{k,1} - w_{k,0})(r_{k,1} - r_{k,0})$$. The standard error of the rate part, with the later shares fixed, is
+
+$$
+\text{SE} = \sqrt{\sum_k w_{k,1}^{2}\left(\frac{r_{k,1}(1 - r_{k,1})}{n_{k,1}} + \frac{r_{k,0}(1 - r_{k,0})}{n_{k,0}}\right)}
 $$
 
 ### 5. Say it, and say what would show you wrong
@@ -631,9 +604,8 @@ $$
 
 ```python
 print(len(after), f"{100 * (after['channel'] == 'paid_social').mean():.1f}%", f"{100 * after['bought'].mean():.1f}%")
-verdict = (f"14-day conversion fell from {100 * before:.2f}% to {100 * during:.2f}% between the five weeks before the campaign ({len(base):,} people) and the campaign ({len(camp):,} people), {100 * (before - during):.2f} points. "
-           f"{100 * -mix_part:.2f} points come from who signed up: paid_social went from {100 * s0['paid_social']:.1f}% to {100 * s1['paid_social']:.1f}% of the signups and converts at about {100 * r1['paid_social']:.0f}%. "
-           f"The other {100 * -rate_part:.2f} points are the change of conversion inside the channels, which is within noise (standard error {100 * se:.2f} points).")
+verdict = (f"Conversion fell {100 * (before - during):.2f} points, from {100 * before:.2f}% to {100 * during:.2f}%. {100 * -mix_part:.2f} points come from who signed up: "
+           f"paid_social went from {100 * w0['paid_social']:.1f}% to {100 * w1['paid_social']:.1f}% of the signups. The other {100 * -rate_part:.2f} points, inside the channels, are within noise (standard error {100 * se:.2f}).")
 print(verdict)
 ```
 
@@ -644,18 +616,18 @@ print(verdict)
 
 ```text
 1078 9.3% 14.7%
-14-day conversion fell from 12.95% to 9.88% between the five weeks before the campaign (3,622 people) and the campaign (9,110 people), 3.07 points. 2.86 points come from who signed up: paid_social went from 9.9% to 37.7% of the signups and converts at about 4%. The other 0.21 points are the change of conversion inside the channels, which is within noise (standard error 0.60 points).
+Conversion fell 3.07 points, from 12.95% to 9.88%. 2.86 points come from who signed up: paid_social went from 9.9% to 37.7% of the signups. The other 0.21 points, inside the channels, are within noise (standard error 0.60).
 ```
 
 </details>
 
-*Why:* the `paid_social` share is back to 9.3 percent and conversion to 14.7 percent, from 1,078 people: the prediction could have failed and did not. It even overshoots the 12.95 before the campaign, which Exercise 1 splits. The next step is a test, not a chart: report conversion by channel from now on, so that a campaign that changes the mix cannot look like a failing product, and judge the channel by what each signup costs and how long it stays.
+*Why:* the `paid_social` share is back to 9.3 percent and conversion to 14.7 percent, from 1,078 people: the prediction could have failed and did not. It even passes the 12.95 before the campaign, which Exercise 1 splits. The next step is a test, not a chart: report conversion by channel, so that a changed mix cannot look like a failing product.
 
 <Aside type="tip" title="Remember">
 
 - Check in this order: the pipeline (names, gaps, late and repeated rows), the calendar (the same weekday, a holiday for those who keep it), the segments, then mix against rate.
-- Split by a column fixed before the outcome and look at both the shares and the rates. Two splits can tell two stories: a segment tied to the cause shows it without being it.
-- The mix part is the later mix with the earlier rates, minus the earlier blend. The rate part is what remains: read it against its standard error.
+- Split by a column fixed before the outcome and look at both the shares and the rates. Two splits can tell two stories.
+- The mix part has an order: say it, and read the rate part against its standard error.
 - State a prediction that can fail, and test it on the next data.
 
 **Common trap:** "it fell in every region, so it is a global fault". Every region fell by 2.0 to 3.8 points while the channel mix alone explains 2.86 of the 3.07.
@@ -666,7 +638,7 @@ print(verdict)
 
 <Exercise id="core-diagnosing-a-movement-1">
 
-**After the campaign ended, conversion recovered. How much of the climb is mix and how much is rate?** Split the change from the campaign weeks to the people who signed up from June 8 to 16 into its mix part and its rate part, by channel. The shares and the rates of both periods are given. Write the two sums, in points. Expected: `answer_1` is [mix, rate], each rounded to 2 decimals.
+**After the campaign ended, conversion recovered. How much of the climb is mix and how much is rate?** Split the change from the campaign weeks to the people who signed up from June 8 to 16 into its mix part and its rate part, by channel, in the order of unit 4: the mix part is the later shares with the earlier rates, minus the earlier blend; the rate part is the later shares times the change of each rate. The shares and rates are given. Write the two sums in points. Expected: `answer_1` is [mix, rate], each rounded to 2 decimals.
 
 ```python
 shares_camp = camp["channel"].value_counts(normalize=True)           # given: shares of the campaign weeks
@@ -680,7 +652,7 @@ answer_1 = None  # replace None with [mix, rate]: points, each rounded to 2 deci
 <details>
 <summary>Hint</summary>
 
-Unit 4: the mix part is `((s1 - s0) * r0).sum()` there, and the rate part is `(s1 * (r1 - r0)).sum()`. Use the variables of this exercise, and multiply by 100 for points.
+Unit 4: the mix part is `((w1 - w0) * r0).sum()` there, the later shares with the earlier rates minus the earlier blend, and the rate part is `(w1 * (r1 - r0)).sum()`. Use the variables of this exercise, and multiply by 100 for points.
 
 </details>
 
@@ -701,9 +673,15 @@ rate_part = ...
 mix_part = ((shares_after - shares_camp) * rate_camp).sum()
 rate_part = (shares_after * (rate_after - rate_camp)).sum()
 answer_1 = [round(float(100 * mix_part), 2), round(float(100 * rate_part), 2)]
+rate_other = (shares_camp * (rate_after - rate_camp)).sum()          # the other order: the earlier shares for the rate part
+print(round(float(100 * (mix_part + rate_part - rate_other)), 2), round(float(100 * rate_other), 2))
 ```
 
-The mix part is +2.65 points and the rate part +2.13, 4.78 in all. The paid_social share fell from 37.7% to 9.3%, which lifts the blend, and conversion inside the channels rose too. The standard error of the rate part is 1.13 points, so its 2.13 is 1.88 standard errors: not clearly more than chance.
+```text
+3.96 0.82
+```
+
+The mix part is +2.65 points and the rate part +2.13, in the order of unit 4. The other order gives 3.96 and 0.82: the interaction is 1.31 points, large here because the shares moved a lot, so the split depends on the order and the total, 4.78, does not. The paid_social share fell from 37.7% to 9.3%, which lifts the blend. The standard error of the rate part is 1.13 points, so 2.13 is 1.88 standard errors: not clearly more than chance.
 
 </Solution>
 
@@ -713,7 +691,7 @@ The mix part is +2.65 points and the rate part +2.13, 4.78 in all. The paid_soci
 
 <Exercise id="core-diagnosing-a-movement-2">
 
-**Does the same walk explain the fall of onboarding?** The share of people who finish onboarding within 14 days (an `onboarding_complete` event; the column `onboarded` is 0 or 1) also fell between the five weeks before April 13 and the campaign weeks. Before you start, say what the result looks like: four numbers. Use the channel decomposition of unit 4 on `onboarded` and set `answer_2` to [change, mix part, rate part, standard error of the rate part], in percentage points, each rounded to 2 decimals. Write the code in the empty cell. Expected: `answer_2` is a list of four numbers.
+**Does the same walk explain the fall of onboarding?** The share of people who finish onboarding within 14 days (an `onboarding_complete` event; the column `onboarded` is 0 or 1) also fell between the five weeks before April 13 and the campaign weeks. Before you start, say what the result looks like: four numbers. Use the decomposition of unit 4 on `onboarded` and set `answer_2` to [change, mix part, rate part, standard error of the rate part], in points, each rounded to 2 decimals. Write the code in the empty cell. Expected: `answer_2` is a list of four numbers.
 
 <details>
 <summary>Hint</summary>
@@ -739,22 +717,12 @@ q0, q1 = base.groupby("channel")["onboarded"].mean(), camp.groupby("channel")["o
 ```python
 t0, t1 = base["onboarded"].mean(), camp["onboarded"].mean()
 q0, q1 = base.groupby("channel")["onboarded"].mean(), camp.groupby("channel")["onboarded"].mean()
-counter = (s1 * q0).sum()
-se_o = np.sqrt((s1 ** 2 * (q1 * (1 - q1) / n1 + q0 * (1 - q0) / n0)).sum())
+counter = (w1 * q0).sum()
+se_o = np.sqrt((w1 ** 2 * (q1 * (1 - q1) / n1 + q0 * (1 - q0) / n0)).sum())
 answer_2 = [round(float(100 * (t1 - t0)), 2), round(float(100 * (counter - t0)), 2), round(float(100 * (t1 - counter)), 2), round(float(100 * se_o), 2)]
 ```
 
-Onboarding fell from 74.2% to 62.2%, 12.02 points. The change of mix explains 8.35 of them. The rate part, -3.67 points, is about three standard errors (the standard error is 1.19 points, z = -3.08), so it is not noise: something besides the mix lowered onboarding inside the channels. The next lines find it. 367 people who signed up between May 4 and June 7, all on Android, have no `signup_flow_v2` assignment row (the dataset README says the new signup screen of that experiment crashes on devices with an old Android version), and none of them finished onboarding. They are 6 percent of the 5,848 people who signed up in those weeks. The same people cannot buy, but for conversion that is too small to rise above the noise: a second cause can hide behind the first.
-
-```python
-window = users[(users["signup_date"] >= "2026-05-04") & (users["signup_date"] <= "2026-06-07")]
-no_row = window[~window["user_id"].isin(assign[assign["experiment"] == "signup_flow_v2"]["user_id"])]
-print(len(no_row), len(window), no_row["platform"].value_counts().to_dict(), int(no_row["onboarded"].sum()))
-```
-
-```text
-367 5848 {'android': 367} 0
-```
+Onboarding fell from 74.2% to 62.2%, 12.02 points. The change of mix explains 8.35 of them. The rate part, -3.67 points, is about 3 standard errors (the standard error is 1.19 points), so something besides the mix lowered onboarding inside the channels; look for a group with zero onboarding.
 
 </Solution>
 
@@ -776,6 +744,7 @@ print(len(no_row), len(window), no_row["platform"].value_counts().to_dict(), int
 **Spot the flaw.** A colleague reads the change of conversion inside each channel and says that every channel that moved by a point or more got better or worse. The p-value of each channel's change is given. Fix the line that decides which channels moved so that it follows from the p-value, with a bar of 0.05, and set `answer_3` to [number of channels that moved, the smallest p-value rounded to 2 decimals]. Expected: `answer_3` is a whole number and a number.
 
 ```python
+# given: channels (the five channels), change (the change of conversion in each) and p_values (the p-value of each change)
 moved = [channel for channel in channels if abs(change[channel]) >= 0.01]     # colleague: "moved = changed by a point or more"
 answer_3 = [len(moved), round(min(p_values.values()), 2)]
 ```
@@ -804,13 +773,13 @@ moved = [channel for channel in channels if p_values[channel] < 0.05]
 answer_3 = [len(moved), round(min(p_values.values()), 2)]
 ```
 
-Three channels changed by a point or more (app_store -1.81, organic_search -1.03 and paid_search +1.71 points), yet no change is larger than chance: the smallest p-value is 0.14 (app_store), and the others are 0.42, 0.26, 0.55 and 0.69. A size cutoff ignores how many people each channel has. The mix explains the drop, and the changes inside the channels cannot be told from noise.
+Three channels changed by a point or more (app_store -1.81, organic_search -1.03 and paid_search +1.71 points), yet no change is larger than chance: the smallest p-value is 0.14, for app_store. A size cutoff ignores how many people each channel has.
 
 </Solution>
 
 </Exercise>
 
-**Can you do it?** *I can walk from a moving number to a cause in order, rule out the pipeline and the calendar, split by segment, tell a change of mix from a change of rate with the sizes of both, and write the diagnosis with a prediction that could fail.*
+**Can you do it?** *I can walk from a moving number to a cause in order, split by segment, tell a change of mix from a change of rate with the order and the sizes of both, and write the diagnosis with a prediction that could fail.*
 Test: Exercise core-diagnosing-a-movement-2, done from the notebook without opening the hints.
 
 The pattern to remember: **rule out the data, then the calendar, then split; before you ask what got worse, ask who is in the number.** Next comes *Designing an A/B test* (C14), where you choose who is in the number.

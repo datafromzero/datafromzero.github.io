@@ -476,6 +476,12 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   would have been answered by the monthly table the lesson prints (signups and purchases are in it); and the README's "mix explains 2.8 of 3.0 points" subtracts rounded rates (the exact numbers
   are 2.86 of 3.07). → **A starter never reassigns a name that a later cell uses (give its given variables their own names, and run the solved notebook top to bottom); before choosing an
   exercise's slice, check that no table or output of the lesson already holds its numerators and denominators; recompute a README difference from unrounded values and report it.**
+- 2026-11-21 — The C13 draft split a fall into a mix part and a rate part and said "the mix explains 2.86 of 3.07 points" with no mention of the order: with the earlier shares for the rate part the
+  split is 2.48 and 0.59 (an interaction of 0.38), and Exercise 1's split swings from 2.65 and 2.13 to 3.96 and 0.82. Other review finds the same round: an Idea stated the cohort window rule that the
+  next Predict asked about, a source was credited with a sentence it does not contain, a reference line (12.0%) included the effect being explained, and a solution named a cause that the next lesson teaches.
+  → **A decomposition of a difference into mix and rate has an order and an interaction term: state the order, give the result under the other order (or use the symmetric version) and say whether the
+  conclusion survives before writing "the mix explains X"; an exercise on it names its order; check every attributed sentence against the opened page; compare against a reference that does not contain
+  the effect; and end an exercise solution at what the lesson has taught.**
 
 ## Agents and reviews
 

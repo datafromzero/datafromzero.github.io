@@ -2,7 +2,7 @@
 id: core-defining-metrics
 title: Defining a metric before you compute it
 short_title: 'Defining a metric'
-description: Write a metric as a numerator, denominator, unit and window, see how each choice moves the number, and pair a goal with its inputs and a guardrail.
+description: Write a metric as a numerator, denominator, unit and window, see how each choice moves the number, and pair a goal with its components and a guardrail.
 stage: core
 order: 120
 level: intermediate
@@ -11,11 +11,13 @@ objectives:
   - Write a metric as a numerator, a denominator, a unit and a window
   - Show how each choice moves the number, with a cohort reading and a calendar reading
   - Count people when you mean people, not retried rows
-  - Pair a goal metric with its inputs and a guardrail
+  - Pair a goal metric with its components and a guardrail
 prerequisites:
   - core-comparing-groups
   - sql-cohort-retention
   - python-pandas-groupby-aggregate
+  - python-pandas-dates-and-resample
+  - python-pandas-merge-and-validate
 datasets:
   - app-events
 notebook: notebooks/core/core-defining-metrics.ipynb
@@ -34,7 +36,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): team draft (D24). Set `reviewed` when you publish; the notebook needs the release tag `v0.2.0`. The stub's objectives, prerequisites and duration were rewritten (`core-comparing-groups` is new because unit 5 reads an interval). "North-star metric", "input metric" and "counter-metric" are industry words that none of the opened papers uses (they write OEC and guardrail metric), so the lesson defines them itself. The stub's experimentguide.com has no text on metrics and its three interview blogs are not primary, so none is cited. C13 and C14 are named by title and not linked, because they are drafts.
+TODO(owner): team draft (D24). Set `reviewed` when you publish; the notebook needs the release tag `v0.2.0`. The stub's objectives, prerequisites and duration were rewritten. "North-star metric", "input metric" and "counter-metric" are industry words that none of the opened papers uses (they write OEC and guardrail metric), so the lesson defines them itself. The stub's experimentguide.com has no text on metrics and its three interview blogs are not primary, so none is cited. C13 and C14 are named by title, not linked, because they are drafts.
 
 ## The question
 
@@ -64,13 +66,13 @@ There is no column called `active` and none called `conversion`. Each word of th
 | June | which days, and counted by what |
 | turn a signup into a subscriber | within how long |
 
-By the end you can write a metric as four choices, show how each one moves the number, and say what to put beside a goal so it cannot be reached by a cheap route.
+By the end you can write a metric as four choices, show how each one moves the number, and say what to put beside a goal.
 
 <Aside type="note" title="You already know this">
 
 **Match.** In *Comparing two groups* (C9) the conversion of `paywall_v2` was a share: buyers out of people. Here you write that sentence down before you compute it.
 
-**Diverge.** In C9 the window of 14 days was given. Units 2 and 3 show what the number does when the window or the base is another one.
+**Diverge.** In C9 the window of 14 days was given. Unit 2 shows what the number does when the window or the base is another one.
 
 </Aside>
 
@@ -187,7 +189,7 @@ A metric is a fraction with four slots: the unit, the numerator, the denominator
 
 ## Learn by doing
 
-About 40 minutes, 5 new ideas: the numerator, the window, the denominator, the unit, and a goal with its inputs and a guardrail. The Data cell of the notebook loads `users`, `events`, `subs` (the subscription rows) and `assign` (the experiment rows) and adds `bought14` to `users`: 1 if a person has a `purchase` within 14 days of their own signup. The people who signed up by June 16 have a full 14 days of follow-up before the data ends: they are `full`.
+About 40 minutes, 4 new ideas: the numerator, the window and the base, the unit, and a goal with its components and a guardrail. The Data cell of the notebook loads `users`, `events`, `subs` (the subscription rows) and `assign` (the experiment rows) and adds `bought14` to `users`: 1 if a person has a `purchase` within 14 days of their own signup. The people who signed up by June 16 have a full 14 days of follow-up before the data ends: they are `full`.
 
 <OpenInColab />
 
@@ -264,11 +266,11 @@ for name, people in shown.items():
 
 *Why:* the four numbers run from 4,289 to 7,874, and each is a defensible "active in June". "Any event" is the largest because it counts everything the app records: 2,659 of its people have no visit and no expense in June. The list shows what they have instead. 892 signed up that month, and 155 are there because they canceled: under this definition a person who left counts as active. An ad campaign that brings signups would raise it without anyone using the app. That is how a metric gets gamed, by accident or on purpose: the number goes up and the thing it stands for does not. The goal picks the definition. For an app whose job is to record expenses, an expense added is the closest to the goal.
 
-### 2. The window: a cohort or a calendar
+### 2. The window and the base
 
-**Idea.** The window says which days count. There are two ways to set it. A *cohort reading* follows the same people for the same time after their own start, for example 14 days from each signup. A *calendar reading* counts what happened in a calendar period, whoever started when. A cohort reading needs its whole window to have passed.
+**Idea.** The window says which days count. There are two ways to set it. A *cohort reading* follows the same people for the same time after their own start, for example 14 days from each signup. A *calendar reading* counts what happened in a calendar period, whoever started when. The base, the denominator, is the people who could have done the thing. Kohavi, Henne and Sommerfield give the same advice for a change to a checkout page: analyze only the people who reached it, because everyone else adds noise. Rodden, Hutchinson and Fu define retention in the same way: of the people active in one period, the share still active later.
 
-**Try it.** The 5,077 people who signed up in May, read three ways, and then the newest signups read today:
+**Try it.** The 5,077 people who signed up in May, read three ways, and then two later groups of signups read today:
 
 ```python
 may = users[(users["signup_date"] >= "2026-05-01") & (users["signup_date"] <= "2026-05-31")]     # the people who signed up in May
@@ -278,6 +280,9 @@ in_may = purchases[(purchases["event_ts"] >= "2026-05-01") & (purchases["event_t
 print(len(may), cohort, ever, len(in_may), int(in_may["user_id"].isin(may["user_id"]).sum()))
 for label, count in (("cohort, 14 days", cohort), ("ever, to June 30", ever), ("calendar, May", len(in_may))):
     print(f"{100 * count / len(may):.1f}%  {label}")
+late = users[users["signup_date"] >= "2026-06-17"]                   # signed up in the last two weeks of the data: their 14 days are not all over
+june_early = users[(users["signup_date"] >= "2026-06-08") & (users["signup_date"] <= "2026-06-16")]     # June 8 to 16: a full 14 days
+print(len(late), f"{100 * late['bought14'].mean():.1f}%", len(june_early), f"{100 * june_early['bought14'].mean():.1f}%")
 ```
 
 **Predict:** the cohort reading is a purchase within 14 days of the person's own signup. The second reading has no window: a purchase any time up to June 30. The calendar reading divides the purchases made in May, whoever made them, by the May signups. Which reading will be the highest, and which the lowest?
@@ -290,69 +295,48 @@ for label, count in (("cohort, 14 days", cohort), ("ever, to June 30", ever), ("
 10.0%  cohort, 14 days
 10.5%  ever, to June 30
 11.9%  calendar, May
-```
-
-</details>
-
-*Why:* the cohort reading follows each of the 5,077 people for 14 days: 509 bought, 10.0%. With no window it is 10.5%, because 22 of the same people bought later. The calendar reading, 11.9%, divides the 605 purchases made in May by the 5,077 May signups, but only 487 of those purchases belong to people who signed up in May: the other 118 came from earlier signups. Its numerator and its denominator describe different people.
-
-**Predict:** people who signed up from June 17 to 30 have fewer than 14 days of follow-up before the data ends. Computed today, will their 14-day conversion come out above 12.0 percent, about the same, or below?
-
-```python
-late = users[users["signup_date"] >= "2026-06-17"]                   # signed up in the last two weeks of the data
-print(len(late), f"{100 * late['bought14'].mean():.1f}%", f"{100 * full['bought14'].mean():.1f}%")
-```
-
-<details>
-<summary>Reveal the result</summary>
-
-```text
-1664 10.6% 12.0%
+1664 10.6% 1078 14.7%
 ```
 
 <figure>
 <svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="dm-win-t dm-win-d">
 <title id="dm-win-t">The same May conversion, read three ways, and the newest signups</title>
-<desc id="dm-win-d">Top: a scale from 9 to 13 percent with three blue dots for the conversion of the 5,077 people who signed up in May: 10.0 percent as a cohort reading with a 14-day window, 10.5 percent as a reading with no window up to June 30 and 11.9 percent as a calendar reading of the purchases made in May. Bottom: a red dot at 10.6 percent for the 1,664 people who signed up from June 17 to 30, whose 14 days have not all passed, and a blue dot at 12.0 percent for people with a full 14 days.</desc>
+<desc id="dm-win-d">Top: a scale from 9 to 15 percent with three blue dots for the conversion of the 5,077 people who signed up in May: 10.0 percent as a cohort reading with a 14-day window, 10.5 percent as a reading with no window up to June 30 and 11.9 percent as a calendar reading of the purchases made in May. Bottom: a red dot at 10.6 percent for the 1,664 people who signed up from June 17 to 30, whose 14 days have not all passed, and a blue dot at 14.7 percent for the 1,078 people who signed up from June 8 to 16, who have a full 14 days.</desc>
 <g fill="currentColor">
 <text x="14" y="14" font-size="10.5" font-weight="600">Conversion of the 5,077 people who signed up in May</text>
 <text x="14" y="45" font-size="10">cohort, 14 days</text>
-<circle cx="175" cy="42" r="5" fill="#0072b2" />
-<text x="185" y="45.5" font-size="10" font-weight="600">10.0%</text>
+<circle cx="156.7" cy="42" r="5" fill="#0072b2" />
+<text x="166.7" y="45.5" font-size="10" font-weight="600">10.0%</text>
 <text x="14" y="71" font-size="10">ever, to June 30</text>
-<circle cx="202.5" cy="68" r="5" fill="#0072b2" />
-<text x="212.5" y="71.5" font-size="10" font-weight="600">10.5%</text>
+<circle cx="175" cy="68" r="5" fill="#0072b2" />
+<text x="185" y="71.5" font-size="10" font-weight="600">10.5%</text>
 <text x="14" y="97" font-size="10">calendar, May</text>
-<circle cx="279.5" cy="94" r="5" fill="#0072b2" />
-<text x="289.5" y="97.5" font-size="10" font-weight="600">11.9%</text>
+<circle cx="226.3" cy="94" r="5" fill="#0072b2" />
+<text x="236.3" y="97.5" font-size="10" font-weight="600">11.9%</text>
 <path d="M120 112 L120 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <text x="120" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">9%</text>
-<path d="M175 112 L175 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="175" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">10%</text>
-<path d="M230 112 L230 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="230" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
-<path d="M285 112 L285 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="285" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">12%</text>
+<path d="M193.3 112 L193.3 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="193.3" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
+<path d="M266.7 112 L266.7 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="266.7" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
 <path d="M340 112 L340 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="340" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
+<text x="340" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">15%</text>
 <path d="M120 112 L340 112" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="14" y="156" font-size="10.5" font-weight="600">Signups of the last two weeks, read today</text>
+<text x="14" y="156" font-size="10.5" font-weight="600">Two later groups of signups, read today</text>
 <text x="14" y="185" font-size="10">June 17 to 30</text>
-<circle cx="208" cy="182" r="5" fill="#c0392b" />
-<text x="218" y="185.5" font-size="10" font-weight="600">10.6%</text>
-<text x="14" y="211" font-size="10">full 14 days</text>
-<circle cx="285" cy="208" r="5" fill="#0072b2" />
-<text x="295" y="211.5" font-size="10" font-weight="600">12.0%</text>
+<circle cx="178.7" cy="182" r="5" fill="#c0392b" />
+<text x="188.7" y="185.5" font-size="10" font-weight="600">10.6%</text>
+<text x="14" y="211" font-size="10">June 8 to 16</text>
+<circle cx="329" cy="208" r="5" fill="#0072b2" />
+<text x="319" y="211.5" font-size="10" text-anchor="end" font-weight="600">14.7%</text>
 <path d="M120 220 L120 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <text x="120" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">9%</text>
-<path d="M175 220 L175 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="175" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">10%</text>
-<path d="M230 220 L230 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="230" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
-<path d="M285 220 L285 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="285" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">12%</text>
+<path d="M193.3 220 L193.3 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="193.3" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
+<path d="M266.7 220 L266.7 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="266.7" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
 <path d="M340 220 L340 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
-<text x="340" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
+<text x="340" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">15%</text>
 <path d="M120 220 L340 220" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <text x="14" y="255" font-size="10" fill-opacity="0.8">14-day conversion, as the data stand today</text>
 </g>
@@ -361,11 +345,7 @@ print(len(late), f"{100 * late['bought14'].mean():.1f}%", f"{100 * full['bought1
 
 </details>
 
-*Why:* 10.6% against 12.0%, from 1,664 people. Part of that gap is a window that is not finished: some of these people will still buy within their 14 days. A reading that looks like a fall of 1.4 points is, in part, the clock. Compare only cohorts whose window is complete, or wait.
-
-### 3. The denominator: out of whom
-
-**Idea.** The denominator is the people who could have done the thing. Kohavi, Henne and Sommerfield give the same advice for a change to a checkout page: analyze only the people who reached it, because everyone else adds noise. Rodden, Hutchinson and Fu define retention in the same way: of the people active in one period, the share still active later.
+*Why:* the cohort reading follows each of the 5,077 people for 14 days: 509 bought, 10.0%. With no window it is 10.5%, because 22 of the same people bought later. The calendar reading, 11.9%, divides the 605 purchases made in May by the 5,077 May signups, but only 487 of those purchases belong to people who signed up in May: the other 118 came from earlier signups. Its numerator and its denominator describe different people. The last line of the output is the clock. The 1,664 people who signed up from June 17 to 30 convert at 10.6%, against 14.7% for the 1,078 who signed up from June 8 to 16 and have a full 14 days. A cohort reading needs its whole window to have passed: some of the later people will still buy within their 14 days, and the rest of the gap is chance, since each rate rests on about a thousand people. Compare only cohorts whose window is complete, or wait.
 
 **Try it.** The June activity ("a visit or an expense", from unit 1) divided by three different bases:
 
@@ -401,7 +381,7 @@ $$
 \text{rate} = \frac{|A \cap B|}{|B|} = \frac{2{,}092}{17{,}816} \approx 0.117
 $$
 
-### 4. The unit: people or rows
+### 3. The unit: people or rows
 
 **Idea.** A count can be of rows of a log or of people. A log holds the retries of an app: here some events were written twice, with the same person, time, name and platform (the dataset README lists them). In pandas, `duplicated(subset=...)` marks the second copy of a row when the columns of `subset` match a row above it; the documentation says `keep="first"` marks every duplicate except the first occurrence.
 
@@ -434,9 +414,9 @@ print(len(purchases), purchases["user_id"].nunique())                # purchase 
 
 *Why:* there are 835 second copies in all, 97 of them among June's expense rows: 12,941 rows become 12,844, 0.75 percent fewer, and the people who added an expense stay 4,344. A metric counted in people does not feel the retries. A metric counted in rows does, and always upward: 2.98 expenses per active person become 2.96. The last line is the same split with purchases: 2,905 purchase rows come from 2,849 people, 56 more rows than buyers, because some people subscribed again. "Purchases" and "buyers" are two metrics. A bias of 0.75 percent can be larger than the effect you are looking for.
 
-### 5. A goal, its inputs and a guardrail
+### 4. A goal, its components and a guardrail
 
-**Idea.** One number cannot carry a goal. Kohavi, Henne and Sommerfield recommend choosing a single metric to aim an experiment at, and warn that a short-term one, such as revenue, can be pushed up in ways that hurt the users. So put three things beside it. The *north-star metric* is the one number the product steers by. Its *inputs* are the numbers that feed it. A *guardrail* is a metric that does not show whether a change worked but that you do not want to harm; Dmitriev and colleagues call such metrics guardrail metrics. A *counter-metric* is a guardrail chosen against one cheap route to the goal. For this app, take the people paying for Plus at the end of a month as the north star, new subscriptions and cancellations as its inputs.
+**Idea.** One number cannot carry a goal. Kohavi, Henne and Sommerfield recommend choosing a single metric to aim an experiment at, and warn that a short-term one, such as revenue, can be pushed up in ways that hurt the users. So put three things beside it. The *north-star metric* is the one number the product steers by. An *input metric* is a number a team can move that feeds it, such as conversion. A *guardrail* is a metric that does not show whether a change worked but that you do not want to harm; Dmitriev and colleagues call such metrics guardrail metrics. For this app, take the people paying for Plus at the end of a month as the north star. It is made of *components*: new subscriptions come in and cancellations go out.
 
 **Try it.** The table of the six months, built from the latest row of each subscription:
 
@@ -537,12 +517,12 @@ for end in ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31"
 
 </details>
 
-*Why:* the number paying grows every month, from 396 to 2,206, and each month's value is the last one plus the new subscriptions minus the cancellations (the cell checks it). New subscriptions fall in June, 529 against 605, but that is a count, and June had fewer signups than May: 4,025 against 5,077. Per signup the June figure is 13.1% and May's 11.9% (the calendar readings of unit 2). Rodden, Hutchinson and Fu make the point for engagement: a total can rise because there are more users, not more use, so report ratios or averages per user.
+*Why:* the number paying grows every month, from 396 to 2,206, and each month's value is the last one plus the new subscriptions minus the cancellations (the cell checks it). New subscriptions fall in June, 529 against 605, but that is a count, and June had fewer signups than May: 4,025 against 5,077. New subscriptions are signups times a conversion rate, and conversion is the input a team can work on. Per signup (a rough rate: unit 2 shows its limits) the June figure is 13.1% and May's 11.9%. Rodden, Hutchinson and Fu make the point for engagement: a total can rise because there are more users, not more use.
 
-In symbols, with $$P_t$$ the people paying at the end of month $$t$$, $$N_t$$ the new subscriptions and $$C_t$$ the cancellations in it:
+In symbols, with $$P_t$$ the people paying at the end of month $$t$$, and $$\text{new}_t$$ and $$\text{canceled}_t$$ the new subscriptions and the cancellations in it:
 
 $$
-P_t = P_{t-1} + N_t - C_t, \qquad 1{,}874 + 529 - 197 = 2{,}206
+P_t = P_{t-1} + \text{new}_t - \text{canceled}_t, \qquad 1{,}874 + 529 - 197 = 2{,}206
 $$
 
 **Try it.** `paywall_v2` lifted conversion. A guardrail for it is the share of the buyers who cancel within 30 days of starting:
@@ -625,7 +605,7 @@ variant 75 415 18.1%
 
 </details>
 
-*Why:* 14.0% of the control buyers and 18.1% of the variant's canceled within 30 days: the gap is +4.1 points, with a 95 percent interval from −1.1 to +9.3 and p = 0.130 (the chi-square test of the 2 by 2 table without the continuity correction; the SciPy page says `correction=True` applies it to a 2 by 2 table). That is not clear evidence of harm and not evidence of safety: the interval allows nine points. In this dataset the buyers of the variant do cancel more, because the generating rule makes their first-renewal cancel chance 1.3 times higher, but 758 buyers are too few to show it. Read a guardrail as you read any gap, by its interval. A team that watched only conversion would ship without seeing it.
+*Why:* 14.0% of the control buyers and 18.1% of the variant's canceled within 30 days: the gap is +4.1 points, with a 95 percent interval from −1.1 to +9.3 and p = 0.130 (the chi-square test of the 2 by 2 table with `correction=False`, as in C9). That is not clear evidence of harm and not evidence of safety: the interval allows nine points. The 30-day cancellation share is the counter-metric to conversion: a guardrail chosen against one cheap route to the goal, a conversion bought by pressure that sends people away. In this dataset the buyers of the variant do cancel more, because the generating rule makes their first-renewal cancel chance 1.3 times higher, but 758 buyers are too few to show it. Read a guardrail as you read any gap, by its interval. A team that watched only conversion would ship without seeing it.
 
 <Aside type="tip" title="Remember">
 
@@ -633,7 +613,7 @@ variant 75 415 18.1%
 - A cohort reading follows the same people for the same time; a calendar reading mixes cohorts. A window that has not closed makes the newest cohort look worse.
 - Name the base: the same numerator gives different rates out of different people.
 - Count people when you mean people. Retried rows push a row count up, never down.
-- Put the goal beside its inputs and a guardrail, and read the guardrail's interval.
+- Put the goal beside its components and a guardrail, and read the guardrail's interval.
 
 **Common trap:** reading a rise in "active people" as more use. Under "any event", 2,659 of the 7,874 people counted in June have no visit and no expense.
 
@@ -656,7 +636,7 @@ answer_1 = None  # replace None with [people, percent]: percent rounded to 1 dec
 <details>
 <summary>Hint</summary>
 
-Unit 3: `n = len(june_active & base)` counts the people in both sets, and `100 * n / len(base)` is the share. Here the base is `before_may` and the other set is `active_may`.
+Unit 2: `n = len(june_active & base)` counts the people in both sets, and `100 * n / len(base)` is the share. Here the base is `before_may` and the other set is `active_may`.
 
 </details>
 
@@ -678,7 +658,7 @@ people = int(before_may["user_id"].isin(active_may).sum())
 answer_1 = [people, round(100 * people / len(before_may), 1)]
 ```
 
-1,916 of the 12,739 accounts created before May were active in May: 15.0 percent. Counting everyone active in May gives 5,526 people (43.4 percent of those accounts), because the set also holds the people who signed up in May; the check cell reports it.
+1,916 of the 12,739 accounts created before May were active in May: 15.0 percent. Counting everyone active in May gives 5,526 people (43.4 percent of those accounts), because the set also holds the people who signed up in May; the check cell reports it. Unit 2 shows 5,525 for the same people because it keeps only those who have a row in `users`: one person active in May belongs to a deleted account.
 
 </Solution>
 
@@ -775,7 +755,7 @@ The table `users` holds 948 of the 988 people who signed up from January 1 to 11
 
 </Exercise>
 
-**Can you do it?** *I can write a metric as a unit, a numerator, a denominator and a window, show how each one moves the number, count people instead of retried rows, and name the inputs and the guardrail that go beside a goal.*
+**Can you do it?** *I can write a metric as a unit, a numerator, a denominator and a window, show how each one moves the number, count people instead of retried rows, and name the components and the guardrail that go beside a goal.*
 Test: Exercise core-defining-metrics-2, done from the notebook without opening the hints.
 
 The pattern to remember: **say all four slots before you compute, and put a guardrail beside the goal.** Next comes *Diagnosing a metric that moved* (C13), where a number changes and you must find out whether the world did.
