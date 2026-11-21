@@ -1,0 +1,761 @@
+---
+id: core-defining-metrics
+title: Defining a metric before you compute it
+short_title: 'Defining a metric'
+description: Write a metric as a numerator, denominator, unit and window, see how each choice moves the number, and pair a goal with its components and a guardrail.
+stage: core
+order: 120
+level: intermediate
+duration: 40
+objectives:
+  - Write a metric as a numerator, a denominator, a unit and a window
+  - Show how each choice moves the number, with a cohort reading and a calendar reading
+  - Count people when you mean people, not retried rows
+  - Pair a goal metric with its components and a guardrail
+prerequisites:
+  - core-comparing-groups
+  - sql-cohort-retention
+  - python-pandas-groupby-aggregate
+  - python-pandas-dates-and-resample
+  - python-pandas-merge-and-validate
+datasets:
+  - app-events
+notebook: notebooks/core/core-defining-metrics.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Kohavi, Henne and Sommerfield, Practical Guide to Controlled Experiments on the Web: Listen to Your Customers not to the HiPPO, KDD 2007 (accessed 2026-11-20)'
+    url: https://exp-platform.com/Documents/GuideControlledExperiments.pdf
+  - title: 'Dmitriev, Gupta, Kim and Vaz, A Dirty Dozen: Twelve Common Metric Interpretation Pitfalls in Online Controlled Experiments, KDD 2017 (accessed 2026-11-20)'
+    url: https://exp-platform.com/Documents/2017-08%20KDDMetricInterpretationPitfalls.pdf
+  - title: 'Rodden, Hutchinson and Fu, Measuring the User Experience on a Large Scale: User-Centered Metrics for Web Applications, CHI 2010 (accessed 2026-11-20)'
+    url: https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/36299.pdf
+  - title: 'pandas documentation: pandas.DataFrame.duplicated (accessed 2026-11-20)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.duplicated.html
+  - title: 'SciPy documentation: scipy.stats.chi2_contingency (accessed 2026-11-20)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
+status: draft
+---
+
+TODO(owner): team draft (D24). Set `reviewed` when you publish; the notebook needs the release tag `v0.2.0`. The stub's objectives, prerequisites and duration were rewritten. "North-star metric", "input metric" and "counter-metric" are industry words that none of the opened papers uses (they write OEC and guardrail metric), so the lesson defines them itself. The stub's experimentguide.com has no text on metrics and its three interview blogs are not primary, so none is cited. C13 and C14 are named by title, not linked, because they are drafts.
+
+## The question
+
+The product lead of a budgeting app, a fictional app whose log is the dataset `app-events`, writes in the team chat:
+
+> How many people were active in June? And is it getting easier or harder to turn a new signup into a Plus subscriber?
+
+The data is a log with one row for each thing the app recorded. These are the first eight rows of one person:
+
+```text
+10007 2026-01-01 02:23:16 signup_complete ios
+10007 2026-01-01 02:25:45 onboarding_complete ios
+10007 2026-01-01 03:16:20 add_expense ios
+10007 2026-01-02 04:34:57 session_start ios
+10007 2026-01-02 04:39:36 add_expense ios
+10007 2026-01-03 23:53:17 view_paywall ios
+10007 2026-01-03 23:57:03 start_checkout ios
+10007 2026-01-03 23:57:46 purchase ios
+```
+
+There is no column called `active` and none called `conversion`. Each word of the question hides a choice:
+
+| the lead said | what you must decide |
+|---|---|
+| active | which event counts |
+| people | out of whom |
+| June | which days, and counted by what |
+| turn a signup into a subscriber | within how long |
+
+By the end you can write a metric as four choices, show how each one moves the number, and say what to put beside a goal.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Comparing two groups* (C9) the conversion of `paywall_v2` was a share: buyers out of people. Here you write that sentence down before you compute it.
+
+**Diverge.** In C9 the window of 14 days was given. Unit 2 shows what the number does when the window or the base is another one.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Comparing two groups* (C9) a report said "significant, p = 0.005". What does the interval of the difference add?
+
+   <details>
+   <summary>answer</summary>
+
+   How big the gap is and how sure you can be of its size: the p-value says only that the gap is not luck.
+
+   </details>
+
+2. In *Cohorts and retention* (S26), what was the denominator of a retention rate, and what counted as active in a month?
+
+   <details>
+   <summary>answer</summary>
+
+   The size of the cohort: the customers who started in the same month, whether or not they ever ordered. Active meant at least one completed order that month.
+
+   </details>
+
+## The big idea
+
+A metric is a fraction with four slots: the unit, the numerator, the denominator and the window; change a slot and you have changed the metric.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="slt-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="slt" id="slt-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="slt" id="slt-r1" aria-label="Step 1 of 5: The unit: one dot, one person" />
+<input class="sa-r r2 o2" type="radio" name="slt" id="slt-r2" aria-label="Step 2 of 5: The numerator: who did it" />
+<input class="sa-r r3 o3" type="radio" name="slt" id="slt-r3" aria-label="Step 3 of 5: The denominator: out of whom" />
+<input class="sa-r r4 o5" type="radio" name="slt" id="slt-r4" aria-label="Step 4 of 5: The window: which weeks" />
+<input class="sa-r r5 o8" type="radio" name="slt" id="slt-r5" aria-label="Step 5 of 5: Move one slot, get another number" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-out"><small>did it</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">5</i><i class="w1 d3 tmp hl">4</i><i class="w2 d4 tmp hl">2</i><i class="w3 d6 hl">3</i></span></span><span class="sa-n c-grp"><small>out of</small><span><i class="w1 tmp hl">12</i><i class="w1 d2 tmp">12</i><i class="w1 d3 tmp hl">6</i><i class="w2 d4 tmp hl">4</i><i class="w3 d6">4</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 256" width="360" role="img" aria-labelledby="slt-t slt-d">
+<title id="slt-t">A metric is a fraction with four slots: the unit, the numerator, the denominator and the window</title>
+<desc id="slt-d">Twelve gray dots in three columns, one for each week, two rows of two dots in each column. Four badges name the slots in turn: the unit, the numerator, the denominator and the window. Five dots turn gold, the ones that did the thing. A dashed outline around the top row makes it the base, and the gold dots in the bottom row turn gray. A shaded band covers weeks 1 and 2, then slides to weeks 2 and 3, and the number of gold dots changes from two to three. The text says a different slot gives a different number from the same dots.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · The unit: one dot, one person</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · The numerator: who did it</text>
+<text class="f10 b w1 d3 tmp" x="10" y="29">3 · The denominator: out of whom</text>
+<text class="f10 b w2 d4 tmp" x="10" y="29">4 · The window: which weeks</text>
+<text class="f10 b w3 d6" x="10" y="29">5 · Move one slot, get another number</text>
+<text class="f11 b" x="10" y="14">Four slots make one number</text>
+<g><rect class="f-src k2" x="14" y="44" width="104" height="18" rx="9" /><text class="f11 b m" x="66" y="57">unit: a person</text></g>
+<g class="w7 d2"><rect class="f-out k2" x="126" y="44" width="123" height="18" rx="9" /><text class="f11 b m" x="187.5" y="57">numerator: did it</text></g>
+<g class="w6 d3"><rect class="f-grp k2" x="14" y="66" width="168" height="18" rx="9" /><text class="f11 b m" x="98" y="79">denominator: out of whom</text></g>
+<g class="w5 d4"><rect class="f-win k2" x="190" y="66" width="136" height="18" rx="9" /><text class="f11 b m" x="258" y="79">window: which weeks</text></g>
+<g class="w5 d4"><g class="mv m6 x10 y0"><rect class="f-win k1" x="30" y="108" width="200" height="88" /></g></g>
+<text class="f10 b m w2 d4 tmp" x="130" y="214">weeks 1 and 2</text>
+<text class="f10 b m w3 d6" x="230" y="214">weeks 2 and 3</text>
+<text class="f10 mu m" x="80" y="102">week 1</text>
+<text class="f10 mu m" x="180" y="102">week 2</text>
+<text class="f10 mu m" x="280" y="102">week 3</text>
+<rect class="bx dsh s-grp w6 d3" x="26" y="114" width="286" height="36" rx="6" />
+<text class="f10 b e w6 d3" x="344" y="129">base</text>
+<circle class="f-ord k4" cx="64" cy="132" r="7" />
+<circle class="f-ord k4" cx="96" cy="132" r="7" />
+<circle class="f-ord k4" cx="64" cy="172" r="7" />
+<circle class="f-ord k4" cx="96" cy="172" r="7" />
+<circle class="f-ord k4" cx="164" cy="132" r="7" />
+<circle class="f-ord k4" cx="196" cy="132" r="7" />
+<circle class="f-ord k4" cx="164" cy="172" r="7" />
+<circle class="f-ord k4" cx="196" cy="172" r="7" />
+<circle class="f-ord k4" cx="264" cy="132" r="7" />
+<circle class="f-ord k4" cx="296" cy="132" r="7" />
+<circle class="f-ord k4" cx="264" cy="172" r="7" />
+<circle class="f-ord k4" cx="296" cy="172" r="7" />
+<circle class="f-out k4 w4 d2 tmp" cx="64" cy="132" r="7" />
+<circle class="f-out k4 w1 d2 tmp" cx="96" cy="172" r="7" />
+<circle class="f-out k4 w7 d2" cx="196" cy="132" r="7" />
+<circle class="f-out k4 w2 d2 tmp" cx="264" cy="132" r="7" />
+<circle class="f-out k4 w3 d6" cx="264" cy="132" r="7" />
+<circle class="f-out k4 w2 d2 tmp" cx="296" cy="132" r="7" />
+<circle class="f-out k4 w3 d6" cx="296" cy="132" r="7" />
+<text class="f10 m w2 d7" x="190" y="242">move a slot and the number moves</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="slt-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="slt-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="slt-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="slt-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="slt-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="slt-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="slt-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="slt-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="slt-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="slt-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="slt-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="slt-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="slt-r1">1</label><label class="sa-sb sb2" for="slt-r2">2</label><label class="sa-sb sb3" for="slt-r3">3</label><label class="sa-sb sb4" for="slt-r4">4</label><label class="sa-sb sb5" for="slt-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Decide the unit first: one dot is one person, not one row of a log.<span class="sa-chs"><span class="sa-ch pl">12 dots, one per person</span></span></div>
+<div class="c-out w1 d2 tmp">The numerator says who counts as having done the thing. A looser or stricter test gives other dots.<span class="sa-chs"><span class="sa-ch pl">5 dots counted</span></span></div>
+<div class="c-grp w1 d3 tmp">The denominator is who could have done it. A dot outside the base no longer counts.<span class="sa-chs"><span class="sa-ch pl">a base of 6</span><span class="sa-ch mi">1 dot leaves the count</span></span></div>
+<div class="c-win w2 d4 tmp">The window picks the days. Only what happens inside it counts, and only the base inside it.<span class="sa-chs"><span class="sa-ch ch">a base of 4</span><span class="sa-ch mi">2 dots leave the count</span></span></div>
+<div class="c-flt w3 d6">Move one slot and the same data gives another number: write all four slots down.<span class="sa-chs"><span class="sa-ch ch">the window moved</span><span class="sa-ch pl">1 dot joins the count</span></span></div>
+</div>
+<p class="ca-cap">A made-up miniature: 12 dots, one for each person, in three weeks. A metric needs four choices: the unit, the numerator, the denominator and the window.</p>
+<ol class="sa-steps">
+<li>The unit: one dot, one person</li>
+<li>The numerator: who did it</li>
+<li>The denominator: out of whom</li>
+<li>The window: which weeks</li>
+<li>Move one slot, get another number</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 40 minutes, 4 new ideas: the numerator, the window and the base, the unit, and a goal with its components and a guardrail. The Data cell of the notebook loads `users`, `events`, `subs` (the subscription rows) and `assign` (the experiment rows) and adds `bought14` to `users`: 1 if a person has a `purchase` within 14 days of their own signup. The people who signed up by June 16 have a full 14 days of follow-up before the data ends: they are `full`.
+
+<OpenInColab />
+
+### 1. The numerator: who counts
+
+**Idea.** A *metric* is a number written as a fraction with four parts. The *numerator* says who or what counts as having done the thing. The *denominator* says out of whom. The *unit* says what one item of the count is: a person, an event, a day. The *window* says which days, and by what clock. Rodden, Hutchinson and Fu note that what counts as using a product depends on its goals: sometimes a visit, sometimes a finished key task. This unit changes only the numerator: the event that makes a person active.
+
+**Try it.** Count the people active in June (June 1 to 30, by the time the event happened) under four definitions, then look at who "any event" adds:
+
+```python
+june = events[(events["event_ts"] >= "2026-06-01") & (events["event_ts"] < "2026-07-01")]     # June 1 to 30, by when it happened
+definitions = {
+    "any event": june,
+    "a return visit (session_start)": june[june["event_name"] == "session_start"],
+    "an expense added (add_expense)": june[june["event_name"] == "add_expense"],
+    "a visit or an expense": june[june["event_name"].isin(["session_start", "add_expense"])],
+}
+active = {name: set(rows["user_id"]) for name, rows in definitions.items()}
+for name, people in active.items():
+    print(f"{len(people):>6,}  {name}")
+extra = active["any event"] - active["a visit or an expense"]       # counted by the first definition and not by the last
+print(len(extra))
+shown = june[june["user_id"].isin(extra)].groupby("event_name")["user_id"].nunique().sort_values(ascending=False, kind="stable")
+for name, people in shown.items():
+    print(f"{people:>6,}  {name}")
+```
+
+**Predict:** the four definitions count distinct people. Which will be the largest? Will "any event" beat "a visit or an expense" by a few hundred people or by thousands?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ 7,874  any event
+ 4,289  a return visit (session_start)
+ 4,344  an expense added (add_expense)
+ 5,215  a visit or an expense
+2659
+ 1,444  plus_feature_used
+   892  signup_complete
+   531  onboarding_complete
+   392  view_paywall
+   259  start_checkout
+   230  paywall_viewed
+   155  cancel_subscription
+   140  purchase
+```
+
+<figure>
+<svg viewBox="0 0 360 214" width="360" role="img" aria-labelledby="dm-act-t dm-act-d">
+<title id="dm-act-t">People active in June, by definition</title>
+<desc id="dm-act-d">Four horizontal bars, one for each definition of active in June 2026, as the number of distinct people. Any event: 7,874. A return visit, session_start: 4,289. An expense added, add_expense: 4,344. A visit or an expense: 5,215. The first bar is 2,659 people longer than the last.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">People active in June, four definitions</text>
+<text x="14" y="38" font-size="10">any event</text>
+<rect x="14" y="43" width="246.1" height="14" fill="#0072b2" fill-opacity="0.9" />
+<text x="266.1" y="54" font-size="10" font-weight="600">7,874</text>
+<text x="14" y="78" font-size="10">a return visit (session_start)</text>
+<rect x="14" y="83" width="134" height="14" fill="#0072b2" fill-opacity="0.9" />
+<text x="154" y="94" font-size="10" font-weight="600">4,289</text>
+<text x="14" y="118" font-size="10">an expense added (add_expense)</text>
+<rect x="14" y="123" width="135.8" height="14" fill="#0072b2" fill-opacity="0.9" />
+<text x="155.8" y="134" font-size="10" font-weight="600">4,344</text>
+<text x="14" y="158" font-size="10">a visit or an expense</text>
+<rect x="14" y="163" width="163" height="14" fill="#0072b2" fill-opacity="0.9" />
+<text x="183" y="174" font-size="10" font-weight="600">5,215</text>
+<path d="M14 32 L14 190" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="208" font-size="10" fill-opacity="0.8">distinct people with at least one such event dated June 1 to 30</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the four numbers run from 4,289 to 7,874, and each is a defensible "active in June". "Any event" is the largest because it counts everything the app records: 2,659 of its people have no visit and no expense in June. The list shows what they have instead. 892 signed up that month, and 155 are there because they canceled: under this definition a person who left counts as active. An ad campaign that brings signups would raise it without anyone using the app. That is how a metric gets gamed, by accident or on purpose: the number goes up and the thing it stands for does not. The goal picks the definition. For an app whose job is to record expenses, an expense added is the closest to the goal.
+
+### 2. The window and the base
+
+**Idea.** The window says which days count. There are two ways to set it. A *cohort reading* follows the same people for the same time after their own start, for example 14 days from each signup. A *calendar reading* counts what happened in a calendar period, whoever started when. The base, the denominator, is the people who could have done the thing. Kohavi, Henne and Sommerfield give the same advice for a change to a checkout page: analyze only the people who reached it, because everyone else adds noise. Rodden, Hutchinson and Fu define retention in the same way: of the people active in one period, the share still active later.
+
+**Try it.** The 5,077 people who signed up in May, read three ways, and then two later groups of signups read today:
+
+```python
+may = users[(users["signup_date"] >= "2026-05-01") & (users["signup_date"] <= "2026-05-31")]     # the people who signed up in May
+cohort = int(may["bought14"].sum())                                  # cohort reading: a purchase within 14 days of their own signup
+ever = int(may["user_id"].isin(purchases["user_id"]).sum())          # no window: a purchase any time up to June 30
+in_may = purchases[(purchases["event_ts"] >= "2026-05-01") & (purchases["event_ts"] < "2026-06-01")]     # calendar reading: purchases made in May
+print(len(may), cohort, ever, len(in_may), int(in_may["user_id"].isin(may["user_id"]).sum()))
+for label, count in (("cohort, 14 days", cohort), ("ever, to June 30", ever), ("calendar, May", len(in_may))):
+    print(f"{100 * count / len(may):.1f}%  {label}")
+late = users[users["signup_date"] >= "2026-06-17"]                   # signed up in the last two weeks of the data: their 14 days are not all over
+june_early = users[(users["signup_date"] >= "2026-06-08") & (users["signup_date"] <= "2026-06-16")]     # June 8 to 16: a full 14 days
+print(len(late), f"{100 * late['bought14'].mean():.1f}%", len(june_early), f"{100 * june_early['bought14'].mean():.1f}%")
+```
+
+**Predict:** the cohort reading is a purchase within 14 days of the person's own signup. The second reading has no window: a purchase any time up to June 30. The calendar reading divides the purchases made in May, whoever made them, by the May signups. Which reading will be the highest, and which the lowest?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+5077 509 531 605 487
+10.0%  cohort, 14 days
+10.5%  ever, to June 30
+11.9%  calendar, May
+1664 10.6% 1078 14.7%
+```
+
+<figure>
+<svg viewBox="0 0 360 262" width="360" role="img" aria-labelledby="dm-win-t dm-win-d">
+<title id="dm-win-t">The same May conversion, read three ways, and the newest signups</title>
+<desc id="dm-win-d">Top: a scale from 9 to 15 percent with three blue dots for the conversion of the 5,077 people who signed up in May: 10.0 percent as a cohort reading with a 14-day window, 10.5 percent as a reading with no window up to June 30 and 11.9 percent as a calendar reading of the purchases made in May. Bottom: a red dot at 10.6 percent for the 1,664 people who signed up from June 17 to 30, whose 14 days have not all passed, and a blue dot at 14.7 percent for the 1,078 people who signed up from June 8 to 16, who have a full 14 days.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Conversion of the 5,077 people who signed up in May</text>
+<text x="14" y="45" font-size="10">cohort, 14 days</text>
+<circle cx="156.7" cy="42" r="5" fill="#0072b2" />
+<text x="166.7" y="45.5" font-size="10" font-weight="600">10.0%</text>
+<text x="14" y="71" font-size="10">ever, to June 30</text>
+<circle cx="175" cy="68" r="5" fill="#0072b2" />
+<text x="185" y="71.5" font-size="10" font-weight="600">10.5%</text>
+<text x="14" y="97" font-size="10">calendar, May</text>
+<circle cx="226.3" cy="94" r="5" fill="#0072b2" />
+<text x="236.3" y="97.5" font-size="10" font-weight="600">11.9%</text>
+<path d="M120 112 L120 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="120" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">9%</text>
+<path d="M193.3 112 L193.3 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="193.3" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
+<path d="M266.7 112 L266.7 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="266.7" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
+<path d="M340 112 L340 116" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="127" font-size="10" text-anchor="middle" fill-opacity="0.8">15%</text>
+<path d="M120 112 L340 112" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="156" font-size="10.5" font-weight="600">Two later groups of signups, read today</text>
+<text x="14" y="185" font-size="10">June 17 to 30</text>
+<circle cx="178.7" cy="182" r="5" fill="#c0392b" />
+<text x="188.7" y="185.5" font-size="10" font-weight="600">10.6%</text>
+<text x="14" y="211" font-size="10">June 8 to 16</text>
+<circle cx="329" cy="208" r="5" fill="#0072b2" />
+<text x="319" y="211.5" font-size="10" text-anchor="end" font-weight="600">14.7%</text>
+<path d="M120 220 L120 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="120" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">9%</text>
+<path d="M193.3 220 L193.3 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="193.3" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">11%</text>
+<path d="M266.7 220 L266.7 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="266.7" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">13%</text>
+<path d="M340 220 L340 224" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="235" font-size="10" text-anchor="middle" fill-opacity="0.8">15%</text>
+<path d="M120 220 L340 220" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="255" font-size="10" fill-opacity="0.8">14-day conversion, as the data stand today</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the cohort reading follows each of the 5,077 people for 14 days: 509 bought, 10.0%. With no window it is 10.5%, because 22 of the same people bought later. The calendar reading, 11.9%, divides the 605 purchases made in May by the 5,077 May signups, but only 487 of those purchases belong to people who signed up in May: the other 118 came from earlier signups. Its numerator and its denominator describe different people. The last line of the output is the clock. The 1,664 people who signed up from June 17 to 30 convert at 10.6%, against 14.7% for the 1,078 who signed up from June 8 to 16 and have a full 14 days. A cohort reading needs its whole window to have passed: some of the later people will still buy within their 14 days, and the rest of the gap is chance, since each rate rests on about a thousand people. Compare only cohorts whose window is complete, or wait.
+
+**Try it.** The June activity ("a visit or an expense", from unit 1) divided by three different bases:
+
+```python
+june_active = active["a visit or an expense"] & set(users["user_id"])      # from unit 1, people who have an account row
+existing = users[users["signup_date"] < "2026-06-01"]                      # accounts that already existed on June 1
+may_events = events[(events["event_ts"] >= "2026-05-01") & (events["event_ts"] < "2026-06-01")]
+may_active = set(may_events[may_events["event_name"].isin(["session_start", "add_expense"])]["user_id"]) & set(users["user_id"])
+bases = {"all accounts": set(users["user_id"]), "accounts created before June 1": set(existing["user_id"]), "people active in May": may_active}
+for label, base in bases.items():
+    n = len(june_active & base)
+    print(f"{len(base):>6,} {n:>6,} {100 * n / len(base):5.1f}%  {label}")
+```
+
+**Predict:** the numerator definition is the same in all three lines. Which base will give the highest rate, and which the lowest?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+21,841  5,215  23.9%  all accounts
+17,816  2,092  11.7%  accounts created before June 1
+ 5,525  1,429  25.9%  people active in May
+```
+
+</details>
+
+*Why:* 23.9% out of all accounts, 11.7% out of the accounts created before June 1 and 25.9% out of the people active in May. The first line mixes habit with newness: 5,215 people are active in June, only 2,092 of them had an account on June 1, so 3,123 are June signups. The last line is a retention rate: of the 5,525 people active in May, 1,429 were active again in June. Say which base you used in the sentence that names the metric.
+
+In symbols, with $$A$$ the set of people who count and $$B$$ the base, $$|A \cap B|$$ the number of people in both and $$|B|$$ the size of the base:
+
+$$
+\text{rate} = \frac{|A \cap B|}{|B|} = \frac{2{,}092}{17{,}816} \approx 0.117
+$$
+
+### 3. The unit: people or rows
+
+**Idea.** A count can be of rows of a log or of people. A log holds the retries of an app: here some events were written twice, with the same person, time, name and platform (the dataset README lists them). In pandas, `duplicated(subset=...)` marks the second copy of a row when the columns of `subset` match a row above it; the documentation says `keep="first"` marks every duplicate except the first occurrence.
+
+**Try it.** Find the second copies, then count June's `add_expense` events with and without them, in rows and in people, and compare purchase rows with buyers:
+
+```python
+key = ["user_id", "event_ts", "event_name", "platform"]
+retry = events.duplicated(subset=key)                                # True for the second copy of an event written twice
+print(int(retry.sum()))
+expenses = june[june["event_name"] == "add_expense"]
+clean = expenses[~retry.loc[expenses.index]]                         # the same events without the second copies
+print(len(expenses), len(clean), expenses["user_id"].nunique(), clean["user_id"].nunique())
+print(f"{len(expenses) / expenses['user_id'].nunique():.2f} {len(clean) / clean['user_id'].nunique():.2f}")
+print(len(purchases), purchases["user_id"].nunique())                # purchase rows against the people who bought
+```
+
+**Predict:** will the number of people who added an expense in June change when the second copies are removed? Will the number of rows?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+835
+12941 12844 4344 4344
+2.98 2.96
+2905 2849
+```
+
+</details>
+
+*Why:* there are 835 second copies in all, 97 of them among June's expense rows: 12,941 rows become 12,844, 0.75 percent fewer, and the people who added an expense stay 4,344. A metric counted in people does not feel the retries. A metric counted in rows does, and always upward: 2.98 expenses per active person become 2.96. The last line is the same split with purchases: 2,905 purchase rows come from 2,849 people, 56 more rows than buyers, because some people subscribed again. "Purchases" and "buyers" are two metrics. A bias of 0.75 percent can be larger than the effect you are looking for.
+
+### 4. A goal, its components and a guardrail
+
+**Idea.** One number cannot carry a goal. Kohavi, Henne and Sommerfield recommend choosing a single metric to aim an experiment at, and warn that a short-term one, such as revenue, can be pushed up in ways that hurt the users. So put three things beside it. The *north-star metric* is the one number the product steers by. An *input metric* is a number a team can move that feeds it, such as conversion. A *guardrail* is a metric that does not show whether a change worked but that you do not want to harm; Dmitriev and colleagues call such metrics guardrail metrics. For this app, take the people paying for Plus at the end of a month as the north star. It is made of *components*: new subscriptions come in and cancellations go out.
+
+**Try it.** The table of the six months, built from the latest row of each subscription:
+
+```python
+latest = subs.sort_values("updated_at").groupby("subscription_id").tail(1)       # the current state of each of the 2,905 subscriptions
+users["month"] = users["signup_date"].str[:7]
+previous = 0
+for end in ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]:
+    end = pd.Timestamp(end)
+    start = end.replace(day=1)
+    signups = int((users["month"] == f"{end.year}-{end.month:02d}").sum())
+    new = int(latest["started_on"].between(start, end).sum())
+    canceled = int(latest["ended_on"].between(start, end).sum())
+    paying = int(((latest["started_on"] <= end) & (latest["ended_on"].isna() | (latest["ended_on"] > end))).sum())
+    assert paying == previous + new - canceled                       # the stock moves by the flows
+    previous = paying
+    print(f"{end:%Y-%m}  signups {signups:>5,}  new {new:>4,}  canceled {canceled:>4,}  paying {paying:>5,}")
+```
+
+**Predict:** will the number paying grow every month? Will June's new subscriptions be above or below May's?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2026-01  signups 2,825  new  404  canceled    8  paying   396
+2026-02  signups 2,686  new  394  canceled   75  paying   715
+2026-03  signups 3,142  new  461  canceled   94  paying 1,082
+2026-04  signups 4,086  new  512  canceled  133  paying 1,461
+2026-05  signups 5,077  new  605  canceled  192  paying 1,874
+2026-06  signups 4,025  new  529  canceled  197  paying 2,206
+```
+
+<figure>
+<svg viewBox="0 0 360 300" width="360" role="img" aria-labelledby="dm-flow-t dm-flow-d">
+<title id="dm-flow-t">People paying at the end of each month, and the flows in and out</title>
+<desc id="dm-flow-d">Top: six blue bars for the people paying at the end of each month from January to June 2026: 396, 715, 1,082, 1,461, 1,874 and 2,206. Bottom: for each month a green bar for new subscriptions (404, 394, 461, 512, 605 and 529) and a purple bar for cancellations (8, 75, 94, 133, 192 and 197). The paying number rises every month; new subscriptions fall in June.</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">People paying at the end of the month</text>
+<rect x="36" y="104.1" width="28" height="13.9" fill="#0072b2" fill-opacity="0.9" />
+<text x="50" y="100.1" font-size="10" text-anchor="middle" font-weight="600">396</text>
+<text x="50" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">Jan</text>
+<rect x="88" y="93" width="28" height="25" fill="#0072b2" fill-opacity="0.9" />
+<text x="102" y="89" font-size="10" text-anchor="middle" font-weight="600">715</text>
+<text x="102" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">Feb</text>
+<rect x="140" y="80.1" width="28" height="37.9" fill="#0072b2" fill-opacity="0.9" />
+<text x="154" y="76.1" font-size="10" text-anchor="middle" font-weight="600">1,082</text>
+<text x="154" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">Mar</text>
+<rect x="192" y="66.9" width="28" height="51.1" fill="#0072b2" fill-opacity="0.9" />
+<text x="206" y="62.9" font-size="10" text-anchor="middle" font-weight="600">1,461</text>
+<text x="206" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">Apr</text>
+<rect x="244" y="52.4" width="28" height="65.6" fill="#0072b2" fill-opacity="0.9" />
+<text x="258" y="48.4" font-size="10" text-anchor="middle" font-weight="600">1,874</text>
+<text x="258" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">May</text>
+<rect x="296" y="40.8" width="28" height="77.2" fill="#0072b2" fill-opacity="0.9" />
+<text x="310" y="36.8" font-size="10" text-anchor="middle" font-weight="600">2,206</text>
+<text x="310" y="132" font-size="10" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<path d="M24 118 L346 118" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="158" font-size="10.5" font-weight="600">New subscriptions and cancellations in the month</text>
+<rect x="29" y="217.2" width="20" height="44.8" fill="#00a07a" fill-opacity="0.9" />
+<rect x="51" y="261.1" width="20" height="0.9" fill="#9a6be0" fill-opacity="0.9" />
+<text x="39" y="213.2" font-size="10" text-anchor="middle" font-weight="600">404</text>
+<text x="61" y="257.1" font-size="10" text-anchor="middle" font-weight="600">8</text>
+<text x="50" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">Jan</text>
+<rect x="81" y="218.4" width="20" height="43.6" fill="#00a07a" fill-opacity="0.9" />
+<rect x="103" y="253.7" width="20" height="8.3" fill="#9a6be0" fill-opacity="0.9" />
+<text x="91" y="214.4" font-size="10" text-anchor="middle" font-weight="600">394</text>
+<text x="113" y="249.7" font-size="10" text-anchor="middle" font-weight="600">75</text>
+<text x="102" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">Feb</text>
+<rect x="133" y="210.9" width="20" height="51.1" fill="#00a07a" fill-opacity="0.9" />
+<rect x="155" y="251.6" width="20" height="10.4" fill="#9a6be0" fill-opacity="0.9" />
+<text x="143" y="206.9" font-size="10" text-anchor="middle" font-weight="600">461</text>
+<text x="165" y="247.6" font-size="10" text-anchor="middle" font-weight="600">94</text>
+<text x="154" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">Mar</text>
+<rect x="185" y="205.3" width="20" height="56.7" fill="#00a07a" fill-opacity="0.9" />
+<rect x="207" y="247.3" width="20" height="14.7" fill="#9a6be0" fill-opacity="0.9" />
+<text x="195" y="201.3" font-size="10" text-anchor="middle" font-weight="600">512</text>
+<text x="217" y="243.3" font-size="10" text-anchor="middle" font-weight="600">133</text>
+<text x="206" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">Apr</text>
+<rect x="237" y="195" width="20" height="67" fill="#00a07a" fill-opacity="0.9" />
+<rect x="259" y="240.7" width="20" height="21.3" fill="#9a6be0" fill-opacity="0.9" />
+<text x="247" y="191" font-size="10" text-anchor="middle" font-weight="600">605</text>
+<text x="269" y="236.7" font-size="10" text-anchor="middle" font-weight="600">192</text>
+<text x="258" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">May</text>
+<rect x="289" y="203.4" width="20" height="58.6" fill="#00a07a" fill-opacity="0.9" />
+<rect x="311" y="240.2" width="20" height="21.8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="299" y="199.4" font-size="10" text-anchor="middle" font-weight="600">529</text>
+<text x="321" y="236.2" font-size="10" text-anchor="middle" font-weight="600">197</text>
+<text x="310" y="276" font-size="10" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<path d="M24 262 L346 262" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="14" y="284" width="12" height="8" fill="#00a07a" fill-opacity="0.9" />
+<text x="32" y="291.5" font-size="10">new</text>
+<rect x="80" y="284" width="12" height="8" fill="#9a6be0" fill-opacity="0.9" />
+<text x="98" y="291.5" font-size="10">canceled</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* the number paying grows every month, from 396 to 2,206, and each month's value is the last one plus the new subscriptions minus the cancellations (the cell checks it). New subscriptions fall in June, 529 against 605, but that is a count, and June had fewer signups than May: 4,025 against 5,077. New subscriptions are signups times a conversion rate, and conversion is the input a team can work on. Per signup (a rough rate: unit 2 shows its limits) the June figure is 13.1% and May's 11.9%. Rodden, Hutchinson and Fu make the point for engagement: a total can rise because there are more users, not more use.
+
+In symbols, with $$P_t$$ the people paying at the end of month $$t$$, and $$\text{new}_t$$ and $$\text{canceled}_t$$ the new subscriptions and the cancellations in it:
+
+$$
+P_t = P_{t-1} + \text{new}_t - \text{canceled}_t, \qquad 1{,}874 + 529 - 197 = 2{,}206
+$$
+
+**Try it.** `paywall_v2` lifted conversion. A guardrail for it is the share of the buyers who cancel within 30 days of starting:
+
+```python
+pw = assign[(assign["experiment"] == "paywall_v2") & assign["converted"]]        # the buyers of the experiment
+first_sub = latest.sort_values("started_on").groupby("user_id").head(1)           # each buyer's first subscription
+buyers = pw.merge(first_sub, on="user_id", validate="one_to_one")
+buyers["canceled30"] = buyers["ended_on"].notna() & ((buyers["ended_on"] - buyers["started_on"]).dt.days <= 30)
+counts = buyers.groupby("variant")["canceled30"].agg(["sum", "count"])
+for name in ["control", "variant"]:
+    c, n = int(counts.loc[name, "sum"]), int(counts.loc[name, "count"])
+    print(name, c, n, f"{100 * c / n:.1f}%")
+table = pd.crosstab(buyers["variant"], buyers["canceled30"])
+print(f"{stats.chi2_contingency(table, correction=False).pvalue:.3f}")
+rates = counts["sum"] / counts["count"]
+gap = rates["variant"] - rates["control"]                            # variant minus control
+se = np.sqrt((rates * (1 - rates) / counts["count"]).sum())          # the standard error of the gap
+print(f"{100 * gap:.1f} {100 * (gap - 1.96 * se):.1f} {100 * (gap + 1.96 * se):.1f}")
+```
+
+**Predict:** will the variant's buyers cancel more or less often than the control's buyers? Will the difference be clearly more than chance, that is, p below 0.05?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+control 48 343 14.0%
+variant 75 415 18.1%
+0.130
+4.1 -1.1 9.3
+```
+
+<figure>
+<svg viewBox="0 0 360 214" width="360" role="img" aria-labelledby="dm-grd-t dm-grd-d">
+<title id="dm-grd-t">Cancellations within 30 days of starting, among the buyers of paywall_v2</title>
+<desc id="dm-grd-d">Top: a scale from 8 to 24 percent with a green dot for the control buyers, 48 of 343, 14.0 percent, and a purple dot for the variant buyers, 75 of 415, 18.1 percent. Bottom: a scale of the difference in points from minus 4 to plus 12. A blue dot marks plus 4.1 and a blue bar runs from minus 1.1 to plus 9.3. An ochre line marks no difference at 0, inside the bar, so the difference is not clearly more than chance (p = 0.130).</desc>
+<g fill="currentColor">
+<text x="14" y="14" font-size="10.5" font-weight="600">Buyers who canceled within 30 days of starting</text>
+<text x="14" y="43" font-size="10">control</text>
+<circle cx="190" cy="40" r="5" fill="#00a07a" />
+<text x="200" y="43.5" font-size="10" font-weight="600">14.0%</text>
+<text x="14" y="67" font-size="10">variant</text>
+<circle cx="251.5" cy="64" r="5" fill="#9a6be0" />
+<text x="261.5" y="67.5" font-size="10" font-weight="600">18.1%</text>
+<path d="M100 76 L100 80" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="100" y="91" font-size="10" text-anchor="middle" fill-opacity="0.8">8%</text>
+<path d="M160 76 L160 80" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="160" y="91" font-size="10" text-anchor="middle" fill-opacity="0.8">12%</text>
+<path d="M220 76 L220 80" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="220" y="91" font-size="10" text-anchor="middle" fill-opacity="0.8">16%</text>
+<path d="M280 76 L280 80" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="280" y="91" font-size="10" text-anchor="middle" fill-opacity="0.8">20%</text>
+<path d="M340 76 L340 80" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="91" font-size="10" text-anchor="middle" fill-opacity="0.8">24%</text>
+<path d="M100 76 L340 76" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="14" y="118" font-size="10.5" font-weight="600">The difference, variant minus control</text>
+<path d="M130 130 L130 160" fill="none" stroke="#ad9100" stroke-width="2" stroke-opacity="1" />
+<rect x="110.8" y="142" width="182" height="6" fill="#0072b2" fill-opacity="0.9" rx="3" />
+<circle cx="201.8" cy="145" r="5" fill="#0072b2" />
+<text x="110.8" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">-1.1</text>
+<text x="201.8" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">+4.1</text>
+<text x="292.8" y="164" font-size="10" text-anchor="middle" fill-opacity="0.8">+9.3</text>
+<text x="124" y="134" font-size="10" text-anchor="end" font-weight="600">none</text>
+<path d="M60 172 L340 172" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M60 172 L60 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="60" y="187" font-size="10" text-anchor="middle" fill-opacity="0.8">-4</text>
+<path d="M130 172 L130 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="130" y="187" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M200 172 L200 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="200" y="187" font-size="10" text-anchor="middle" fill-opacity="0.8">+4</text>
+<path d="M270 172 L270 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="270" y="187" font-size="10" text-anchor="middle" fill-opacity="0.8">+8</text>
+<path d="M340 172 L340 176" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="340" y="187" font-size="10" text-anchor="middle" fill-opacity="0.8">+12</text>
+<text x="200" y="206" font-size="10" text-anchor="middle">difference in points; p = 0.130</text>
+</g>
+</svg>
+</figure>
+
+</details>
+
+*Why:* 14.0% of the control buyers and 18.1% of the variant's canceled within 30 days: the gap is +4.1 points, with a 95 percent interval from −1.1 to +9.3 and p = 0.130 (the chi-square test of the 2 by 2 table with `correction=False`, as in C9). That is not clear evidence of harm and not evidence of safety: the interval allows nine points. The 30-day cancellation share is the counter-metric to conversion: a guardrail chosen against one cheap route to the goal, a conversion bought by pressure that sends people away. In this dataset the buyers of the variant do cancel more, because the generating rule makes their first-renewal cancel chance 1.3 times higher, but 758 buyers are too few to show it. Read a guardrail as you read any gap, by its interval. A team that watched only conversion would ship without seeing it.
+
+<Aside type="tip" title="Remember">
+
+- A metric has four slots: the unit, the numerator, the denominator and the window. Write all four in the sentence that names it.
+- A cohort reading follows the same people for the same time; a calendar reading mixes cohorts. A window that has not closed makes the newest cohort look worse.
+- Name the base: the same numerator gives different rates out of different people.
+- Count people when you mean people. Retried rows push a row count up, never down.
+- Put the goal beside its components and a guardrail, and read the guardrail's interval.
+
+**Common trap:** reading a rise in "active people" as more use. Under "any event", 2,659 of the 7,874 people counted in June have no visit and no expense.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-defining-metrics-1">
+
+**Of the accounts created before May, how many were active in May, and what share of those accounts is that?** Active means a visit or an expense. The two sets are given. Count the accounts in the first that are in the second, then the share in percent. Expected: `answer_1` is [people, percent], percent rounded to 1 decimal.
+
+```python
+may_events = events[(events["event_ts"] >= "2026-05-01") & (events["event_ts"] < "2026-06-01")]            # given: May 1 to 31
+active_may = set(may_events[may_events["event_name"].isin(["session_start", "add_expense"])]["user_id"])   # given: a visit or an expense in May
+before_may = users[users["signup_date"] < "2026-05-01"]              # given: accounts created before May
+# count how many of these accounts were active in May, then their share of the accounts in percent
+answer_1 = None  # replace None with [people, percent]: percent rounded to 1 decimal
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 2: `n = len(june_active & base)` counts the people in both sets, and `100 * n / len(base)` is the share. Here the base is `before_may` and the other set is `active_may`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+people = int(before_may["user_id"].isin(active_may).sum())
+answer_1 = [people, ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+people = int(before_may["user_id"].isin(active_may).sum())
+answer_1 = [people, round(100 * people / len(before_may), 1)]
+```
+
+1,916 of the 12,739 accounts created before May were active in May: 15.0 percent. Counting everyone active in May gives 5,526 people (43.4 percent of those accounts), because the set also holds the people who signed up in May; the check cell reports it. Unit 2 shows 5,525 for the same people because it keeps only those who have a row in `users`: one person active in May belongs to a deleted account.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-defining-metrics-2">
+
+**The conversion of the first half of April, read two ways.** The cohort reading is the share of the people who signed up from April 1 to 15 who bought within 14 days of their own signup. The calendar reading is the number of purchases made from April 1 to 15, whoever made them, divided by the number of signups of those days. Before you start, say what the result looks like: two percentages. Set `answer_2` to [cohort percent, calendar percent], each rounded to 1 decimal. Write the code in the empty cell. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+Unit 2 built both readings for May. Change the dates to April 1 to 15: the cohort reading uses the column `bought14` of the April signups, and the calendar reading counts the rows of `purchases` made on those days.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two percentages between 12 and 14, and the calendar reading is the larger."*
+
+```python
+april = users[(users["signup_date"] >= "2026-04-01") & (users["signup_date"] <= "2026-04-15")]
+in_april = purchases[(purchases["event_ts"] >= "2026-04-01") & (purchases["event_ts"] < "2026-04-16")]
+```
+
+</details>
+
+<Solution>
+
+```python
+april = users[(users["signup_date"] >= "2026-04-01") & (users["signup_date"] <= "2026-04-15")]
+in_april = purchases[(purchases["event_ts"] >= "2026-04-01") & (purchases["event_ts"] < "2026-04-16")]
+answer_2 = [round(float(100 * april["bought14"].mean()), 1), round(100 * len(in_april) / len(april), 1)]
+```
+
+218 of the 1,767 people who signed up from April 1 to 15 bought within 14 days of their own signup: 12.3 percent. The 242 purchases made on those days divided by the same 1,767 signups give 13.7 percent, but only 182 of those purchases were made by people who signed up in those days. The other 60 came from earlier signups, so the numerator and the denominator of the calendar reading describe different people.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a dashboard says "active users up 30 percent". Which four things do you ask before you believe it?
+
+   <details>
+   <summary>answer</summary>
+
+   The numerator (which event counts), the denominator (out of whom), the unit (people or rows) and the window (which days, and whether they are over).
+
+   </details>
+
+<Exercise id="core-defining-metrics-3">
+
+**Spot the flaw.** A colleague computes the 14-day conversion of the people who signed up from January 1 to 11 from the table `users` and gets a number a little higher than it should be. Fix the denominator so that it counts everyone who signed up in those days, and set `answer_3` to the conversion in percent rounded to 1 decimal. Expected: `answer_3` is a number in percent.
+
+```python
+january = users[users["signup_date"] <= "2026-01-11"]                # colleague: "everyone who signed up from January 1 to 11"
+answer_3 = round(float(100 * january["bought14"].mean()), 1)         # colleague's conversion, in percent
+```
+
+<details>
+<summary>Hint</summary>
+
+Where does the table `users` get its rows from, and could a person who signed up be missing from it? Count the `signup_complete` events of those days.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+signup_events = events[(events["event_name"] == "signup_complete") & (events["event_ts"] < "2026-01-12")]
+people = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+# added to or changed in the starter:
+signup_events = events[(events["event_name"] == "signup_complete") & (events["event_ts"] < "2026-01-12")]
+people = signup_events["user_id"].nunique()
+answer_3 = round(100 * int(january["bought14"].sum()) / people, 1)
+```
+
+The table `users` holds 948 of the 988 people who signed up from January 1 to 11, because 40 accounts were deleted and left no row, and none of them had bought (every purchase belongs to a person who is in `users`). 142 buyers out of 988 people is 14.4 percent, against 15.0 percent out of 948. The check cell reports 15.0 if you keep the colleague's denominator.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a metric as a unit, a numerator, a denominator and a window, show how each one moves the number, count people instead of retried rows, and name the components and the guardrail that go beside a goal.*
+Test: Exercise core-defining-metrics-2, done from the notebook without opening the hints.
+
+The pattern to remember: **say all four slots before you compute, and put a guardrail beside the goal.** Next comes *Diagnosing a metric that moved* (C13), where a number changes and you must find out whether the world did.
