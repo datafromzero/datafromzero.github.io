@@ -268,6 +268,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
+- Homepage history slider: the two round arrow buttons became one outlined pill with thin chevrons and a counter of the centered card ("02 / 12").
 - Choose your track (SPEC D50, owner decision, 2026-11-20): the grouped bar charts are removed; the four radars stay, now with each score printed beside its skill label.
 - Lesson sources cite primary sources only (owner rule, 2026-11-20): the 27 Python lessons no longer list the team's research issue as a source, and `npm run check:lessons` now refuses a lesson source that points at this site's GitHub issues.
 - Three more figures fit their text inside the boxes (owner report from a phone, 2026-11-20): P27's four-step figure ("worked by hand" ran past its box), the tidy-table drawing of the Excel cheatsheet (the TOTAL row) and the S19 table header; a second scan for text outside a figure or on other text fixed E11 and E13 (a caption ran past the right edge), E17 (the marker 2 sat on the 2,500 axis label) and the P21 Exercise 2 chart (its title was wider than the chart; now *Average order: about the same in every store*). `scripts/check-figure-text.cjs` is the manual browser check that finds such labels.
