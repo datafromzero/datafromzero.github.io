@@ -6,7 +6,7 @@
 Needs pandas, numpy and scikit-learn. The charts are plain SVG with currentColor text, the figure color roles of the site and a title and a desc, so
 they can be pasted into the .mdx lessons as they are (each tag on its own line). Rerun and paste again when the data or a number changes.
 Colors: data and estimate blue, flagged red, first group green. The models are the honest recipe of lessons C19 to C21 (logistic regression on channel,
-platform and region) fitted on the training part of a seeded split; the seeds are 20 (C20) and 21 (C21), as in the notebooks.
+platform and region) fitted on the training part of a seeded split; the seed is 20 in both lessons, as in the notebooks.
 """
 import html
 import sys
@@ -143,8 +143,8 @@ def charts():
     s.text(28, 220, "red: a column that settles after the prediction moment", size=9, opacity=0.9)
     out["dl-brier"] = s.render()
 
-    # ---- C21: the confusion matrix at the cut 0.5, and the total cost by threshold (seed 21) ----
-    train, test = train_test_split(people, test_size=0.25, random_state=21, stratify=people["bought14"])
+    # ---- C21: the confusion matrix at the cut 0.5, and the total cost by threshold (seed 20) ----
+    train, test = train_test_split(people, test_size=0.25, random_state=20, stratify=people["bought14"])
     model = make_model().fit(train, train["bought14"])
     chance = model.predict_proba(test)[:, 1]
     y = test["bought14"].to_numpy()

@@ -24,7 +24,7 @@ export default function make({ id = 'spb' } = {}) {
 		caption: 'Split first with a seed, fit the baseline and the model on the train rows only, then score both on the rows that were held out.',
 		phases: [
 			[1, 'All rows, one per person', { role: 'src', key: 'Every row is one person with a known outcome; at the start they are all together.', changes: [['+', '8 rows']] }],
-			[3, 'A seeded split holds some out', { role: 'mat', key: 'The seed fixes which rows are held out, so the same split can be made again.', changes: [['~', '2 rows held out'], ['+', '6 train rows']] }],
+			[3, 'A seeded split holds some out', { role: 'mat', key: 'A seeded shuffle picks which rows are held out.', changes: [['~', '2 rows held out'], ['+', '6 train rows']] }],
 			[5, 'Fit on the train rows only', { role: 'grp', key: 'The baseline and the model both learn from the train rows and from nothing else.', changes: [['+', 'a baseline'], ['+', 'a model']] }],
 			[7, 'Score on the held-out rows', { role: 'out', key: 'Both are scored on rows neither has seen, and then the scores are compared.', changes: [['+', '2 scores']] }],
 		],

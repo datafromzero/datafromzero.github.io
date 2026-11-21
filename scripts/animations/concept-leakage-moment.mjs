@@ -17,7 +17,7 @@ export default function make({ id = 'lkm' } = {}) {
 		title: 'A column that settles after the prediction moment must not feed the model',
 		desc:
 			'A vertical dashed line is the prediction moment. Left of it the words known before, right of it the words settles after and a chip y for the target. Two chips, x1 and x2, on the left have blue arrows into a box named model. A chip x3 on the right, tinted red and labeled settles later, has a red arrow that crosses the dashed line into the model, labeled a leak.',
-		caption: 'Only columns that settle before the prediction moment may feed the model; an arrow from the right of the line is a leak.',
+		caption: 'Only columns that settle before the prediction moment may feed the model; an arrow from after the line is a leak.',
 		phases: [
 			[1, 'The moment, and the target after it', { role: 'src', key: 'A prediction is made at one moment; the target is only known after it.', changes: [['+', 'a moment'], ['+', 'a target y']] }],
 			[3, 'Columns known before it', { role: 'grp', key: 'Columns that have settled by the moment can be given to the model.', changes: [['+', '2 columns before'], ['+', 'a model']] }],

@@ -33,14 +33,16 @@ A teammate shares a notebook for the welcome-message model of the last lesson, t
 
 > I added three columns I found in our tables, and the model got much better. Can we ship it?
 
-The data are the people of `app-events`, a fictional app. The three columns: `n_events`, the number of events of the person in the events table; `plus_uses`, how many of those are `plus_feature_used`; and `has_plan`, 1 when the person has a row in the subscriptions table. Four of the first people, next to the target `bought14` (1 when they bought Plus within 14 days of signing up):
+The data are the people of `app-events`, a fictional app. The three columns: `n_events`, the number of events of the person in the events table; `plus_uses`, how many of those are `plus_feature_used`; and `has_plan`, 1 when the person has a row in the subscriptions table. Six of the first people (person 10112 subscribed, but after the first 14 days), next to the target `bought14` (1 when they bought Plus within 14 days of signing up):
 
 | user_id | channel | n_events | plus_uses | has_plan | bought14 |
 |---:|---|---:|---:|---:|---:|
 | 10001 | organic_search | 4 | 0 | 0 | 0 |
 | 10002 | app_store | 4 | 0 | 0 | 0 |
+| 10005 | referral | 16 | 0 | 0 | 0 |
 | 10007 | referral | 48 | 35 | 1 | 1 |
 | 10011 | organic_search | 37 | 21 | 1 | 1 |
+| 10112 | referral | 35 | 14 | 1 | 0 |
 
 By the end you can say what is wrong with columns like these, find them, fit a scaler without letting the test part in, and read a score that looks too good as a warning.
 
@@ -131,7 +133,7 @@ A column may feed the model only if it settles before the prediction moment.
 <div class="c-flt w2 d5 tmp">Some columns are filled in only after the moment, once the outcome is on its way.<span class="sa-chs"><span class="sa-ch pl">1 column after</span></span></div>
 <div class="c-flt w2 d7">Feeding the model a value from after the moment lets the answer into training.<span class="sa-chs"><span class="sa-ch pl">a leak into the model</span></span></div>
 </div>
-<p class="ca-cap">Only columns that settle before the prediction moment may feed the model; an arrow from the right of the line is a leak.</p>
+<p class="ca-cap">Only columns that settle before the prediction moment may feed the model; an arrow from after the line is a leak.</p>
 <ol class="sa-steps">
 <li>The moment, and the target after it</li>
 <li>Columns known before it</li>
@@ -183,7 +185,7 @@ print(round(score(leaky, at_moment), 4), round(float(leaky.predict_proba(at_mome
 
 </details>
 
-*Why:* the honest recipe scores 0.1012 against the baseline's 0.1059, and the recipe with the three columns scores 0.0115, almost nine times lower: the "overly optimistic performance estimates" of the scikit-learn guide. Nothing a person does before signing up explains that. The columns are filled in by the purchase: Plus-only events exist only while a subscription is active, and a subscription row is written when a person buys. At the moment of signup the same model sees `n_events` = 1 and nothing else, gives every person a chance of at most 0.0002 and scores 0.1203, the share of buyers and worse than the baseline. A model that looks this much better than the baseline, on columns about a person's later life, earns suspicion before it earns a launch.
+*Why:* the honest recipe scores 0.1012 against the baseline's 0.1059, and the recipe with the three columns scores 0.0115, almost nine times lower: the "overly optimistic performance estimates" of the scikit-learn guide. Nothing a person does before signing up explains that. Two of the columns are filled in by the purchase: Plus-only events exist only while a subscription is active, and a subscription row is written when a person buys. The third, `n_events`, counts everything after signup, the Plus-only events and the purchase included. At the moment of signup the same model sees `n_events` = 1 and nothing else, gives every person a chance of at most 0.0002 and scores 0.1203, the share of buyers and worse than the baseline. A model that looks this much better than the baseline, on columns about a person's later life, earns suspicion before it earns a launch.
 
 ### 2. Ask when each value becomes known
 
@@ -311,6 +313,8 @@ print(round(float(sc_all.transform(late[num]).mean()), 2), round(float(sc_early.
 model_t = make_model().fit(early, early["bought14"])
 base_t = DummyClassifier(strategy="prior").fit(early, early["bought14"])
 print(round(score(model_t, late), 4), round(float(brier_score_loss(late["bought14"], base_t.predict_proba(late)[:, 1])), 4))
+share = lambda d: round(float((d["channel"] == "paid_social").mean()), 3)                      # the share of paid_social people
+print(share(early), share(late), round(float(people.loc[people["channel"] == "paid_social", "bought14"].mean()), 3))
 ```
 
 **Predict:** Train on the people who signed up before May 1 and test on those from May 1 to June 16. Is the share of buyers the same in both parts? Is the mean of the late people's scaled `signup_day` about the same through a scaler fitted on all people as through one fitted on the early people only? And does the model still beat the baseline?
@@ -322,11 +326,12 @@ print(round(score(model_t, late), 4), round(float(brier_score_loss(late["bought1
 12739 7434 0.1301 0.1036
 1.03 2.17
 0.0883 0.0936
+0.155 0.343 0.039
 ```
 
 </details>
 
-*Why:* 13.0 percent of the early people bought and 10.4 percent of the late ones, because the paid-social campaign that began on April 13 brought many people who buy less (*Diagnosing a movement*, C13). Through the scaler that learned from the early people only, the late people sit 2.17 standard deviations above its mean day; through the scaler that also saw them, 1.03. A scaler that has seen the test part makes the future look closer than it is. The model still beats the baseline, 0.0883 against 0.0936, which is 5.6 percent lower; on the random split of unit 1 the gain was 4.4 percent (0.1012 against 0.1059). In this data a random split did not flatter the model, because the channel rates barely move; that is something to check, not to assume, and the time split is the first thing to try when a score looks too good.
+*Why:* 13.0 percent of the early people bought and 10.4 percent of the late ones, mostly because of the mix: paid social is 15.5 percent of the early signups and 34.3 percent of the late ones, and it converts at 3.9 percent (the campaign of April 13 to June 7, as in [*Diagnosing a metric that moved*](/core/diagnosing-a-movement/), C13). The early part also holds the `paywall_v2` experiment, which lifted conversion for its variant from January 12 to March 8, so the early rate is not a clean baseline. Through the scaler that learned from the early people only, the late people sit 2.17 standard deviations above its mean day; through the scaler that also saw them, 1.03. A scaler that has seen the test part makes the future look closer than it is. The model still beats the baseline, 0.0883 against 0.0936, which is 5.6 percent lower; on the random split of unit 1 the gain was 4.4 percent (0.1012 against 0.1059). In this data a random split did not flatter the model; that is something to check, not to assume, and the time split is the first thing to try when a score looks too good.
 
 <Aside type="tip" title="Remember">
 
@@ -389,7 +394,7 @@ Seen through the scaler of the training part, the test people sit 5.168 standard
 
 <Exercise id="core-data-leakage-2">
 
-**Which counts leak, and which only look innocent?** Before you start, say in one sentence what the result looks like: four Brier scores, one close to 0.05, two between 0.07 and 0.10 and one close to the honest 0.1012. Four more columns count a person's events in the events table, as `n_events` did in unit 1: `n_checkouts` (`start_checkout`), `n_views` (`view_paywall` and `paywall_viewed`), `n_cancels` (`cancel_subscription`) and `n_sessions` (`session_start`). Build them, add each one alone to the honest recipe (fitted on the training part of the seed-20 split of unit 1, rebuilt with the new columns), and put a dictionary from each column name to its Brier score on the test part, rounded to 4 decimals, in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a dictionary with four columns as keys.
+**Which counts leak, and which only look innocent?** Before you start, say in one sentence what the result looks like: four Brier scores, one close to 0.05, one close to 0.08 and two close to the honest 0.10. Four more columns count a person's events in the events table, as `n_events` did in unit 1: `n_checkouts` (`start_checkout`), `n_views` (`view_paywall` and `paywall_viewed`), `n_cancels` (`cancel_subscription`) and `n_sessions` (`session_start`). Build them, add each one alone to the honest recipe (fitted on the training part of the seed-20 split of unit 1, rebuilt with the new columns), and put a dictionary from each column name to its Brier score on the test part, rounded to 4 decimals, in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a dictionary with four columns as keys.
 
 <details>
 <summary>Hint</summary>
@@ -401,7 +406,7 @@ Count with `events[events["event_name"] == "start_checkout"].groupby("user_id").
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"A dictionary of four scores: one far below the honest 0.1012, two in between, and one that has not moved."*
+Expected output in words: *"A dictionary of four scores: one far below the honest 0.1012, one in between, and two close to it."*
 
 ```python
 names = {"n_checkouts": ["start_checkout"], "n_views": ["view_paywall", "paywall_viewed"], "n_cancels": ["cancel_subscription"], "n_sessions": ["session_start"]}
