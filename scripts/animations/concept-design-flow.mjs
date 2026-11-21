@@ -39,12 +39,12 @@ export default function make({ id = 'df' } = {}) {
 	// 2: two boxes and the line between them, bar pair at A, circle and foot at B
 	a.box(30, 60, 120, 112, { role: 'mat', title: 'A', fx: { in: 2 } });
 	a.box(210, 60, 120, 112, { role: 'mat', title: 'B', fx: { in: 2 } });
-	a.link([[150, 85], [210, 85]], '1', '0..*', { verb: 'has' }, { in: 2, draw: true });
-	// 4: key columns, and the FK names the PK
-	a.chip(40, 96, 'PK a', { role: 'out', level: 3, w: 100, h: 22, fx: { in: 4 } });
+	a.link([[150, 85], [210, 85]], '1', '0..*', { verb: 'has' }, { in: 2, hide: 4, draw: true });
+	// 4: key columns; the line moves from the headers to the PK row of A and the FK row of B (same height)
+	a.chip(40, 126, 'PK a', { role: 'out', level: 3, w: 100, h: 22, fx: { in: 4 } });
 	a.chip(220, 96, 'PK b', { role: 'out', level: 3, w: 100, h: 22, fx: { in: 4 } });
 	a.chip(220, 126, 'FK a', { role: 'src', level: 3, w: 100, h: 22, fx: { in: 4 } });
-	a.arrow(218, 137, 142, 107, 's-mat dsh', { in: 4, draw: true });
+	a.link([[150, 137], [210, 137]], '1', '0..*', { verb: 'has' }, { in: 4, draw: true });
 	// 5 and 6: the rules, under the boxes
 	a.chip(30, 184, 'key: unique, not empty', { role: 'grp', level: 2, w: 120, h: 24, c: 'f10', fx: { in: 5 } });
 	a.chip(210, 184, 'FK: must exist in A', { role: 'grp', level: 2, w: 120, h: 24, c: 'f10', fx: { in: 5 } });
