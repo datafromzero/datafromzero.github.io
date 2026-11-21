@@ -1,0 +1,515 @@
+---
+id: core-framing-split-and-baseline
+title: Framing a prediction problem, splitting and a baseline
+short_title: Framing and baseline
+description: Frame a prediction problem, split the data before looking, fit on the training part only and beat a trivial baseline on held-out data.
+stage: core
+order: 190
+level: intermediate
+duration: 35
+objectives:
+  - Name the target, the unit and the decision a prediction will feed
+  - List the data available at prediction time
+  - Split data into training and test sets with a seed
+  - Fit a baseline and a first model on the training part only
+  - Compare both on the held-out part and write a plain-language verdict
+prerequisites:
+  - core-linear-regression-basics
+  - core-defining-metrics
+  - python-pandas-select-and-filter
+datasets:
+  - app-events
+notebook: notebooks/core/core-framing-split-and-baseline.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Common pitfalls and recommended practices, section on data leakage (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/common_pitfalls.html
+  - title: 'scikit-learn documentation: DummyClassifier (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.dummy.DummyClassifier.html
+  - title: 'scikit-learn documentation: train_test_split (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html
+  - title: 'scikit-learn documentation: brier_score_loss (accessed 2026-11-21)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html
+  - title: 'Google for Developers: Rules of Machine Learning, rule 4 (accessed 2026-11-21)'
+    url: https://developers.google.com/machine-learning/guides/rules-of-ml
+status: draft
+---
+
+TODO(owner): team draft (D24), for you to edit and approve. Open questions and changes to the stub. (1) Duration: the stub says 30 minutes; this draft has five concept units and about 3,700 body words with the figure text, so it says 35 (Part 2 lessons run 105 to 110 words a minute). (2) The target is "buys Plus within 14 days of signup", the 14-day conversion of C12 to C14 and of the dataset README (12.0 percent), not 30 days; say if you want 30. (3) The first model is judged by the Brier score (the mean squared miss of the chances) and not by accuracy: with chances this low it never calls anyone a buyer at the 0.5 cut, so its accuracy equals the baseline's; *Choosing a metric: accuracy, precision, recall and error costs* takes that up. (4) Logistic regression is used as a fitted recipe and named only; the Data Scientist track teaches it. (5) The stub's source "Machine Learning Crash Course" is dropped: no claim of this lesson sits on a page I opened; the Rules of Machine Learning (rule 4) and three scikit-learn pages are cited. (6) `plan_at_signup` is left out of the features with one sentence; *Data leakage* audits it. (7) The table has 20,173 of the 20,177 people who signed up by June 16: 4 have no event at all (README quirk 7) so have no signup time; the 40 deleted accounts (quirk 6) are not in `users`. (8) Every number was run on scikit-learn 1.9.1 with pandas 3.0.5 and on scikit-learn 1.6.1 with pandas 2.2.3: identical. (9) `reviewed` is the stub's date; you set it when you publish. (10) The prerequisites are the stub's; the lesson uses one row per person but not the grain lesson of Part 3, which is still a draft (*Grain, facts and dimensions*).
+
+## The question
+
+The success team of a budgeting app writes:
+
+> We can send a personal welcome message to a few new people each day. Can you tell us, the moment someone signs up, who is most likely to buy Plus?
+
+The data are the people of `app-events`, a fictional app. "Buy" means a purchase of Plus within 14 days of signing up. Four of the first people, and the first two who bought:
+
+| user_id | signup_date | channel | platform | region | bought within 14 days |
+|---:|---|---|---|---|---:|
+| 10001 | 2026-01-01 | organic_search | web | asia_pacific | 0 |
+| 10002 | 2026-01-01 | app_store | android | north_america | 0 |
+| 10007 | 2026-01-01 | referral | ios | north_america | 1 |
+| 10011 | 2026-01-01 | organic_search | web | europe | 1 |
+
+By the end you can write a prediction problem as four lines, say what is known at the moment, split with a seed, fit a baseline and a first model on the training part only, and write the verdict on the held-out part.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Regression as a thinking tool*](/core/linear-regression-basics/) (C11) a line predicted an order's total from its units, and a residual was the miss. A model here does the same for a yes or no: it predicts a chance from columns, and its misses are scored. In [*Defining a metric before you compute it*](/core/defining-metrics/) (C12) a metric had a numerator, a denominator, a unit and a window: the target below is one.
+
+**Diverge.** In C11 the line was judged on the rows it was fitted to. Unit 3 shows how a model is judged on rows it has not seen.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C12, write the 14-day conversion of the app as a numerator, a denominator, a unit and a window.
+
+   <details>
+   <summary>answer</summary>
+
+   The numerator is the people with a purchase within 14 days of signing up, the denominator is the people who signed up and had a full 14 days to buy, the unit is the person, and the window is 14 days from that person's signup.
+
+   </details>
+
+2. In C11, what is a residual, and why were the misses squared before they were added?
+
+   <details>
+   <summary>answer</summary>
+
+   A residual is the actual value minus the prediction. Squaring stops misses above and below from canceling and makes a big miss count more.
+
+   </details>
+
+## The big idea
+
+Hold some rows out, learn from the rest, and score on the held-out rows.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="spb-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="spb" id="spb-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="spb" id="spb-r1" aria-label="Step 1 of 4: All rows, one per person" />
+<input class="sa-r r2 o4" type="radio" name="spb" id="spb-r2" aria-label="Step 2 of 4: A seeded split holds some out" />
+<input class="sa-r r3 o6" type="radio" name="spb" id="spb-r3" aria-label="Step 3 of 4: Fit on the train rows only" />
+<input class="sa-r r4 o8" type="radio" name="spb" id="spb-r4" aria-label="Step 4 of 4: Score on the held-out rows" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>rows</small><span><i class="w2 tmp hl">8</i><i class="w6 d3">8</i></span></span><span class="sa-n c-grp"><small>train</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">6</i><i class="w4 d5">6</i></span></span><span class="sa-n c-mat"><small>test</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">2</i><i class="w4 d5">2</i></span></span><span class="sa-n c-grp"><small>fit on</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">6</i><i class="w2 d7">6</i></span></span><span class="sa-n c-out"><small>scored</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">2</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 290" width="360" role="img" aria-labelledby="spb-t spb-d">
+<title id="spb-t">Hold some rows out, learn from the rest, score on the held-out rows</title>
+<desc id="spb-d">A strip of eight rows, r1 to r8. A seed picks two of them, r3 and r7, which slide down and are labeled held out; the other six are labeled train. Arrows from the train rows lead into two boxes, baseline and model, labeled fit. Arrows from the held-out rows lead into the same two boxes, labeled score. A score chip sits under each box and the word compare sits between them.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · All rows, one per person</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · A seeded split holds some out</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · Fit on the train rows only</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Score on the held-out rows</text>
+<text class="f11 b" x="10" y="14">Hold some rows out</text>
+<text class="f10 b e w2 tmp" x="350" y="50">all rows</text>
+<text class="f10 b e w6 d3" x="350" y="50">train rows stay</text>
+<rect class="bx dsh" x="90" y="58" width="32" height="24" />
+<rect class="bx dsh" x="250" y="58" width="32" height="24" />
+<g><rect class="f-ord k2" x="10" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="10" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="26" y="74">r1</text></g>
+<g><rect class="f-ord k2" x="50" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="50" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="66" y="74">r2</text></g>
+<g class="w8"><g class="mv m3 x0 y7"><g><rect class="f-ord k2" x="90" y="58" width="32" height="24" rx="6" /><rect class="f-mat k3 w6 d3" x="90" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="106" y="74">r3</text></g></g></g>
+<g><rect class="f-ord k2" x="130" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="130" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="146" y="74">r4</text></g>
+<g><rect class="f-ord k2" x="170" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="170" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="186" y="74">r5</text></g>
+<g><rect class="f-ord k2" x="210" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="210" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="226" y="74">r6</text></g>
+<g class="w8"><g class="mv m3 x0 y7"><g><rect class="f-ord k2" x="250" y="58" width="32" height="24" rx="6" /><rect class="f-mat k3 w6 d3" x="250" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="266" y="74">r7</text></g></g></g>
+<g><rect class="f-ord k2" x="290" y="58" width="32" height="24" rx="6" /><rect class="f-grp k3 w6 d3" x="290" y="58" width="32" height="24" rx="6" /><text class="f10 m" x="306" y="74">r8</text></g>
+<text class="f10 b m w5 d4" x="186" y="144">held out</text>
+<g class="w4 d5"><rect class="s-ord" x="20" y="200" width="110" height="34" rx="6" /><text class="f11 b" x="30" y="217">baseline</text></g>
+<g class="w4 d5"><rect class="s-src" x="190" y="200" width="110" height="34" rx="6" /><text class="f11 b" x="200" y="217">model</text></g>
+<path class="s-grp dr p4 d5" pathLength="1" d="M26 86L26 198M29.04 191.7L26 198L22.96 191.7" />
+<path class="s-grp dr p4 d5" pathLength="1" d="M226 86L226 198M229.04 191.7L226 198L222.96 191.7" />
+<text class="f10 b w3 d6" x="34" y="172">fit</text>
+<text class="f10 b w3 d6" x="234" y="172">fit</text>
+<path class="s-mat dr p2 d7" pathLength="1" d="M106 156L106 198M109.04 191.7L106 198L102.96 191.7" />
+<path class="s-mat dr p2 d7" pathLength="1" d="M266 156L266 198M269.04 191.7L266 198L262.96 191.7" />
+<text class="f10 b w1 d8" x="114" y="182">score</text>
+<text class="f10 b w1 d8" x="274" y="182">score</text>
+<path class="s-out dr p1 d8" pathLength="1" d="M75 236L75 250M78.04 243.7L75 250L71.96 243.7" />
+<path class="s-out dr p1 d8" pathLength="1" d="M245 236L245 250M248.04 243.7L245 250L241.96 243.7" />
+<g class="w1 d8"><rect class="f-out k3" x="40" y="252" width="70" height="24" rx="6" /><text class="f11 m" x="75" y="268">score</text></g>
+<g class="w1 d8"><rect class="f-out k3" x="210" y="252" width="70" height="24" rx="6" /><text class="f11 m" x="245" y="268">score</text></g>
+<text class="f10 b m w1 d8" x="160" y="268">compare</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="spb-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="spb-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="spb-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="spb-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="spb-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="spb-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="spb-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="spb-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="spb-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="spb-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="spb-r1">1</label><label class="sa-sb sb2" for="spb-r2">2</label><label class="sa-sb sb3" for="spb-r3">3</label><label class="sa-sb sb4" for="spb-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">Every row is one person with a known outcome; at the start they are all together.<span class="sa-chs"><span class="sa-ch pl">8 rows</span></span></div>
+<div class="c-mat w2 d3 tmp">A seeded shuffle picks which rows are held out.<span class="sa-chs"><span class="sa-ch ch">2 rows held out</span><span class="sa-ch pl">6 train rows</span></span></div>
+<div class="c-grp w2 d5 tmp">The baseline and the model both learn from the train rows and from nothing else.<span class="sa-chs"><span class="sa-ch pl">a baseline</span><span class="sa-ch pl">a model</span></span></div>
+<div class="c-out w2 d7">Both are scored on rows neither has seen, and then the scores are compared.<span class="sa-chs"><span class="sa-ch pl">2 scores</span></span></div>
+</div>
+<p class="ca-cap">Split first with a seed, fit the baseline and the model on the train rows only, then score both on the rows that were held out.</p>
+<ol class="sa-steps">
+<li>All rows, one per person</li>
+<li>A seeded split holds some out</li>
+<li>Fit on the train rows only</li>
+<li>Score on the held-out rows</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 5 new ideas: the four lines of a problem, what is known at the moment, the split, the baseline and the first model, and the verdict. The setup cell loaded `users` and `events` and gave each person a `platform` and a `signup_ts`.
+
+<OpenInColab />
+
+### 1. Name the target, the unit and the decision
+
+**Idea.** A prediction problem has four lines. The *target* is the one thing you predict, written as a column. The *unit* is what one row stands for. The *prediction moment* is the instant when the prediction is made. The *decision* is what someone will do with it. Writing them first fixes which rows and which columns the problem may use.
+
+| line | this lesson |
+|---|---|
+| target | `bought14`: 1 if the person buys Plus within 14 days of signing up, else 0 |
+| unit | one new person, one row |
+| prediction moment | the instant the account is created |
+| decision | who gets a personal welcome message, from a team with time for a few |
+
+People who signed up after June 16 have fewer than 14 days before the export of July 1, so a missing purchase would not mean "did not buy". They are left out.
+
+**Try it:** build the table, one row per person.
+
+```python
+last_day = pd.Timestamp("2026-06-16")                 # signed up by June 16: a full 14 days before the export of July 1
+first_buy = events[events["event_name"] == "purchase"].groupby("user_id")["event_ts"].min()
+people = users[(users["signup_date"] <= last_day) & users["signup_ts"].notna()].copy()
+people["days_to_buy"] = (people["user_id"].map(first_buy) - people["signup_ts"]).dt.total_seconds() / 86400    # NaN: never bought
+people["bought14"] = (people["days_to_buy"] <= 14).astype(int)                                                    # NaN compares False: 0
+print((users["signup_date"] <= last_day).sum(), len(people), bool(people["user_id"].is_unique))
+print(int(people["bought14"].sum()), round(float(people["bought14"].mean()), 4))
+```
+
+**Predict:** The table has one row for each person who signed up from January 1 to June 16 and has a signup event. How many people does the table keep, and what share of them have a 1?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+20177 20173 True
+2427 0.1203
+```
+
+</details>
+
+*Why:* 20,177 people signed up by June 16 and the table keeps 20,173: 4 have no event at all, so no signup time. Each person is one row. 2,427 of them bought within 14 days, 12.03 percent: the 12.0 percent of the dataset README for people with a full follow-up. A person who never bought has no purchase time (`NaN`), and `NaN <= 14` is false, so they get a 0.
+
+### 2. What is known at the moment
+
+**Idea.** A column is a *feature* only if its value is final at the prediction moment. For each column ask when its value stops changing. A value that settles later belongs to the future: the model cannot have it when the message has to be chosen.
+
+| column | final when | a feature here? |
+|---|---|---|
+| `channel`, `region` | at signup | yes |
+| `platform` | at signup, from the signup event | yes |
+| `signup_date` and its hour | at signup | yes |
+| `plan_at_signup` | on the signup screen, at the instant of a purchase made there | no, left out for now |
+
+**Try it:** check the table against the events: does the app hold anything about a new person before the signup?
+
+```python
+moment = events.merge(people[["user_id", "signup_ts"]], on="user_id", validate="many_to_one")
+before = moment[(moment["event_ts"] <= moment["signup_ts"]) & (moment["event_name"] != "signup_complete")]
+print(len(before), len(moment), int((moment["event_name"] == "signup_complete").sum()) == len(people))
+print(people[["channel", "platform", "region"]].isna().sum().to_dict())
+print(round(float(moment.groupby("user_id").size().mean()), 2))
+```
+
+**Predict:** The prediction moment is the instant the account exists. Apart from the signup itself, how many events does the app hold about a new person at that instant?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0 168179 True
+{'channel': 0, 'platform': 0, 'region': 0}
+8.34
+```
+
+</details>
+
+*Why:* none of the 168,179 events of these people is earlier than their signup, and each person has exactly one `signup_complete`. The other 7.34 events a person has on average (8.34 with the signup) all come later, so every count of visits, expenses or paywall views is a value from the future. The three columns have no gaps, so the first model has three features: `channel`, `platform` and `region`.
+
+### 3. Split before you look
+
+**Idea.** Keep part of the rows aside to see how a model does on people it has not seen. The *training part* is what the model may learn from; the *test part* is touched once, at the end. scikit-learn's guidance is to split first, before any preprocessing. `train_test_split` shuffles the rows, `test_size` is the share held out, `stratify` keeps the share of 1s equal in both parts, and `random_state` is the *seed* of that shuffle.
+
+**Try it:** split the people 75 to 25.
+
+```python
+X = people[["channel", "platform", "region"]]          # columns known at the moment
+y = people["bought14"]                                 # the target
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=19, stratify=y)
+print(len(X_train), len(X_test))
+print(round(float(y_train.mean()), 4), round(float(y_test.mean()), 4))
+again = train_test_split(X, y, test_size=0.25, random_state=19, stratify=y)[0]
+other = train_test_split(X, y, test_size=0.25, random_state=20, stratify=y)[0]
+print(bool(again.index.equals(X_train.index)), len(X_train.index.intersection(other.index)))
+```
+
+**Predict:** Split the people 75 to 25 with `random_state=19`, keeping the share of buyers equal in both parts. How many people go to each part, and what share of each part are buyers? Then split again with the same seed: do you get the same people? And with seed 20: how many of the first training people are in the new training part?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+15129 5044
+0.1203 0.1203
+True 11404
+```
+
+</details>
+
+*Why:* 15,129 people train the model and 5,044 are held out, and both parts have 12.03 percent buyers. The same seed gives the same people, so anyone can repeat the split, and that is what a seed is for; seed 20 gives a different split, and 11,404 of the first 15,129 training people are in its training part. No seed is special: pick one, write it down and keep it. A different split is a different sample, and unit 5 shows how much the score moves.
+
+### 4. A baseline and a first model, fitted on the training part only
+
+**Idea.** A *baseline* is the simplest honest prediction, the score any model has to beat. For a yes or no it gives every person the share of 1s in the training part as a chance (`DummyClassifier`, strategy `"prior"`). A *model* learns from the columns: here a logistic regression, which turns columns into a chance between 0 and 1 (the Data Scientist track teaches it), after a step that makes one 0/1 column for each value of a text column. `fit` is called on the training part only; `predict_proba` gives the chances. Rule 4 of Google's Rules of Machine Learning asks for a simple first model, which also gives you baseline metrics.
+
+**Try it:** fit both on the training part and look at the chances they give the test part.
+
+```python
+baseline = DummyClassifier(strategy="prior").fit(X_train, y_train)      # ignores the columns: the training share of buyers for everyone
+print(np.round(baseline.predict_proba(X_test.head(3))[:, 1], 4))
+model = make_pipeline(
+    ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel", "platform", "region"])]),   # one 0/1 column per value
+    LogisticRegression(max_iter=1000),
+)
+model.fit(X_train, y_train)                                             # only the training part
+chance = model.predict_proba(X_test)[:, 1]                              # the model's chance of a 1, for each test person
+print(round(float(chance.min()), 3), round(float(chance.max()), 3))
+probe = pd.DataFrame({"channel": ["referral", "paid_social"], "platform": ["web", "android"], "region": ["north_america", "north_america"]})
+print(np.round(model.predict_proba(probe)[:, 1], 3))
+rate = (X_train.assign(y=y_train).groupby(["channel", "platform"])["y"].mean() * 100).round(1)
+print(rate.loc[[("referral", "web"), ("paid_social", "android")]].to_dict())
+```
+
+**Predict:** The baseline gives every person the share of buyers in the training part. What chance does it give a test person? And the first model, which learns from channel, platform and region: what are the lowest and the highest chance it gives anyone in the test part: both near the baseline, or one far above it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[0.1203 0.1203 0.1203]
+0.026 0.292
+[0.229 0.027]
+{('referral', 'web'): 22.9, ('paid_social', 'android'): 2.9}
+```
+
+</details>
+
+*Why:* the baseline gives 0.1203 to everyone. The model's chances run from 0.026 to 0.292. For referral people on the web it says 0.229, and the training share of that group is 22.9 percent; for paid social on Android it says 0.027, against 2.9 percent. So this model has mostly learned a table of group shares from the training part. No one gets a chance above 0.5: what to do with chances like these is the question of *Choosing a metric: accuracy, precision, recall and error costs*.
+
+### 5. Compare on the held-out part and write the verdict
+
+**Idea.** Score on the test part, once, and always beside the baseline. The *Brier score* is the mean squared difference between the predicted chance and the actual outcome, 0 or 1 (scikit-learn's `brier_score_loss`); smaller is better. It is the squared miss of C11 with chances in place of dollars. A model is judged by how far it gets below the baseline's score on the same test part.
+
+**Try it:** score both on the test part and on the training part, then repeat the split with twenty other seeds.
+
+```python
+brier_base = brier_score_loss(y_test, baseline.predict_proba(X_test)[:, 1])
+brier_model = brier_score_loss(y_test, chance)
+print(round(brier_base, 4), round(brier_model, 4), round(1 - brier_model / brier_base, 3))
+print(round(brier_score_loss(y_train, model.predict_proba(X_train)[:, 1]), 4))          # the same score on the rows the model learned from
+gaps = []
+for seed in range(100, 120):                                            # twenty other splits of the same people
+    a, b, c, d = train_test_split(X, y, test_size=0.25, random_state=seed, stratify=y)
+    base_s = DummyClassifier(strategy="prior").fit(a, c)
+    model_s = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel", "platform", "region"])]), LogisticRegression(max_iter=1000)).fit(a, c)
+    gaps.append(brier_score_loss(d, base_s.predict_proba(b)[:, 1]) - brier_score_loss(d, model_s.predict_proba(b)[:, 1]))
+print(round(min(gaps), 4), round(max(gaps), 4), sum(g > 0 for g in gaps))
+```
+
+**Predict:** The Brier score is the average of (chance minus outcome) squared over the test people, where the outcome is 0 or 1: smaller is better. Will the first model beat the baseline on the test part by a lot, a little or not at all? And on the training part, will its score be much better than on the test part?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.1059 0.1008 0.048
+0.1014
+0.0031 0.0057 20
+```
+
+</details>
+
+*Why:* on 5,044 held-out people the baseline scores 0.1059 and the model 0.1008, 4.8 percent lower. On the training part the model scores 0.1014, no better than on the test part: a recipe this simple has not memorized its rows. In the twenty other splits (seeds 100 to 119, so these numbers depend on the seeds) the model beat the baseline every time, by 0.0031 to 0.0057.
+
+In symbols, with $$n$$ people, $$\hat{p}_i$$ the chance given to person $$i$$ and $$y_i$$ the outcome, 0 or 1:
+
+$$
+\text{Brier} = \frac{1}{n}\sum_{i=1}^{n}(\hat{p}_i - y_i)^2
+$$
+
+The verdict, in plain words: *on 5,044 people held out from the fitting, the first model, which knows only channel, platform and region, scores 0.1008 against 0.1059 for giving everyone 12 percent. That is a small gain that held in twenty other splits. It is better than a flat guess and not yet an answer to the decision.*
+
+<Aside type="tip" title="Remember">
+
+- A prediction problem is four lines: the target, the unit, the prediction moment and the decision.
+- A feature is final at the moment of prediction; ask when each column stops changing.
+- Split first, with a seed; fit anything only on the training part.
+- Print the baseline's score next to the model's, on the same test part.
+- The Brier score is the mean squared miss of the chances; smaller is better.
+
+**Common trap:** reading a score alone. A 0.1008 says nothing until the baseline's score on the same test part stands beside it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-framing-split-and-baseline-1">
+
+**How good is the first model on another split?** Split the people 80 to 20 with the seed 5 (given), fit the recipe on the training part only, and score the chances it gives the test part with the Brier score. Put the score, rounded to 4 decimals, in `answer_1`. Expected: `answer_1` is a number between 0 and 1.
+
+```python
+X5_train, X5_test, y5_train, y5_test = train_test_split(X, y, test_size=0.2, random_state=5, stratify=y)    # given: an 80 to 20 split with seed 5
+recipe = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel", "platform", "region"])]), LogisticRegression(max_iter=1000))    # given: the recipe of unit 4
+# fit the recipe on the training part only, then score the chances it gives the test part
+answer_1 = None  # replace None with the score, rounded to 4 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+Fit with `recipe.fit(X5_train, y5_train)`. Then `recipe.predict_proba(X5_test)[:, 1]` gives the chance of a 1 for each test person: the same two calls as in unit 4.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+recipe.fit(..., ...)
+answer_1 = round(float(brier_score_loss(..., recipe.predict_proba(...)[:, 1])), 4)
+```
+
+</details>
+
+<Solution>
+
+```python
+recipe.fit(X5_train, y5_train)
+answer_1 = round(float(brier_score_loss(y5_test, recipe.predict_proba(X5_test)[:, 1])), 4)
+```
+
+On this split the first model scores 0.1013 on 4,035 test people. The baseline of this split scores 0.1058, so the gap is about the size of the gaps of unit 5. The check cell reports the score on the training part (0.1012) or the baseline's, if you give one of those.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-framing-split-and-baseline-2">
+
+**How much of the gain comes from the channel alone?** Before you start, say in one sentence what the result looks like: two numbers, both between 0.09 and 0.12, the second one larger than the first. Use the split of Exercise 1. Fit the recipe of unit 4 on the `channel` column alone, on the training part, and put the list [its Brier score on the test part, the Brier score of the baseline on the test part] in `answer_2`, each rounded to 4 decimals. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+Copy the recipe of unit 4, with `["channel"]` in place of the three column names, and fit it on `X5_train[["channel"]]`. The baseline is the `DummyClassifier` of unit 4.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two numbers a little apart: the model's score about 0.101, the baseline's about 0.106."*
+
+```python
+chan_model = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel"])]), LogisticRegression(max_iter=1000))
+chan_model.fit(..., y5_train)
+base2 = DummyClassifier(strategy="prior").fit(..., y5_train)
+```
+
+</details>
+
+<Solution>
+
+```python
+chan_model = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel"])]), LogisticRegression(max_iter=1000))
+chan_model.fit(X5_train[["channel"]], y5_train)
+base2 = DummyClassifier(strategy="prior").fit(X5_train[["channel"]], y5_train)
+score_chan = brier_score_loss(y5_test, chan_model.predict_proba(X5_test[["channel"]])[:, 1])
+score_base = brier_score_loss(y5_test, base2.predict_proba(X5_test[["channel"]])[:, 1])
+answer_2 = [round(float(score_chan), 4), round(float(score_base), 4)]
+```
+
+The channel alone scores 0.1014 against 0.1058 for the baseline. The model with all three columns (Exercise 1) scores 0.1013, so platform and region add 0.0001 on this split: nearly all of the gain is the channel. Fewer columns would do the same job, and every column is also one more thing that must be known at the moment of prediction.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: write the four lines of a prediction problem, and say what a column must satisfy to be a feature.
+
+   <details>
+   <summary>answer</summary>
+
+   The target, the unit, the prediction moment and the decision. A feature is a column whose value is final at the prediction moment, so the model could have it when it has to predict.
+
+   </details>
+
+<Exercise id="core-framing-split-and-baseline-3">
+
+**Spot the flaw.** A colleague compares the first model with a baseline on the split of Exercise 1 and reports that the model is 60 percent better. The baseline is not fair. Fix the baseline so that the comparison is fair, and set `answer_3` to the gain `1 - model score / baseline score`, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 1.
+
+```python
+model3 = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel", "platform", "region"])]), LogisticRegression(max_iter=1000)).fit(X5_train, y5_train)     # given: the first model, fitted on the training part
+b_base = brier_score_loss(y5_test, np.full(len(y5_test), 0.5))       # colleague: "the baseline knows nothing, so it says 0.5 for everyone"
+b_model = brier_score_loss(y5_test, model3.predict_proba(X5_test)[:, 1])
+answer_3 = round(float(1 - b_model / b_base), 3)
+```
+
+<details>
+<summary>Hint</summary>
+
+Which share of the people in the training part are buyers: `y5_train.mean()`? Compare it with the chance the colleague's baseline gives.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+chance_base = ...
+b_base = brier_score_loss(y5_test, np.full(len(y5_test), chance_base))
+```
+
+</details>
+
+<Solution>
+
+```python
+chance_base = float(y5_train.mean())
+b_base = brier_score_loss(y5_test, np.full(len(y5_test), chance_base))
+b_model = brier_score_loss(y5_test, model3.predict_proba(X5_test)[:, 1])
+answer_3 = round(float(1 - b_model / b_base), 3)
+```
+
+The gain is 0.042, not 0.595. A chance of 0.5 for everyone pays a squared miss of 0.25 on every person, so the colleague's baseline scores 0.25 and any model looks 60 percent better. The honest baseline gives everyone the share of buyers in the training part (0.1203) and scores 0.1058. A baseline weaker than the simplest honest answer makes any model look good.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a prediction problem as target, unit, prediction moment and decision, say which columns are known at that moment, split with a seed, fit a baseline and a first model on the training part only, and write the verdict from their scores on the held-out part.*
+Test: Exercise core-framing-split-and-baseline-2, done from the notebook without opening the hints.
+
+The pattern to remember: **fix the problem in four lines, split first, learn from the training part only, and read every score beside the baseline.** The next lesson, *Data leakage*, asks what happens when a column knows the answer before the moment.
