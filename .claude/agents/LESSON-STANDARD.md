@@ -231,7 +231,7 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   `{ in: k, hide: m }` (appears at phase k, gone from phase m; default: stays to the end), an arrow or line `{ in: k, draw: true }`.
   Parts that are always there have no effect. Draw with `chip`, `move`, `tags`, `row`/`grid`, `box`, `badge`, `arrow`, `venn`, `ghost`. Ready animations (paste with the command
   after the name): `concept-group-by` (S8), `concept-aggregate-window` (S14), `concept-cte-kinds`, `concept-join:inner|left|right|full|cross`,
-  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`. Also ready (one per key, marker `{/* CONCEPT: <key> */}`): `concept-query`, `-select-order-limit`, `-where`, `-null`, `-expression`, `-case`, `-aggregate`, `-conditional-agg`, `-text-clean`, `-date-trunc`, `-rank-ties`, `-sliding-window`, `-dedup`, `-keys`, `-fanout`, `-self-join`, `-subquery`, `-set-ops`, `-funnel`, `-cohort`, `-recursive`, `-view`, `-star`, `-ai-check`, `-constraints`, `-transaction`, `-normalize`, `-index`, `-shard` (each with `concept-` in front). The facts each one shows are in its spec's header comment with the DuckDB run that checked them.
+  `concept-join:all` (LEFT, RIGHT, INNER, FULL in turn, for the lesson that compares them) and `concept-logical-order`. Also ready (one per key, marker `{/* CONCEPT: <key> */}`): `concept-query`, `-select-order-limit`, `-where`, `-null`, `-expression`, `-case`, `-aggregate`, `-conditional-agg`, `-text-clean`, `-date-trunc`, `-rank-ties`, `-sliding-window`, `-dedup`, `-keys`, `-fanout`, `-self-join`, `-subquery`, `-set-ops`, `-funnel`, `-cohort`, `-recursive`, `-view`, `-star`, `-link-table`, `-grain-rollup`, `-question-star`, `-ai-check`, `-constraints`, `-transaction`, `-normalize`, `-index`, `-shard` (each with `concept-` in front). The facts each one shows are in its spec's header comment with the DuckDB run that checked them.
   `node scripts/make-animation.mjs concept-join:left --stats` prints the markup for the lesson (variants after a colon).
   About 3 to 5 KB of animation markup (two are about 7 KB) plus about 3 KB of step controls per animation; the CSS is shared.
 - **Pause and steps:** autoplay is the default. Under the figure the learner has Pause / Play (a native checkbox, 44 px, WCAG 2.2.2),
@@ -253,6 +253,49 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   the middle of a phase too, not only its start (a part is still invisible at the instant its phase begins). Then click every step button and
   check that its frame equals the running loop paused at the end of the last phase of that step.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
+
+## Entity-relationship diagrams (crow's foot)
+
+Owner decision, 2026-11-21 (choice: crow's foot symbols plus a small text label). Every figure that draws tables as boxes and joins them by
+lines (an ER diagram, a star schema, a link table, a normalization split, in a hand-drawn SVG or a concept animation) follows the convention
+of dbdiagram, DBeaver, Lucidchart and MySQL Workbench (Information Engineering notation). Figures that show row matches (join steppers,
+shaded-column data grids) or a pipeline of query steps are not ER diagrams and do not use it.
+
+1. **Row to row.** A link line starts at the parent's primary-key (PK) row and ends at the child's foreign-key (FK) row, at the vertical
+   center of each row, on the box edge. It is orthogonal (horizontal and vertical segments only) and never crosses a box. A self-reference
+   (`customers.referred_by`) loops out of one side of the box from the FK row back to the PK row of the same box.
+2. **Ends use crow's foot symbols**, drawn at the box edge where the line meets it, 10 px wide:
+
+   | Label | Meaning | Symbol (from the box edge) |
+   | --- | --- | --- |
+   | `1` | exactly one | two bars |
+   | `0..1` | zero or one | bar, then a circle |
+   | `1..*` | one or many | crow's foot, then a bar |
+   | `0..*` | zero or many | crow's foot, then a circle |
+
+   The symbol beside a table says how many rows of that table go with one row of the table at the other end: `1` beside `stores` and
+   `1..*` beside `orders` read "an order has exactly one store; a store has one or many orders".
+3. **A label beside each end**: a small mono label (`1`, `0..1`, `1..*`, `0..*`) in the muted token, on the side of the line away from the
+   neighbouring symbols; the `cl` class in `src/styles/step-animation.css` styles it and the `cf` class draws lines and symbols in the text color.
+4. **Cardinalities come from the data and the constraints**, checked with queries on `datasets/…/v1/` (DuckDB) and reported by count: a
+   nullable FK gives `0..1` at the parent end (count the NULLs); every parent with at least one child in the data gives `1..*` at the child end,
+   a parent with none gives `0..*` (count the parents with no child). Cafe-sales, verified: `orders.store_id` and `order_items.order_id` and
+   `order_items.product_id` never NULL and never orphan; `orders.customer_id` NULL on 1 of 1,800 orders, 5 of 150 customers with no order;
+   every order has 1 to 3 lines; 1 of 16 products (16, Pumpkin Spice Latte) has no line; `customers.referred_by` NULL on 120 of 150, no orphan,
+   121 customers referred nobody (a referrer has 1 or 2). In a star schema every dimension to fact link is `1` to `0..*` when the fact has an
+   unknown member for a missing key (the core star lesson); where the fact key can be NULL (the SQL star: 1 line with no customer) the
+   dimension end is `0..1`.
+5. **Drawing.** PK and FK markers on the rows as before; lines and symbols are `currentColor` (a refused or highlighted link may use a clause
+   color in an animation); legible in light and dark at 360 px drawn width (the page scales a drawing up to 520 px): text at least 10 px, boxes
+   at most two columns, the end stub of a link at least 30 px so symbol and label fit, FK rows 28 px apart where several links reach one box so
+   labels never touch the next symbol. Route links through the gap between the columns and the side margins (about 32 px); order the
+   channels so two links never cross. `<svg>` keeps `role="img"`, `<title>` and `<desc>`; the `<desc>` spells every cardinality in words
+   ("exactly one store (1) for each order, one or many orders (1..&#42;) for each store") and, like any figure `<desc>`, never states the
+   answer to a Predict or exercise that comes later. Write `*` as `&#42;` in SVG text.
+6. **Tooling.** `scripts/lib/erd.mjs` holds the geometry: `link(points, a, b, opts)` returns the line, the symbols and the labels, and
+   `svg(link)` renders them for a hand-drawn figure. In a concept animation call `a.link(points, a, b, opts, fx)` (an `fx` with `draw: true`
+   draws the line and fades the symbols in). Change the generator, then run `node scripts/refresh-concept-figures.mjs` and revert unrelated
+   rewrites. Look at every changed figure in light and dark at 390 px, and at every step of an animation, before it ships.
 
 ## Python stage (D45, D46): teaching rules
 
