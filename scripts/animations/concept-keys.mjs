@@ -1,6 +1,6 @@
 // Concept animation (SPEC D41, no real data) for primary and foreign keys. Metaphor: one parent row, many child rows pointing at it.
-// 8 s loop of 8 phases: 1 table P, one unique key per row (PK); 2 table C, each row stores a P key (FK); 3 the crow's foot link draws from
-// the PK row of P to the FK row of C (exactly one P at its end, zero or many C at the other; LESSON-STANDARD "Entity-relationship
+// 8 s loop of 8 phases: 1 table P, one unique key per row (PK); 2 table C, each row stores a P key (FK); 3 the crow's foot link, named "has",
+// draws from the PK row of P to the FK row of C (exactly one P at its end, zero or many C at the other; LESSON-STANDARD "Entity-relationship
 // diagrams"), and C1 takes the shade of its P1 row; 4 and 5 C2 (to P1) and C3 (to P2) take the shade of their P row; 6 the "one to many"
 // label; 7 a row C4 whose FK names a P row that does not exist is marked red and refused; 8 hold.
 // Facts (DuckDB 2.0.0, concept2/facts.out): a PRIMARY KEY rejects a repeated or NULL value; inserting a child whose key has no parent
@@ -23,7 +23,7 @@ export default function make({ id = 'ky' } = {}) {
 		loop: { cycle: 8 },
 		title: 'Keys link tables: one parent row, many child rows',
 		desc:
-			'Table P has rows P1 and P2, each with a unique primary key (PK). Table C has rows C1, C2, C3 and C4, each storing a P key as a foreign key (FK). One line joins the PK row of P to the FK row of C: exactly one P row at the P end, zero or many C rows at the C end. Matching shades show which C rows name which P row: C1 and C2 name P1, C3 names P2, so one P row has many C rows. C4 stores P9, a key that no P row has; its row is marked refused, and a dashed empty seat shows where P9 would be.',
+			'Table P has rows P1 and P2, each with a unique primary key (PK). Table C has rows C1, C2, C3 and C4, each storing a P key as a foreign key (FK). One line, labeled has, joins the PK row of P to the FK row of C: each P row has zero or many C rows, and each C row belongs to exactly one P row (two bars at the P end, a circle and a crow\'s foot at the C end). Matching shades show which C rows name which P row: C1 and C2 name P1, C3 names P2, so one P row has many C rows. C4 stores P9, a key that no P row has; its row is marked refused, and a dashed empty seat shows where P9 would be.',
 		caption: 'A primary key identifies one row of its table. A foreign key stores that value in another table, so one parent row can have many children. A foreign key must name a parent that exists.',
 		phases: [
 			[1, 'Table P: a unique key per row (PK)', { role: 'mat', key: 'A primary key (PK) gives every row of a table its own value, so each row can be told apart.', changes: [['+', 'P1 and P2: unique keys']] }],
@@ -67,7 +67,7 @@ export default function make({ id = 'ky' } = {}) {
 		});
 	});
 	// the link: from the PK row of P to the FK row of C
-	a.link([[120, 73], [190, 73]], '1', '0..*', {}, { in: 3, draw: true });
+	a.link([[120, 73], [190, 73]], '1', '0..*', { verb: 'has' }, { in: 3, draw: true });
 	a.rect(8, 84, 114, 54, 's-mat', { in: 6, hide: 7, pulse: true }, 6);
 	a.text(190, 214, 'refused', 'f10 b f-flt', { in: 7 });
 	a.text(10, 214, 'one → many', 'f10 b', { in: 6 });
