@@ -112,9 +112,14 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		const card = cards[wrapIndex(Math.round(playhead.offset / SPACING))];
 		if (say && card) say.textContent = `${card.querySelector('.yr')?.textContent ?? ''}: ${card.querySelector('h3')?.textContent ?? ''}`;
 	};
+	// The pill's counter ("05 / 14") follows the card nearest the center while the slider moves.
+	const count = controls?.querySelector<HTMLElement>('.hist-count b');
+	let shown = -1;
 	const render = () => {
 		loop.time(wrapTime(playhead.offset));
 		stack();
+		const i = wrapIndex(Math.round(playhead.offset / SPACING));
+		if (count && i !== shown) count.textContent = String((shown = i) + 1).padStart(2, '0');
 	};
 	const scrub = gsap.to(playhead, {
 		offset: 0,
