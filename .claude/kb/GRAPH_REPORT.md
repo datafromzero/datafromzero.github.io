@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1393 nodes, 1529 edges, 170 communities (643 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 38, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 463, rule 10, script 142, skill 1, spec-section 25, starlight-component 6, style 7, symbol 261, template 2, token 12.
-- Edges: defines 261, imports 50, mentions 835, overrides 6, references 28, runs 11, specified-by 4, uses 297, uses-token 32, validated-by 5.
+- 1404 nodes, 1534 edges, 170 communities (653 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 204, content-type 5, decision 52, dependency 25, design-section 15, doc 39, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 473, rule 10, script 142, skill 1, spec-section 25, starlight-component 6, style 7, symbol 261, template 2, token 12.
+- Edges: defines 261, imports 50, mentions 840, overrides 6, references 28, runs 11, specified-by 4, uses 297, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -26,8 +26,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 26 | .claude/MISTAKES.md:1 |
 | 13 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
-| 14 | `design/README.md` | doc | 23 | design/README.md:1 |
-| 15 | `D44` Stage cheatsheets; a math blo… | decision | 22 | SPEC.md:71 |
+| 14 | `S7` Datasets | spec-section | 23 | SPEC.md:310 |
+| 15 | `design/README.md` | doc | 23 | design/README.md:1 |
 
 ## Communities
 
@@ -37,7 +37,7 @@ Label propagation; each community is named by its top-degree node.
 - **C2 HANDOFF.md** (19): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; CLAUDE.md; research/curriculum/07-curriculum-rationale.md
 - **C3 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C4 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C5 Tech stack** (16): S2 Tech stack; S3 URL contract; S1 Decision record; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C5 Tech stack** (17): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
 - **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C8 Lesson step-by-step figures** (12): D41 Lesson step-by-step figures; agent:LESSON-STANDARD LESSON-STANDARD; src/styles/step-animation.css; scripts/lib/step-animation.mjs; scripts/make-animation.mjs; scripts/refresh-concept-figures.mjs
