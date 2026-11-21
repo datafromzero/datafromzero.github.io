@@ -268,6 +268,7 @@ All notable changes to datafromzero are recorded here. The format follows
   per line (Excel E4, E5, E7, E13, E21).
 
 ### Changed
+- *Telling the story* (C15) cites the ASA statement on p-values from its journal article (Wasserstein & Lazar, 2016) instead of the ASA press release, as *Hypothesis tests and p-values, honestly* already does (owner decision, 2026-11-21).
 - Homepage history slider: the two round arrow buttons became one outlined pill with thin chevrons and a counter of the centered card ("02 / 12").
 - Choose your track (SPEC D50, owner decision, 2026-11-20): the grouped bar charts are removed; the four radars stay, now with each score printed beside its skill label.
 - Lesson sources cite primary sources only (owner rule, 2026-11-20): the 27 Python lessons no longer list the team's research issue as a source, and `npm run check:lessons` now refuses a lesson source that points at this site's GitHub issues.
