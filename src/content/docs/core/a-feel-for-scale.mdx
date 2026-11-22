@@ -1,0 +1,508 @@
+---
+id: core-a-feel-for-scale
+title: 'A feel for scale: what is cheap and what is slow'
+short_title: A feel for scale
+description: Measure why a dict or set lookup beats a list scan, and recognize the other common structures, without formal Big-O.
+stage: core
+order: 320
+level: intermediate
+duration: 30
+objectives:
+  - Time a list scan against a dict or set lookup on cafe-sales ids
+  - Explain why the cost of a lookup depends on the structure, not the data
+  - Recognize a stack, a queue, a heap, a tree and a graph and the question each answers
+  - Read a file too big for memory in chunks
+prerequisites:
+  - core-data-beyond-tables
+  - python-dicts-and-sets
+  - python-numpy-vectorization
+datasets:
+  - cafe-sales
+reviewed: 2026-11-22
+sources:
+  - title: 'Python documentation: time complexity of operations on built-in types (accessed 2026-11-22)'
+    url: https://docs.python.org/3/builtins/time-complexity.html
+  - title: 'Python documentation: data structures tutorial (accessed 2026-11-22)'
+    url: https://docs.python.org/3/tutorial/datastructures.html
+  - title: 'Python documentation: heapq, heap queue algorithm (accessed 2026-11-22)'
+    url: https://docs.python.org/3/library/heapq.html
+  - title: 'pandas documentation: Scaling to large datasets (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/user_guide/scale.html
+status: published
+---
+
+## The question
+
+Last night's check looked for every order id of a day in a list of known ids. The analyst says it was fine on the sample and crawls on the export.
+
+> Is the check wrong, or is it just slow? And what would make it fast?
+
+These are the first ids of the file:
+
+| order_id | ordered_at |
+|---:|---|
+| 1001 | 2026-01-01 08:02:00 |
+| 1002 | 2026-01-01 15:38:00 |
+| 1003 | 2026-01-01 15:47:00 |
+
+By the end you can time a lookup two ways, name five structures by the question each answers, and read a file in pieces.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Dictionaries, and a glance at sets*](/python/dicts-and-sets/) (P6) you read values from a dictionary by key and met the set. Here you time them.
+
+**Diverge.** In [*Arrays and vectorized math with NumPy*](/python/numpy-vectorization/) (P10) you made a loop fast by moving it into NumPy. Unit 1 asks what happens to the cost of a lookup when the container grows.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In P6, write the call that reads `order["store"]` and gives `"unknown"` when the key is missing.
+
+   <details>
+   <summary>answer</summary>
+
+   `order.get("store", "unknown")`
+
+   </details>
+
+2. In [*Data beyond tables*](/core/data-beyond-tables/) (C31), which of CSV and Parquet stores the values of each column together?
+
+   <details>
+   <summary>answer</summary>
+
+   Parquet.
+
+   </details>
+
+## The big idea
+
+How fast you can find an item depends on how the items are kept.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="soj-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="soj" id="soj-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="soj" id="soj-r1" aria-label="Step 1 of 4: Eight items and a wanted key" />
+<input class="sa-r r2 o4" type="radio" name="soj" id="soj-r2" aria-label="Step 2 of 4: Scan: check the items in turn" />
+<input class="sa-r r3 o6" type="radio" name="soj" id="soj-r3" aria-label="Step 3 of 4: The scan reaches k7" />
+<input class="sa-r r4 o8" type="radio" name="soj" id="soj-r4" aria-label="Step 4 of 4: A dict or set jumps to k7" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-ord"><small>checked</small><span><i class="w2 tmp hl">0</i><i class="w1 d3 tmp hl">2</i><i class="w1 d4 tmp hl">4</i><i class="w1 d5 tmp hl">5</i><i class="w1 d6 tmp hl">7</i><i class="w2 d7">7</i></span></span><span class="sa-n c-out"><small>jump</small><span><i class="w2 tmp hl">0</i><i class="w4 d3 tmp">0</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 236" width="360" role="img" aria-labelledby="soj-t soj-d">
+<title id="soj-t">A list scan walks past every item; a dict or set jumps to one</title>
+<desc id="soj-d">Eight cells labeled k1 to k8 in a row and the wanted key k7. A scan marks cells k1 to k6 as not it, one after another, and stops on k7. Then an arrow jumps from the wanted key straight to cell k7 without passing the others.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Eight items and a wanted key</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · Scan: check the items in turn</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · The scan reaches k7</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · A dict or set jumps to k7</text>
+<text class="f11 b" x="10" y="14">Walk, or jump</text>
+<g><rect class="f-src k1" x="10" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="29" y="96">k1</text></g>
+<g><rect class="f-src k1" x="53" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="72" y="96">k2</text></g>
+<g><rect class="f-src k1" x="96" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="115" y="96">k3</text></g>
+<g><rect class="f-src k1" x="139" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="158" y="96">k4</text></g>
+<g><rect class="f-src k1" x="182" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="201" y="96">k5</text></g>
+<g><rect class="f-src k1" x="225" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="244" y="96">k6</text></g>
+<g><rect class="f-src k3" x="268" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="287" y="96">k7</text></g>
+<g><rect class="f-src k1" x="311" y="80" width="38" height="24" rx="6" /><text class="f10 m" x="330" y="96">k8</text></g>
+<g><rect class="f-src k3" x="10" y="34" width="84" height="24" rx="6" /><text class="f11 m" x="52" y="50">wanted: k7</text></g>
+<g class="w6 d3"><rect class="f-ord k2" x="10" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="29" y="132">no</text></g>
+<g class="w6 d3"><rect class="f-ord k2" x="53" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="72" y="132">no</text></g>
+<g class="w5 d4"><rect class="f-ord k2" x="96" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="115" y="132">no</text></g>
+<g class="w5 d4"><rect class="f-ord k2" x="139" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="158" y="132">no</text></g>
+<g class="w4 d5"><rect class="f-ord k2" x="182" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="201" y="132">no</text></g>
+<g class="w3 d6"><rect class="f-ord k2" x="225" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="244" y="132">no</text></g>
+<g class="w3 d6"><rect class="f-flt k4" x="268" y="116" width="38" height="24" rx="6" /><text class="f10 m" x="287" y="132">it</text></g>
+<path class="s-out dr p2 d7" pathLength="1" d="M52 58L52 66L287 66L287 78" />
+<rect class="s-out u2 d7" x="266" y="76" width="42" height="32" rx="6" />
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="soj-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="soj-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="soj-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="soj-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="soj-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="soj-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="soj-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="soj-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="soj-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="soj-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="soj-r1">1</label><label class="sa-sb sb2" for="soj-r2">2</label><label class="sa-sb sb3" for="soj-r3">3</label><label class="sa-sb sb4" for="soj-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">The task: is the key k7 among the items?<span class="sa-chs"><span class="sa-ch pl">8 items</span><span class="sa-ch pl">wanted key k7</span></span></div>
+<div class="c-ord w2 d3 tmp">One way to look: check the items in order until the key shows up.<span class="sa-chs"><span class="sa-ch pl">checks k1 to k4</span></span></div>
+<div class="c-flt w2 d5 tmp">This way ends when the key shows up.<span class="sa-chs"><span class="sa-ch pl">checks k5 to k7</span></span></div>
+<div class="c-out w2 d7">The other way: use the key to find its place.<span class="sa-chs"><span class="sa-ch pl">1 look</span></span></div>
+</div>
+<p class="ca-cap">A list scan looks at the items one after another. A dict or set uses the key to go straight to its place.</p>
+<ol class="sa-steps">
+<li>Eight items and a wanted key</li>
+<li>Scan: check the items in turn</li>
+<li>The scan reaches k7</li>
+<li>A dict or set jumps to k7</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: a list scan against a set, five structures named by their question, and a file read in chunks. Work in `cafe-report` after C31, with `main` up to date. Times are from the machine of this page and yours differ; the ratios are the point. Save each script in the project folder and delete it when you are done.
+
+### 1. A list scan against a set
+
+**Idea.** `x in a_list` and `x in a_set` ask the same question of containers that keep their items differently. A list keeps them in a row and compares `x` with them one after another, until it finds it or reaches the end. A set keeps each item at a place worked out from its value, and looks there.
+
+**Try it.** Save as `scan.py` and run it. It checks 1,800 ids that are not in the file, against the first 450, 900 and all 1,800 order ids, as a list and as a set, and prints the best of three times:
+
+```python
+import csv
+import time
+
+with open("data/orders.csv", newline="") as file:
+    ids = [int(row["order_id"]) for row in csv.DictReader(file)]
+wanted = [i + 10_000 for i in ids]  # ids that are not in the file
+
+
+def check(known):
+    """Count the wanted ids found in `known`; return the count and the best of 3 times in ms."""
+    times = []
+    for _ in range(3):
+        start = time.perf_counter()
+        found = sum(1 for i in wanted if i in known)
+        times.append((time.perf_counter() - start) * 1000)
+    return found, min(times)
+
+
+print(len(wanted), "ids to check")
+for size in (450, 900, 1800):
+    as_list = ids[:size]
+    found, ms_list = check(as_list)
+    _, ms_set = check(set(as_list))
+    print(f"{size:5} known ids: list {ms_list:7.2f} ms, set {ms_set:6.3f} ms, found {found}")
+```
+
+**Predict:** about how many times longer does the list check take with 1,800 known ids than with 450, and what is that ratio for the set?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scan.py
+1800 ids to check
+  450 known ids: list    4.16 ms, set  0.038 ms, found 0
+  900 known ids: list    8.13 ms, set  0.052 ms, found 0
+ 1800 known ids: list   16.03 ms, set  0.031 ms, found 0
+```
+
+Your times differ and wobble.
+
+</details>
+
+*Why:* with four times the items the list took about 3.9 times as long (16.03 against 4.16 ms), and the set time did not grow (0.031 against 0.038 ms). The Python time-complexity page says the same: a list test grows with the length of the list, and a set or dict test is constant on average. The same 1,800 ids were checked each time; only the container changed, so the cost belongs to the structure, not to the data. Each missing id forced the list to look at every item. A found id stops a scan early, so this test is the worst case for a list; the time to build the set is not counted, and you pay it once. A dict keyed by id behaves like the set.
+
+### 2. Name a structure by its question
+
+**Idea.** You rarely write these structures; you meet them in libraries and job ads, so learn them by the question each answers. A structure is a way to keep items so that one question is cheap.
+
+| structure | the question it answers | in Python | in the cafe data |
+|---|---|---|---|
+| stack | what came last? (last in, first out) | `list.append`, `list.pop` | undoing the last edit |
+| queue | who has waited longest? (first in, first out) | `collections.deque`, `popleft` | orders waiting at the till |
+| heap | which is the smallest right now, again and again, as items arrive? | `heapq.heappush`, `heappop`; `heap[0]` is the smallest; `nlargest` for the biggest few | the busiest days |
+| tree | what sits under this? | nested dicts and lists | an order and its lines (C31) |
+| graph | who is linked to whom, in any direction? | a dict of lists | customers and the products they order, many links on both sides |
+
+The tutorial recommends `deque` for a queue because `list` is slow at the front.
+
+**Try it.** Save as `heap.py` and run it: the two busiest days, found with a heap and with a full sort.
+
+```python
+import heapq
+from collections import Counter
+
+with open("data/orders.csv") as file:
+    next(file)  # skip the header line
+    per_day = Counter(line.split(",")[3][:10] for line in file)
+
+print(len(per_day), "days")
+print(heapq.nlargest(2, per_day, key=per_day.get))
+print(sorted(per_day, key=per_day.get, reverse=True)[:2])
+```
+
+**Predict:** how many days does the file cover, and which two days come out?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python heap.py
+181 days
+['2026-05-16', '2026-06-21']
+['2026-05-16', '2026-06-21']
+```
+
+</details>
+
+*Why:* the file covers January 1 to June 30, 181 days, and May 16 and June 21 have the most orders, 19 each. The result of `nlargest` is the same as the sorted version cut at `n`, which is how the heapq page defines it; the page adds that it performs best for small `n` and that `sorted` is better for larger values. A heap keeps its smallest item at `heap[0]`, and the two functions here are the helpers for the biggest few. A tree and a graph are shapes of data first: the C31 record is a tree, and customers and products form a graph.
+
+### 3. Read a file in chunks
+
+**Idea.** When a file does not fit in memory, read it in pieces and keep only a small running result. `pd.read_csv(path, chunksize=n)` gives chunks of at most `n` rows, one after another. The pandas page says chunking works when the operation needs little coordination between chunks, and that the peak memory is the largest chunk plus the running result. `Series.add(other, fill_value=0)` adds counts and treats a missing label as 0.
+
+**Try it.** Save as `chunks.py` and run it. It counts completed orders for each store chunk by chunk, and by one full read:
+
+```python
+import pandas as pd
+
+whole = pd.read_csv("data/orders.csv")
+print("whole file:", whole.memory_usage(deep=True).sum(), "bytes in memory")
+
+completed = None
+for number, chunk in enumerate(pd.read_csv("data/orders.csv", chunksize=500), start=1):
+    print(f"chunk {number}: {len(chunk)} rows, {chunk.memory_usage(deep=True).sum()} bytes")
+    counts = chunk[chunk["status"] == "completed"].groupby("store_id").size()
+    completed = counts if completed is None else completed.add(counts, fill_value=0)
+
+print(completed.astype(int).to_dict())
+print(whole[whole["status"] == "completed"].groupby("store_id").size().to_dict())
+```
+
+**Predict:** how many chunks come out and how many rows has the last, and do the two answers agree?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python chunks.py
+whole file: 145223 bytes in memory
+chunk 1: 500 rows, 40431 bytes
+chunk 2: 500 rows, 40402 bytes
+chunk 3: 500 rows, 40448 bytes
+chunk 4: 300 rows, 24338 bytes
+{1: 729, 2: 715, 3: 355}
+{1: 729, 2: 715, 3: 355}
+```
+
+The byte counts depend on the pandas version.
+
+</details>
+
+*Why:* 1,800 rows make four chunks, the last one short, and the sums agree. The largest chunk held about 28 percent of what the whole file needs. Harbor (store 3) opened in April, so the first chunk has no Harbor row; `fill_value=0` let the sum go on. This file is small; the pattern is for the file that is not.
+
+<Aside type="tip" title="Remember">
+
+- A list scan grows with the list; a set or dict lookup stays about the same.
+- The cost belongs to the structure, not to the data: the same ids, another container.
+- Stack, queue, heap, tree and graph are named by the question each answers.
+- Read a big file in chunks, keep a small running result, and combine the pieces.
+
+**Common trap:** trusting a check because it ran fast on the sample. A list scan that is fine on 1,800 rows can crawl on 18 million.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-a-feel-for-scale-1">
+
+**Count the orders of each customer.** Counting with a list of pairs scans the pairs for every order. Save the script below as `ex1.py` (delete each exercise script when you are done) and run it; then add the same count with a dict, time it the same way, and check that both counts are equal. Expected: three lines, the pairs line with its time, a dict line with a much smaller time, and `True`. Both lines say 145 customers.
+
+```python
+import csv
+import time
+
+with open("data/orders.csv", newline="") as file:
+    customers = [row["customer_id"] for row in csv.DictReader(file) if row["customer_id"]]
+
+pairs = []  # [customer_id, orders], one pair for each customer
+start = time.perf_counter()
+for customer in customers:
+    for pair in pairs:
+        if pair[0] == customer:
+            pair[1] += 1
+            break
+    else:
+        pairs.append([customer, 1])
+ms = (time.perf_counter() - start) * 1000
+print(len(customers), "orders,", len(pairs), "customers:", round(ms, 2), "ms with a list of pairs")
+```
+
+<details>
+<summary>Hint</summary>
+
+A dict keyed by customer replaces the inner loop: read the count with `get(customer, 0)`, add 1 and store it back.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+counts = {}
+for customer in customers:
+    counts[customer] = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+counts = {}
+start = time.perf_counter()
+for customer in customers:
+    counts[customer] = counts.get(customer, 0) + 1
+ms = (time.perf_counter() - start) * 1000
+print(len(counts), "customers:", round(ms, 2), "ms with a dict")
+print(counts == {customer: orders for customer, orders in pairs})
+```
+
+```console
+1799 orders, 145 customers: 3.83 ms with a list of pairs
+145 customers: 0.16 ms with a dict
+True
+```
+
+The one order with no customer was skipped, so 1,799 orders count. The dict went straight to each customer, while the pairs were scanned from the start for every order. Your times differ.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-a-feel-for-scale-2">
+
+**Orders in each hour of the day, in chunks.** Before you start, say what the result looks like: one count for each opening hour, and a total you can check against the file. Write a script from a blank file that reads `data/orders.csv` 400 rows at a time and prints a dictionary of completed orders for each hour of the day (the hour of `ordered_at`), then prints the sum and the number of rows read. Expected: eleven hours, 7 to 17, whole numbers, a sum of 1,799 and 1,800 rows read.
+
+<details>
+<summary>Hint</summary>
+
+Take the hour with `pd.to_datetime(...).dt.hour`, count each chunk with `groupby`, and add the counts as in unit 3. `add` with `fill_value=0` gives decimals, so cut them back to whole numbers at the end.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+total = None
+for chunk in pd.read_csv("data/orders.csv", chunksize=400):
+    done = chunk[chunk["status"] == "completed"]
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+import pandas as pd
+
+total = None
+rows = 0
+for chunk in pd.read_csv("data/orders.csv", chunksize=400):
+    rows += len(chunk)
+    done = chunk[chunk["status"] == "completed"]
+    hours = pd.to_datetime(done["ordered_at"]).dt.hour
+    counts = done.groupby(hours).size()
+    total = counts if total is None else total.add(counts, fill_value=0)
+
+print(rows, "rows read")
+print(total.astype(int).to_dict())
+print(int(total.sum()))
+```
+
+```console
+1800 rows read
+{7: 172, 8: 156, 9: 169, 10: 181, 11: 169, 12: 142, 13: 150, 14: 161, 15: 168, 16: 169, 17: 162}
+1799
+```
+
+The canceled order is not counted, which is why 1,800 rows give 1,799. `add` turns the counts into decimals; `astype(int)` puts them back.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which structure fits each job: the three biggest days, orders waiting at the till, and checking whether an id is known?
+
+   <details>
+   <summary>answer</summary>
+
+   A heap (`heapq.nlargest`), a queue (`deque`), and a set or dict.
+
+   </details>
+
+<Exercise id="core-a-feel-for-scale-3">
+
+**Spot the flaw.** A colleague reads the orders 700 rows at a time to find the share of orders paid by mobile, averages the three chunk shares, and reports 0.31. The whole file gives a different share. Save the script as `ex3.py`, run it, and say why the two differ and how to combine the chunks. Expected: the run prints `3 chunks` and `share of mobile orders: 0.31`; after your fix it prints 0.3033, the share of the whole file.
+
+```python
+import pandas as pd
+
+shares = []
+for chunk in pd.read_csv("data/orders.csv", chunksize=700):
+    shares.append((chunk["payment_method"] == "mobile").mean())
+
+print(len(shares), "chunks")
+print("share of mobile orders:", round(sum(shares) / len(shares), 4))
+```
+
+<details>
+<summary>Hint</summary>
+
+The chunks hold 700, 700 and 400 rows. Does a chunk of 400 rows deserve as much weight as one of 700? What could you keep from each chunk instead of a share?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+mobile = 0
+rows = 0
+for chunk in pd.read_csv("data/orders.csv", chunksize=700):
+    mobile += ...
+```
+
+</details>
+
+<Solution>
+
+```console
+3 chunks
+share of mobile orders: 0.31
+```
+
+The average of three shares gives the last, shorter chunk the same weight as the others, so it is not the share of all orders. Keep the pieces that add up, the number of mobile orders and the number of rows, and divide once at the end:
+
+```python
+import pandas as pd
+
+mobile = 0
+rows = 0
+for chunk in pd.read_csv("data/orders.csv", chunksize=700):
+    mobile += (chunk["payment_method"] == "mobile").sum()
+    rows += len(chunk)
+
+print("share of mobile orders:", round(mobile / rows, 4))
+```
+
+```console
+share of mobile orders: 0.3033
+```
+
+That is 546 of 1,800 orders, the same as one full read.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can time a list scan against a set lookup and say why the second stays flat, name a stack, a queue, a heap, a tree and a graph by the question each answers, and read a file in chunks and combine the pieces correctly.*
+Test: Exercise core-a-feel-for-scale-2, done without opening the hints.
+
+The pattern to remember: **ask which structure makes your question cheap, use a set or dict for lookups, and read big files in pieces whose results add up.** Next comes [*The cloud: storage, compute and who may access what*](/core/cloud-storage-compute-and-access/) (C33), where the same files and questions move to rented machines.
