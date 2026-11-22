@@ -1,0 +1,528 @@
+---
+id: core-cloud-storage-compute-and-access
+title: 'The cloud: storage, compute and who may access what'
+short_title: The cloud and access
+description: Explain object storage, compute and regions, how a role's policy decides who may access what, and what never belongs in a public bucket, with no cloud account.
+stage: core
+order: 330
+level: beginner
+duration: 30
+objectives:
+  - Explain object storage, compute and region in plain words
+  - 'Say how a policy decides: no access by default, an Allow line grants, a Deny line wins'
+  - Tell an object store from a database from a spreadsheet
+  - Name three kinds of file that never belong in a public bucket
+  - Recognize a cluster, HPC, a GPU, a container and streaming from one sentence each
+prerequisites:
+  - core-git-save-history
+  - core-logging-config-secrets
+  - core-environments-and-dependencies
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Amazon S3 User Guide: What is Amazon S3? (accessed 2026-11-22)'
+    url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+  - title: 'Amazon S3 User Guide: Blocking public access to your Amazon S3 storage (accessed 2026-11-22)'
+    url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html
+  - title: 'AWS IAM User Guide: IAM roles (accessed 2026-11-22)'
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html
+  - title: 'AWS IAM User Guide: IAM JSON policy elements, Effect (accessed 2026-11-22)'
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_effect.html
+  - title: 'AWS IAM User Guide: Policy evaluation for requests within a single account (accessed 2026-11-22)'
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-basics.html
+  - title: 'AWS: What is data governance? (accessed 2026-11-22)'
+    url: https://aws.amazon.com/what-is/data-governance/
+  - title: 'OWASP Cheat Sheet Series: Secrets Management (accessed 2026-11-22)'
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+  - title: 'AWS: What is cloud computing? (accessed 2026-11-22)'
+    url: https://aws.amazon.com/what-is-cloud-computing/
+  - title: 'Google Cloud, Compute Engine documentation: Regions and zones (accessed 2026-11-22)'
+    url: https://cloud.google.com/compute/docs/regions-zones
+  - title: 'AWS: Block, file and object storage compared (accessed 2026-11-22)'
+    url: https://aws.amazon.com/compare/the-difference-between-block-file-object-storage/
+  - title: 'NVIDIA CUDA Programming Guide: Introduction (accessed 2026-11-22)'
+    url: https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/introduction.html
+  - title: 'Google Cloud, Compute Engine documentation: GPU machine types (accessed 2026-11-22)'
+    url: https://cloud.google.com/compute/docs/gpus
+  - title: 'Apache Spark documentation: Cluster mode overview (accessed 2026-11-22)'
+    url: https://spark.apache.org/docs/latest/cluster-overview.html
+  - title: 'University of Sheffield HPC documentation: What is High Performance Computing? (accessed 2026-11-22)'
+    url: https://docs.hpc.shef.ac.uk/en/latest/hpc/what-is-hpc.html
+  - title: 'Docker documentation: What is a container? (accessed 2026-11-22)'
+    url: https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/
+  - title: 'AWS: What is batch processing? (accessed 2026-11-22)'
+    url: https://aws.amazon.com/what-is/batch-processing/
+  - title: 'Apache Kafka documentation: Introduction (accessed 2026-11-22)'
+    url: https://kafka.apache.org/intro
+status: draft
+---
+
+TODO(owner): Team draft (D24), for you to edit. Not run: no cloud account (D48), so every provider statement rests on the documentation pages in the sources and no step touches a cloud service; the object store and the policy checker are small models written for the lesson, and they say so. Doubts: I added a short_title and the prerequisite for uv; AWS and Google Cloud pages stand for all providers (Azure is named but no Azure page was opened, so the DP-900 source of the stub is dropped); the three kinds of file that stay private are our judgment from the OWASP and S3 pages; `reviewed` is yours to set.
+
+## The question
+
+The owner of the three cafes has an offer from a supplier:
+
+> We should "put it in the cloud". What is the cloud, where would our files go, and who could read them?
+
+Today the sales are in `data/orders.csv` (82,348 bytes) on one laptop, and the key of the mailing service is in `.env` on the same laptop, which Git ignores (C28). Eight words come with every talk about the cloud, one sentence each; the rest of the lesson makes some of them run on your laptop.
+
+| the word | in one sentence |
+|---|---|
+| Cloud platform | Rented data centers: computing power, storage and databases that you use on demand and pay for by use, instead of buying machines. AWS, Google Cloud and Microsoft Azure are providers. |
+| Region and zone | A region is an independent geographic area made of zones; using several zones and regions lowers the risk that one outage takes everything. |
+| Object, block and file storage | Object storage keeps whole files under names; block storage is a machine's raw disk, cut into equal blocks; file storage is a shared folder many machines open. |
+| CPU and GPU | A CPU runs a few tens of threads, each as fast as possible; a GPU runs thousands in parallel and gives up speed on any one. Model training is typical GPU work. |
+| Cluster | Many machines, called nodes, that work as one: a program hands tasks to processes on the nodes. Imagine 18 billion orders instead of 1,800. |
+| HPC | High performance computing pools many machines into one big shared computer, and a job scheduler queues each person's jobs. |
+| Container and virtual machine | A virtual machine pretends to be a whole computer with its own operating system; a container is an isolated process that shares the host's kernel. |
+| Batch and streaming | Batch runs a big job on a finished pile of data at set times; streaming handles each event as it arrives, like each sale as the till rings it. |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Logging, configuration and secrets*](/core/logging-config-secrets/) (C28), why does the key live in `.env` and not in `cafe-report.toml`?
+
+   <details>
+   <summary>answer</summary>
+
+   Git ignores `.env`, so the key stays on the laptop. The TOML file is committed, so anything in it is copied to every clone.
+
+   </details>
+
+2. In [*Git: saving a history of your work*](/core/git-save-history/) (C23), write the line of `.gitignore` that keeps the downloaded data out of Git.
+
+   <details>
+   <summary>answer</summary>
+
+   `data/`
+
+   </details>
+
+## The big idea
+
+In the cloud you rent storage and machines by use, and a written policy, not trust in a person, decides who may touch them.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ap-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="ap" id="ap-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="ap" id="ap-r1" aria-label="Step 1 of 4: Three requests, one policy" />
+<input class="sa-r r2 o4" type="radio" name="ap" id="ap-r2" aria-label="Step 2 of 4: A/1 meets an Allow line" />
+<input class="sa-r r3 o6" type="radio" name="ap" id="ap-r3" aria-label="Step 3 of 4: B/1 meets no line" />
+<input class="sa-r r4 o8" type="radio" name="ap" id="ap-r4" aria-label="Step 4 of 4: A/x/1 meets Allow and Deny" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>requests</small><span><i class="w2 tmp hl">3</i><i class="w6 d3">3</i></span></span><span class="sa-n c-grp"><small>allowed</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">1</i><i class="w4 d5">1</i></span></span><span class="sa-n c-flt"><small>denied</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">1</i><i class="w2 d7 hl">2</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 236" width="360" role="img" aria-labelledby="ap-t ap-d">
+<title id="ap-t">A request is allowed only when a line allows it and no line denies it</title>
+<desc id="ap-d">Three requests are listed in a column: Read A/1, Read B/1 and Read A/x/1. In the middle is a policy box with two lines, Allow Read A/any and Deny Read A/x/any, and the note that with no matching line the answer is deny. An arrow from Read A/1 reaches the Allow line and the result allow appears. An arrow from Read B/1 reaches no line and the result deny appears. Two arrows from Read A/x/1 reach both lines and the result deny appears.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Three requests, one policy</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · A/1 meets an Allow line</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · B/1 meets no line</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · A/x/1 meets Allow and Deny</text>
+<text class="f11 b" x="10" y="14">Request, policy, answer</text>
+<rect class="s-mat" x="132" y="44" width="118" height="170" rx="6" />
+<text class="f11 b m" x="191" y="62">policy</text>
+<rect class="f-grp k1" x="140" y="78" width="102" height="26" rx="4" />
+<text class="f10 mo m" x="191" y="95">Allow Read A/any</text>
+<rect class="f-flt k1" x="140" y="144" width="102" height="26" rx="4" />
+<text class="f10 mo m" x="191" y="161">Deny Read A/x/any</text>
+<text class="f10 b m" x="191" y="198">no line: deny</text>
+<g><rect class="f-src k2" x="10" y="66" width="96" height="24" rx="6" /><text class="f10 mo m" x="58" y="82">Read A/1</text></g>
+<path class="s-grp dr p6 d3" pathLength="1" d="M106 78L138 91M133.31 85.81L138 91L131.01 91.45" />
+<g class="w5 d4"><rect class="f-grp k3" x="268" y="66" width="80" height="24" rx="6" /><text class="f11 b m" x="308" y="82">allow</text></g>
+<path class="s-grp dr p5 d4" pathLength="1" d="M250 78L266 78M259.7 74.96L266 78L259.7 81.04" />
+<g><rect class="f-src k2" x="10" y="122" width="96" height="24" rx="6" /><text class="f10 mo m" x="58" y="138">Read B/1</text></g>
+<path class="s-flt dr p4 d5" pathLength="1" d="M106 134L138 194M137.72 187.01L138 194L132.35 189.87" />
+<g class="w3 d6"><rect class="f-flt k3" x="268" y="122" width="80" height="24" rx="6" /><text class="f11 b m" x="308" y="138">deny</text></g>
+<path class="s-flt dr p3 d6" pathLength="1" d="M250 134L266 134M259.7 130.96L266 134L259.7 137.04" />
+<g><rect class="f-src k2" x="10" y="178" width="96" height="24" rx="6" /><text class="f10 mo m" x="58" y="194">Read A/x/1</text></g>
+<path class="s-grp dr p2 d7" pathLength="1" d="M106 190L138 91M133.16 96.06L138 91L138.96 97.93" />
+<path class="s-flt dr p2 d7" pathLength="1" d="M106 190L138 157M131.43 159.41L138 157L135.8 163.64" />
+<g class="w1 d8"><rect class="f-flt k3" x="268" y="178" width="80" height="24" rx="6" /><text class="f11 b m" x="308" y="194">deny</text></g>
+<path class="s-flt dr p1 d8" pathLength="1" d="M250 190L266 190M259.7 186.96L266 190L259.7 193.04" />
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ap-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ap-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ap-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ap-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ap-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ap-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ap-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ap-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ap-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ap-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ap-r1">1</label><label class="sa-sb sb2" for="ap-r2">2</label><label class="sa-sb sb3" for="ap-r3">3</label><label class="sa-sb sb4" for="ap-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">A policy is a short list of lines; each request is checked against all of them.<span class="sa-chs"><span class="sa-ch pl">3 requests</span><span class="sa-ch pl">2 policy lines</span></span></div>
+<div class="c-grp w2 d3 tmp">An Allow line grants the requests it matches, and only those.<span class="sa-chs"><span class="sa-ch pl">1 request allowed</span></span></div>
+<div class="c-flt w2 d5 tmp">A request that no line matches is denied: access is off until a line turns it on.<span class="sa-chs"><span class="sa-ch pl">1 request denied</span></span></div>
+<div class="c-flt w2 d7">When a Deny line matches, it overrides every Allow line.<span class="sa-chs"><span class="sa-ch pl">1 request denied</span></span></div>
+</div>
+<p class="ca-cap">A line allows or denies the requests it matches. A request that no line matches is denied, and a Deny line wins over an Allow line.</p>
+<ol class="sa-steps">
+<li>Three requests, one policy</li>
+<li>A/1 meets an Allow line</li>
+<li>B/1 meets no line</li>
+<li>A/x/1 meets Allow and Deny</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: object storage, compute and region, policies, and what stays private. Nothing here needs a cloud account: you run small models of the real services on your laptop, in `cafe-report` with the repository clean, and delete the model files at the end.
+
+### 1. Object storage: a whole file under a key
+
+**Idea.** An *object store* keeps *objects*, each a file plus a description of it, in a *bucket* (a container), and each object has a *key*, its unique name in the bucket. The Amazon S3 guide describes the whole service as a map from a bucket and a key to an object. A spreadsheet lets you change one cell and a database answers "which rows have this value?"; an object store does three things: put an object under a key, get the object with a key, and list the keys that start with some text.
+
+**Try it.** Save as `object_store.py` in the project folder and run it with `uv run python object_store.py`:
+
+```python
+from pathlib import Path
+
+
+class ObjectStore:
+    """A toy object store: whole objects under keys, kept in a dictionary."""
+
+    def __init__(self):
+        self.objects = {}
+
+    def put(self, key, data):
+        self.objects[key] = data  # a new object replaces the old one as a whole
+
+    def get(self, key):
+        return self.objects[key]
+
+    def list(self, prefix=""):
+        return sorted(key for key in self.objects if key.startswith(prefix))
+
+
+store = ObjectStore()
+store.put("raw/orders.csv", Path("data/orders.csv").read_bytes())
+store.put("reports/2026-04.txt", b"store 1: 123 orders\n")
+store.put("reports/2026-05.txt", b"store 1: 125 orders\n")
+
+print(store.list("reports/"))
+print(store.list("rep"))
+
+store.put("reports/2026-05.txt", b"store 1: 125 orders\nstore 2: 134 orders\n")
+print(len(store.get("reports/2026-05.txt")), "bytes now")
+```
+
+**Predict:** What do the two `list` lines print, and how many bytes does the May report hold after the second `put`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+['reports/2026-04.txt', 'reports/2026-05.txt']
+['reports/2026-04.txt', 'reports/2026-05.txt']
+40 bytes now
+```
+
+</details>
+
+*Why:* `list("rep")` returns the same two keys as `list("reports/")`. The slash is part of the key, and a "folder" is only a prefix that keys share: the S3 guide contrasts its general purpose buckets, a flat structure, with directory buckets that organize objects into directories. The second `put` did not edit the file: it replaced the whole object, and the class has no method that changes one byte. The model leaves out what makes the real service worth renting: versions, access rules, copies in other zones. Delete `object_store.py`.
+
+### 2. Compute, and the region it runs in
+
+**Idea.** *Compute* is machine time you rent: cores, memory and hours. A *region* is a geographic area where a provider keeps its machines, and a region is made of *zones*. The S3 guide says you might choose a region to optimize latency, minimize costs or meet regulatory requirements, and that objects stored in a region never leave it unless you transfer or replicate them. So run the compute in the region that holds the data it reads.
+
+**Try it.** Ask your own machine how much compute it has:
+
+```bash
+uv run python -c 'import os; print(os.cpu_count(), "cores")'
+```
+
+**Predict:** What number do you expect, more or fewer than 16?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+4 cores
+```
+
+Yours differs.
+
+</details>
+
+*Why:* the cloud rents you the same quantity in other sizes, for the hours you run. The Sheffield HPC guide says a researcher's laptop has between 4 and 16 CPU cores, and a cluster usually has at least an order of magnitude more. The Compute Engine page adds that resources in different zones of a region are less likely to fail together, and resources in different regions even less.
+
+### 3. A role holds permissions, and the default is no
+
+**Idea.** A *policy* is a list of lines, each Allow or Deny, for an *action* (read, write) on a *resource* (a path). A *role* is a named set of permissions that a person or a program takes on; the IAM guide says it is meant to be taken on by whoever needs it, not tied to one person. Three rules of the AWS guides decide a request: access is denied by default, an Allow line grants access, and an explicit Deny overrides an Allow.
+
+**Try it.** Save as `access_demo.py` and run it. The real policy language writes `Effect`, `Action` and `Resource`, and writes a resource as a path such as `arn:aws:s3:::cafe-data/reports/*`; the model keeps the three names, and its star `*` matches any text, slashes included:
+
+```python
+from fnmatch import fnmatchcase
+
+POLICY = [
+    {"Effect": "Allow", "Action": "read", "Resource": "cafe-data/reports/*"},
+    {"Effect": "Deny", "Action": "read", "Resource": "cafe-data/reports/draft/*"},
+]
+
+
+def decide(policy, action, resource):
+    allowed = False
+    for line in policy:
+        if fnmatchcase(action, line["Action"]) and fnmatchcase(resource, line["Resource"]):
+            if line["Effect"] == "Deny":
+                return "deny (a Deny line)"
+            allowed = True
+    return "allow" if allowed else "deny (no line matched)"
+
+
+if __name__ == "__main__":
+    for action, resource in [
+        ("read", "cafe-data/reports/2026-05.txt"),
+        ("read", "cafe-data/raw/orders.csv"),
+        ("read", "cafe-data/reports/draft-plan.txt"),
+        ("write", "cafe-data/reports/2026-05.txt"),
+        ("read", "cafe-data/reports/draft/plan.txt"),
+    ]:
+        print(f"{action:<5} {resource:<36} {decide(POLICY, action, resource)}")
+```
+
+**Predict:** Which of the five requests are allowed?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+read  cafe-data/reports/2026-05.txt        allow
+read  cafe-data/raw/orders.csv             deny (no line matched)
+read  cafe-data/reports/draft-plan.txt     allow
+write cafe-data/reports/2026-05.txt        deny (no line matched)
+read  cafe-data/reports/draft/plan.txt     deny (a Deny line)
+```
+
+</details>
+
+*Why:* line 1 matches the Allow. Lines 2 and 4 match no line, so the default answers. Line 5 matches both lines, and the Deny wins. Line 3 is the surprise: `draft-plan.txt` matches the Allow, and the Deny pattern needs the slash after `draft`, so the file is allowed. A line covers the names that match its pattern, not the names that look like it. Grant the narrowest path that does the job, and test one request that must be refused. Keep `access_demo.py` for the exercises.
+
+### 4. What never goes in a public bucket
+
+**Idea.** *Data governance* is the set of rules for who may take what action on which data: the AWS page says it "outlines who can take what action, upon what data, using what methods, and in what situations". The S3 guide says new buckets and their objects do not allow public access until someone changes a policy. Three kinds of file never belong in a public bucket. *Keys and passwords*: OWASP lists API keys, database credentials, SSH keys and certificates as secrets. *Personal data*: anything that names or reaches a person. *Copies of a database*: one file that holds every table, with both of the others inside.
+
+**Try it.** Save as `upload_check.py`. It reads file names and CSV headers, not meaning:
+
+```python
+import csv
+import sys
+from pathlib import Path
+
+PERSONAL = {"name", "email", "phone", "address"}
+
+
+def problem(path):
+    """Say why a file must not go into a public bucket, or return None."""
+    if path.name == ".env" or path.suffix in {".pem", ".key"}:
+        return "a key or a password"
+    if path.suffix in {".dump", ".sql", ".duckdb"}:
+        return "a copy of a database"
+    if path.suffix == ".csv":
+        with open(path, newline="") as file:
+            found = PERSONAL & {column.lower() for column in next(csv.reader(file), [])}
+        if found:
+            return "personal data: " + ", ".join(sorted(found))
+
+
+flagged = 0
+for path in sorted(Path(sys.argv[1]).rglob("*")):
+    if path.is_file() and (why := problem(path)):
+        print(f"BLOCK {path}: {why}")
+        flagged += 1
+print(f"{flagged} files must stay private")
+```
+
+Make a folder to upload, with one harmless report and three files that should stay home, and check it and the real data folder:
+
+```bash
+mkdir -p outbox/reports outbox/exports
+printf 'store 1: 125 orders\n' > outbox/reports/2026-05.txt
+printf 'customer_id,name,email,city\n15,Ana Example,ana@example.com,Oakland\n' > outbox/exports/customers.csv
+echo "CAFE_REPORT_TOKEN=demo-key-not-real" > outbox/.env
+printf 'dump' > outbox/cafe.dump
+uv run python upload_check.py outbox
+uv run python upload_check.py data
+```
+
+**Predict:** Which files of `outbox` does the check block, and what does it say about `data`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+BLOCK outbox/.env: a key or a password
+BLOCK outbox/cafe.dump: a copy of a database
+BLOCK outbox/exports/customers.csv: personal data: email, name
+3 files must stay private
+0 files must stay private
+```
+
+The first four lines come from `outbox`, the last from `data`.
+
+</details>
+
+*Why:* the check models one habit: decide what may leave before anything is uploaded. It cannot decide the hard cases: `customer_id` alone passes, because a script sees a column name, and whether a customer number identifies a person is a decision for the owner and the written rules. The same goes for who may read `reports/`: a policy states the decision, and a person with authority makes it. Delete `outbox`, `upload_check.py` and `object_store.py`.
+
+<Aside type="note" title="Docker, in one box">
+
+A container is an ordinary process that runs in isolation: it sees only the files it was started with, and you can cap its memory and CPU. Every container shares the machine's kernel, so there is no operating system to boot, and the Docker guide says a container starts in about a second. You build none in the core; the Data Engineer and ML Engineer tracks do. Operating Kubernetes, tuning a cluster, writing GPU code, running a job scheduler and designing across regions belong to the tracks too: the core verbs are recognize and explain.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- An object store holds whole objects under keys; a "folder" is a shared start of keys.
+- Compute is rented machine time in a region; keep it near the data it reads.
+- A policy: no access by default, an Allow line grants, a Deny line wins.
+- Keys, personal data and copies of a database stay out of a public bucket; decide before the upload.
+
+**Common trap:** trusting a line that looks like it covers a file. `reports/draft-plan.txt` was allowed, although the Deny line says `draft`.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-cloud-storage-compute-and-access-1">
+
+**Let the analyst read the raw data.** In `access_demo.py`, add a third line to `POLICY` so that a role may read everything under `raw/`, and nothing else changes. The line is started, and it does not work yet:
+
+```python
+    {"Effect": "Allow", "Action": "read", "Resource": "cafe-data/raw/"},
+```
+
+Run the script again. Expected: the five lines of unit 3, the same as before except the second, which now says `allow`.
+
+<details>
+<summary>Hint</summary>
+
+The request is `cafe-data/raw/orders.csv`. A pattern with no star matches only exactly that text; the first line of the policy ends in a star.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The resource is `"cafe-data/raw/"` followed by one more character, the one that ends the first line of the policy.
+
+</details>
+
+<Solution>
+
+```python
+    {"Effect": "Allow", "Action": "read", "Resource": "cafe-data/raw/*"},
+```
+
+The second line of the output now says `allow`, and the other four are as before. The new line allows only `read` under `raw/`: the write still has no line, and the Deny line still wins over the Allow for the draft.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-cloud-storage-compute-and-access-2">
+
+**A role that only loads data.** Write the policy of a `loader` role that may write under `cafe-data/raw/` and may do nothing else, and five requests that prove it. Save them in a new file `loader_demo.py` in the project folder, from a blank file; it can import `decide` from `access_demo`. Before you start, say in one sentence what the answers will be. Expected: five lines; two writes under `raw/` are allowed, and a read there, a write under `reports/` and a write to the top of the bucket are denied.
+
+<details>
+<summary>Hint</summary>
+
+One Allow line with the action `write` and the resource `cafe-data/raw/*` is enough. Everything else is already denied by default, so the proof is the requests that fail.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The write to `raw/orders.csv` and the write to a deeper path under `raw/` say allow; the read of `raw/orders.csv`, the write under `reports/` and the write to the top of the bucket say deny (no line matched)."* The policy has one line.
+
+</details>
+
+<Solution>
+
+```python
+from access_demo import decide
+
+LOADER = [{"Effect": "Allow", "Action": "write", "Resource": "cafe-data/raw/*"}]
+
+for action, resource in [
+    ("write", "cafe-data/raw/orders.csv"),
+    ("write", "cafe-data/raw/2026/april.csv"),
+    ("read", "cafe-data/raw/orders.csv"),
+    ("write", "cafe-data/reports/2026-05.txt"),
+    ("write", "cafe-data/notes.txt"),
+]:
+    print(f"{action:<5} {resource:<32} {decide(LOADER, action, resource)}")
+```
+
+The output is two `allow` lines, then three `deny (no line matched)` lines. The write permission does not give the read permission: each action needs its own line.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what are the three rules that decide a request, and which three kinds of file stay out of a public bucket?
+
+   <details>
+   <summary>answer</summary>
+
+   Access is denied by default, an Allow line grants access, and a Deny line overrides an Allow. Keys and passwords, personal data, and copies of a database stay private.
+
+   </details>
+
+<Exercise id="core-cloud-storage-compute-and-access-3">
+
+**Spot the flaw.** A colleague writes the policy of the `report-reader` role as one line, tests one request, sees `allow`, and calls it safe. Add the four lines below to the end of `access_demo.py` and run it. Expected: the lines of the script, then two more. What does the last one show, and what is the fix?
+
+```python
+if __name__ == "__main__":
+    READER = [{"Effect": "Allow", "Action": "read", "Resource": "cafe-data/*"}]
+    print(decide(READER, "read", "cafe-data/reports/2026-05.txt"))
+    print(decide(READER, "read", "cafe-data/raw/orders.csv"))
+```
+
+<details>
+<summary>Hint</summary>
+
+The role was meant for the reports. Ask what else the pattern `cafe-data/*` matches, and test a request that should be refused.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The two requests print `allow` and `allow`. Replace the star path by a narrower one and run both requests again.
+
+</details>
+
+<Solution>
+
+The two lines print `allow` and `allow`.
+
+The second request reads the raw orders, which the role was never meant to see. The one test the colleague ran was a request that should be allowed, and such a test cannot show that a pattern is too wide. The fix is the narrowest path, `"cafe-data/reports/*"`, and a second test that must come back refused: with the narrow path the two lines print `allow` and `deny (no line matched)`.
+
+```text
+allow
+deny (no line matched)
+```
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can explain object storage, compute and regions in plain words, say how a policy decides a request, tell an object store from a database and a spreadsheet, and name the three kinds of file that stay out of a public bucket.*
+Test: Exercise core-cloud-storage-compute-and-access-2, done without opening the hints.
+
+The pattern to remember: **a role's policy grants access line by line with a default of no, and what must stay private is decided before the upload, not after.** Next comes *Inside the database: plans, transactions and copies* (C34).

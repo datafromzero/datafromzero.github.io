@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1434 nodes, 1604 edges, 184 communities (643 isolated nodes).
+- 1434 nodes, 1607 edges, 184 communities (643 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 39, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 473, rule 10, script 154, skill 1, spec-section 25, starlight-component 6, style 7, symbol 273, template 2, token 12.
-- Edges: defines 273, imports 50, mentions 864, overrides 6, references 28, runs 11, specified-by 4, uses 331, uses-token 32, validated-by 5.
+- Edges: defines 273, imports 50, mentions 865, overrides 6, references 28, runs 11, specified-by 4, uses 333, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -18,7 +18,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `D41` Lesson step-by-step figures | decision | 84 | SPEC.md:68 |
 | 4 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
 | 5 | `.claude/HANDOFF.md` | doc | 49 | .claude/HANDOFF.md:1 |
-| 6 | `src/components/content/RunSQL.astro` | component | 45 | src/components/content/RunSQL.astro:1 |
+| 6 | `src/components/content/RunSQL.astro` | component | 47 | src/components/content/RunSQL.astro:1 |
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
 | 8 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
 | 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:272 |
@@ -51,7 +51,8 @@ Label propagation; each community is named by its top-degree node.
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
 - `ctype:career` -specified-by-> `S5.4` (C84 to C81, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C116 to C21, scripts/animations/concept-join.mjs:1)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C95 to C73, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C117 to C21, scripts/animations/concept-join.mjs:1)
 - `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C71, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C170 to C167, src/layouts/HomeLayout.astro:39)
 - `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C14, src/styles/math.css:17)
@@ -61,7 +62,6 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C161 to C2, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C51 to C52, src/lib/repo-files.ts:4)
 - `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C74 to C173, SPEC.md:78)
-- `DG6` -mentions-> `DG2` (C75 to C27, design/README.md:226)
 
 ## Decisions (SPEC §1)
 
@@ -179,7 +179,7 @@ term: id — file:line
 - tokens: `src/styles/tokens.css` — src/styles/tokens.css:1
 - font: `research/issues/9-measured-payload-gsap-full-set-about-51-kb-gzip-geist-fonts.md` — research/issues/9-measured-payload-gsap-full-set-about-51-kb-gzip-geist-fonts.md:1
 - agents: `agent:content-producer` — .claude/agents/content-producer.md:1
-- build plan: `R:curriculum/00-README#3-how-each-package-file-maps-to-build-decisions:04-ui-ux-lessons-site-build` — research/curriculum/00-README.md:84
+- build plan: `scripts/animations/concept-plan-tree.mjs` — scripts/animations/concept-plan-tree.mjs:1
 - out of scope: `R:curriculum/00-README#4-evidence-and-confidence:what-remains-unverified-or-out-of-scope` — research/curriculum/00-README.md:121
 - career: `src/lib/career-quiz-score.ts#Career` — src/lib/career-quiz-score.ts:10
 - story: `ctype:story` — src/lib/content-schemas.ts:98
