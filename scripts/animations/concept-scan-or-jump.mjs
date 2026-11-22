@@ -22,13 +22,13 @@ export default function make({ id = 'soj' } = {}) {
 		caption: 'A list scan looks at the items one after another. A dict or set uses the key to go straight to its place.',
 		phases: [
 			[1, 'Eight items and a wanted key', { role: 'src', key: 'The task: is the key k7 among the items?', changes: [['+', '8 items'], ['+', 'wanted key k7']] }],
-			[3, 'Scan: check the items in turn', { role: 'ord', key: 'A list scan checks the items in order until the key shows up.', changes: [['+', 'checks k1 to k4']] }],
-			[5, 'The scan reaches k7', { role: 'flt', key: 'A scan that does not find the key early has looked at most of the list.', changes: [['+', 'checks k5 to k7']] }],
-			[7, 'A dict or set jumps to k7', { role: 'out', key: 'A dict or set uses the key to find its place, so the other items are never touched.', changes: [['+', '1 look'], ['−', 'no walk past k1 to k6']] }],
+			[3, 'Scan: check the items in turn', { role: 'ord', key: 'One way to look: check the items in order until the key shows up.', changes: [['+', 'checks k1 to k4']] }],
+			[5, 'The scan reaches k7', { role: 'flt', key: 'This way ends when the key shows up.', changes: [['+', 'checks k5 to k7']] }],
+			[7, 'A dict or set jumps to k7', { role: 'out', key: 'The other way: use the key to find its place.', changes: [['+', '1 look']] }],
 		],
 		counters: [
-			{ label: 'scan looks', role: 'ord', values: [[1, 0], [3, 2], [4, 4], [5, 5], [6, 7]] },
-			{ label: 'jump looks', role: 'out', values: [[1, 0], [7, 1]] },
+			{ label: 'checked', role: 'ord', values: [[1, 0], [3, 2], [4, 4], [5, 5], [6, 7]] },
+			{ label: 'jump', role: 'out', values: [[1, 0], [7, 1]] },
 		],
 	});
 	a.text(10, 14, 'Walk, or jump', 'f11 b');
@@ -40,11 +40,9 @@ export default function make({ id = 'soj' } = {}) {
 	for (let i = 0; i < 7; i++) {
 		a.chip(CELL(i), 116, i === 6 ? 'it' : 'no', { role: i === 6 ? 'flt' : 'ord', level: i === 6 ? 4 : 2, w: 38, c: 'f10', fx: { in: at[i] } });
 	}
-	a.text(10, 166, 'scan: 7 looks', 'f10 b', { in: 6, hide: 7 }, 's');
-
+	
 	// the jump: an arrow from the wanted key to cell k7
 	a.path(`M52 58L52 66L${CELL(6) + 19} 66L${CELL(6) + 19} 78`, 's-out', { in: 7, draw: true });
 	a.rect(CELL(6) - 2, 76, 42, 32, 's-out', { in: 7, pulse: true }, 6);
-	a.text(10, 166, 'jump: 1 look', 'f10 b', { in: 7 }, 's');
-	return a;
+		return a;
 }

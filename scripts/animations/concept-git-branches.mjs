@@ -23,7 +23,7 @@ export default function make({ id = 'gbr' } = {}) {
 		caption: 'A branch is a second line of commits. A pull request asks main to take it, and the merge commit joins the two lines.',
 		phases: [
 			[1, 'main holds two commits', { role: 'src', key: 'A branch is a label on a commit; main is one of them.', changes: [['+', '2 commits on main']] }],
-			[3, 'feature gets its own commits', { role: 'grp', key: 'A commit moves only the branch you are on, so main waits where it was.', changes: [['+', 'branch feature'], ['+', '2 commits on feature']] }],
+			[3, 'feature gets its own commits', { role: 'grp', key: 'The branch can grow commits of its own.', changes: [['+', 'branch feature'], ['+', '2 commits on feature']] }],
 			[5, 'A pull request asks to merge', { role: 'mat', key: 'A pull request is a proposal to merge a branch; nothing has moved yet.', changes: [['+', '1 open pull request']] }],
 			[7, 'The merge commit joins both', { role: 'out', key: 'The merge commit has two parents, and main now holds the work of feature.', changes: [['+', 'merge commit m'], ['~', 'main moves to m']] }],
 		],
