@@ -28,3 +28,4 @@ Copies of the GitHub issues labelled `research`, refreshed by `npm run research:
 | [#98](98-asa-p-value-statement-paraphrase-check-for-hypothesis-tests.md) | open | Research: ASA p-value statement — paraphrase check for "Hypothesis tests and p-values, honestly" |
 | [#107](107-module-3-knowledge-pack-domain-and-data-modeling-design-work.md) | open | Research: Module 3 knowledge pack — domain and data modeling (design workflow, ER diagrams, UML, multiplicity) |
 | [#113](113-certifications-and-official-courses-for-working-with-ai-assi.md) | open | Research: certifications and official courses for working with AI assistants — what exists, and whether Part 6 should mention them |
+| [#114](114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md) | open | Research: a prompt recipe for data work — vendor guidance, evidence, and limits (follow-up to #113) |

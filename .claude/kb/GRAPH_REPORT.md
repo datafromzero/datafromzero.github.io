@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1445 nodes, 1622 edges, 187 communities (644 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 40, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 477, rule 10, script 157, skill 1, spec-section 25, starlight-component 6, style 7, symbol 276, template 2, token 12.
-- Edges: defines 276, imports 50, mentions 871, overrides 6, references 28, runs 11, specified-by 4, uses 339, uses-token 32, validated-by 5.
+- 1452 nodes, 1623 edges, 187 communities (650 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 41, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 483, rule 10, script 157, skill 1, spec-section 25, starlight-component 6, style 7, symbol 276, template 2, token 12.
+- Edges: defines 276, imports 50, mentions 872, overrides 6, references 28, runs 11, specified-by 4, uses 339, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -25,9 +25,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
-| 13 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
-| 14 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
-| 15 | `scripts/sync-research-issues.mjs` | script | 24 | scripts/sync-research-issues.mjs:1 |
+| 13 | `scripts/sync-research-issues.mjs` | script | 25 | scripts/sync-research-issues.mjs:1 |
+| 14 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
+| 15 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
 
 ## Communities
 
@@ -40,7 +40,7 @@ Label propagation; each community is named by its top-degree node.
 - **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C8 sync-research-issues.mjs** (11): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
+- **C8 sync-research-issues.mjs** (12): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md
 - **C9 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 - **C10 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
 - **C11 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
