@@ -1,0 +1,551 @@
+---
+id: core-find-the-planted-error
+title: Find the planted error
+description: 'Four AI answers on the cafe data, each with one named mistake: a doubled total, an invented function, a dropped null, an average of averages.'
+stage: core
+order: 390
+level: intermediate
+duration: 35
+objectives:
+  - Catch a fan-out join that doubles revenue, using row counts around the join
+  - Catch a function that does not exist, using the documentation of the installed version
+  - Catch a filter that silently drops nulls, using a null profile
+  - Catch an average of averages by recomputing from the raw rows
+  - Name the check that catches each failure, not only the failure
+prerequisites:
+  - core-trust-but-verify-ai-output
+  - sql-join-fanout
+  - sql-null-handling
+  - python-pandas-groupby-aggregate
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: Spracklen et al., We have a package for you! Package hallucinations by code-generating LLMs (USENIX Security 2025; arXiv 2406.10279, accessed 2026-11-22)
+    url: https://arxiv.org/abs/2406.10279
+  - title: Pourreza and Rafiei, DIN-SQL, decomposed in-context learning of text-to-SQL with self-correction (NeurIPS 2023; arXiv 2304.11015, accessed 2026-11-22)
+    url: https://arxiv.org/abs/2304.11015
+  - title: 'pandas documentation: DataFrame, the API reference (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/reference/frame.html
+  - title: 'pandas documentation: What''s new in 2.0.0, April 3, 2023 (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/whatsnew/v2.0.0.html
+  - title: 'DuckDB documentation: NULL Values (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/2.0/sql/data_types/nulls.html
+  - title: 'DuckDB documentation: Aggregate Functions (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/2.0/sql/functions/aggregates.html
+status: draft
+---
+
+TODO(owner): Team draft (D24); `reviewed` and `status` are yours to set. Not run in the page: the pandas block (run on pandas 3.0.5 and 2.2.3, same output). Each SQL result is the same on DuckDB 2.0.0 and the page's 1.4.3. Changes from the stub: `.mdx`, the interleaved shape, `duration` 35, three prerequisites added, two sources dropped (not opened). Doubts: cafe-sales has no per-order total or `rating` column (research issue #88 assumed both), so the fan-out builds the total in a query and the null drill uses a `LEFT JOIN`; averaging daily averages gives a gap of cents, so drill 4 uses category averages. No rate is quoted for silent nulls.
+
+TODO(owner): Assumed from lessons not yet written, named by title only. *Trust, but verify: checking AI output* teaches five steps in this order: predict the shape and a few values; count rows and nulls before and after every join and filter; reconcile one total a second way; confirm every function in the documentation of the installed version; end with accept, revise or reject. *Prompting with the data in the room* defines the context pack, not used here.
+
+## The question
+
+Four answers about the cafes wait in your inbox, each hiding one mistake. This time the class of the mistake is named before you look, and your job is the check that catches it, in your own words.
+
+<Aside type="note" title="What these answers are">
+
+Every AI answer here was written for this lesson, in the style of an assistant, with a planted mistake. None is a real transcript and none comes from a product. The code is real, and the numbers are what it prints.
+
+</Aside>
+
+| Drill | Class of mistake | The answer is about |
+|---|---|---|
+| 1 | a fan-out join | revenue by category, April to June, completed orders |
+| 2 | a name that does not exist | the daily totals of the cafes, all 1,800 orders |
+| 3 | a filter that drops nulls | customers who never had an order canceled |
+| 4 | an average of averages | the average amount of an order line, completed orders |
+
+The checking routine of *Trust, but verify: checking AI output*: predict the shape and a few values; count rows and nulls around every join and filter; reconcile one total a second way; confirm every function in the documentation of the installed version; end with accept, revise or reject. Each class below calls for one step.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *NULL: unknown is not zero* (S4), write the query that gives, in one row, the number of orders and the number of orders that have a customer.
+
+   <details>
+   <summary>answer</summary>
+
+   `SELECT COUNT(*), COUNT(customer_id) FROM orders;`. `COUNT(*)` counts rows and `COUNT(column)` counts the rows where the column is not empty.
+
+   </details>
+
+2. In *Using an AI assistant for Python, with checks* (P27), name two checks you run on AI-written code before you trust its numbers.
+
+   <details>
+   <summary>answer</summary>
+
+   Any two of: a row count that makes sense, a known total from another route, a look at the first rows, a look up of every function.
+
+   </details>
+
+## The big idea
+
+A mistake with a name has a check with a name: the class tells you which check to run.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ec-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="ec" id="ec-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="ec" id="ec-r1" aria-label="Step 1 of 4: An AI answer arrives" />
+<input class="sa-r r2 o4" type="radio" name="ec" id="ec-r2" aria-label="Step 2 of 4: Name its class" />
+<input class="sa-r r3 o6" type="radio" name="ec" id="ec-r3" aria-label="Step 3 of 4: Run the check for that class" />
+<input class="sa-r r4 o8" type="radio" name="ec" id="ec-r4" aria-label="Step 4 of 4: Write the check in words" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>answers</small><span><i class="w2 tmp hl">1</i><i class="w6 d3">1</i></span></span><span class="sa-n c-flt"><small>classes</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">1</i><i class="w4 d5">1</i></span></span><span class="sa-n c-mat"><small>checks</small><span><i class="w5 tmp">—</i><i class="w1 d6 tmp hl">1</i><i class="w2 d7">1</i></span></span><span class="sa-n c-grp"><small>sentences</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 236" width="360" role="img" aria-labelledby="ec-t ec-d">
+<title id="ec-t">The class of a mistake tells you which check to run</title>
+<desc id="ec-d">A chip named AI answer sits at the top left. An arrow leads to a chip named its class. A second arrow leads down to a box named its check, and an arrow from the box reaches a chip named the data. A last arrow leads left to a box named in words, with a closing line: a class, a check, a sentence.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · An AI answer arrives</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · Name its class</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · Run the check for that class</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Write the check in words</text>
+<text class="f11 b" x="10" y="14">Class first, then the check</text>
+<g><rect class="f-src k2" x="10" y="50" width="96" height="26" rx="6" /><text class="f11 m" x="58" y="67">AI answer</text></g>
+<path class="s-flt dr p6 d3" pathLength="1" d="M106 63L136 63M129.7 59.96L136 63L129.7 66.04" />
+<g class="w6 d3"><rect class="f-flt k3" x="140" y="50" width="100" height="26" rx="6" /><text class="f11 m" x="190" y="67">its class</text></g>
+<path class="s-mat dr p4 d5" pathLength="1" d="M190 76L190 110M193.04 103.7L190 110L186.96 103.7" />
+<g class="w4 d5"><rect class="s-mat" x="140" y="112" width="100" height="46" rx="6" /><text class="f11 b" x="150" y="129">its check</text></g>
+<path class="s-out dr p3 d6" pathLength="1" d="M240 135L268 135M261.7 131.96L268 135L261.7 138.04" />
+<g class="w3 d6"><rect class="f-out k2" x="270" y="122" width="80" height="26" rx="6" /><text class="f11 m" x="310" y="139">the data</text></g>
+<path class="s-grp dr p2 d7" pathLength="1" d="M140 135L110 135M116.3 138.04L110 135L116.3 131.96" />
+<g class="w2 d7"><rect class="s-grp" x="10" y="112" width="98" height="46" rx="6" /><text class="f11 b" x="20" y="129">in words</text></g>
+<text class="f11 b m w1 d8" x="190" y="206">a class, a check, a sentence</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ec-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ec-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ec-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ec-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ec-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ec-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ec-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ec-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ec-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ec-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ec-r1">1</label><label class="sa-sb sb2" for="ec-r2">2</label><label class="sa-sb sb3" for="ec-r3">3</label><label class="sa-sb sb4" for="ec-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">An AI answer is a draft: it can run cleanly and still be wrong.<span class="sa-chs"><span class="sa-ch pl">1 answer</span></span></div>
+<div class="c-flt w2 d3 tmp">Naming the class of mistake tells you which check to run.<span class="sa-chs"><span class="sa-ch pl">1 class named</span></span></div>
+<div class="c-mat w2 d5 tmp">Each class has its own check, and the check runs on the data, not on the answer.<span class="sa-chs"><span class="sa-ch pl">its check</span><span class="sa-ch pl">the data</span></span></div>
+<div class="c-grp w2 d7">A check you can say in your own words is a check you can run again.<span class="sa-chs"><span class="sa-ch pl">1 sentence</span></span></div>
+</div>
+<p class="ca-cap">An AI answer is a draft. Name the class of its mistake, run the check for that class on the data, then write the check in your own words.</p>
+<ol class="sa-steps">
+<li>An AI answer arrives</li>
+<li>Name its class</li>
+<li>Run the check for that class</li>
+<li>Write the check in words</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: a fan-out, a name that does not exist, a filter that drops nulls and an average of averages. The SQL blocks run in the page, each complete on its own. The Python block of drill 2 is read only: run it in a notebook or a terminal.
+
+### 1. A fan-out counts a number once for each line
+
+**Idea.** A *fan-out* is a join that returns one row for every match (*Join fan-out*, S22), so a number that belongs to an order is repeated once for each of its lines. The check counts the rows around the join and adds the same quantity up a second way.
+
+<Aside type="note" title="An answer written for this lesson, in the style of an assistant">
+
+**Revenue by category, April to June, completed orders.** I worked out the total of each order first and joined it to the order lines, so that every total could be split by category. Coffee 14,256.25, bakery 5,660.00, food 5,526.50 and tea 4,469.25: 29,912.00 dollars in all.
+
+</Aside>
+
+**Try it.** The assistant's query, as it wrote it:
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT order_id, SUM(quantity * unit_price_usd - discount_usd) AS order_total
+  FROM order_items JOIN products USING (product_id)
+  GROUP BY order_id
+)
+SELECT p.category, SUM(t.order_total) AS revenue
+FROM orders o
+JOIN order_totals t ON t.order_id = o.order_id
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-07-01'
+GROUP BY p.category
+ORDER BY revenue DESC;`} />
+
+Expected: 4 rows, 2 columns.
+
+**Predict:** the revenue of the same orders added from the order lines alone, with nothing else joined. Will it come to about 29,912.00, about half of it or about a third of it?
+
+**Try it.** The second route, with the rows that go through the join:
+
+<RunSQL query={`SELECT COUNT(DISTINCT o.order_id) AS orders,
+       COUNT(*) AS lines,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-07-01';`} />
+
+Expected: 1 row, 3 columns.
+
+*Why:* 1,082 orders, 1,979 lines and 13,974.00 dollars: the assistant's total is 2.14 times the real one. Each order's total was copied onto every one of its lines, so an order with three lines was added three times. The query ran, returned four tidy rows and raised no error.
+
+**Write the check.** In a sentence or two of your own: which check catches this, and what does it show?
+
+<details>
+<summary>A check in words</summary>
+
+Count the rows around the join: 1,082 orders go in and 1,979 rows come out, so anything per order is repeated. Add the revenue a second way, from the lines: 13,974.00.
+
+</details>
+
+### 2. A name that does not exist
+
+**Idea.** An assistant writes names (a function, a method, a package, a column) that look right and may not exist in your installed version. The check is the documentation of that version, or asking the object itself.
+
+<Aside type="note" title="An answer written for this lesson, in the style of an assistant">
+
+**Daily totals of the cafes.** I added the amount of each order to the orders and used the daily totals method to get one number for each day.
+
+</Aside>
+
+The assistant's code, with the table `sales` it builds first (one row for each of the 1,800 orders, with its `amount`):
+
+```python
+import pandas as pd
+
+BASE = "https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.1.0/datasets/cafe-sales/v1/"
+orders = pd.read_csv(BASE + "orders.csv", parse_dates=["ordered_at"])
+lines = pd.read_csv(BASE + "order_items.csv").merge(pd.read_csv(BASE + "products.csv"), on="product_id", validate="many_to_one")
+lines["amount"] = lines["quantity"] * lines["unit_price_usd"] - lines["discount_usd"]
+sales = orders.merge(lines.groupby("order_id", as_index=False)["amount"].sum(), on="order_id", validate="one_to_one")
+
+daily = sales.daily_totals("amount", by="ordered_at")
+```
+
+**Predict:** the last line asks for a method by name. Which will Python raise: `NameError`, `KeyError`, `AttributeError` or `TypeError`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+AttributeError: 'DataFrame' object has no attribute 'daily_totals'
+```
+
+</details>
+
+**Try it.** Ask the object, then use a method that exists:
+
+```python
+print(hasattr(sales, "daily_totals"))
+print(hasattr(pd.DataFrame, "append"))
+daily = sales.groupby(sales["ordered_at"].dt.date)["amount"].sum()
+print(daily.head(3))
+print(len(daily), daily.sum())
+```
+
+**Predict:** `hasattr(x, "name")` says whether `x` has something of that name. What do the first two lines print, one for the invented name and one for `append`, a method that older code used?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+False
+False
+ordered_at
+2026-01-01    45.50
+2026-01-02    75.75
+2026-01-03    65.50
+Name: amount, dtype: float64
+181 22754.25
+```
+
+</details>
+
+*Why:* there is no such method, and `append` is gone too: the pandas 2.0 release notes list `DataFrame.append` among the removed methods and point to `concat`. The output is from pandas 2.2.3 and 3.0.5; your installed version decides, so read the page for that version. The DataFrame page lists `groupby` under function application and `resample` under time series, and no `daily_totals`. The fix gives 181 days and 22,754.25 dollars, the canceled order included.
+
+**Write the check.** In a sentence or two of your own: how do you catch an invented name?
+
+<details>
+<summary>A check in words</summary>
+
+Look up every name in the documentation of the installed version, or ask the object with `hasattr` or `dir`. A name neither has does not exist, however natural it sounds.
+
+</details>
+
+### 3. A filter on a column that a join left empty
+
+**Idea.** After a `LEFT JOIN`, a customer with no orders has `NULL` in every column of `orders`. A comparison with `NULL` returns `NULL`, even `NULL = NULL` (the DuckDB page on NULL values), and in standard SQL a `WHERE` keeps a row only when its test is true. A test on a column of the right-hand table can therefore take the join's added rows away again.
+
+<Aside type="note" title="An answer written for this lesson, in the style of an assistant">
+
+**How many of our 150 loyalty customers have never had an order canceled?** I joined every customer to their orders, kept the rows whose order is not canceled and counted the customers: 144.
+
+</Aside>
+
+**Try it.** The assistant's query, as it wrote it:
+
+<RunSQL query={`SELECT COUNT(DISTINCT c.customer_id) AS customers_without_a_canceled_order
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+WHERE o.status <> 'canceled';`} />
+
+Expected: 1 row, 1 column.
+
+**Predict:** the orders table holds one canceled order, and its customer has no other order. Without running anything, how many of the 150 customers should the answer be?
+
+**Try it.** Profile the join the assistant used:
+
+<RunSQL query={`SELECT COUNT(*) AS joined_rows,
+       COUNT(o.status) AS with_status,
+       COUNT(DISTINCT c.customer_id) AS customers
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id;`} />
+
+Expected: 1 row, 3 columns.
+
+*Why:* the answer is 149, and the assistant's 144 is 5 short. The join has 1,804 rows but only 1,799 have a status: five customers never ordered, their rows carry `NULL`, and the `WHERE` removed them. `COUNT(column)` skips empty values, as the DuckDB aggregates page says, which is why it exposes them. A `NOT EXISTS` subquery gives 149, and the first exercise uses one. No rate is quoted for this mistake: the rules of SQL fix the mechanism, and the check does not depend on how often it happens.
+
+**Write the check.** In a sentence or two of your own: what do you count, and where?
+
+<details>
+<summary>A check in words</summary>
+
+Count rows and non-empty values around the filter: 1,804 rows after the join, 1,799 with a status, so a `WHERE` on that column drops five.
+
+</details>
+
+### 4. An average of averages
+
+**Idea.** The average of several group averages is the average of all the rows only when the groups have the same size. With unequal groups each row of a small group weighs more than a row of a big one. The check recomputes the figure from the raw rows.
+
+<Aside type="note" title="An answer written for this lesson, in the style of an assistant">
+
+**The average amount of an order line, completed orders.** I averaged the lines of each category and then averaged those four numbers: 7.46 dollars.
+
+</Aside>
+
+**Try it.** The assistant's query, as it wrote it:
+
+<RunSQL query={`WITH by_category AS (
+  SELECT p.category, AVG(oi.quantity * p.unit_price_usd - oi.discount_usd) AS avg_line
+  FROM order_items oi
+  JOIN orders o ON o.order_id = oi.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY p.category
+)
+SELECT ROUND(AVG(avg_line), 2) AS average_line FROM by_category;`} />
+
+Expected: 1 row, 1 column.
+
+**Predict:** the average of all the completed lines, taken straight from the rows. Will it be higher than, lower than or equal to 7.46?
+
+**Try it.** From the raw rows, and by category:
+
+<RunSQL query={`SELECT COUNT(*) AS lines,
+       ROUND(AVG(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS average_line
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed';`} />
+
+Expected: 1 row, 2 columns.
+
+*Why:* 3,286 lines average 6.92 dollars. Coffee has 1,654 lines at 6.53, tea 501 at 6.45, bakery 703 at 5.44 and food 428 at 11.43. Food is 13 percent of the lines, but one quarter of the assistant's four averages.
+
+**Write the check.** In a sentence or two of your own: how do you catch it?
+
+<details>
+<summary>A check in words</summary>
+
+Recompute from the raw rows, with no average of averages: 6.92 over 3,286 lines. Or weight each category's average by its number of lines.
+
+</details>
+
+<Aside type="note" title="As of 2026-11-22: what published research measured">
+
+**Package names.** Spracklen and colleagues (USENIX Security 2025, preprint revised March 2025) had 16 models write Python and JavaScript. Of 2.23 million package names, 440,445 (19.7 percent) did not exist: 5.2 percent for the GPT-series models and 21.7 percent for open-source ones. Of the invented names they retried ten times, 43 percent came back every time and 39 percent never. These are package names from 2024 models, not method names as in drill 2.
+
+**Joins and names in SQL.** Pourreza and Rafiei (NeurIPS 2023) read 500 failed few-shot queries on the Spider benchmark, written by the Codex Davinci model. A wrong or missing table or column was the largest class of failure and JOIN the second.
+
+Newer models change these rates; the checks stay. This box is reviewed every six months.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- Name the class first: it picks the check.
+- Fan-out: count rows before and after each join, and add the total a second way.
+- A name: look it up in the documentation of the installed version, or ask the object.
+- A filter on a column that can be empty, even one a join emptied, drops those rows: count rows and non-empty values around it.
+- An average of averages: recompute from the raw rows.
+
+**Common trap:** trusting an answer because it ran, returned tidy rows and raised no error.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-find-the-planted-error-1">
+
+**Class: a filter that drops nulls.** An assistant was asked how many of the 150 customers have never placed a completed order. Its query keeps the customers whose order is not completed and counts them. Fix it so that every customer without a completed order is counted, whether or not the customer has any order. Expected: 1 row, 1 column.
+
+<RunSQL query={`SELECT COUNT(DISTINCT c.customer_id) AS customers
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+WHERE o.status <> 'completed';`} />
+
+<details>
+<summary>Hint</summary>
+
+Unit 3: what does the `WHERE` do with the rows the join added for customers with no orders? A customer has no completed order when none exists for that customer.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT COUNT(*) AS customers
+FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE ...);
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT COUNT(*) AS customers
+FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status = 'completed');
+```
+
+6 customers: the five who never ordered and the customer whose only order was canceled. The starter said 1, because its `WHERE` kept only rows that have a status.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-find-the-planted-error-2">
+
+**Class: a name that does not exist.** An assistant answered "orders by day of the week, April to June, completed orders" with a query that begins `SELECT weekday_name(ordered_at) AS weekday, COUNT(*) AS orders`. Before you start, say what the result looks like: seven rows, a weekday and a count. Find the right function in the DuckDB documentation, then write the query, the busiest day first. Expected: 7 rows, 2 columns (`weekday`, `orders`).
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Open the date functions page of the DuckDB documentation and look for the function that returns the name of a weekday.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Seven rows, each a weekday name with a count, the largest count first."*
+
+```sql
+SELECT ...(ordered_at) AS weekday, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed' AND ordered_at >= '2026-04-01' AND ordered_at < '2026-07-01'
+GROUP BY weekday
+ORDER BY orders DESC, weekday;
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT dayname(ordered_at) AS weekday, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed' AND ordered_at >= '2026-04-01' AND ordered_at < '2026-07-01'
+GROUP BY weekday
+ORDER BY orders DESC, weekday;
+```
+
+Saturday 215, Sunday 190, Monday 146, Wednesday 137, Tuesday 133, Thursday 131 and Friday 130, which add to the 1,082 orders of unit 1. The DuckDB page lists `dayname`, and no `weekday_name`.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the four classes of this lesson and the check for each.
+
+   <details>
+   <summary>answer</summary>
+
+   Fan-out: count rows around the join and add the total a second way. A name that does not exist: look it up in the documentation of the installed version. A filter that drops nulls: count rows and non-empty values around it. An average of averages: recompute from the raw rows.
+
+   </details>
+
+<Exercise id="core-find-the-planted-error-3">
+
+**Spot the flaw.** A colleague saw that the total of unit 1 was too big and asked the assistant for a fix: `DISTINCT` inside the sum. The total fell to 8,060.25, and the colleague wrote "Duplicates gone, fixed." Run it. Is the fix right, and what is the real revenue by category? Expected: 4 rows, 2 columns.
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT order_id, SUM(quantity * unit_price_usd - discount_usd) AS order_total
+  FROM order_items JOIN products USING (product_id)
+  GROUP BY order_id
+)
+SELECT p.category, SUM(DISTINCT t.order_total) AS revenue
+FROM orders o
+JOIN order_totals t ON t.order_id = o.order_id
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-07-01'
+GROUP BY p.category
+ORDER BY revenue DESC;`} />
+
+<details>
+<summary>Hint</summary>
+
+`DISTINCT` drops repeated values, not repeated rows. Can two different orders have the same total? Reconcile with 13,974.00.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT p.category, SUM(...) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT p.category, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-07-01'
+GROUP BY p.category
+ORDER BY revenue DESC;
+```
+
+Coffee 6,470.25, food 3,275.50, bakery 2,309.00 and tea 1,919.25: 13,974.00 together. The fix is wrong: 8,060.25 falls 5,913.75 short. `DISTINCT` counts each value once, so two different orders with the same total, 7.00 for example, are added once. It loses real rows. Add up the lines, the grain you want.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can name the check that catches a fan-out, an invented name, a filter that drops nulls and an average of averages, run it, and write it in my own words.*
+Test: Exercise core-find-the-planted-error-2, done from the empty editor without opening the hints.
+
+The pattern to remember: **name the class of the mistake, and the class names the check.** Next comes *Hunt the error nobody flagged* (C40), where nothing names the class and the answers may be right.
