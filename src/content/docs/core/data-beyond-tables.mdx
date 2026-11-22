@@ -1,0 +1,778 @@
+---
+id: core-data-beyond-tables
+title: 'Data beyond tables: nested JSON, events and formats'
+short_title: Data beyond tables
+description: Read nested JSON and event data, choose between the two format pairs, and flatten, explode or normalize it back into tables.
+stage: core
+order: 310
+level: intermediate
+duration: 35
+objectives:
+  - Read nested JSON and name its records, lists and keys
+  - Turn an event stream into timestamped rows
+  - Choose between a row format and a column format, and between a text format and a binary one
+  - Flatten, explode and normalize nested data into tables with pandas
+  - Add a Parquet export to the project through a pull request
+prerequisites:
+  - core-designing-a-star-schema
+  - python-files-csv-json
+  - core-git-branches-and-pull-requests
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'pandas documentation: json_normalize (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.json_normalize.html
+  - title: 'pandas documentation: DataFrame.to_parquet (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html
+  - title: 'pandas documentation: Scaling to large datasets (accessed 2026-11-22)'
+    url: https://pandas.pydata.org/docs/user_guide/scale.html
+  - title: 'Python documentation: json, JSON encoder and decoder (accessed 2026-11-22)'
+    url: https://docs.python.org/3/library/json.html
+  - title: 'JSON Lines (accessed 2026-11-22)'
+    url: https://jsonlines.org/
+  - title: 'Apache Parquet documentation: Motivation (accessed 2026-11-22)'
+    url: https://parquet.apache.org/docs/overview/motivation/
+  - title: 'Apache Avro 1.12.0 specification (accessed 2026-11-22)'
+    url: https://avro.apache.org/docs/1.12.0/specification/
+  - title: 'Apache Kafka documentation: introduction, events and topics (accessed 2026-11-22)'
+    url: https://kafka.apache.org/intro
+  - title: 'MongoDB Manual: data modeling introduction (accessed 2026-11-22)'
+    url: https://www.mongodb.com/docs/manual/core/data-modeling-introduction/
+status: draft
+---
+
+TODO(owner): Team draft (D24) of the whole lesson. Every output ran on Python 3.13.18, pandas 3.1.1, pyarrow 26.0.1 and uv 0.11.32 (Linux), in the `cafe-report` repository as C30 leaves it; pandas 2.x and Windows were not run. cafe-sales has no nested data and no event log: the three nested orders are orders 1001 to 1003 with their lines, and the eight events are the placing of orders 1001 to 1008 (lines 5 and 6 swapped on purpose). Only nested JSON, events and the four formats are taught, not the other forms of the research. The Parquet docs hub says nothing about the format, so its Motivation page is the source; Avro is cited from its specification. Times vary by machine.
+
+## The question
+
+The mobile team sends each order as one JSON record with its lines inside, and a log of events. The owner asks:
+
+> The analysts want one row for each line sold, and a file that opens fast. Can you give them both?
+
+This is the table they want, for the first order:
+
+| order_id | store_name | product | quantity |
+|---:|---|---|---:|
+| 1001 | Campus | Croissant | 1 |
+| 1001 | Campus | Cold Brew | 1 |
+| 1001 | Campus | Espresso | 2 |
+
+By the end you can read the nested record, turn it and an event log into tables, choose a file format, and add a Parquet export to `cafe-report`.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18) you split a business process into a fact table and dimension tables with keys. Unit 2 does the same split, on a record that arrives nested.
+
+**Diverge.** In C18 you designed the tables first. Here the nested record arrives first, and unit 1 shows what a table makes of it.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Reading files and tables*](/python/files-and-tables/) (P9), which call turns the text of a JSON file into dictionaries and lists?
+
+   <details>
+   <summary>answer</summary>
+
+   `json.load(file)` for an open file, or `json.loads(text)` for a string.
+
+   </details>
+
+## The big idea
+
+Nested data fits a table when you flatten the nesting, explode the lists and split what repeats into tables with keys.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ntt-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="ntt" id="ntt-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="ntt" id="ntt-r1" aria-label="Step 1 of 4: One nested record" />
+<input class="sa-r r2 o4" type="radio" name="ntt" id="ntt-r2" aria-label="Step 2 of 4: Flatten: the store becomes columns" />
+<input class="sa-r r3 o6" type="radio" name="ntt" id="ntt-r3" aria-label="Step 3 of 4: Explode: the list becomes rows" />
+<input class="sa-r r4 o8" type="radio" name="ntt" id="ntt-r4" aria-label="Step 4 of 4: Normalize: tables with keys" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>tables</small><span><i class="w2 tmp hl">1</i><i class="w4 d3 tmp">1</i><i class="w2 d7 hl">3</i></span></span><span class="sa-n c-grp"><small>rows</small><span><i class="w2 tmp hl">1</i><i class="w2 d3 tmp">1</i><i class="w2 d5 tmp hl">2</i><i class="w2 d7 hl">4</i></span></span><span class="sa-n c-flt"><small>store copies</small><span><i class="w2 tmp hl">1</i><i class="w2 d3 tmp">1</i><i class="w2 d5 tmp hl">2</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 236" width="360" role="img" aria-labelledby="ntt-t ntt-d">
+<title id="ntt-t">Nested data unfolds into flat rows, then into tables that share a key</title>
+<desc id="ntt-d">One record with a nested store and a list of items. Flatten splits the store into the columns store.sid and store.name. Explode turns the list into two rows and repeats the other columns on both. Normalize splits the rows into three small tables, orders, stores and items, that share the keys id and sid, so nothing repeats.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · One nested record</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · Flatten: the store becomes columns</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · Explode: the list becomes rows</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Normalize: tables with keys</text>
+<text class="f11 b" x="10" y="14">Unfold, then split</text>
+<g class="w2 tmp"><rect class="f-src k3" x="10" y="70" width="44" height="24" rx="6" /><text class="f11 m" x="32" y="86">id</text></g>
+<g class="w2 tmp"><rect class="f-src k2" x="62" y="70" width="134" height="24" rx="6" /><text class="f11 m" x="129" y="86">store: sid, name</text></g>
+<g class="w4 tmp"><rect class="f-src k2" x="204" y="70" width="100" height="24" rx="6" /><text class="f11 m" x="254" y="86">items [x1, x2]</text></g>
+<g class="w4 d3 tmp"><rect class="f-grp k3" x="10" y="70" width="44" height="24" rx="6" /><text class="f11 m" x="32" y="86">id</text></g>
+<g class="w4 d3 tmp"><rect class="f-grp k2" x="62" y="70" width="58" height="24" rx="6" /><text class="f11 m" x="91" y="86">store.sid</text></g>
+<g class="w4 d3 tmp"><rect class="f-grp k2" x="128" y="70" width="68" height="24" rx="6" /><text class="f11 m" x="162" y="86">store.name</text></g>
+<g class="w2 d5 tmp"><rect class="f-flt k3" x="204" y="70" width="44" height="24" rx="6" /><text class="f11 m" x="226" y="86">x1</text></g>
+<g class="w2 d5 tmp"><rect class="f-flt k3" x="204" y="102" width="44" height="24" rx="6" /><text class="f11 m" x="226" y="118">x2</text></g>
+<g class="w2 d5 tmp"><rect class="f-grp k1" x="10" y="102" width="44" height="24" rx="6" /><text class="f11 m" x="32" y="118">id</text></g>
+<g class="w2 d5 tmp"><rect class="f-grp k1" x="62" y="102" width="58" height="24" rx="6" /><text class="f11 m" x="91" y="118">store.sid</text></g>
+<g class="w2 d5 tmp"><rect class="f-grp k1" x="128" y="102" width="68" height="24" rx="6" /><text class="f11 m" x="162" y="118">store.name</text></g>
+<text class="f10 mu w1 d6 tmp" x="10" y="140">row 2 repeats id and the store</text>
+<g class="w2 d7"><rect class="s-out" x="10" y="44" width="96" height="56" rx="6" /><text class="f11 b" x="20" y="61">orders</text></g>
+<g class="w2 d7"><rect class="f-src k3" x="18" y="68" width="36" height="24" rx="6" /><text class="f11 m" x="36" y="84">id</text></g>
+<g class="w2 d7"><rect class="f-mat k3" x="60" y="68" width="38" height="24" rx="6" /><text class="f11 m" x="79" y="84">sid</text></g>
+<g class="w2 d7"><rect class="s-out" x="128" y="44" width="130" height="56" rx="6" /><text class="f11 b" x="138" y="61">stores</text></g>
+<g class="w2 d7"><rect class="f-mat k3" x="136" y="68" width="38" height="24" rx="6" /><text class="f11 m" x="155" y="84">sid</text></g>
+<g class="w2 d7"><rect class="f-grp k3" x="180" y="68" width="70" height="24" rx="6" /><text class="f11 m" x="215" y="84">name</text></g>
+<g class="w2 d7"><rect class="s-out" x="10" y="124" width="128" height="92" rx="6" /><text class="f11 b" x="20" y="141">items</text></g>
+<g class="w2 d7"><rect class="f-src k3" x="18" y="150" width="36" height="24" rx="6" /><text class="f11 m" x="36" y="166">id</text></g>
+<g class="w2 d7"><rect class="f-flt k3" x="62" y="150" width="38" height="24" rx="6" /><text class="f11 m" x="81" y="166">x1</text></g>
+<g class="w2 d7"><rect class="f-src k3" x="18" y="182" width="36" height="24" rx="6" /><text class="f11 m" x="36" y="198">id</text></g>
+<g class="w2 d7"><rect class="f-flt k3" x="62" y="182" width="38" height="24" rx="6" /><text class="f11 m" x="81" y="198">x2</text></g>
+<text class="f10 mu w1 d8" x="160" y="152">id and sid are the keys:</text>
+<text class="f10 mu w1 d8" x="160" y="168">each fact is stored once</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ntt-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ntt-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ntt-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ntt-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ntt-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ntt-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ntt-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ntt-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ntt-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ntt-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ntt-r1">1</label><label class="sa-sb sb2" for="ntt-r2">2</label><label class="sa-sb sb3" for="ntt-r3">3</label><label class="sa-sb sb4" for="ntt-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">A nested record holds records and lists inside one another.<span class="sa-chs"><span class="sa-ch pl">1 record</span><span class="sa-ch pl">a store and a list</span></span></div>
+<div class="c-grp w2 d3 tmp">Flatten gives each nested key its own column, named store.sid and store.name.<span class="sa-chs"><span class="sa-ch pl">store.sid, store.name</span></span></div>
+<div class="c-flt w2 d5 tmp">Explode makes one row for each list element and repeats the other columns.<span class="sa-chs"><span class="sa-ch pl">a second row</span><span class="sa-ch pl">repeated columns</span></span></div>
+<div class="c-out w2 d7">Normalize stores each fact once, in a table of its own, linked by a key.<span class="sa-chs"><span class="sa-ch pl">3 tables</span><span class="sa-ch mi">repeated columns</span></span></div>
+</div>
+<p class="ca-cap">Flatten spreads a nested record into columns, explode turns a list into rows, and normalize splits the rows into tables that share a key.</p>
+<ol class="sa-steps">
+<li>One nested record</li>
+<li>Flatten: the store becomes columns</li>
+<li>Explode: the list becomes rows</li>
+<li>Normalize: tables with keys</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: nested JSON and flatten, explode and normalize, an event stream, and the two format pairs. Work in `cafe-report` after C30, with `main` up to date and `git status` clean. Save the data files in `data/`, which Git ignores, and the scripts in the project folder; delete the scripts when you are done.
+
+### 1. Read nested JSON, then flatten it
+
+**Idea.** `json.load` turns a JSON object into a dict (a *record* of named values, whose names are *keys*), an array into a list and `null` into `None`. *Nested* means a record inside a record, or a list inside a record. `pd.json_normalize` *flattens* nested records into columns whose names join the keys with a dot; a list stays whole in one cell.
+
+**Try it.** Save as `data/orders_nested.json` (orders 1001 to 1003 of cafe-sales, with their lines):
+
+```json
+[
+  {
+    "order_id": 1001,
+    "ordered_at": "2026-01-01 08:02:00",
+    "status": "completed",
+    "customer_id": 15,
+    "store": {"store_id": 2, "store_name": "Campus"},
+    "items": [
+      {"product_id": 10, "name": "Croissant", "quantity": 1},
+      {"product_id": 6, "name": "Cold Brew", "quantity": 1},
+      {"product_id": 1, "name": "Espresso", "quantity": 2}
+    ]
+  },
+  {
+    "order_id": 1002,
+    "ordered_at": "2026-01-01 15:38:00",
+    "status": "completed",
+    "customer_id": 46,
+    "store": {"store_id": 1, "store_name": "Old Town"},
+    "items": [
+      {"product_id": 10, "name": "Croissant", "quantity": 1},
+      {"product_id": 15, "name": "Turkey Sandwich", "quantity": 1}
+    ]
+  },
+  {
+    "order_id": 1003,
+    "ordered_at": "2026-01-01 15:47:00",
+    "status": "completed",
+    "customer_id": 61,
+    "store": {"store_id": 2, "store_name": "Campus"},
+    "items": [
+      {"product_id": 6, "name": "Cold Brew", "quantity": 2},
+      {"product_id": 1, "name": "Espresso", "quantity": 1}
+    ]
+  }
+]
+```
+
+Save this as `nested.py` and run it with `uv run python nested.py`:
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/orders_nested.json") as file:
+    orders = json.load(file)
+
+print(type(orders).__name__, len(orders))
+first = orders[0]
+print(list(first))
+print(type(first["store"]).__name__, type(first["items"]).__name__)
+print(first["store"]["store_name"], first["items"][2]["name"])
+
+flat = pd.json_normalize(orders)
+print(flat.shape)
+print(list(flat.columns))
+print(flat["items"][1])
+```
+
+**Predict:** what are the types of `store` and `items`, what shape does the flat table have, how are its columns named, and what does the `items` cell of the second order hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python nested.py
+list 3
+['order_id', 'ordered_at', 'status', 'customer_id', 'store', 'items']
+dict list
+Campus Espresso
+(3, 7)
+['order_id', 'ordered_at', 'status', 'customer_id', 'items', 'store.store_id', 'store.store_name']
+[{'product_id': 10, 'name': 'Croissant', 'quantity': 1}, {'product_id': 15, 'name': 'Turkey Sandwich', 'quantity': 1}]
+```
+
+</details>
+
+*Why:* the file is a list of three records; `store` is a record and `items` a list, so the store flattened into two dotted columns (the pandas page shows the same `foo.bar` naming) and the list stayed in one cell. A table has one value in each cell, so the next unit deals with the list.
+
+### 2. Explode a list, then normalize
+
+**Idea.** To *explode* a list is to make one row for each element, repeating the other columns on each row. `json_normalize` with `record_path` (the list to explode) and `meta` (the fields to repeat) flattens and explodes in one call. To *normalize*, in the sense of C18, is to split the rows into tables with keys so that each fact is stored once. MongoDB's manual calls the same choice embedding against referencing.
+
+**Try it.** Save as `verbs.py` and run it:
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/orders_nested.json") as file:
+    orders = json.load(file)
+
+flat = pd.json_normalize(orders)
+lines = flat.explode("items")
+print(lines.shape)
+print(lines["items"].iloc[0])
+
+items = pd.json_normalize(orders, record_path="items", meta=["order_id"])
+print(items)
+
+stores = flat[["store.store_id", "store.store_name"]].drop_duplicates()
+print(stores)
+print(len(flat), len(items), len(stores))
+print(sum(len(order["items"]) for order in orders))
+```
+
+**Predict:** how many rows does the exploded table have, what columns and rows does `items` have, and how many rows has `stores`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python verbs.py
+(7, 7)
+{'product_id': 10, 'name': 'Croissant', 'quantity': 1}
+   product_id             name  quantity order_id
+0          10        Croissant         1     1001
+1           6        Cold Brew         1     1001
+2           1         Espresso         2     1001
+3          10        Croissant         1     1002
+4          15  Turkey Sandwich         1     1002
+5           6        Cold Brew         2     1003
+6           1         Espresso         1     1003
+   store.store_id store.store_name
+0               2           Campus
+1               1         Old Town
+3 7 2
+7
+```
+
+</details>
+
+*Why:* each list element became a row, so three orders with 3, 2 and 2 lines gave 7 rows, and the last line counts the elements by a second route. `meta` put the order id on every line, which is the key that links `items` to `flat`. Two stores serve the three orders, so `drop_duplicates` leaves 2 rows: a fact stored once.
+
+### 3. An event stream is rows with a time
+
+**Idea.** Kafka's documentation says an *event* records the fact that something happened, and that it has a key, a value and a timestamp. A log of events is often *JSON Lines*: one JSON value on each line, which a program can process one record at a time. Land the events as rows: parse each line, flatten it, turn the time text into a date and time, sort by it, and group by the hour with `dt.floor("h")`.
+
+**Try it.** Save as `data/events.jsonl` (the placing of orders 1001 to 1008, in the order the lines arrived):
+
+```json
+{"type": "order_placed", "at": "2026-01-01T08:02:00", "data": {"order_id": 1001, "store_id": 2}}
+{"type": "order_placed", "at": "2026-01-01T15:38:00", "data": {"order_id": 1002, "store_id": 1}}
+{"type": "order_placed", "at": "2026-01-01T15:47:00", "data": {"order_id": 1003, "store_id": 2}}
+{"type": "order_placed", "at": "2026-01-01T16:18:00", "data": {"order_id": 1004, "store_id": 1}}
+{"type": "order_placed", "at": "2026-01-02T07:44:00", "data": {"order_id": 1006, "store_id": 1}}
+{"type": "order_placed", "at": "2026-01-02T07:18:00", "data": {"order_id": 1005, "store_id": 2}}
+{"type": "order_placed", "at": "2026-01-02T09:40:00", "data": {"order_id": 1007, "store_id": 1}}
+{"type": "order_placed", "at": "2026-01-02T11:34:00", "data": {"order_id": 1008, "store_id": 2}}
+```
+
+Save as `events.py` and run it:
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/events.jsonl") as file:
+    events = [json.loads(line) for line in file]
+
+table = pd.json_normalize(events)
+print(table.columns.tolist())
+print(table["at"].dtype)
+
+table["at"] = pd.to_datetime(table["at"])
+table = table.sort_values("at")
+print(table["data.order_id"].tolist())
+print(table.groupby(table["at"].dt.floor("h")).size())
+```
+
+**Predict:** what type is `at` before the conversion, which order ids come out in time order, and how many events fall in each hour?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python events.py
+['type', 'at', 'data.order_id', 'data.store_id']
+str
+[1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008]
+at
+2026-01-01 08:00:00    1
+2026-01-01 15:00:00    2
+2026-01-01 16:00:00    1
+2026-01-02 07:00:00    2
+2026-01-02 09:00:00    1
+2026-01-02 11:00:00    1
+dtype: int64
+```
+
+</details>
+
+*Why:* the time arrives as text (pandas 3.1 calls that type `str`; older versions print `object`), so sorting needed the conversion first. The file lists orders 1006 and 1005 in the order they arrived, and the sort put them in the order they happened. Hours with no event do not appear, because `groupby` lists only the groups it finds.
+
+### 4. Two pairs of formats
+
+**Idea.** Four formats come in two pairs. **Text you can open:** CSV, flat lines of text with no types, and JSON, nested. **Binary you cannot open:** Parquet, which stores the values of each column together and, as its documentation says, is built for very efficient compression and encoding, with the compression chosen for each column; and Avro, which stores its records in blocks and keeps its schema in the file header. Columns suit analysis, because a reader can load only the columns it needs; records suit moving data between systems; text is for people and binary is for scale. `to_parquet` needs a Parquet library, `pyarrow`.
+
+**Try it.** Work on a branch, as in C30. Save as `cafe_report/export.py`, run it once, then add the library with `uv add pyarrow` and run it again:
+
+```bash
+git switch -c export-parquet
+```
+
+```python
+"""Write the orders in the Parquet format."""
+
+from pathlib import Path
+
+import pandas as pd
+
+
+def write_parquet(csv_path: str | Path, parquet_path: str | Path) -> int:
+    """Write the orders of a CSV file as a Parquet file, and return how many there are.
+
+    The order time is stored as a date and time, not as text.
+    """
+    orders = pd.read_csv(csv_path, parse_dates=["ordered_at"])
+    orders.to_parquet(parquet_path, index=False)
+    return len(orders)
+```
+
+```bash
+uv run python -c 'from cafe_report.export import write_parquet; print(write_parquet("data/orders.csv", "data/orders.parquet"))'
+uv add pyarrow
+uv run python -c 'from cafe_report.export import write_parquet; print(write_parquet("data/orders.csv", "data/orders.parquet"))'
+```
+
+Then compare the two files. Save as `formats.py` and run it; it prints both sizes, the bytes of each column inside the Parquet file, the stored type of `ordered_at`, and the time of 200 reads of the `status` column alone, from each file:
+
+```python
+import os
+import time
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+print("csv", os.path.getsize("data/orders.csv"), "bytes")
+print("parquet", os.path.getsize("data/orders.parquet"), "bytes")
+
+file = pq.ParquetFile("data/orders.parquet")
+group = file.metadata.row_group(0)
+for i in range(group.num_columns):
+    column = group.column(i)
+    print(column.path_in_schema, column.total_compressed_size)
+print(file.schema_arrow.field("ordered_at").type)
+
+
+def milliseconds(read, times=200):
+    start = time.perf_counter()
+    for _ in range(times):
+        read()
+    return (time.perf_counter() - start) / times * 1000
+
+
+csv_ms = milliseconds(lambda: pd.read_csv("data/orders.csv", usecols=["status"]))
+parquet_ms = milliseconds(lambda: pd.read_parquet("data/orders.parquet", columns=["status"]))
+print("csv, status only:", round(csv_ms, 2), "ms")
+print("parquet, status only:", round(parquet_ms, 2), "ms")
+```
+
+**Predict:** what does the first run print, how does the Parquet file compare in size with the CSV file, which column takes the least room, and which read is faster?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -c '...write_parquet(...)'
+A suitable version of pyarrow or fastparquet is required for parquet support.
+...
+$ uv add pyarrow
+ + pyarrow==26.0.1
+$ uv run python -c '...write_parquet(...)'
+1800
+$ uv run python formats.py
+csv 82348 bytes
+parquet 31526 bytes
+order_id 9791
+customer_id 2509
+store_id 570
+ordered_at 14453
+status 104
+payment_method 550
+timestamp[us]
+csv, status only: 1.06 ms
+parquet, status only: 2.7 ms
+```
+
+The first run's message goes on to say that neither library imported; your times differ.
+
+</details>
+
+*Why:* the first run failed because the project had declared no Parquet library; `uv add` wrote it into `pyproject.toml` and `uv.lock` (C25). The Parquet file is about 38 percent of the CSV file, `ordered_at` is stored as a real timestamp instead of text, and `status` needs 104 bytes, because it holds two distinct words repeated 1,800 times; a read of that column touches about 0.3 percent of the file. At 1,800 rows both reads take only a few milliseconds and the CSV read was faster on this run, so the number to take away is the size, and how few bytes one column needs.
+
+<Aside type="tip" title="Remember">
+
+- Flatten nested records into dotted columns, explode a list into rows, normalize repeated facts into tables with keys.
+- `record_path` names the list that becomes rows; `meta` names the fields repeated on each row.
+- An event is a fact with a time; land it as a row, convert the time, sort, then group.
+- CSV and JSON are text for people; Parquet and Avro are binary for scale; columns suit analysis, records suit moving data.
+
+**Common trap:** thinking a nested file is already a table. Explode multiplies the rows: three orders became seven lines.
+
+</Aside>
+
+## Project step: write the orders as Parquet
+
+You are on the branch `export-parquet`. Add the command, a test, and send the work through a pull request, as in C30.
+
+In `cafe_report/cli.py`, add `from pathlib import Path` below `from datetime import date`, `from cafe_report.export import write_parquet` below the config import, this option below `--store`, and the block that handles it just before `if args.monthly:`:
+
+```python
+    parser.add_argument(
+        "--parquet", action="store_true", help="write the orders as Parquet next to the CSV file"
+    )
+```
+
+```python
+    if args.parquet:
+        out = Path(orders_file).with_suffix(".parquet")
+        print(f"wrote {out} with {write_parquet(orders_file, out)} orders")
+        return
+```
+
+Save a test file, `tests/test_export.py`. It writes a two-order CSV file with the `tmp_path` fixture of C27, including the order without a customer, and reads the Parquet file back:
+
+```python
+import pandas as pd
+
+from cafe_report.export import write_parquet
+
+ORDERS = (
+    "order_id,customer_id,store_id,ordered_at,status,payment_method\n"
+    "1001,15,2,2026-01-01 08:02:00,completed,mobile\n"
+    "1335,,1,2026-02-14 08:59:00,completed,mobile\n"
+)
+
+
+def test_the_parquet_file_keeps_the_rows_and_the_order_time(tmp_path):
+    csv_file = tmp_path / "orders.csv"
+    csv_file.write_text(ORDERS)
+    parquet_file = tmp_path / "orders.parquet"
+    assert write_parquet(csv_file, parquet_file) == 2
+    table = pd.read_parquet(parquet_file)
+    assert table["order_id"].tolist() == [1001, 1335]
+    assert str(table["ordered_at"].dtype).startswith("datetime64")
+    assert table["customer_id"].isna().tolist() == [False, True]
+```
+
+Delete the four scripts, then check everything, run the command on the real file, and commit what the pull request needs (`data/` is already in `.gitignore`, so the Parquet file stays out of Git):
+
+```bash
+rm nested.py verbs.py events.py formats.py
+uv run pytest -q
+uv run ruff check
+uv run ruff format --check
+uv run python -m cafe_report --parquet
+git check-ignore -v data/orders.parquet
+git add pyproject.toml uv.lock cafe_report tests
+git commit -m "Add --parquet: write the orders as Parquet"
+git push -u origin export-parquet
+```
+
+```console
+$ uv run pytest -q
+13 passed in 0.47s
+$ uv run ruff check
+All checks passed!
+$ uv run ruff format --check
+17 files already formatted
+$ uv run python -m cafe_report --parquet
+wrote data/orders.parquet with 1800 orders
+$ git check-ignore -v data/orders.parquet
+.gitignore:2:data/    data/orders.parquet
+$ git commit -m "Add --parquet: write the orders as Parquet"
+[export-parquet 6ca8cd6] Add --parquet: write the orders as Parquet
+ 5 files changed, 93 insertions(+), 1 deletion(-)
+```
+
+On GitHub you would now open the pull request with a title and a description that says what the command writes and that `data/` stays out of Git, and the reviewer would read the two new files. When it is merged (here, in Sam's clone: `git fetch origin`, `git merge --no-ff origin/export-parquet -m "Merge pull request: add --parquet"`, `git push origin main`), catch up and tidy:
+
+```console
+$ git switch main
+$ git pull
+Updating 8345e38..10a789d
+Fast-forward
+$ git branch -d export-parquet
+Deleted branch export-parquet (was 6ca8cd6).
+$ uv run pytest -q
+13 passed in 0.39s
+```
+
+## Finish it
+
+<Exercise id="core-data-beyond-tables-1">
+
+**Normalize the products.** The lines of `orders_nested.json` carry the product name on every line. Split them into a `products` table, with one row for each product, and a `lines` table with the columns `order_id`, `product_id` and `quantity`; then join them back and check the total quantity. Save as `ex1.py` (delete each exercise script when you are done); the first lines are given. Expected: `products` has 4 rows and 2 columns, `lines` has 7 rows and 3 columns, the joined table has 7 rows, and both quantity sums are equal.
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/orders_nested.json") as file:
+    orders = json.load(file)
+
+items = pd.json_normalize(orders, record_path="items", meta=["order_id"])
+print(items.shape)
+```
+
+<details>
+<summary>Hint</summary>
+
+Pick two columns of `items` and drop the repeated rows, as unit 2 did for the stores. The join back is `merge`, as in [*Merging tables safely*](/python/pandas-merge-and-validate/) (P15), and `validate="many_to_one"` says that each line has one product.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+products = items[["product_id", "name"]].drop_duplicates()
+lines = items[[...]]
+```
+
+</details>
+
+<Solution>
+
+```python
+products = items[["product_id", "name"]].drop_duplicates()
+lines = items[["order_id", "product_id", "quantity"]]
+print(products.shape, list(products.columns))
+print(lines.shape, list(lines.columns))
+joined = lines.merge(products, on="product_id", validate="many_to_one")
+print(joined.shape)
+print(joined["quantity"].sum(), items["quantity"].sum())
+```
+
+```console
+(4, 2) ['product_id', 'name']
+(7, 3) ['order_id', 'product_id', 'quantity']
+(7, 4)
+9 9
+```
+
+The four products repeat across seven lines, so the name is now stored once. The join gives back the 7 lines, and the totals agree.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-data-beyond-tables-2">
+
+**Units sold in each hour.** A second log mixes two kinds of event: the placing of an order and each line sold. Before you start, say what the result looks like: one row for each hour with a number of units, and a total you can check by hand. Save the log as `data/events_mixed.jsonl`, then write a script from a blank file that prints the units sold in each hour.
+
+```json
+{"type": "order_placed", "at": "2026-01-01T08:02:00", "data": {"order_id": 1001, "store_id": 2}}
+{"type": "item_sold", "at": "2026-01-01T08:02:00", "data": {"order_id": 1001, "product_id": 10, "quantity": 1}}
+{"type": "item_sold", "at": "2026-01-01T08:02:00", "data": {"order_id": 1001, "product_id": 6, "quantity": 1}}
+{"type": "item_sold", "at": "2026-01-01T08:02:00", "data": {"order_id": 1001, "product_id": 1, "quantity": 2}}
+{"type": "order_placed", "at": "2026-01-01T15:38:00", "data": {"order_id": 1002, "store_id": 1}}
+{"type": "item_sold", "at": "2026-01-01T15:38:00", "data": {"order_id": 1002, "product_id": 10, "quantity": 1}}
+{"type": "item_sold", "at": "2026-01-01T15:38:00", "data": {"order_id": 1002, "product_id": 15, "quantity": 1}}
+```
+
+Expected: two hours, 08:00 and 15:00, with 4 and 2 units; print the columns of the flat table first and say what you see in the quantity column.
+
+<details>
+<summary>Hint</summary>
+
+Parse the lines and flatten as in unit 3. The two kinds of event have different keys under `data`, so a column is empty for the other kind. Keep only the `item_sold` rows, then group by the hour and sum.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+table = pd.json_normalize(events)
+table["at"] = pd.to_datetime(table["at"])
+sold = table[table["type"] == ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/events_mixed.jsonl") as file:
+    events = [json.loads(line) for line in file]
+
+table = pd.json_normalize(events)
+table["at"] = pd.to_datetime(table["at"])
+print(table.columns.tolist())
+print(table["data.quantity"].dtype)
+sold = table[table["type"] == "item_sold"]
+print(sold.groupby(sold["at"].dt.floor("h"))["data.quantity"].sum())
+```
+
+```console
+['type', 'at', 'data.order_id', 'data.store_id', 'data.product_id', 'data.quantity']
+float64
+at
+2026-01-01 08:00:00    4.0
+2026-01-01 15:00:00    2.0
+Name: data.quantity, dtype: float64
+```
+
+The columns of both kinds sit side by side, and the empty cells of `order_placed` rows turned the quantity into decimals (`4.0`). The units are 1 + 1 + 2 = 4 and 1 + 1 = 2, which matches the file.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which verb turns a list into rows, which turns nested records into dotted columns, and which splits repeated facts into tables?
+
+   <details>
+   <summary>answer</summary>
+
+   Explode turns a list into rows, flatten turns nested records into dotted columns, and normalize splits repeated facts into tables with keys.
+
+   </details>
+
+<Exercise id="core-data-beyond-tables-3">
+
+**Spot the flaw.** A colleague builds the orders table from the lines, with `record_path="items"` and `meta=["order_id", "status"]`, and reports that 2 orders were placed and none canceled. The file has three orders, one of them canceled. Save the orders as `data/orders_empty.json` and the script as `ex3.py`, run it, and explain the count. Expected: the output below, then a fix that prints `3 orders, 5 lines` and `{'completed': 2, 'canceled': 1}`.
+
+```json
+[
+  {"order_id": 1001, "status": "completed", "items": [{"product_id": 10, "quantity": 1}, {"product_id": 6, "quantity": 1}, {"product_id": 1, "quantity": 2}]},
+  {"order_id": 1002, "status": "completed", "items": [{"product_id": 10, "quantity": 1}, {"product_id": 15, "quantity": 1}]},
+  {"order_id": 9001, "status": "canceled", "items": []}
+]
+```
+
+```python
+import json
+
+import pandas as pd
+
+with open("data/orders_empty.json") as file:
+    orders = json.load(file)
+
+items = pd.json_normalize(orders, record_path="items", meta=["order_id", "status"])
+print(items["order_id"].nunique(), "orders,", len(items), "lines")
+print(items.drop_duplicates("order_id")["status"].value_counts().to_dict())
+```
+
+<details>
+<summary>Hint</summary>
+
+Count the lines of each order. What does `record_path` produce for an order whose list is empty? Which table should the orders come from?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+orders_table = pd.json_normalize(orders)...
+items = pd.json_normalize(orders, record_path="items", meta=["order_id"])
+```
+
+</details>
+
+<Solution>
+
+```console
+2 orders, 5 lines
+{'completed': 2}
+```
+
+An order with no lines makes no rows with `record_path`, so the canceled order vanished from the table that was used as the list of orders. The orders come from the flattened records, and only the lines from `record_path`:
+
+```python
+orders_table = pd.json_normalize(orders).drop(columns="items")
+items = pd.json_normalize(orders, record_path="items", meta=["order_id"])
+print(len(orders_table), "orders,", len(items), "lines")
+print(orders_table["status"].value_counts().to_dict())
+```
+
+```console
+3 orders, 5 lines
+{'completed': 2, 'canceled': 1}
+```
+
+One table for each grain: the orders table has a row for every order, the lines table has a row for every line. The order 9001 is made up for this exercise; in cafe-sales every order has one to three lines.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read nested JSON by its records, lists and keys, flatten, explode and normalize it with pandas, land an event log as timestamped rows, choose between CSV, JSON, Parquet and Avro, and add a Parquet export to a project through a pull request.*
+Test: Exercise core-data-beyond-tables-2, done without opening the hints.
+
+The pattern to remember: **flatten the nesting, explode the lists, normalize what repeats, and keep columns for analysis and text for people.** Next comes *A feel for scale: what is cheap and what is slow* (C32), where the same file is read in pieces and a list scan meets a set.
