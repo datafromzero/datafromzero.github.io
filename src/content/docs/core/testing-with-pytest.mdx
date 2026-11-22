@@ -1,0 +1,502 @@
+---
+id: core-testing-with-pytest
+title: Testing on known answers with pytest
+short_title: Testing with pytest
+description: Write pytest tests on small cafe order lists with edge rows, catch a count that silently doubles rows, and take expected answers from another route.
+stage: core
+order: 270
+level: intermediate
+duration: 30
+objectives:
+  - Write a test function with an assert, run it with pytest, and make the package importable from the tests
+  - Build a small list of orders whose answer you know, with edge rows such as the first moment of a day and a canceled order
+  - Catch a count that silently doubles rows when an export repeats one
+  - Take the expected answer from another route, and say what continuous integration does with your tests
+prerequisites:
+  - core-debugging-and-retries
+  - core-environments-and-dependencies
+  - python-ai-assisted-code
+datasets:
+  - cafe-sales
+reviewed: 2026-11-22
+sources:
+  - title: 'pytest documentation: Get started (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/getting-started.html
+  - title: 'pytest documentation: How to use fixtures (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/how-to/fixtures.html
+  - title: 'pytest documentation: pytest import mechanisms and sys.path (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/explanation/pythonpath.html
+  - title: 'pytest documentation: Configuration, pyproject.toml (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/reference/customize.html
+  - title: 'pytest documentation: API reference, the pythonpath option (accessed 2026-11-21)'
+    url: https://docs.pytest.org/en/stable/reference/reference.html
+  - title: 'uv documentation: Managing dependencies, development dependencies (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/dependencies/
+  - title: 'GitHub Docs: Continuous integration (accessed 2026-11-21)'
+    url: https://docs.github.com/en/actions/get-started/continuous-integration
+status: published
+---
+
+## The question
+
+The owner wants to change the order counts again, and writes:
+
+> Last time I changed the first day of the count, nobody noticed a day was missing. Can the program check itself every time, also on the first day and the last second of a month?
+
+A tiny list shows where such a mistake hides. These five orders have a known answer for a count from April 1: the last second of March, the first moment of April, a walk-in with no customer, a canceled order, and the first moment of May.
+
+| order_id | customer_id | store_id | ordered_at | status |
+|---:|---:|---:|---|---|
+| 1 | 7 | 1 | 2026-03-31 23:59:59 | completed |
+| 2 | 8 | 1 | 2026-04-01 00:00:00 | completed |
+| 3 | | 2 | 2026-04-15 12:30:00 | completed |
+| 4 | 9 | 2 | 2026-04-30 23:59:59 | canceled |
+| 5 | 9 | 3 | 2026-05-01 00:00:00 | completed |
+
+By the end you can write tests on lists like this one, read a failed test, and trust an answer from elsewhere.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Using an AI assistant for Python, with checks*](/python/ai-assisted-code/) (P27) you asserted a draft against a tiny table whose answer you worked out by hand, and against a second route. A test file keeps those checks and runs them with one command.
+
+**Diverge.** In a notebook a failed `assert` stops the cell. Unit 2 shows what pytest does next.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In P27, you checked a draft with an `assert` against a hand answer. Write the `assert` that checks that `len(["a", "b", "c"])` is 3.
+
+   <details>
+   <summary>answer</summary>
+
+   `assert len(["a", "b", "c"]) == 3`.
+
+   </details>
+
+## The big idea
+
+A test runs your code on rows whose answer you know and fails when the result differs.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ka-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="ka" id="ka-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="ka" id="ka-r1" aria-label="Step 1 of 4: Rows small enough to check by hand" />
+<input class="sa-r r2 o4" type="radio" name="ka" id="ka-r2" aria-label="Step 2 of 4: The code runs and makes a result" />
+<input class="sa-r r3 o6" type="radio" name="ka" id="ka-r3" aria-label="Step 3 of 4: The known answer comes from elsewhere" />
+<input class="sa-r r4 o8" type="radio" name="ka" id="ka-r4" aria-label="Step 4 of 4: assert: the two must be equal" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>rows</small><span><i class="w2 tmp hl">3</i><i class="w6 d3">3</i></span></span><span class="sa-n c-out"><small>results</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">1</i><i class="w4 d5">1</i></span></span><span class="sa-n c-grp"><small>expected</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">1</i><i class="w2 d7">1</i></span></span><span class="sa-n c-mat"><small>compared</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 258" width="360" role="img" aria-labelledby="ka-t ka-d">
+<title id="ka-t">A test runs the code on rows you can check by hand and compares with a known answer</title>
+<desc id="ka-d">A small table of three input rows, Row 1, Row 2 and an edge row, feeds an arrow into a box named code, whose arrow leads to a chip named result. Below, a box named second route leads to a chip named expected. Two arrows from result and expected meet in a box named assert, labeled must be equal.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Rows small enough to check by hand</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · The code runs and makes a result</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · The known answer comes from elsewhere</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · assert: the two must be equal</text>
+<text class="f11 b" x="10" y="14">Run it on rows with a known answer</text>
+<g><rect class="s-src" x="10" y="44" width="104" height="116" rx="6" /><text class="f11 b" x="20" y="61">input rows</text></g>
+<g><rect class="f-src k2" x="20" y="70" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="85">Row 1</text></g>
+<g><rect class="f-src k2" x="20" y="98" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="113">Row 2</text></g>
+<g><rect class="f-flt k3" x="20" y="126" width="84" height="22" rx="6" /><text class="f11 m" x="62" y="141">edge row</text></g>
+<path class="s-out dr p6 d3" pathLength="1" d="M114 102L148 102M141.7 98.96L148 102L141.7 105.04" />
+<g class="w6 d3"><rect class="s-out" x="150" y="82" width="80" height="40" rx="6" /><text class="f11 b" x="160" y="99">code</text></g>
+<path class="s-out dr p5 d4" pathLength="1" d="M230 102L258 102M251.7 98.96L258 102L251.7 105.04" />
+<g class="w5 d4"><rect class="f-out k3" x="260" y="90" width="90" height="24" rx="6" /><text class="f11 m" x="305" y="106">result</text></g>
+<g class="w4 d5"><rect class="s-grp" x="10" y="184" width="104" height="56" rx="6" /><text class="f11 b" x="20" y="201">second route</text></g>
+<text class="f10 mu w4 d5" x="20" y="226">by hand or SQL</text>
+<path class="s-grp dr p3 d6" pathLength="1" d="M114 212L258 212M251.7 208.96L258 212L251.7 215.04" />
+<g class="w3 d6"><rect class="f-grp k3" x="260" y="200" width="90" height="24" rx="6" /><text class="f11 m" x="305" y="216">expected</text></g>
+<path class="s-mat dr p2 d7" pathLength="1" d="M305 116L305 148M308.04 141.7L305 148L301.96 141.7" />
+<path class="s-mat dr p2 d7" pathLength="1" d="M305 200L305 172M301.96 178.3L305 172L308.04 178.3" />
+<g class="w2 d7"><rect class="s-mat" x="240" y="150" width="110" height="22" rx="6" /><text class="f11 b" x="250" y="167">assert</text></g>
+<text class="f10 b e w1 d8" x="190" y="166">must be equal</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ka-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ka-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ka-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ka-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ka-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ka-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ka-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ka-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ka-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="ka-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ka-r1">1</label><label class="sa-sb sb2" for="ka-r2">2</label><label class="sa-sb sb3" for="ka-r3">3</label><label class="sa-sb sb4" for="ka-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">Choose a few rows, with one edge row, whose right answer you can work out yourself.<span class="sa-chs"><span class="sa-ch pl">3 input rows</span></span></div>
+<div class="c-out w2 d3 tmp">The code under test runs on those rows and returns a result.<span class="sa-chs"><span class="sa-ch pl">code</span><span class="sa-ch pl">a result</span></span></div>
+<div class="c-grp w2 d5 tmp">The expected answer comes from another route, not from the code under test.<span class="sa-chs"><span class="sa-ch pl">a second route</span><span class="sa-ch pl">expected</span></span></div>
+<div class="c-mat w2 d7">assert compares the result with the expected answer, and the test fails when they differ.<span class="sa-chs"><span class="sa-ch pl">assert</span></span></div>
+</div>
+<p class="ca-cap">A test feeds the code rows whose answer you know from another route, then asserts that the result and the known answer are equal.</p>
+<ol class="sa-steps">
+<li>Rows small enough to check by hand</li>
+<li>The code runs and makes a result</li>
+<li>The known answer comes from elsewhere</li>
+<li>assert: the two must be equal</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a test and where pytest looks for your code, edge rows and a fixture, a count that doubles a repeated row, and an answer from another route. Work in `cafe-report` after C26, in the terminal, with the changes of C26 committed.
+
+### 1. A test is a function with an assert
+
+**Idea.** A test is a function that builds a small input, calls your code and asserts the answer you know. pytest runs the files named `test_*.py` or `*_test.py` and the functions whose names start with `test_`, and prints a dot for each test that holds.
+
+**Try it.** Add pytest, then save the first test as `tests/test_summary.py` (make the folder `tests`):
+
+```bash
+uv add --dev pytest
+```
+
+```python
+from datetime import date
+
+from cafe_report.summary import orders_per_store
+
+
+def test_orders_per_store_counts_the_completed_orders_from_the_day():
+    orders = [
+        {"order_id": "1", "store_id": "1", "ordered_at": "2026-04-02 08:00:00", "status": "completed"},
+        {"order_id": "2", "store_id": "1", "ordered_at": "2026-04-03 09:30:00", "status": "completed"},
+        {"order_id": "3", "store_id": "2", "ordered_at": "2026-04-03 10:00:00", "status": "canceled"},
+    ]
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 2}
+```
+
+Run `uv run pytest -q`.
+
+**Predict:** The answer is right: store 1 has two completed orders, and the canceled one does not count. Does the run print a dot?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ uv run pytest -q
+==================================== ERRORS ====================================
+____________________ ERROR collecting tests/test_summary.py ____________________
+...
+tests/test_summary.py:3: in <module>
+    from cafe_report.summary import orders_per_store
+E   ModuleNotFoundError: No module named 'cafe_report'
+=========================== short test summary info ============================
+ERROR tests/test_summary.py
+1 error in 0.07s
+```
+
+</details>
+
+*Why:* the test never ran: pytest could not import the package. For a test file with no `__init__.py` beside it, the pytest page says it inserts the folder of the test file into the search path, here `tests/`, not the project folder (C24's Exercise 3 again); `python -m pytest` adds the current directory instead. The lasting fix is a setting: a `[tool.pytest.ini_options]` table in `pyproject.toml` configures pytest, and the reference says `pythonpath` lists directories added to the search path, relative to the rootdir. Add this to the end of `pyproject.toml` and run again:
+
+```toml
+[tool.pytest.ini_options]
+pythonpath = ["."]
+```
+
+```text
+$ uv run pytest -q
+.                                                                        [100%]
+1 passed in 0.01s
+```
+
+`pyproject.toml` also has a `dev` list with `pytest>=9.2.0`; the uv page says a development dependency is not part of the requirements when the project is published.
+
+### 2. Edge rows, a fixture, and a failure report
+
+**Idea.** The mistakes that survive a first look sit at the edges of a rule: the first moment of a day, the last second before it, a canceled order, a missing customer. Put those rows in the list. A fixture is a function marked `@pytest.fixture` that builds the list for each test; a test asks for it by writing its name as an argument.
+
+**Try it.** Add the five orders as a fixture, with `import pytest` at the top, above the first test, and a test at the end:
+
+```python
+@pytest.fixture
+def orders():
+    return [
+        {"order_id": "1", "customer_id": "7", "store_id": "1", "ordered_at": "2026-03-31 23:59:59", "status": "completed"},
+        {"order_id": "2", "customer_id": "8", "store_id": "1", "ordered_at": "2026-04-01 00:00:00", "status": "completed"},
+        {"order_id": "3", "customer_id": "", "store_id": "2", "ordered_at": "2026-04-15 12:30:00", "status": "completed"},
+        {"order_id": "4", "customer_id": "9", "store_id": "2", "ordered_at": "2026-04-30 23:59:59", "status": "canceled"},
+        {"order_id": "5", "customer_id": "9", "store_id": "3", "ordered_at": "2026-05-01 00:00:00", "status": "completed"},
+    ]
+
+
+def test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not(orders):
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
+```
+
+It passes. Now break the rule in `cafe_report/summary.py`: change `day >= since` to `day > since`, and run `uv run pytest -q`.
+
+**Predict:** Which test fails, and which store does the report say is missing?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+.F                                                                       [100%]
+_ test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not _
+...
+>       assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
+E       AssertionError: assert {'2': 1, '3': 1} == {'1': 1, '2': 1, '3': 1}
+E         Right contains 1 more item:
+E         {'1': 1}
+tests/test_summary.py:29: AssertionError
+FAILED tests/test_summary.py::test_the_first_moment_of_the_day_counts_and_the_last_second_before_it_does_not
+1 failed, 1 passed in 0.02s
+```
+
+Report lines are left out.
+
+</details>
+
+*Why:* the edge-row test fails and the first test still passes, because its orders are days after April 1: one run shows everything that is broken, and the first test could never have seen this change. The `>` marks the failing line and the `E` lines show both answers and what is missing: `{'1': 1}`, store 1, whose only order from April 1 is the one at exactly midnight. Undo the change with `git restore cafe_report/summary.py`.
+
+### 3. A count that doubles a repeated row
+
+**Idea.** A count can change the number of rows without an error. When an export is written twice, an order appears on two rows, and a loop that adds one for each row counts it twice. A test finds this only when the list holds a repeated row on purpose.
+
+**Try it.** Add a test that repeats order 2, and run `uv run pytest -q`:
+
+```python
+def test_a_repeated_order_row_counts_once(orders):
+    again = orders + [orders[1]]  # the export wrote order 2 twice
+    assert orders_per_store(again, date(2026, 4, 1)) == {"1": 1, "2": 1, "3": 1}
+```
+
+**Predict:** The answer is the same as in unit 2, since the orders are the same. Does the test pass? If not, what do the `E` lines say?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+..F                                                                      [100%]
+___________________ test_a_repeated_order_row_counts_once ____________________
+...
+E       AssertionError: assert {'1': 2, '2': 1, '3': 1} == {'1': 1, '2': 1, '3': 1}
+E         Differing items:
+E         {'1': 2} != {'1': 1}
+tests/test_summary.py:34: AssertionError
+FAILED tests/test_summary.py::test_a_repeated_order_row_counts_once - Asserti...
+1 failed, 2 passed in 0.02s
+```
+
+</details>
+
+*Why:* the code of C24 adds one for each row, so order 2 counted twice. Nothing raised an error; only a test that knew the answer could see it. The fix is to skip an order id already seen. In `cafe_report/summary.py`, add `seen = set()` after `counts = {}`, and these lines at the top of the loop:
+
+```python
+        if order["order_id"] in seen:
+            continue
+        seen.add(order["order_id"])
+```
+
+Now `uv run pytest -q` prints `...` and `3 passed`. Commit: `git add pyproject.toml uv.lock tests cafe_report`, then `git commit -m "Test the order counts and skip a repeated order row"`.
+
+### 4. The answer comes from another route
+
+**Idea.** A test on the real file needs an answer from a second route on the same data: a SQL query, a PivotTable, a `uniq -c` pipeline. The numbers C24 printed for the count from April 1 came out of this function, so they cannot check it.
+
+**Try it.** Run this query in the SQL playground of this site, at `/sql/playground/`, which has the five tables loaded:
+
+```sql
+SELECT store_id, COUNT(*) AS orders
+FROM orders
+WHERE status = 'completed' AND ordered_at >= '2026-04-01'
+GROUP BY store_id
+ORDER BY store_id;
+```
+
+Expected: 3 rows, 2 columns: stores 1, 2 and 3 with 365, 362 and 355 orders. Add the same numbers as a test on the real file, with `from pathlib import Path` and `from cafe_report.load import read_orders` in the imports and this line below them:
+
+```python
+DATA = Path(__file__).resolve().parent.parent / "data"
+```
+
+```python
+def test_april_matches_the_answer_from_sql():
+    orders = read_orders(DATA / "orders.csv")
+    assert orders_per_store(orders, date(2026, 4, 1)) == {"1": 365, "2": 362, "3": 355}
+```
+
+**Predict:** With the four tests of this lesson in the file, how many does `uv run pytest -q` report, and do they pass?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+....                                                                     [100%]
+4 passed in 0.02s
+```
+
+</details>
+
+*Why:* one dot for each test. The last test's numbers were not produced by `orders_per_store`, so a mistake in it cannot hide in them (the store numbers are text in the dictionary, hence the quotes). `data/` is ignored by Git, so a clean clone needs `uv run download_data.py` first, as in C25. Commit: `git add tests`, then `git commit -m "Test April against the answer from SQL"`. GitHub describes continuous integration as frequently committing code to a shared repository and building and testing it each time, and its workflows can start when code is pushed. You build none here: `uv run pytest` needs only the repository and the data script.
+
+<Aside type="tip" title="Remember">
+
+- A test builds a small input, calls the code and asserts an answer you know.
+- The tests folder is not the project folder: tell pytest where the package is with `pythonpath`.
+- Put the edge rows in the list: the first moment, the last second, a canceled order, a missing value, a repeated row.
+- Read a failure from the `E` lines: the result, the known answer and what differs.
+
+**Common trap:** a test that cannot fail for the bug you fear. Make it fail once, on purpose, before you trust it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-testing-with-pytest-1">
+
+**A canceled order does not count.** Finish the test that proves `orders_per_store` leaves canceled orders out, on the fixture of unit 2: from April 30, order 4 (canceled, store 2) must not count, and order 5 (completed, store 3) does. Expected: one more test, and it passes.
+
+```python
+def test_a_canceled_order_does_not_count(orders):
+    assert orders_per_store(orders, date(2026, 4, 30)) == ...
+```
+
+<details>
+<summary>Hint</summary>
+
+Cross out the canceled order first; the store number is text.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    assert orders_per_store(orders, date(2026, 4, 30)) == {"3": ...}
+```
+
+</details>
+
+<Solution>
+
+```python
+    assert orders_per_store(orders, date(2026, 4, 30)) == {"3": 1}
+```
+
+Only order 5 is left that counts; store 2 does not appear. A run reports 5 passed with the four tests of the lesson.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-testing-with-pytest-2">
+
+**The monthly table, on a file you write.** `orders_by_store_month(path)` of C25 reads a file by its path, so the test writes a small file first. Before you start, say in one sentence what the result will look like. Write the test from a blank line in `tests/test_summary.py`: with the `tmp_path` fixture, which pytest describes as a unique temporary directory for each test, write a file with the header `order_id,customer_id,store_id,ordered_at,status,payment_method` and the first four orders of the question, call the function on its path, and assert the columns of the table and its numbers. Expected: the test passes, and the run reports one more test.
+
+<details>
+<summary>Hint</summary>
+
+`path = tmp_path / "orders.csv"` and `path.write_text("...")` make the file, one `\n` per line. Use `list(table.columns)` and `table.to_numpy().tolist()`, and count by hand.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The columns are the months 2026-03 and 2026-04, and the numbers are one row for each store: store 1 has 1 and 1, store 2 has 0 and 1."*
+
+```python
+    table = orders_by_store_month(path)
+    assert list(table.columns) == [...]
+```
+
+</details>
+
+<Solution>
+
+```python
+def test_monthly_table_has_a_row_for_each_store_and_a_column_for_each_month(tmp_path):
+    path = tmp_path / "orders.csv"
+    path.write_text(
+        "order_id,customer_id,store_id,ordered_at,status,payment_method\n"
+        "1,7,1,2026-03-31 23:59:59,completed,card\n"
+        "2,8,1,2026-04-01 00:00:00,completed,mobile\n"
+        "3,,2,2026-04-15 12:30:00,completed,cash\n"
+        "4,9,2,2026-04-30 23:59:59,canceled,cash\n"
+    )
+    table = orders_by_store_month(path)
+    assert list(table.columns) == ["2026-03", "2026-04"]
+    assert table.to_numpy().tolist() == [[1, 1], [0, 1]]
+```
+
+The test needs `from cafe_report.monthly import orders_by_store_month`. The 0 is the pair with no order; the canceled order is not counted.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which file names and function names does pytest run?
+
+   <details>
+   <summary>answer</summary>
+
+   Files `test_*.py` or `*_test.py`, and functions whose names start with `test_`.
+
+   </details>
+
+<Exercise id="core-testing-with-pytest-3">
+
+**Spot the flaw.** A colleague makes the count start one day early "to be safe": in `summary.py`, the test becomes `day >= since - timedelta(days=1)`, with `timedelta` imported. The test below passes, and April 15 is declared safe. Save it as `tests/test_weak.py` and run `uv run pytest -q tests/test_weak.py` with the changed `summary.py`. Expected: one dot. What is wrong with the test, and what is the fix? Then undo the change with `git restore` and delete the file.
+
+```python
+from datetime import date
+
+from cafe_report.summary import orders_per_store
+
+
+def test_every_store_has_orders_from_april_15():
+    orders = [
+        {"order_id": "1", "store_id": "2", "ordered_at": "2026-04-14 23:59:59", "status": "completed"},
+        {"order_id": "2", "store_id": "2", "ordered_at": "2026-04-15 00:00:00", "status": "completed"},
+        {"order_id": "3", "store_id": "3", "ordered_at": "2026-04-20 09:00:00", "status": "completed"},
+        {"order_id": "4", "store_id": "1", "ordered_at": "2026-05-01 00:00:00", "status": "completed"},
+        {"order_id": "5", "store_id": "2", "ordered_at": "2026-04-16 12:00:00", "status": "completed"},
+    ]
+    assert len(orders_per_store(orders, date(2026, 4, 15))) == 3
+```
+
+<details>
+<summary>Hint</summary>
+
+Write down what the changed function returns for these orders, store by store, and compare with the right answer.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    assert orders_per_store(orders, date(2026, 4, 15)) == {...}
+```
+
+</details>
+
+<Solution>
+
+```python
+    assert orders_per_store(orders, date(2026, 4, 15)) == {"1": 1, "2": 2, "3": 1}
+```
+
+The changed filter also counts order 1, from April 14, so the function returns `{'1': 1, '2': 3, '3': 1}`: three stores, so `len(...) == 3` passes, while store 2 is wrong. Compared with the full dictionary the test fails and reports `{'2': 3} != {'2': 2}`. `len` says how many stores appear; the dictionary says how many orders each one has.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a test on a small list with edge rows, make the package importable from the tests, read a failed test, test that a count does not double a repeated row, and take the expected answer from another route.*
+Test: Exercise core-testing-with-pytest-2, done without opening the hints.
+
+The pattern to remember: **a test is code run on rows whose answer you know, and the answer must come from somewhere other than the code.** Next comes [*Logging, configuration and secrets*](/core/logging-config-secrets/) (C28), which makes the program tell you what it did and keeps its settings and keys out of the code.

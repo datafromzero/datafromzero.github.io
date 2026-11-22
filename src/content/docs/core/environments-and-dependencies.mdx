@@ -1,0 +1,544 @@
+---
+id: core-environments-and-dependencies
+title: Environments and dependencies, for real
+short_title: Environments, for real
+description: Create a project environment with uv, record its dependencies, and rebuild it on a clean machine.
+stage: core
+order: 250
+level: intermediate
+duration: 30
+objectives:
+  - Create and activate a project environment with uv
+  - Add a dependency and read the dependency file as a reproduction contract
+  - Diagnose installing into the wrong environment with sys.executable
+  - Rebuild a project from its repository alone
+prerequisites:
+  - core-python-project-layout
+  - core-git-save-history
+  - python-environments-and-pip
+datasets:
+  - cafe-sales
+reviewed: 2026-11-22
+sources:
+  - title: 'uv documentation: Working on projects (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/guides/projects/
+  - title: 'uv documentation: Creating projects, uv init (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/init/
+  - title: 'uv documentation: Managing dependencies (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/dependencies/
+  - title: 'uv documentation: Project structure and layout (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/layout/
+  - title: 'uv documentation: Locking and syncing (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/concepts/projects/sync/
+  - title: 'uv documentation: Running scripts (accessed 2026-11-21)'
+    url: https://docs.astral.sh/uv/guides/scripts/
+  - title: 'Python documentation: venv, creation of virtual environments (accessed 2026-11-21)'
+    url: https://docs.python.org/3/library/venv.html
+  - title: 'Python documentation: sys.executable (accessed 2026-11-21)'
+    url: https://docs.python.org/3/library/sys.html
+  - title: 'Pro Git: Git basics, getting a Git repository (accessed 2026-11-21)'
+    url: https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository
+status: published
+---
+
+## The question
+
+The owner wants the next report, and writes:
+
+> A table with one row for each store and one column for each month, please. And when a new analyst joins, I want them to rebuild your project from the repository alone and get the same numbers.
+
+The table needs pandas, which the project does not use yet. This is the file the numbers come from, the first rows of `data/orders.csv` of the fictional chain `cafe-sales`:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02:00 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38:00 | completed | mobile |
+| 1003 | 61 | 2 | 2026-01-01 15:47:00 | completed | mobile |
+
+By the end the project declares pandas, the table is one command away, and a fresh clone of the repository gives the same numbers.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Your own Python setup: environments and pip*](/python/environments-and-pip/) (P24) you made an environment, installed a pinned version and kept the pins in `requirements.txt`. uv does the same with two files that it writes for you.
+
+**Diverge.** In P24 you put the Python you meant in front of `-m pip`. `uv run` picks the project's environment for you, and unit 3 shows what happens to a command that runs in another one.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Your own Python setup: environments and pip*](/python/environments-and-pip/) (P24), what is an environment?
+
+   <details>
+   <summary>answer</summary>
+
+   A folder with its own Python and its own packages.
+
+   </details>
+
+2. In P24, write the command that prints every installed package with its exact version.
+
+   <details>
+   <summary>answer</summary>
+
+   `python -m pip freeze`, or `pip freeze` for the Python that the `pip` belongs to.
+
+   </details>
+
+## The big idea
+
+A project declares what it needs in two files you commit, and its environment is a folder built from them.
+
+<svg viewBox="0 0 360 178" width="360" role="img" aria-labelledby="env-t env-d">
+<title id="env-t">Two files in Git, one environment folder outside it</title>
+<desc id="env-d">Two boxes with an arrow between them. The first box, in Git, holds pyproject.toml, the packages you ask for, and uv.lock, the exact version of everything. The arrow is labeled uv builds. The second box, not in Git, holds the folder .venv with Python and the packages.</desc>
+<text x="180" y="20" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">The project declares; uv builds</text>
+<rect x="10" y="34" width="140" height="102" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-opacity="0.45" />
+<text x="20" y="52" font-size="11" font-weight="700" fill="currentColor">in Git</text>
+<text x="20" y="74" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="currentColor">pyproject.toml</text>
+<text x="20" y="88" font-size="10" fill="currentColor">the packages you ask for</text>
+<text x="20" y="110" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="currentColor">uv.lock</text>
+<text x="20" y="124" font-size="10" fill="currentColor">the exact version of all</text>
+<rect x="210" y="34" width="140" height="102" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-opacity="0.45" />
+<text x="220" y="52" font-size="11" font-weight="700" fill="currentColor">not in Git</text>
+<text x="220" y="74" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="currentColor">.venv/</text>
+<text x="220" y="88" font-size="10" fill="currentColor">Python and the packages</text>
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M154 88H204" />
+</g>
+<path d="M200 83L206 88L200 93Z" fill="currentColor" />
+<text x="180" y="80" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">uv builds</text>
+<text x="10" y="160" font-size="10" fill="currentColor">The left box is committed; the right box is not.</text>
+</svg>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a project and its environment, a dependency and its contract, the wrong environment, and a rebuild from the repository alone. Start in the folder `cafe-report` after the last lesson, with `git status` clean.
+
+### 1. A project and its environment
+
+**Idea.** A uv *project* is a folder with a `pyproject.toml`; `uv init --bare` writes one and nothing else. The first `uv run` builds the project's *environment*, a folder `.venv` with its own Python.
+
+**Try it.** Make the folder a project, read the file, and print the path of the Python that runs, which Python calls `sys.executable`:
+
+```console
+uv init --bare
+cat pyproject.toml
+uv run python -c "import sys; print(sys.executable)"
+git status -s
+```
+
+**Predict:** what does `pyproject.toml` hold, which Python does the third command print, and which new files does `git status -s` list?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv init --bare
+Initialized project `cafe-report`
+$ cat pyproject.toml
+[project]
+name = "cafe-report"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = []
+$ uv run python -c "import sys; print(sys.executable)"
+Using CPython 3.13.18 interpreter at: /usr/local/bin/python3
+Creating virtual environment at: .venv
+/home/ana/cafe-report/.venv/bin/python
+$ git status -s
+?? pyproject.toml
+?? uv.lock
+```
+
+</details>
+
+*Why:* the file names the project and lists no dependencies yet. `requires-python` records the Python that uv found, so yours says the version of your Python. `uv run` ran the command in the Python inside the new `.venv`, not the one uv found on the system; on Windows that path ends in `.venv\Scripts\python.exe`. uv wrote `uv.lock` as well. `.venv` is not listed for two reasons: uv puts its own `.gitignore` inside it, and the `.gitignore` of the Git lesson names it too.
+
+### 2. A dependency and its contract
+
+**Idea.** `uv add pandas` installs pandas into `.venv` and writes it into `pyproject.toml`, under `dependencies`. The file `uv.lock` pins exact versions. Together they are the contract that lets another machine rebuild the same environment, so you commit both.
+
+**Try it.** Add pandas, then read the two files:
+
+```console
+uv add pandas
+cat pyproject.toml
+grep -A1 '^name = ' uv.lock
+```
+
+**Predict:** is numpy, which you never asked for, in `pyproject.toml`? Is it in `uv.lock`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv add pandas
+Resolved 5 packages in 11ms
+Installed 4 packages in 21ms
+ + numpy==2.5.5
+ + pandas==3.1.1
+ + python-dateutil==4.0.0
+ + tzdata==2026.6
+$ cat pyproject.toml
+[project]
+name = "cafe-report"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "pandas>=3.1.1",
+]
+$ grep -A1 '^name = ' uv.lock
+name = "cafe-report"
+version = "0.1.0"
+--
+name = "numpy"
+version = "2.5.5"
+--
+name = "pandas"
+version = "3.1.1"
+--
+name = "python-dateutil"
+version = "4.0.0"
+--
+name = "tzdata"
+version = "2026.6"
+```
+
+</details>
+
+*Why:* `pyproject.toml` holds one line, the package you asked for, with a lower bound that uv chose from the newest version. `uv.lock` holds the project and every package pandas needs, each with an exact version, numpy included. These are the versions of 21 November 2026; yours will be newer. Do not edit `uv.lock` by hand: uv manages it.
+
+**Try it.** Use the dependency. Save this as `cafe_report/monthly.py`:
+
+```python
+import pandas as pd
+
+
+def orders_by_store_month(path):
+    """A table of completed orders: one row for each store, one column for each month."""
+    orders = pd.read_csv(path)
+    completed = orders[orders["status"] == "completed"]
+    month = pd.to_datetime(completed["ordered_at"]).dt.strftime("%Y-%m").rename("month")
+    return completed.groupby(["store_id", month]).size().unstack(fill_value=0)
+```
+
+In `cafe_report/cli.py`, add these lines (the rest of the file stays) and run the table:
+
+```python
+from cafe_report.monthly import orders_by_store_month
+...
+    parser.add_argument("--monthly", action="store_true", help="print a table of stores and months instead")
+    args = parser.parse_args(argv)
+    if args.monthly:
+        print(orders_by_store_month(args.orders_file))
+        return
+```
+
+```console
+uv run python -m cafe_report data/orders.csv --monthly
+```
+
+**Predict:** Harbor, store 3, opened on April 1. What do its first three month columns show?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m cafe_report data/orders.csv --monthly
+month     2026-01  2026-02  2026-03  2026-04  2026-05  2026-06
+store_id                                                      
+1             128      103      133      123      125      117
+2             114      115      124      103      134      125
+3               0        0        0      123      121      111
+```
+
+</details>
+
+*Why:* Harbor has no orders before April, and `fill_value=0` writes the missing store and month pairs as 0 instead of leaving them empty. The table counts completed orders only. Commit the contract with the code: `git add pyproject.toml uv.lock cafe_report`, then `git commit -m "Declare pandas and add the monthly table"`.
+
+### 3. The wrong environment
+
+**Idea.** A computer can hold many Pythons, each with its own packages: the one in `.venv`, the one uv found on your system, and any environment you make. A command runs in exactly one of them, and `sys.executable` says which. Inside a project, `uv run` uses the project's, unless you tell it not to.
+
+**Try it.** Make a second environment, `other-env`, with Python's `venv` module, run the monthly table with its Python, print the path of the Python that `uv run` uses, and delete the second environment. On Windows, the Python of `other-env` is `other-env/Scripts/python`, as the comments show:
+
+```console
+uv run --no-project python -m venv other-env
+other-env/bin/python -c "import sys; print(sys.executable)"   # Windows: other-env/Scripts/python
+other-env/bin/python -m cafe_report data/orders.csv --monthly   # Windows: other-env/Scripts/python
+uv run python -c "import sys; print(sys.executable)"
+rm -r other-env
+```
+
+**Predict:** pandas was installed with `uv add`. What does each of the three middle commands print, and can both Pythons import pandas?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run --no-project python -m venv other-env
+$ other-env/bin/python -c "import sys; print(sys.executable)"
+/home/ana/cafe-report/other-env/bin/python
+$ other-env/bin/python -m cafe_report data/orders.csv --monthly
+Traceback (most recent call last):
+  ...
+  File "/home/ana/cafe-report/cafe_report/monthly.py", line 1, in <module>
+    import pandas as pd
+ModuleNotFoundError: No module named 'pandas'
+$ uv run python -c "import sys; print(sys.executable)"
+/home/ana/cafe-report/.venv/bin/python3
+$ rm -r other-env
+```
+
+The path of the last Python points inside `.venv`; on your system it may end in `python` or `python3`.
+
+</details>
+
+*Why:* the second environment has its own Python and was never given pandas, so the same code fails there, and the message says a package is missing, not which environment is missing it. `sys.executable` tells you which Python ran. With `uv run` inside the project you do not choose: it runs in the project's environment, with the locked versions of what the project declares.
+
+### 4. Rebuild from the repository alone
+
+**Idea.** `git clone` copies a repository, with its whole history, into a new folder; the copy holds what was committed and nothing else. `uv sync` builds the environment from `uv.lock`, and `download_data.py` fetches the data again. A GitHub address works in place of a folder path.
+
+**Try it.** Clone the project next to itself, and rebuild it there:
+
+```console
+git clone ~/cafe-report ~/cafe-report-check
+cd ~/cafe-report-check
+ls -a
+uv sync
+uv run download_data.py
+uv run python -m cafe_report data/orders.csv --since 2026-04-01
+```
+
+**Predict:** what does `ls -a` list in the clone, and what do the last three commands print?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ git clone ~/cafe-report ~/cafe-report-check
+Cloning into '/home/ana/cafe-report-check'...
+done.
+$ cd ~/cafe-report-check
+$ ls -a
+.   .git        cafe_report           download_data.py  uv.lock
+..  .gitignore  check_environment.py  pyproject.toml
+$ uv sync
+Using CPython 3.13.18 interpreter at: /usr/local/bin/python3
+Creating virtual environment at: .venv
+Resolved 5 packages in 2ms
+Installed 4 packages in 33ms
+ + numpy==2.5.5
+ + pandas==3.1.1
+ + python-dateutil==4.0.0
+ + tzdata==2026.6
+$ uv run download_data.py
+saved data/orders.csv with 82348 bytes
+$ uv run python -m cafe_report data/orders.csv --since 2026-04-01
+store 1: 365 orders
+store 2: 362 orders
+store 3: 355 orders
+```
+
+</details>
+
+*Why:* the clone has the code and the two contract files, and neither `.venv` nor `data`. `uv sync` rebuilt the environment with the versions of the lock, the download script fetched the data again, and the counts match the ones of the last lesson. If a package were missing from the contract, this is where it would announce itself. Go back with `cd ~/cafe-report`; the check folder can be deleted.
+
+<Aside type="tip" title="Remember">
+
+- A uv project is a `pyproject.toml`; `uv run` builds `.venv` and runs your command in it.
+- `uv add name` installs a package and declares it in `pyproject.toml`; `uv.lock` pins every package at an exact version. Commit both.
+- A command runs in exactly one Python; `sys.executable` shows which, and `uv run` picks the project's.
+- `.venv` and `data` stay out of Git; `uv sync` and `download_data.py` rebuild them.
+- The proof that a project is reproducible is a fresh clone that runs.
+
+**Common trap:** a "package not found" error for a package you installed: it is installed in another environment.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-environments-and-dependencies-1">
+
+**Add a progress bar the right way.** The owner wants a progress bar for slow runs, which the package `tqdm` draws. Add it to the project and read what changed in the contract. The first step is given; finish it, then undo the change with `uv remove`. Expected: `git diff pyproject.toml` shows one new line, and `git status -s` lists two modified files.
+
+```console
+uv add tqdm
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 2 read `pyproject.toml` and `uv.lock`. Which of the two does `git diff pyproject.toml` show, and which other file does `git status -s` list?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```console
+git diff pyproject.toml
+git status -s
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv add tqdm
+Resolved 7 packages in 124ms
+Prepared 1 package in 30ms
+Installed 1 package in 2ms
+ + tqdm==4.70.1
+$ git diff pyproject.toml
+@@ -4,4 +4,5 @@ version = "0.1.0"
+ requires-python = ">=3.13"
+ dependencies = [
+     "pandas>=3.1.1",
++    "tqdm>=4.70.1",
+ ]
+$ git status -s
+ M pyproject.toml
+ M uv.lock
+$ uv remove tqdm
+Resolved 5 packages in 21ms
+Uninstalled 1 package in 5ms
+ - tqdm==4.70.1
+```
+
+One new line in `pyproject.toml` declares the package, and `uv.lock` changed to pin it. `uv remove` takes the line out and uninstalls the package, so both files match the last commit again.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-environments-and-dependencies-2">
+
+**Throw away the environment.** Before you start, say what you expect to see: which lines uv prints before the counts, and whether the counts change. In the project folder, delete the folder `.venv`, then run the report for June. Nothing you committed is touched.
+
+```console
+rm -r .venv
+uv run python -m cafe_report data/orders.csv --since 2026-06-01
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare with the first lines of unit 1 and of unit 4. Which command built `.venv` there?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Lines that say uv found a Python, made a new environment and installed the packages, then three store lines with the counts of June."*
+
+</details>
+
+<Solution>
+
+```console
+$ rm -r .venv
+$ uv run python -m cafe_report data/orders.csv --since 2026-06-01
+Using CPython 3.13.18 interpreter at: /usr/local/bin/python3
+Creating virtual environment at: .venv
+Installed 4 packages in 52ms
+store 1: 117 orders
+store 2: 125 orders
+store 3: 111 orders
+```
+
+`uv run` built the environment again from `pyproject.toml` and `uv.lock`, then ran the report. The counts are the ones of June in the monthly table. An environment you can rebuild in seconds is nothing to protect: the two files are what you keep.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which file lists the packages you asked for, and which one pins the exact version of everything?
+
+   <details>
+   <summary>answer</summary>
+
+   `pyproject.toml` lists the packages you asked for, under `dependencies`. `uv.lock` pins every package, yours and the ones they need, at an exact version.
+
+   </details>
+
+<Exercise id="core-environments-and-dependencies-3">
+
+**Spot the flaw.** A colleague needs a package to print tables, installs it with the line below, and says the project is reproducible: it imports, in a fresh terminal too, and `git status` shows nothing to commit.
+
+```console
+$ uv pip install tabulate
+Resolved 1 package in 159ms
+Prepared 1 package in 29ms
+Installed 1 package in 2ms
+ + tabulate==0.10.0
+$ uv run python -c "import tabulate; print(tabulate.__version__)"
+0.10.0
+$ git status -s
+```
+
+Reproduce the colleague's two steps, then find out whether a clean machine would get the package, and fix the project. Expected: after your check, `import tabulate` fails; after your fix, `git diff pyproject.toml` shows one new line. Undo the change with `uv remove tabulate` when you are done.
+
+<details>
+<summary>Hint</summary>
+
+`git status -s` showed nothing, so no file that you commit changed. A clean machine builds its environment with `uv sync`. Run it in the project and see what it does to `.venv`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```console
+uv sync
+uv run python -c "import tabulate"
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv sync
+Resolved 5 packages in 2ms
+Uninstalled 1 package in 2ms
+ - tabulate==0.10.0
+$ uv run python -c "import tabulate"
+ModuleNotFoundError: No module named 'tabulate'
+$ uv add tabulate
+Resolved 6 packages in 8ms
+Installed 1 package in 3ms
+ + tabulate==0.10.0
+$ git diff pyproject.toml
+@@ -4,4 +4,5 @@ version = "0.1.0"
+ requires-python = ">=3.13"
+ dependencies = [
+     "pandas>=3.1.1",
++    "tabulate>=0.10.0",
+ ]
+$ uv remove tabulate
+Resolved 5 packages in 9ms
+Uninstalled 1 package in 2ms
+ - tabulate==0.10.0
+```
+
+The hand-installed package lived only in the colleague's `.venv`; neither `pyproject.toml` nor `uv.lock` knew about it, which is why `git status` was empty. `uv sync` builds exactly what the lock says and removed it (`uv run` alone leaves extra packages in place, which is why the import kept working). `uv add` declares the package and pins it, and now the change shows in the two files.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can make a uv project, add a dependency and say what `pyproject.toml` and `uv.lock` each hold, tell which Python a command ran in with `sys.executable`, and prove that a fresh clone rebuilds and runs.*
+Test: Exercise core-environments-and-dependencies-3, done without opening the hints.
+
+The pattern to remember: **declare it, lock it, commit both, and rebuild in a clone to prove it.** Next comes [*When it breaks: errors, retries and debugging*](/core/debugging-and-retries/) (C26), which reads a long traceback from this package, catches one expected error, retries a flaky step and stops on a line with the debugger.

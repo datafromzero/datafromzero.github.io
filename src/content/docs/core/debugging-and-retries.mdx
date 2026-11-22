@@ -1,0 +1,543 @@
+---
+id: core-debugging-and-retries
+title: 'When it breaks: errors, retries and debugging'
+short_title: Errors and debugging
+description: Find your own line in a long traceback, catch one expected error, retry a flaky step a limited number of times and stop on a line to look.
+stage: core
+order: 260
+level: intermediate
+duration: 30
+objectives:
+  - Find the last line of your own code in a long traceback and say what the error names
+  - Catch the one error you expect and let every other error fail loudly
+  - Retry a step a limited number of times with a wait, and raise the last error
+  - Stop a program on a line and look at a variable with a breakpoint
+prerequisites:
+  - core-python-project-layout
+  - core-environments-and-dependencies
+  - python-errors-and-debugging
+datasets:
+  - cafe-sales
+reviewed: 2026-11-22
+sources:
+  - title: 'Python documentation: Errors and exceptions (accessed 2026-11-21)'
+    url: https://docs.python.org/3/tutorial/errors.html
+  - title: 'PEP 8: Programming recommendations, bare except and the size of a try clause (accessed 2026-11-21)'
+    url: https://peps.python.org/pep-0008/#programming-recommendations
+  - title: 'Python documentation: sys.exit (accessed 2026-11-21)'
+    url: https://docs.python.org/3/library/sys.html
+  - title: 'Python documentation: unittest.mock, side_effect and call_count (accessed 2026-11-21)'
+    url: https://docs.python.org/3/library/unittest.mock.html
+  - title: 'Python documentation: pdb, the debugger (accessed 2026-11-21)'
+    url: https://docs.python.org/3/library/pdb.html
+  - title: 'Visual Studio Code documentation: Debugging (accessed 2026-11-21)'
+    url: https://code.visualstudio.com/docs/debugtest/debugging
+  - title: 'Visual Studio Code documentation: Python debugging in VS Code (accessed 2026-11-21)'
+    url: https://code.visualstudio.com/docs/python/debugging
+status: published
+---
+
+## The question
+
+The Harbor manager fed the monthly table a file from another export, and it stopped with a wall of text. The owner asks:
+
+> The report broke twice. Can it say what went wrong in a line, try again when that helps, and can you show me how you find the line that is at fault when it does not?
+
+A good run, `uv run python -m cafe_report data/orders.csv --since 2026-04-01`, prints this:
+
+| store | orders |
+|---:|---:|
+| 1 | 365 |
+| 2 | 362 |
+| 3 | 355 |
+
+By the end you can find your own line in a long error report, catch the one error you expect, retry a step, and stop on a line to look.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Reading errors and debugging*](/python/errors-and-debugging/) (P8) you read a traceback from the last line up and used `try` and `except`, the twin of `IFERROR` in *Formula errors and auditing* (E12).
+
+**Diverge.** `IFERROR` catches every error, and `except` catches the class you name.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*A real Python project*](/core/python-project-layout/) (C24), write the `argparse` line that adds the option `--since`, which turns the text into a date.
+
+   <details>
+   <summary>answer</summary>
+
+   `parser.add_argument("--since", type=date.fromisoformat, default=date.min)`, with the `help=` text if you wrote one.
+
+   </details>
+
+## The big idea
+
+An error you expect gets a plan: wait and call again a few times, then raise it to the caller.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="rt-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="rt" id="rt-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="rt" id="rt-r1" aria-label="Step 1 of 4: A call fails with an error" />
+<input class="sa-r r2 o4" type="radio" name="rt" id="rt-r2" aria-label="Step 2 of 4: Wait, then call again" />
+<input class="sa-r r3 o6" type="radio" name="rt" id="rt-r3" aria-label="Step 3 of 4: Stop after N tries" />
+<input class="sa-r r4 o8" type="radio" name="rt" id="rt-r4" aria-label="Step 4 of 4: The last error is raised" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>tries</small><span><i class="w2 tmp hl">1</i><i class="w2 d3 tmp hl">2</i><i class="w2 d5 tmp hl">N</i><i class="w2 d7">N</i></span></span><span class="sa-n c-ord"><small>waits</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">1</i><i class="w2 d5 tmp hl">N − 1</i><i class="w2 d7">N − 1</i></span></span><span class="sa-n c-flt"><small>errors</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">1</i><i class="w1 d3 tmp">1</i><i class="w1 d4 tmp hl">2</i><i class="w1 d5 tmp">2</i><i class="w1 d6 tmp hl">N</i><i class="w2 d7">N</i></span></span><span class="sa-n c-out"><small>raised</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">1</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 232" width="360" role="img" aria-labelledby="rt-t rt-d">
+<title id="rt-t">A retry is a loop with a limit: call, wait, call again, then give up</title>
+<desc id="rt-d">A row of chips from left to right: try 1, wait, try 2, wait, try N. Under each try an error chip in red, joined by an arrow. At the end an arrow from the last error leads down to a box labeled raise, the caller sees the error, and a line says at most N tries.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · A call fails with an error</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · Wait, then call again</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · Stop after N tries</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · The last error is raised</text>
+<text class="f11 b" x="10" y="14">Call, wait, call again, give up</text>
+<g><rect class="f-src k3" x="10" y="70" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="86">try 1</text></g>
+<path class="s-flt dr p7 d2" pathLength="1" d="M38 96L38 116M41.04 109.7L38 116L34.96 109.7" />
+<g class="w7 d2"><rect class="f-flt k3" x="10" y="118" width="56" height="24" rx="6" /><text class="f11 m" x="38" y="134">error</text></g>
+<g class="w6 d3"><rect class="f-ord k2" x="74" y="70" width="40" height="24" rx="6" /><text class="f10 m" x="94" y="86">wait</text></g>
+<g class="w6 d3"><rect class="f-src k3" x="122" y="70" width="56" height="24" rx="6" /><text class="f11 m" x="150" y="86">try 2</text></g>
+<path class="s-flt dr p5 d4" pathLength="1" d="M150 96L150 116M153.04 109.7L150 116L146.96 109.7" />
+<g class="w5 d4"><rect class="f-flt k3" x="122" y="118" width="56" height="24" rx="6" /><text class="f11 m" x="150" y="134">error</text></g>
+<g class="w4 d5"><rect class="f-ord k2" x="186" y="70" width="40" height="24" rx="6" /><text class="f10 m" x="206" y="86">wait</text></g>
+<g class="w4 d5"><rect class="f-src k3" x="234" y="70" width="56" height="24" rx="6" /><text class="f11 m" x="262" y="86">try N</text></g>
+<path class="s-flt dr p3 d6" pathLength="1" d="M262 96L262 116M265.04 109.7L262 116L258.96 109.7" />
+<g class="w3 d6"><rect class="f-flt k3" x="234" y="118" width="56" height="24" rx="6" /><text class="f11 m" x="262" y="134">error</text></g>
+<path class="s-out dr p2 d7" pathLength="1" d="M262 144L262 164M265.04 157.7L262 164L258.96 157.7" />
+<text class="f10 b w1 d8" x="270" y="154">raise</text>
+<g class="w2 d7"><rect class="s-out" x="90" y="168" width="260" height="40" rx="6" /><text class="f11 b" x="100" y="185">the caller sees the last error</text></g>
+<text class="f10 mu w1 d8" x="10" y="224">at most N tries</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="rt-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="rt-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="rt-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="rt-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="rt-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="rt-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="rt-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="rt-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="rt-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="rt-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="rt-r1">1</label><label class="sa-sb sb2" for="rt-r2">2</label><label class="sa-sb sb3" for="rt-r3">3</label><label class="sa-sb sb4" for="rt-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">A step can fail for a reason that goes away by itself, and the error says so.<span class="sa-chs"><span class="sa-ch pl">try 1</span><span class="sa-ch pl">an error</span></span></div>
+<div class="c-ord w2 d3 tmp">A short wait gives the cause time to go away before the next try.<span class="sa-chs"><span class="sa-ch pl">a wait</span><span class="sa-ch pl">try 2</span></span></div>
+<div class="c-flt w2 d5 tmp">The number of tries has a limit, so a step that never recovers cannot loop forever.<span class="sa-chs"><span class="sa-ch pl">a wait</span><span class="sa-ch pl">try N</span></span></div>
+<div class="c-out w2 d7">After the last try the loop raises the error, so the caller learns that the step failed.<span class="sa-chs"><span class="sa-ch pl">raise to the caller</span></span></div>
+</div>
+<p class="ca-cap">A retry calls the step again after a wait. It stops after the last try and raises the error it got, so the caller still sees it.</p>
+<ol class="sa-steps">
+<li>A call fails with an error</li>
+<li>Wait, then call again</li>
+<li>Stop after N tries</li>
+<li>The last error is raised</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: finding your own line in a long report, catching one error, a retry with a limit, and stopping on a line to look. Work in the terminal, in the folder `cafe-report` after C25, with `git status` clean. Save the throwaway scripts of this lesson in that folder, next to `check_environment.py`, and never `git add` them; delete them when you are done. The line numbers below are those of the files as C24 and C25 print them.
+
+### 1. Find your own line in a long report
+
+**Idea.** A traceback lists the calls that were running, oldest first, and ends with the error. Start from the last line, then walk up to the last frame in your own code: the line of your program that was running when the library gave up.
+
+**Try it.** A file from another export has two columns only. Make it and ask for the monthly table of it:
+
+```bash
+printf 'order_id,store_id\n1,1\n' > data/short.csv
+uv run python -m cafe_report data/short.csv --monthly
+```
+
+**Predict:** The report will be long. Which function of your own code is the last one it names before pandas takes over, and what does the error say is wrong?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+Traceback (most recent call last):
+  File "/home/ana/cafe-report/.venv/lib/python3.13/site-packages/pandas/core/indexes/base.py", line 3816, in get_loc
+  (four more frames inside pandas)
+KeyError: 'status'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ana/cafe-report/cafe_report/__main__.py", line 3, in <module>
+    main()
+  File "/home/ana/cafe-report/cafe_report/cli.py", line 17, in main
+    print(orders_by_store_month(args.orders_file))
+  File "/home/ana/cafe-report/cafe_report/monthly.py", line 7, in orders_by_store_month
+    completed = orders[orders["status"] == "completed"]
+  (two more frames inside pandas)
+KeyError: 'status'
+```
+
+Marker lines under the code are left out; pandas lines depend on its version.
+
+</details>
+
+*Why:* the last frame of your own code is `orders_by_store_month`, line 7 of `monthly.py`, where `status` is read; `cli.py` line 17 called it. The file has no column `status`: it is not an orders file. The report has two parts because pandas raised one error from another, the chaining the Python tutorial describes for `raise ... from`; read the last part first.
+
+### 2. Catch the one error you expect
+
+**Idea.** An `except` clause names the class of error it handles. Catch the failure you can explain to the person who runs the program, and turn it into one line with `raise SystemExit("text")`.
+
+**Try it.** A mistyped file name is the most common failure. In `cli.py`, put the line that reads the orders in a `try`:
+
+```python
+    try:
+        orders = read_orders(args.orders_file)
+    except FileNotFoundError:
+        raise SystemExit(f"cafe_report: no file {args.orders_file}")
+    counts = orders_per_store(orders, args.since)
+```
+
+Run it on a file that does not exist, ask the shell for the exit code, then run the two-column file again:
+
+```bash
+uv run python -m cafe_report data/nothing.csv
+echo $?
+uv run python -m cafe_report data/short.csv
+```
+
+**Predict:** What do the first two commands print, and does the third still end in a long report?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+cafe_report: no file data/nothing.csv
+1
+```
+
+The third command prints a report whose last line is `KeyError: 'ordered_at'`.
+
+</details>
+
+*Why:* `sys.exit` documents that an object that is not a number or `None` is printed to standard error with exit code 1; `raise SystemExit(...)` does the same. The missing column is not a `FileNotFoundError`, so it passes through. The `try` holds only the line that can fail, as PEP 8 asks.
+
+**Try it, broken on purpose.** Change `except FileNotFoundError:` to a bare `except:`, and misspell `read_orders` as `read_ordrs` inside the `try`. The file is right this time:
+
+```bash
+uv run python -m cafe_report data/orders.csv --since 2026-04-01
+```
+
+**Predict:** What does this run print?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+cafe_report: no file data/orders.csv
+```
+
+</details>
+
+*Why:* the misspelled name is a `NameError`; the bare `except:` caught it and blamed a file that is there. PEP 8 warns that a bare `except:` can disguise other problems and also catches `SystemExit` and `KeyboardInterrupt`. Put both lines back.
+
+### 3. Retry a step, with a limit
+
+**Idea.** Some steps fail for a reason that goes away on its own, such as a file another program is still writing. A retry calls the step again after a wait, up to a limit, for the errors you name. Save this as `cafe_report/retry.py`:
+
+```python
+import time
+
+
+def retry(call, attempts=3, wait=1.0, errors=(OSError,)):
+    for attempt in range(1, attempts + 1):
+        try:
+            return call()
+        except errors:
+            if attempt == attempts:
+                raise
+            time.sleep(wait)
+```
+
+The demo's `Mock` fails on cue: given a list as `side_effect`, each call returns or raises the next item, and `call_count` counts the calls.
+
+**Try it.** Save as `retry_demo.py` in the project folder and run it with `uv run python retry_demo.py`:
+
+```python
+from unittest.mock import Mock
+
+from cafe_report.retry import retry
+
+
+def run(label, call, attempts):
+    try:
+        result = retry(call, attempts=attempts, wait=0.1)
+    except (OSError, ValueError) as err:
+        result = f"{type(err).__name__}: {err}"
+    print(f"{label}: {result} (calls: {call.call_count})")
+
+
+busy = OSError("file is busy")
+run("run 1", Mock(side_effect=[busy, busy, "ok"]), attempts=3)
+run("run 2", Mock(side_effect=[busy, busy, "ok"]), attempts=2)
+run("run 3", Mock(side_effect=ValueError("bad month")), attempts=3)
+```
+
+**Predict:** What does each of the three lines print, and how many calls does each make?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+run 1: ok (calls: 3)
+run 2: OSError: file is busy (calls: 2)
+run 3: ValueError: bad month (calls: 1)
+```
+
+</details>
+
+*Why:* in run 1 the third call works. In run 2 the limit comes first: on the last try the bare `raise` raises the error `except` caught, so the caller still sees it. In run 3 a `ValueError` is not in `errors`, so nothing catches it and nothing waits: a retry that caught every error would try a typo three times.
+
+### 4. Stop on a line and look
+
+**Idea.** `breakpoint()` stops the program at that line and opens the debugger, where you print any variable (`p`) and go on (`c`).
+
+**Try it.** A colleague's script counts the orders of March from the text of the time and prints 250, but the till says more. Save it as `march_bug.py` in the project folder, with `breakpoint()` on line 7, and run it with `uv run python march_bug.py`:
+
+```python
+from pathlib import Path
+
+from cafe_report.load import read_orders
+
+orders = read_orders(Path(__file__).resolve().parent / "data" / "orders.csv")
+march = [o for o in orders if "2026-03-01" <= o["ordered_at"] <= "2026-03-31"]
+breakpoint()
+print(len(march))
+```
+
+At the `(Pdb)` prompt, type these four lines one by one, then `c`:
+
+```text
+p len(march)
+p sum(o["ordered_at"].startswith("2026-03") for o in orders)
+p [o["ordered_at"] for o in orders if o["ordered_at"].startswith("2026-03-31")][:2]
+p "2026-03-31 10:01:00" <= "2026-03-31"
+```
+
+**Predict:** How many orders does the file hold for March, how does that compare with `len(march)`, and what does the last comparison give?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(Pdb) p len(march)
+250
+(Pdb) p sum(o["ordered_at"].startswith("2026-03") for o in orders)
+258
+(Pdb) p [o["ordered_at"] for o in orders if o["ordered_at"].startswith("2026-03-31")][:2]
+['2026-03-31 10:01:00', '2026-03-31 10:10:00']
+(Pdb) p "2026-03-31 10:01:00" <= "2026-03-31"
+False
+```
+
+</details>
+
+*Why:* the file holds 258 orders for March and the list kept 250. `"2026-03-31 10:01:00"` is longer than `"2026-03-31"` with the same start, so it is greater: every order after midnight on the 31st fails the test, and the 8 orders of that day are lost. The fix is to compare the day, as `orders_per_store` does; the next lesson, [*Testing on known answers with pytest*](/core/testing-with-pytest/) (C27), turns a boundary day into a test.
+
+To stop on the same line in VS Code, as the two VS Code pages describe:
+
+1. Click the editor margin next to line 7, or press F9 on it, and remove the `breakpoint()` line.
+2. Open the arrow beside the run button and choose "Python Debugger: Debug Python File". The program stops on the line.
+3. VARIABLES lists the variables of the selected frame, and hovering over a name shows its value.
+4. Continue is F5, Step Over F10, Step Into F11, Step Out ⇧F11 (macOS) or Shift+F11 (Windows, Linux), Stop ⇧F5 (macOS) or Shift+F5 (Windows, Linux).
+
+<Aside type="tip" title="Remember">
+
+- Read a long traceback from the last line up to the last frame in your own code.
+- `except` names a class; a bare `except:` also hides bugs and Ctrl+C. Put only the line that can fail in the `try`.
+- A retry needs a limit, a wait, a list of errors worth another try, and a final `raise`.
+- A breakpoint shows the real values; look before you guess.
+
+**Common trap:** wrapping the whole run in a catch-all "to make it robust". A typo in the `try` was reported as a missing file.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-debugging-and-retries-1">
+
+**The same line for the monthly table.** The monthly table reads its file itself, so a mistyped name still gives a long report there. Catch it in `cli.py` and print the same one line. Starting point, the monthly branch of `main`:
+
+```python
+    if args.monthly:
+        try:
+            table = orders_by_store_month(args.orders_file)
+        except ...:  # name the class of the error you expect, not a bare except
+            raise SystemExit(...)  # one line, the same as in unit 2
+        print(table)
+        return
+```
+
+Expected: for `data/nothing.csv --monthly` the one line `cafe_report: no file data/nothing.csv` and exit code 1; for `data/orders.csv --monthly` the table of C25.
+
+<details>
+<summary>Hint</summary>
+
+A missing file ends in the same error whether `load.py` or pandas opens it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+        except FileNotFoundError:
+            raise SystemExit(f"cafe_report: no file {args.orders_file}")
+```
+
+</details>
+
+<Solution>
+
+```python
+    if args.monthly:
+        try:
+            table = orders_by_store_month(args.orders_file)
+        except FileNotFoundError:
+            raise SystemExit(f"cafe_report: no file {args.orders_file}")
+        print(table)
+        return
+```
+
+The printing stays outside the `try`; a missing column like `'status'` still fails loudly.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-debugging-and-retries-2">
+
+**Find the missing cash orders.** The script below should print the number of cash orders in May, and it prints 0. Before you start, say in one sentence what the result will look like. Save it as `cash_bug.py` in the project folder, stop the program after the orders are read with a breakpoint, look at the values of `payment_method`, and write the fixed script. Expected: one whole number on one line, and the payment methods you saw at the breakpoint.
+
+```python
+from pathlib import Path
+
+from cafe_report.load import read_orders
+
+orders = read_orders(Path(__file__).resolve().parent / "data" / "orders.csv")
+cash = [o for o in orders if o["ordered_at"].startswith("2026-05") and o["payment_method"] == "Cash"]
+print(len(cash))
+```
+
+<details>
+<summary>Hint</summary>
+
+Put `breakpoint()` before the line that builds `cash` and type `p sorted({o["payment_method"] for o in orders})`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The debugger lists the three payment methods spelled in lowercase, so the comparison with `Cash` matches no order. The fixed script prints the number of May orders that match the lowercase name, a whole number that is not 0."*
+
+```python
+cash = [o for o in orders if o["ordered_at"].startswith("2026-05") and o["payment_method"] == ...]
+```
+
+</details>
+
+<Solution>
+
+```text
+(Pdb) p sorted({o["payment_method"] for o in orders})
+['card', 'cash', 'mobile']
+```
+
+```python
+cash = [o for o in orders if o["ordered_at"].startswith("2026-05") and o["payment_method"] == "cash"]
+print(len(cash))
+```
+
+The fixed script prints `74`, the cash orders of May. `Cash` matched nothing, so `len` gave 0 without an error.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the four things a retry needs.
+
+   <details>
+   <summary>answer</summary>
+
+   A limit on the number of tries, a wait between them, the list of errors worth another try, and a final `raise` of the last error.
+
+   </details>
+
+<Exercise id="core-debugging-and-retries-3">
+
+**Spot the flaw.** A colleague wants a helpful line for each way the orders file can fail. Save this as `handlers.py` in the project folder and run it with `uv run python handlers.py`; the file `data/nothing.csv` does not exist. Expected: one line, then exit code 1. Which line does it print, is it the one the second clause was written for, and what is the fix?
+
+```python
+from cafe_report.load import read_orders
+
+try:
+    orders = read_orders("data/nothing.csv")
+except OSError:
+    raise SystemExit("cafe_report: cannot read the orders file")
+except FileNotFoundError:
+    raise SystemExit("cafe_report: no file data/nothing.csv")
+```
+
+<details>
+<summary>Hint</summary>
+
+The tutorial says the first matching `except` clause runs. See which classes `FileNotFoundError` is built on: `print([c.__name__ for c in FileNotFoundError.__mro__])`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+except FileNotFoundError:
+    ...
+except OSError:
+    ...
+```
+
+</details>
+
+<Solution>
+
+```text
+$ uv run python handlers.py
+cafe_report: cannot read the orders file
+$ echo $?
+1
+```
+
+`FileNotFoundError` is built on `OSError` (the list is `['FileNotFoundError', 'OSError', 'Exception', 'BaseException', 'object']`), and an `except` clause matches a class and the classes built on it, so the first clause catches the missing file and the second never runs. Swap the two clauses: the specific one goes first.
+
+</Solution>
+
+</Exercise>
+
+**Commit what you kept.** Delete the throwaway scripts, then name the package only, so that no demo script goes in:
+
+```bash
+git add cafe_report
+git commit -m "Report a missing file in one line and add retry"
+```
+
+**Can you do it?** *I can find my own line in a long traceback, catch one named error and leave the others to fail loudly, write a retry with a limit, a wait and a final raise, and stop a program on a line to look at its values.*
+Test: Exercise core-debugging-and-retries-2, done without opening the hints.
+
+The pattern to remember: **read from the last line up to your own code, catch only what you can explain, retry only what can pass, and look at the real values before you guess.** Next comes [*Testing on known answers with pytest*](/core/testing-with-pytest/) (C27), which turns what you looked at here into checks that run every time.
