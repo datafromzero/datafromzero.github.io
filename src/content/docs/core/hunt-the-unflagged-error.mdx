@@ -1,0 +1,517 @@
+---
+id: core-hunt-the-unflagged-error
+title: Hunt the error nobody flagged
+short_title: Hunt the unflagged error
+description: 'AI answers on the cafe data with no hint of what is wrong: a column that almost exists, a number from nowhere, a mixed bag. Decide accept, revise or reject.'
+stage: core
+order: 400
+level: intermediate
+duration: 35
+objectives:
+  - Diff every column name in AI-written SQL against the schema in the context pack
+  - Refuse a number that no code produced against the real data in this session
+  - Hunt an unflagged mistake with the full checking routine
+  - 'End each answer with a decision: accept, revise or reject, and one sentence of reason'
+prerequisites:
+  - core-find-the-planted-error
+  - core-prompting-with-the-data-in-the-room
+  - sql-join-fanout
+  - sql-null-handling
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: OECD and European Union, Empowering learners for the age of AI, an AI literacy framework for primary and secondary education (2026, accessed 2026-11-22)
+    url: https://ailiteracyframework.org/pdfs/framework_pdf/AILF_en.pdf
+  - title: Lei et al., Spider 2.0, evaluating language models on real-world enterprise text-to-SQL workflows (ICLR 2025; arXiv 2411.07763, accessed 2026-11-22)
+    url: https://arxiv.org/abs/2411.07763
+  - title: 'DuckDB documentation: NULL Values (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/2.0/sql/data_types/nulls.html
+  - title: 'DuckDB documentation: IN Operator (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/2.0/sql/expressions/in.html
+status: draft
+---
+
+TODO(owner): Team draft (D24); `reviewed` and `status` are yours to set. Every SQL result agrees on DuckDB 2.0.0 and the page's 1.4.3. The OECD and European Union framework is written for school learners, not adults, and the lesson says so. cafe-sales has no `order_total` column, so answer A uses `qty` and `price`, and answer B a real column in the wrong table (`city`). Exercise 3 revisits the `AND` and `OR` trap of *Filtering rows with WHERE* with new data. No rate is quoted for silent nulls or invented numbers.
+
+TODO(owner): Assumed from lessons not yet written. *Prompting with the data in the room* defines the context pack: schema, grain, sample rows, data dictionary. *Trust, but verify: checking AI output* teaches five steps: predict the shape and a few values; count rows and nulls around every join and filter; reconcile one total a second way; confirm every function in the installed version's documentation; accept, revise or reject, with one sentence of reason.
+
+## The question
+
+In *Find the planted error* (C39) every answer came with its class named. Now nothing is flagged. An assistant sends answers about the cafes. Some are wrong, and none says which. For each you end with a decision, accept, revise or reject, and one sentence of reason. The OECD and European Union AI literacy framework, written for school learners, names this competence: "Evaluate whether AI outputs should be accepted, revised or rejected." Its advanced level adds that learners "justify decisions" to accept, revise or reject.
+
+Every AI answer here was written for this lesson, in the style of an assistant, and none is a real transcript or comes from a product. The schema and data-dictionary parts of your context pack:
+
+```text
+stores       store_id, store_name, city, opened_on
+customers    customer_id, signup_date, city, loyalty_tier, referred_by
+products     product_id, product_name, category, unit_price_usd
+orders       order_id, customer_id, store_id, ordered_at, status, payment_method
+order_items  order_item_id, order_id, product_id, quantity, discount_usd
+
+stores.city          the city of the store
+customers.city       the home city of the customer
+order_items          the amount of a line is quantity * unit_price_usd - discount_usd
+```
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Find the planted error* (C39), a query returns four tidy rows and a total twice as big as the lines add up to. Which two checks catch it?
+
+   <details>
+   <summary>answer</summary>
+
+   Count the rows around the join, and add the total a second way, from the lines.
+
+   </details>
+
+2. Write the query that counts the completed orders.
+
+   <details>
+   <summary>answer</summary>
+
+   `SELECT COUNT(*) FROM orders WHERE status = 'completed';` It returns 1,799: one order of the 1,800 was canceled.
+
+   </details>
+
+## The big idea
+
+No answer comes with a flag, so the checks are the alarm.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="nf-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="nf" id="nf-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="nf" id="nf-r1" aria-label="Step 1 of 4: Answers arrive with no flag" />
+<input class="sa-r r2 o5" type="radio" name="nf" id="nf-r2" aria-label="Step 2 of 4: Run the same checks on each" />
+<input class="sa-r r3 o6" type="radio" name="nf" id="nf-r3" aria-label="Step 3 of 4: Decide for each answer" />
+<input class="sa-r r4 o8" type="radio" name="nf" id="nf-r4" aria-label="Step 4 of 4: Say why in one sentence" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>answers</small><span><i class="w2 tmp hl">3</i><i class="w6 d3">3</i></span></span><span class="sa-n c-mat"><small>checks</small><span><i class="w2 tmp">—</i><i class="w1 d3 tmp hl">1</i><i class="w1 d4 tmp hl">2</i><i class="w1 d5 tmp hl">3</i><i class="w3 d6">3</i></span></span><span class="sa-n c-out"><small>decisions</small><span><i class="w5 tmp">—</i><i class="w1 d6 tmp hl">3</i><i class="w2 d7">3</i></span></span><span class="sa-n c-grp"><small>reasons</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">3</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 252" width="360" role="img" aria-labelledby="nf-t nf-d">
+<title id="nf-t">No answer arrives with a flag, so the checks are the alarm</title>
+<desc id="nf-d">Three answers, A, B and C, sit in a row, each with an empty dashed slot marked no flag. Under each answer the same three checks appear one row at a time: names, numbers and counts. A decision chip appears under each answer, and a closing line reads accept, revise or reject, with one sentence of reason.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Answers arrive with no flag</text>
+<text class="f10 b w3 d3 tmp" x="10" y="29">2 · Run the same checks on each</text>
+<text class="f10 b w1 d6 tmp" x="10" y="29">3 · Decide for each answer</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Say why in one sentence</text>
+<text class="f11 b" x="10" y="14">The same checks on every answer</text>
+<g><rect class="f-src k2" x="12" y="44" width="96" height="26" rx="6" /><text class="f11 m" x="60" y="61">answer A</text></g>
+<rect class="bx dsh" x="12" y="76" width="96" height="22" />
+<text class="f10 mu m" x="60" y="91">no flag</text>
+<g class="w6 d3"><rect class="f-mat k2" x="12" y="108" width="96" height="22" rx="6" /><text class="f10 m" x="60" y="123">names</text></g>
+<g class="w5 d4"><rect class="f-mat k2" x="12" y="134" width="96" height="22" rx="6" /><text class="f10 m" x="60" y="149">numbers</text></g>
+<g class="w4 d5"><rect class="f-mat k2" x="12" y="160" width="96" height="22" rx="6" /><text class="f10 m" x="60" y="175">counts</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="12" y="192" width="96" height="24" rx="6" /><text class="f11 m" x="60" y="208">decision</text></g>
+<g><rect class="f-src k2" x="132" y="44" width="96" height="26" rx="6" /><text class="f11 m" x="180" y="61">answer B</text></g>
+<rect class="bx dsh" x="132" y="76" width="96" height="22" />
+<text class="f10 mu m" x="180" y="91">no flag</text>
+<g class="w6 d3"><rect class="f-mat k2" x="132" y="108" width="96" height="22" rx="6" /><text class="f10 m" x="180" y="123">names</text></g>
+<g class="w5 d4"><rect class="f-mat k2" x="132" y="134" width="96" height="22" rx="6" /><text class="f10 m" x="180" y="149">numbers</text></g>
+<g class="w4 d5"><rect class="f-mat k2" x="132" y="160" width="96" height="22" rx="6" /><text class="f10 m" x="180" y="175">counts</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="132" y="192" width="96" height="24" rx="6" /><text class="f11 m" x="180" y="208">decision</text></g>
+<g><rect class="f-src k2" x="252" y="44" width="96" height="26" rx="6" /><text class="f11 m" x="300" y="61">answer C</text></g>
+<rect class="bx dsh" x="252" y="76" width="96" height="22" />
+<text class="f10 mu m" x="300" y="91">no flag</text>
+<g class="w6 d3"><rect class="f-mat k2" x="252" y="108" width="96" height="22" rx="6" /><text class="f10 m" x="300" y="123">names</text></g>
+<g class="w5 d4"><rect class="f-mat k2" x="252" y="134" width="96" height="22" rx="6" /><text class="f10 m" x="300" y="149">numbers</text></g>
+<g class="w4 d5"><rect class="f-mat k2" x="252" y="160" width="96" height="22" rx="6" /><text class="f10 m" x="300" y="175">counts</text></g>
+<g class="w3 d6"><rect class="f-out k3" x="252" y="192" width="96" height="24" rx="6" /><text class="f11 m" x="300" y="208">decision</text></g>
+<text class="f10 b m w2 d7" x="190" y="236">accept, revise or reject, with one sentence of reason</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="nf-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="nf-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="nf-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="nf-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="nf-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="nf-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="nf-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="nf-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="nf-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="nf-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="nf-r1">1</label><label class="sa-sb sb2" for="nf-r2">2</label><label class="sa-sb sb3" for="nf-r3">3</label><label class="sa-sb sb4" for="nf-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">An answer comes without a hint of what is wrong, or whether anything is.<span class="sa-chs"><span class="sa-ch pl">3 answers</span><span class="sa-ch pl">no flags</span></span></div>
+<div class="c-mat w3 d3 tmp">The same checks run on every answer, because none of them is marked.<span class="sa-chs"><span class="sa-ch pl">3 checks for each answer</span></span></div>
+<div class="c-out w1 d6 tmp">Every answer ends in a decision, even when no check finds a problem.<span class="sa-chs"><span class="sa-ch pl">3 decisions</span></span></div>
+<div class="c-grp w2 d7">The decision comes with one sentence of reason that someone else could check.<span class="sa-chs"><span class="sa-ch pl">3 reasons</span></span></div>
+</div>
+<p class="ca-cap">Nothing marks an answer as wrong. Run the same checks on every answer, then decide: accept, revise or reject, with one sentence of reason.</p>
+<ol class="sa-steps">
+<li>Answers arrive with no flag</li>
+<li>Run the same checks on each</li>
+<li>Decide for each answer</li>
+<li>Say why in one sentence</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 3 new ideas: a name that is almost right, a number from nowhere and accepting on evidence. Every block runs in the page, complete on its own.
+
+### 1. The column that almost exists
+
+**Idea.** Check every name an answer uses against the schema, and every name that exists against what the column means.
+
+<Aside type="note" title="An answer written for this lesson">
+
+**A. Revenue by category.** I summed quantity times price for each category, and coffee comes first.
+
+</Aside>
+
+**Try it.** The query of answer A, as written:
+
+<RunSQL query={`SELECT p.category, SUM(oi.qty * p.price) AS revenue
+FROM order_items oi
+JOIN products p ON p.product_id = oi.product_id
+GROUP BY p.category
+ORDER BY revenue DESC;`} />
+
+Expected: an error saying that table `oi` has no column named `qty`.
+
+**Predict:** the schema above is the standard. How many names does this query use that the schema does not have? The error names only one.
+
+*Why:* two: `qty` should be `quantity`, and `price` should be `unit_price_usd`. The engine stops at the first unknown name. Even with both fixed the query is wrong, because the dictionary says a line's amount takes the discount off, and `discount_usd` is nowhere in it.
+
+<Aside type="note" title="An answer written for this lesson">
+
+**B. Which home city of our customers brings in the most revenue?** Oakland, at 9,144.25 dollars, then Berkeley and Alameda.
+
+</Aside>
+
+**Try it.** The query of answer B, as written:
+
+<RunSQL query={`SELECT s.city, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY s.city
+ORDER BY revenue DESC;`} />
+
+Expected: 3 rows, 2 columns.
+
+**Predict:** every name in B is in the schema and the query runs. In the dictionary, is `s.city` the column the question needs? If you put the right one in, will the three cities come in the same order?
+
+**Try it.** The same query with the city of the customer:
+
+<RunSQL query={`SELECT c.city, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN customers c ON c.customer_id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY c.city
+ORDER BY revenue DESC;`} />
+
+Expected: 3 rows, 2 columns.
+
+*Why:* `stores.city` is where the cafe is; the question asked for the home city, `customers.city`. By home city Berkeley leads with 8,815.25, then Oakland with 8,750.50 and Alameda with 5,176.50, so the answer's winner is wrong. The walk-in order has no customer and no home city, so the total is 22,742.25 and not 22,749.25 (order 2075, the 20-sandwich extra zero, is inside both). The engine catches a name that is missing, never one that exists and means something else: a diff of names finds nothing here, and only the meaning in the dictionary separates the two.
+
+**Decide.** For each answer, accept, revise or reject, with one sentence.
+
+<details>
+<summary>A decision in words</summary>
+
+A: revise, because two names are wrong and the amount ignores the discount. B: reject, because it answers a question about stores, not customers; the revised query changes the leader.
+
+</details>
+
+### 2. A number from nowhere
+
+**Idea.** A number counts only if code that ran on the real data, in this session, produced it. An assistant can state a figure without running anything; the figure may be right or wrong, and either way it is not yet yours.
+
+<Aside type="note" title="An answer written for this lesson">
+
+**C. How did the second quarter go?** The average order was $18.40 in the second quarter, up 7.6 percent on the first. Coffee brought in the most revenue.
+
+</Aside>
+
+**Predict:** no query has run behind answer C. Completed orders only, what are the average orders of the first quarter (January to March) and of the second (April to June), to the nearest dollar?
+
+**Try it.** Reproduce the first claim:
+
+<RunSQL query={`WITH order_totals AS (
+  SELECT o.order_id, o.ordered_at, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS amount
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY o.order_id, o.ordered_at
+)
+SELECT CASE WHEN ordered_at < '2026-04-01' THEN 'Q1' ELSE 'Q2' END AS quarter,
+       COUNT(*) AS orders,
+       ROUND(AVG(amount), 2) AS average_order
+FROM order_totals
+GROUP BY quarter
+ORDER BY quarter;`} />
+
+Expected: 2 rows, 3 columns.
+
+**Try it.** Reproduce the second claim, for the second quarter:
+
+<RunSQL query={`SELECT p.category, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND o.ordered_at >= '2026-04-01' AND o.ordered_at < '2026-07-01'
+GROUP BY p.category
+ORDER BY revenue DESC;`} />
+
+Expected: 4 rows, 2 columns.
+
+*Why:* the averages are 12.24 and 12.91 (order 2075, the 20-sandwich extra zero, is in the second), a rise of 5.5 percent, so neither $18.40 nor 7.6 percent came from the data. Coffee does lead, with 6,470.25. The second claim was right and no code had produced it: it counts once you have reproduced it, and not before.
+
+**Decide.** Accept, revise or reject answer C, with one sentence.
+
+<details>
+<summary>A decision in words</summary>
+
+Revise: replace the average with 12.91 and the rise with 5.5 percent, and keep the claim about coffee, now reproduced. Only a number that code produced counts.
+
+</details>
+
+### 3. Accept only on evidence
+
+**Idea.** Accept an answer only after the checks you can run have run, and say which.
+
+<Aside type="note" title="An answer written for this lesson">
+
+**D. The three products that sold the most units, completed orders.** Latte 653, Croissant 503, Cappuccino 472.
+
+</Aside>
+
+**Try it.** The query of answer D, as written, and then a second route that never joins `products`:
+
+<RunSQL query={`SELECT p.product_name, SUM(oi.quantity) AS units
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY p.product_name
+ORDER BY units DESC, p.product_name
+LIMIT 3;`} />
+
+Expected: 3 rows, 2 columns.
+
+<RunSQL query={`SELECT oi.product_id, SUM(oi.quantity) AS units
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+WHERE o.status = 'completed'
+GROUP BY oi.product_id
+ORDER BY units DESC, oi.product_id
+LIMIT 3;`} />
+
+Expected: 3 rows, 2 columns.
+
+**Predict:** the first query joins `products`, the second does not. Will the three unit counts be the same, or will the join have changed one of them?
+
+*Why:* the same three counts, for product ids 3, 10 and 4. Every name is in the schema, and the join to `products` is by its key, so a product matches one row and nothing repeats. The routine can end in accept, once the checks have run.
+
+**Decide.** Accept, revise or reject answer D, with one sentence.
+
+<details>
+<summary>A decision in words</summary>
+
+Accept: every name matches the schema, and the units agree with a route that skips the join.
+
+</details>
+
+<Aside type="note" title="As of 2026-11-22: what a published benchmark measured">
+
+Lei and colleagues (ICLR 2025) gave one code agent, built on o1-preview, three SQL tests. It solved 91.2 percent of Spider 1.0, 73.0 percent of BIRD and 21.3 percent of Spider 2.0, 632 problems built from real enterprise workflows. The more realistic the setting, the less an answer can be taken as it comes. A newer system may score higher; the checks of this lesson do not depend on the score. This box is reviewed every six months.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- Diff every name against the schema, then read what each name means in the dictionary.
+- A number counts only if code that ran on the real data produced it, even when it is right.
+- Run the same checks on every answer, including the ones that look fine.
+- End every answer with accept, revise or reject and one sentence of reason.
+
+**Common trap:** taking a name's existence as proof that it is the right column, and an answer with no error as proof that it is right.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-hunt-the-unflagged-error-1">
+
+**Orders of each cafe in May.** An assistant answered with the query below. Run it, then fix it: the engine names one wrong name, and others may follow. Check every name against the schema above, and decide: accept, revise or reject. Expected: first an error naming a column that a table does not have; then 3 rows, 2 columns (`store_name`, `orders`).
+
+<RunSQL query={`SELECT s.name, COUNT(*) AS orders
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+  AND o.order_date >= '2026-05-01' AND o.order_date < '2026-06-01'
+GROUP BY s.name
+ORDER BY s.name;`} />
+
+<details>
+<summary>Hint</summary>
+
+Unit 1: the engine stops at the first unknown name. List every column in the query, then find each in the schema.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT s.store_name, COUNT(*) AS orders
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+  AND o.... >= '2026-05-01' AND o.... < '2026-06-01'
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT s.store_name, COUNT(*) AS orders
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= '2026-05-01' AND o.ordered_at < '2026-06-01'
+GROUP BY s.store_name
+ORDER BY s.store_name;
+```
+
+Campus 134, Harbor 121 and Old Town 125 orders. Two names were wrong, each used several times: `s.name` should be `s.store_name` and `o.order_date` should be `o.ordered_at`. Decision: revise, because the repairs change names only and the counts add to 380, the completed orders of May.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-hunt-the-unflagged-error-2">
+
+**The mixed hunt.** Four more answers, none flagged. Before you start, say what the result looks like: for each, a decision and one sentence of reason. Run what can run, and write your four decisions in a note of your own.
+
+**E. How many different customers shopped at each cafe?** Old Town 728, Campus 716, Harbor 355.
+
+<RunSQL query={`SELECT s.store_name, COUNT(*) AS customers
+FROM orders o
+JOIN stores s ON s.store_id = o.store_id
+JOIN customers c ON c.customer_id = o.customer_id
+GROUP BY s.store_name
+ORDER BY s.store_name;`} />
+
+**F. How many orders were paid by credit card? None: the query below returned 0.**
+
+<RunSQL query={`SELECT COUNT(*) AS orders
+FROM orders
+WHERE payment_method = 'credit card';`} />
+
+**G. Which product was never sold?** Pumpkin Spice Latte.
+
+<RunSQL query={`SELECT product_name
+FROM products
+WHERE product_id NOT IN (SELECT product_id FROM order_items);`} />
+
+**H. Payments.** Mobile payments were 32.9 percent of completed orders, and Harbor had the highest share at 36 percent.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+For E, count rows against distinct customers. For F, list the distinct values of the column it filters. For G, count the empty values in the column inside the `NOT IN`. For H, no query has run: reproduce both numbers.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT s.store_name,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE o.payment_method = 'mobile') / COUNT(*), 1) AS mobile_pct
+FROM orders o JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed'
+GROUP BY ...
+```
+
+</details>
+
+<Solution>
+
+E: revise. `COUNT(*)` counts orders, not customers (716, 355 and 728); `COUNT(DISTINCT c.customer_id)` gives Campus 108, Harbor 90 and Old Town 108. F: revise. `payment_method` holds `card`, `cash` and `mobile`; `'credit card'` matches no row, so the count is 0 and no error appears. With `'card'` it is 1,001 orders, all completed. G: accept. `NOT IN` goes wrong when the subquery's column holds an empty value (DuckDB's IN page says `x NOT IN y` is `NOT (x IN y)`, and its NULL page says a comparison with `NULL` returns `NULL`); `order_items.product_id` is never empty, so the pattern is safe, and the one row is the real answer. H: revise. The figures are 30.4 percent overall and 33.8 percent at Harbor, still the highest (Campus 29.2, Old Town 29.8): keep the order, replace both numbers. These share orders, so order 2075 counts once like any other.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the three things an answer must pass before you accept it, from this lesson.
+
+   <details>
+   <summary>answer</summary>
+
+   Every name matches the schema and its meaning in the dictionary; every number came from code that ran on the real data; and the checks that fit its class (rows around joins and filters, a second route for a total) agree.
+
+   </details>
+
+<Exercise id="core-hunt-the-unflagged-error-3">
+
+**Spot the flaw.** An assistant answered "revenue of coffee and tea, completed orders" with the query below: coffee 10,807.00 and tea 3,232.50. A reviewer wrote: "Accepted. Every name is in the schema, the amount follows the dictionary, and I got the two categories I asked for." Run it. What can those checks not see, and what is the real revenue of each category? Expected: 2 rows, 2 columns.
+
+<RunSQL query={`SELECT p.category, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND p.category = 'tea' OR p.category = 'coffee'
+GROUP BY p.category
+ORDER BY p.category;`} />
+
+<details>
+<summary>Hint</summary>
+
+Which test does `AND` join first? Count the lines the `WHERE` keeps against the lines of completed orders in the two categories.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT p.category, SUM(...) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT p.category, SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND (p.category = 'tea' OR p.category = 'coffee')
+GROUP BY p.category
+ORDER BY p.category;
+```
+
+Coffee 10,802.00 and tea 3,232.50. The assistant's coffee is 5.00 too high: in standard SQL `AND` binds before `OR`, so the test read "completed tea, or any coffee", and the Mocha of the one canceled order got in (1,655 coffee lines against 1,654). The reviewer's checks read names, meaning and the shape of the result, and the shape is the same with the slip. A count of the rows around the filter finds it. Decision: revise, with one pair of brackets.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can run the checks on an answer nobody flagged, find a name that is wrong or means something else, refuse a number no code produced, and end with accept, revise or reject and a reason.*
+Test: Exercise core-hunt-the-unflagged-error-2, done without opening the hints.
+
+The pattern to remember: **an unflagged answer gets every check, and ends in a decision with a reason.** Next comes *When AI does the statistics and writes the story* (C41), where the output is correct and the choice of method is the mistake.
