@@ -1,0 +1,533 @@
+---
+id: core-inside-the-database
+title: 'Inside the database: plans, transactions and copies'
+short_title: Inside the database
+description: Read a query plan as a tree of steps, say what a transaction promises and why a number can change mid-refresh, and tell a replica from a backup.
+stage: core
+order: 340
+level: intermediate
+duration: 35
+objectives:
+  - Read a query plan as a tree of operators (scan, filter, join, aggregate) from the bottom up
+  - Say why the planner may ignore an index on a small table
+  - Say what a transaction promises and why a dashboard number can change during a refresh
+  - Say why a replica of a database is not a backup
+  - Recognize a stored procedure and a trigger, and say where each still lives in a modern data stack
+prerequisites:
+  - sql-indexes-and-explain
+  - sql-modify-data-transactions
+  - sql-triggers-and-procedures
+  - sql-scaling-and-nosql
+  - core-cloud-storage-compute-and-access
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'DuckDB documentation: EXPLAIN (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/stable/guides/meta/explain
+  - title: 'PostgreSQL 16 documentation: Using EXPLAIN (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/using-explain.html
+  - title: 'Apache Calcite documentation: Algebra (accessed 2026-11-22)'
+    url: https://calcite.apache.org/docs/algebra.html
+  - title: 'PostgreSQL 16 documentation: Transactions (tutorial) (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - title: 'PostgreSQL 16 documentation: Transaction isolation (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/transaction-iso.html
+  - title: 'DuckDB documentation: Transaction management (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/stable/sql/statements/transactions
+  - title: 'uv documentation: Running commands in projects (accessed 2026-11-22)'
+    url: https://docs.astral.sh/uv/concepts/projects/run/
+  - title: 'PostgreSQL 16 documentation: High availability, load balancing and replication (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/high-availability.html
+  - title: 'PostgreSQL 16 documentation: SQL dump (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/backup-dump.html
+  - title: 'BigQuery documentation: Work with SQL stored procedures (accessed 2026-11-22)'
+    url: https://cloud.google.com/bigquery/docs/procedures
+  - title: 'Snowflake documentation: SQL Server to Snowflake functional differences (accessed 2026-11-22)'
+    url: https://docs.snowflake.com/en/migrations/aim-for-datawarehouses/code-conversion/issues-and-troubleshooting/functional-difference/sqlServerFDM
+  - title: 'PostgreSQL 16 documentation: Overview of trigger behavior (accessed 2026-11-22)'
+    url: https://www.postgresql.org/docs/16/trigger-definition.html
+status: draft
+---
+
+TODO(owner): Team draft (D24), for you to edit; recognition depth only (research #89, findings 2 and 4). PostgreSQL 16.15 was installed and run for the plan, index, replica and dump blocks, which are read only on the page; every other block ran on DuckDB 1.4.3 (the page) and 2.0.1. Doubts: the page's engine always prints a plan in capitals (SEQ_SCAN) and 2.0 prints Seq Scan, so the lesson names operators in words; "consistency" in ACID has no sentence on the opened pages and is stated in our words; the Data Engineer lessons are named, not linked, because they are drafts; PostgreSQL 19 is the current documentation (released 2026-11-19), so the sources point at the version-16 pages that were run.
+
+## The question
+
+On Monday the owner opens the dashboard of the three cafes and asks three things:
+
+> The total said 717 completed orders when I left on Friday, and 1,799 ten minutes later, with nobody selling anything. Is it broken? The monthly report also took forever. And if someone deletes orders by mistake, don't we have a copy?
+
+Three problems with three causes: a slow query, a number that moved during a refresh, and a copy that is not the kind of copy the owner thinks. Each takes a few minutes of looking inside the database, and none of them needs more than reading.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Indexes and reading a query plan*](/sql/indexes-and-explain/) (S38), write the statement that prints the plan of `SELECT * FROM stores` without running it.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   EXPLAIN SELECT * FROM stores;
+   ```
+
+   </details>
+
+2. In [*Inserting, updating and deleting safely*](/sql/modify-data-transactions/) (S34), which statement throws away everything done since `BEGIN`?
+
+   <details>
+   <summary>answer</summary>
+
+   `ROLLBACK;`
+
+   </details>
+
+## The big idea
+
+A query plan is a tree of boxes that the engine runs from the bottom up, each box working on the rows that the boxes below it send up.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="pt-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="pt" id="pt-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="pt" id="pt-r1" aria-label="Step 1 of 4: Two scans at the bottom" />
+<input class="sa-r r2 o4" type="radio" name="pt" id="pt-r2" aria-label="Step 2 of 4: A filter above a scan" />
+<input class="sa-r r3 o6" type="radio" name="pt" id="pt-r3" aria-label="Step 3 of 4: A join takes two inputs" />
+<input class="sa-r r4 o8" type="radio" name="pt" id="pt-r4" aria-label="Step 4 of 4: An aggregate at the top" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-src"><small>boxes</small><span><i class="w2 tmp hl">2</i><i class="w2 d3 tmp hl">3</i><i class="w2 d5 tmp hl">4</i><i class="w2 d7 hl">5</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 252" width="360" role="img" aria-labelledby="pt-t pt-d">
+<title id="pt-t">A plan is a tree: rows flow up from the scans to the answer</title>
+<desc id="pt-d">A tree of five boxes drawn with the scans at the bottom. Two boxes, Scan A and Scan B, stand at the bottom. An arrow labeled all rows leads up from Scan A to a Filter box. An arrow labeled fewer rows leads up from the Filter to a wide Join box, and an arrow labeled all rows leads up from Scan B to the same Join box. An arrow labeled pairs leads up from the Join to an Aggregate box at the top, which says one row per group.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · Two scans at the bottom</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · A filter above a scan</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · A join takes two inputs</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · An aggregate at the top</text>
+<text class="f11 b" x="10" y="14">Rows flow up the tree</text>
+<g><rect class="f-src k1" x="14" y="212" width="110" height="28" rx="6" /><rect class="s-src" x="14" y="212" width="110" height="28" rx="6" /><text class="f11 b m" x="69" y="230">Scan A</text></g>
+<g><rect class="f-src k1" x="216" y="212" width="110" height="28" rx="6" /><rect class="s-src" x="216" y="212" width="110" height="28" rx="6" /><text class="f11 b m" x="271" y="230">Scan B</text></g>
+<path class="s-flt dr p6 d3" pathLength="1" d="M69 210L69 188M65.96 194.3L69 188L72.04 194.3" />
+<text class="f10 w6 d3" x="77" y="203">all rows</text>
+<g class="w6 d3"><rect class="f-flt k1" x="14" y="156" width="110" height="28" rx="6" /><rect class="s-flt" x="14" y="156" width="110" height="28" rx="6" /><text class="f11 b m" x="69" y="174">Filter</text></g>
+<path class="s-mat dr p4 d5" pathLength="1" d="M69 154L69 132M65.96 138.3L69 132L72.04 138.3" />
+<text class="f10 w4 d5" x="77" y="147">fewer rows</text>
+<path class="s-mat dr p4 d5" pathLength="1" d="M271 210L271 132M267.96 138.3L271 132L274.04 138.3" />
+<text class="f10 w4 d5" x="279" y="176">all rows</text>
+<g class="w4 d5"><rect class="f-mat k1" x="14" y="100" width="312" height="28" rx="6" /><rect class="s-mat" x="14" y="100" width="312" height="28" rx="6" /><text class="f11 b m" x="170" y="118">Join</text></g>
+<path class="s-grp dr p2 d7" pathLength="1" d="M170 98L170 78M166.96 84.3L170 78L173.04 84.3" />
+<text class="f10 w2 d7" x="178" y="91">pairs</text>
+<g class="w2 d7"><rect class="f-grp k1" x="14" y="40" width="312" height="36" rx="6" /><rect class="s-grp" x="14" y="40" width="312" height="36" rx="6" /><text class="f11 b m" x="170" y="55">Aggregate</text><text class="f10 m" x="170" y="69">one row per group</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="pt-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="pt-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="pt-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="pt-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="pt-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="pt-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="pt-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="pt-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="pt-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="pt-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="pt-r1">1</label><label class="sa-sb sb2" for="pt-r2">2</label><label class="sa-sb sb3" for="pt-r3">3</label><label class="sa-sb sb4" for="pt-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">The leaves of a plan are scans: they read rows from a table.<span class="sa-chs"><span class="sa-ch pl">2 scans</span></span></div>
+<div class="c-flt w2 d3 tmp">A filter keeps the rows that pass its test, so fewer rows come out than go in.<span class="sa-chs"><span class="sa-ch pl">1 filter</span></span></div>
+<div class="c-mat w2 d5 tmp">A join has two children: it pairs up their rows by a condition.<span class="sa-chs"><span class="sa-ch pl">1 join</span></span></div>
+<div class="c-grp w2 d7">An aggregate turns many rows into one row for each group. Read the tree from the bottom up.<span class="sa-chs"><span class="sa-ch pl">1 aggregate</span></span></div>
+</div>
+<p class="ca-cap">A plan is a tree of boxes called operators. The scans at the bottom read the tables, and each box above works on the rows that come up from below.</p>
+<ol class="sa-steps">
+<li>Two scans at the bottom</li>
+<li>A filter above a scan</li>
+<li>A join takes two inputs</li>
+<li>An aggregate at the top</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: the plan as a tree, an index the planner skips, what a transaction promises a reader, and a replica against a backup. The SQL blocks run in the page. The scripts run in `cafe-report` with `uv run --with duckdb`, which lends the script DuckDB for one run and changes nothing in the project. The PostgreSQL blocks were run on PostgreSQL 16.15 on Linux and are read only here; the Data Engineer track runs them with you.
+
+### 1. A plan is a tree of operators
+
+**Idea.** The DuckDB documentation says the plan that `EXPLAIN` shows is a tree of operators, and PostgreSQL says its plan is a tree of nodes, with scans at the bottom and joins, aggregation and sorting above. The names to know: a *scan* reads a table, a *filter* keeps the rows that pass a test, a *join* pairs the rows of two inputs, an *aggregate* turns many rows into one for each group. Textbooks call them the operators of relational algebra, and the Apache Calcite documentation says every query is represented as a tree of them; here they are only the names of the boxes.
+
+**Try it.** The units of completed orders for each cafe, as a plan and not a result:
+
+<RunSQL query={`EXPLAIN SELECT o.store_id, SUM(i.quantity) AS units
+FROM orders AS o
+JOIN order_items AS i ON i.order_id = o.order_id
+WHERE o.status = 'completed'
+GROUP BY o.store_id;`} />
+
+**Predict:** The query has a `WHERE` on `status`. Will the plan have a box of its own for that test?
+
+Expected: one cell holding the plan, drawn as boxes with the last step at the top.
+
+*Why:* the test is not a box of its own. It sits inside the scan of `orders`, on a line that says `Filters:`, because the engine moved a simple filter down into the scan. Read from the bottom: two scans, one for `order_items` and one for `orders`; a `HASH_JOIN` that pairs the rows by `order_id`; `PROJECTION` boxes that pass on only the columns still needed; and a group-by box at the top, one row for each store. The `~` numbers are estimates, because the query was not run: the DuckDB page says they come from table statistics and rules of thumb. The page's engine writes box names in capitals (`SEQ_SCAN`) and DuckDB 2.0 writes `Seq Scan`; the shape is the same.
+
+PostgreSQL 16.15 prints the same query as indented text, with the last step first:
+
+```text
+ HashAggregate  (cost=148.93..148.96 rows=3 width=12)
+   Group Key: o.store_id
+   ->  Hash Join  (cost=62.99..132.51 rows=3285 width=8)
+         Hash Cond: (i.order_id = o.order_id)
+         ->  Seq Scan on order_items i  (cost=0.00..60.87 rows=3287 width=8)
+         ->  Hash  (cost=40.50..40.50 rows=1799 width=8)
+               ->  Seq Scan on orders o  (cost=0.00..40.50 rows=1799 width=8)
+                     Filter: (status = 'completed'::text)
+```
+
+The filter is a line of the scan here too. Same tree, other engine. *Goes deeper:* the Data Engineer track lesson *Reading the machine: plans and operators*.
+
+### 2. An index the planner skips
+
+**Idea.** The planner estimates what each way of reading a table would cost and picks the cheapest. An index is one way to read, not an obligation (S38 built one).
+
+**Try it.** PostgreSQL 16.15, with the five tables loaded, a primary key on each, and `ANALYZE` run. `stores` has 3 rows and an index on `store_id`. Ask for its plan, then forbid a sequential scan with `SET enable_seqscan = off` and ask again:
+
+```sql
+EXPLAIN SELECT * FROM stores WHERE store_id = 2;
+SET enable_seqscan = off;
+EXPLAIN SELECT * FROM stores WHERE store_id = 2;
+```
+
+**Predict:** The index exists. Which scan does the first plan use, and which of the two plans has the lower estimated cost?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ Seq Scan on stores  (cost=0.00..1.04 rows=1 width=23)
+   Filter: (store_id = 2)
+
+ Index Scan using stores_pkey on stores  (cost=0.13..8.15 rows=1 width=23)
+   Index Cond: (store_id = 2)
+```
+
+</details>
+
+*Why:* the planner skipped the index and was right: reading the table costs 1.04, the forced index plan 8.15. The PostgreSQL documentation says that on a table of one disk page you will nearly always get a sequential scan, whether indexes exist or not, because that page has to be read anyway and an index adds reads. Table size is not the only input. Add an index on `orders (store_id)` and compare two filters:
+
+```sql
+CREATE INDEX orders_store_idx ON orders (store_id);
+ANALYZE orders;
+EXPLAIN SELECT * FROM orders WHERE store_id = 1;
+EXPLAIN SELECT * FROM orders WHERE store_id = 3;
+```
+
+**Predict:** Store 1 has 729 of the 1,800 orders and store 3 has 355. Which filter uses the index?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ Seq Scan on orders  (cost=0.00..40.50 rows=729 width=34)
+   Filter: (store_id = 1)
+
+ Bitmap Heap Scan on orders  (cost=7.03..29.47 rows=355 width=34)
+   Recheck Cond: (store_id = 3)
+   ->  Bitmap Index Scan on orders_store_idx  (cost=0.00..6.94 rows=355 width=0)
+         Index Cond: (store_id = 3)
+```
+
+</details>
+
+*Why:* for store 1 the index is skipped; forced, its plan would cost 41.04 against 40.50 for the scan. For store 3 the index plan costs 29.47 and wins. A filter that keeps many rows leaves little for an index to save. Other engines use other rules: on a 3-row copy of `stores` with an index, DuckDB's `EXPLAIN ANALYZE` still reports an index scan, because its documented rule counts the rows a filter matches (S38). A skipped index is not broken: the planner compared two costs. *Goes deeper:* the Data Engineer track lesson *Indexes, honestly*.
+
+### 3. What a transaction promises a reader
+
+**Idea.** A *transaction* is a group of statements that the database treats as one (S34). Its promises have a name, *ACID*. *Atomicity*: the steps are all-or-nothing, as the PostgreSQL tutorial puts it. *Consistency*: the rules you declared, such as keys and checks, hold again when it ends. *Durability*: once the database says it is done, the change is recorded permanently and survives a crash. *Isolation* is about what other sessions see of work in progress, and the run below shows it.
+
+**Try it.** The nightly job rebuilds a table of completed orders for each day and store: it deletes the old rows, then inserts the new ones. Save the helpers as `refresh_helpers.py` and the demo as `refresh_demo.py`. The dashboard is a second connection to the same database file:
+
+```python
+import duckdb
+
+db = duckdb.connect("refresh.duckdb")
+dashboard = db.cursor()  # a second connection to the same database
+
+
+def load(last_day):
+    db.execute(f"""INSERT INTO daily_orders
+        SELECT CAST(ordered_at AS DATE), store_id, COUNT(*)
+        FROM read_csv('data/orders.csv')
+        WHERE status = 'completed' AND CAST(ordered_at AS DATE) <= DATE '{last_day}'
+        GROUP BY ALL""")
+
+
+def reset():
+    """The table as the dashboard last saw it: the orders up to March 31."""
+    db.execute("CREATE OR REPLACE TABLE daily_orders (day DATE, store_id INTEGER, orders BIGINT)")
+    load("2026-03-31")
+
+
+def seen(label):
+    count, total = dashboard.execute("SELECT COUNT(*), SUM(orders) FROM daily_orders").fetchone()
+    print(f"{label:<30} {count:>3} rows, {total} orders")
+```
+
+```python
+from refresh_helpers import db, load, reset, seen
+
+reset()
+seen("before the refresh")
+
+print("-- a refresh with no transaction")
+db.execute("DELETE FROM daily_orders")
+seen("after the DELETE")
+load("2026-06-30")
+seen("after the INSERT")
+
+reset()
+print("-- the same refresh in one transaction")
+db.execute("BEGIN")
+db.execute("DELETE FROM daily_orders")
+seen("after the DELETE")
+load("2026-06-30")
+seen("after the INSERT")
+db.execute("COMMIT")
+seen("after the COMMIT")
+```
+
+```bash
+uv run --with duckdb python refresh_demo.py
+```
+
+**Predict:** What does the dashboard see after the `DELETE` in each of the two refreshes, and after the `COMMIT`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+before the refresh             180 rows, 717 orders
+-- a refresh with no transaction
+after the DELETE                 0 rows, None orders
+after the INSERT               453 rows, 1799 orders
+-- the same refresh in one transaction
+after the DELETE               180 rows, 717 orders
+after the INSERT               180 rows, 717 orders
+after the COMMIT               453 rows, 1799 orders
+```
+
+</details>
+
+*Why:* the DuckDB documentation says that without `BEGIN` each statement that succeeds is committed at once, so the dashboard arrived between the two statements and saw an empty table. It also says that changes made by a transaction are not visible from concurrent transactions until it is committed: the second refresh showed the old numbers until the `COMMIT`, then the new ones at once. That is how a dashboard goes from 717 to 1,799 with nobody selling: it saw different moments of one refresh. PostgreSQL's default level, Read Committed, lets each query see only data committed before that query began, so a page that asks twice can see two moments (Exercise 2). Delete `refresh.duckdb`. *Goes deeper:* the Data Engineer track lesson *Transactions: what ACID actually promises*.
+
+### 4. A replica is not a backup
+
+**Idea.** A *replica* is a second server that applies each change of the primary as it happens, so that it can take over quickly if the primary fails, which is how the PostgreSQL documentation describes a standby server. A *backup* is a copy of the data at one moment: a dump is a file of commands that recreates the database in the state it had when the dump was made.
+
+**Try it.** PostgreSQL 16.15 on Linux, two local servers. The replica is built from a copy of the primary (`pg_basebackup -R`) and keeps following it; the dump is taken from the primary before the mistake. The options that name the local socket folder are left out:
+
+```text
+$ psql -p 5498 -d cafe -Atc "SELECT pg_is_in_recovery()"          -- on the replica
+t
+$ psql -p 5499 -d cafe -Atc "SELECT count(*) FROM orders"         -- primary
+1800
+$ psql -p 5498 -d cafe -Atc "SELECT count(*) FROM orders"         -- replica
+1800
+$ pg_dump -p 5499 -Fc -f cafe.dump cafe                           -- a copy of this moment
+$ psql -p 5499 -d cafe -Atc "DELETE FROM orders WHERE order_id <= 1100"
+DELETE 100
+```
+
+**Predict:** After the committed `DELETE` on the primary, how many orders does the replica count, and how many does a new database restored from `cafe.dump` hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+$ psql -p 5499 -d cafe -Atc "SELECT count(*) FROM orders"         -- primary
+1700
+$ psql -p 5498 -d cafe -Atc "SELECT count(*) FROM orders"         -- replica
+1700
+$ createdb -p 5499 cafe_restored && pg_restore -p 5499 -d cafe_restored cafe.dump
+$ psql -p 5499 -d cafe_restored -Atc "SELECT count(*) FROM orders"
+1800
+```
+
+</details>
+
+*Why:* the replica copied the `DELETE` faithfully, because following every committed change is its job: it protects against a dead machine, not against a mistake. The dump kept the past. The owner's question has two answers, a replica for a server that fails and a backup for a statement that should not have run; the PostgreSQL documentation files them in two chapters, high availability and backup and restore. *Goes deeper:* the Data Engineer track lesson *The platform layer: replication, partitioning and trade-offs*.
+
+<Aside type="note" title="Recognize: procedures and triggers">
+
+A *stored procedure* is a named list of statements kept in the database and run by name; a *trigger* is a rule that runs by itself when rows change (S35). Where they live now:
+
+| where | procedures | triggers |
+|---|---|---|
+| a warehouse such as BigQuery or Snowflake | yes: BigQuery's page describes SQL stored procedures that encapsulate and reuse statements | no: Snowflake's page says triggers are not supported |
+| a source database such as PostgreSQL | yes | yes: a row-level trigger runs once for each row a statement touches, a statement-level trigger once for the statement, even when it touches no row |
+
+In a source system, a column can change with no statement of yours behind it: ask what triggers a table has before you trust it. *Goes deeper:* the Data Engineer track lesson *Ghosts in the source system: procedures and triggers*.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- A plan is a tree of operators (scan, filter, join, aggregate); read it from the bottom up.
+- The planner compares costs: it skips an index on a tiny table and on a filter that keeps most rows.
+- A transaction is all or nothing, and others do not see its work until the `COMMIT`.
+- A dashboard that asks twice can see two moments of one refresh.
+- A replica follows every change, including a mistake; only a backup keeps the past.
+
+**Common trap:** believing a second copy is a backup. The replica counted 1,700 orders after the mistake.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-inside-the-database-1">
+
+**Name the operators.** Run this plan, and name its operators from the bottom up, one line for each. The first is given: a scan of `order_items` with the filter `quantity>1` inside it. Expected: the plan as boxes, and your list of three operators ending at the top.
+
+<RunSQL query={`EXPLAIN SELECT product_id, SUM(quantity) AS units
+FROM order_items
+WHERE quantity > 1
+GROUP BY product_id
+ORDER BY units DESC
+LIMIT 3;`} />
+
+<details>
+<summary>Hint</summary>
+
+Read the boxes from the last one up, and skip the `PROJECTION` boxes, which only pass on columns. The query has a `GROUP BY`, an `ORDER BY` and a `LIMIT`: count the boxes that stand for them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+1. scan of `order_items`, with `Filters: quantity>1`
+2. ...
+3. ...
+
+</details>
+
+<Solution>
+
+1. a scan of `order_items`, with the filter `quantity>1` inside it
+2. a hash group-by on `product_id`, which adds up `quantity` for each product
+3. a `TOP_N` box with `Top: 3`
+
+The `ORDER BY` and the `LIMIT` became one box: to keep the three largest sums the engine does not need to sort all the groups. `PROJECTION` boxes sit between them. The page's engine prints `PERFECT_HASH_GROUP_BY`, a kind of hash group-by.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-inside-the-database-2">
+
+**Two numbers, two moments.** The dashboard asks two questions: the total of `daily_orders`, then the orders of each store. Between the two, the refresh of unit 3 commits. Write `ask_twice.py` from a blank file, with `refresh_helpers.py` of unit 3. Before you start, say in one sentence what the two numbers will be. Expected: one line with the total and the sum of the stores, and they differ; then a fixed version that prints the same number twice.
+
+<details>
+<summary>Hint</summary>
+
+Ask the first question with `dashboard.execute(...)`. Run the refresh as a transaction on `db` (`BEGIN`, `DELETE`, `load("2026-06-30")`, `COMMIT`). Ask the second question. For the fix, ask both questions inside one transaction of `dashboard`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"First run: a total of 717 and a store sum of 1799, two moments. Fixed run: 717 and 717, because both questions read the same snapshot."*
+
+</details>
+
+<Solution>
+
+```python
+from refresh_helpers import dashboard, db, load, reset
+
+reset()
+dashboard.execute("BEGIN")  # delete this line and the COMMIT below to see the two moments
+total = dashboard.execute("SELECT SUM(orders) FROM daily_orders").fetchone()[0]
+db.execute("BEGIN")  # the nightly refresh finishes between the two questions
+db.execute("DELETE FROM daily_orders")
+load("2026-06-30")
+db.execute("COMMIT")
+by_store = dashboard.execute(
+    "SELECT store_id, SUM(orders) FROM daily_orders GROUP BY store_id ORDER BY store_id"
+).fetchall()
+dashboard.execute("COMMIT")
+print("total:", total, "| the stores add up to:", sum(n for _, n in by_store))
+```
+
+```text
+total: 717 | the stores add up to: 717
+```
+
+Without the two lines that begin and end the dashboard's transaction, each question is its own transaction and the output is `total: 717 | the stores add up to: 1799`. Inside one transaction both questions read the same snapshot, so the page agrees with itself.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does the isolation in ACID promise to a reader, and what does a replica copy that a dump does not?
+
+   <details>
+   <summary>answer</summary>
+
+   Other sessions do not see the work of an open transaction until it is committed. A replica copies every change as it happens, including a delete made by mistake; a dump keeps the data as it was at one moment.
+
+   </details>
+
+<Exercise id="core-inside-the-database-3">
+
+**Spot the flaw.** A colleague says: "I run the dashboard inside `BEGIN`, so it always shows the newest numbers." Save the script, run it, and read the last line. Expected: one line. Does it show the newest number, and what is the fix?
+
+```python
+from refresh_helpers import dashboard, db, load, reset
+
+reset()
+dashboard.execute("BEGIN")
+dashboard.execute("SELECT SUM(orders) FROM daily_orders").fetchone()
+db.execute("BEGIN")
+db.execute("DELETE FROM daily_orders")
+load("2026-06-30")
+db.execute("COMMIT")
+print("the dashboard says", dashboard.execute("SELECT SUM(orders) FROM daily_orders").fetchone()[0])
+```
+
+<details>
+<summary>Hint</summary>
+
+The refresh committed before the last question. Ask what the dashboard's own transaction has seen since it began, and when it ends.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+dashboard.execute("...")  # end the dashboard's transaction before asking again
+```
+
+</details>
+
+<Solution>
+
+```text
+the dashboard says 717
+```
+
+The refresh committed 1,799 orders, and the dashboard still says 717. A transaction reads one snapshot taken when it began, so it is consistent but as old as its start. The fix is to end the dashboard's transaction with `dashboard.execute("COMMIT")` and ask again, or to open a new transaction for each fresh page: the same question then says `the dashboard says 1799`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read a query plan from the bottom up, say why the planner skips an index, say what a transaction promises and why a number moves during a refresh, tell a replica from a backup, and recognize a procedure and a trigger.*
+Test: Exercise core-inside-the-database-2, done without opening the hints.
+
+The pattern to remember: **a plan is a tree the planner costs, a transaction shows one moment at a time, and a replica follows the present while only a backup keeps the past.** Next comes *Warehouses, data lakes and what things cost* (C35).

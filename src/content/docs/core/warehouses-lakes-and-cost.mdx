@@ -1,0 +1,717 @@
+---
+id: core-warehouses-lakes-and-cost
+title: Warehouses, data lakes and what things cost
+short_title: Warehouses and cost
+description: Compare transactional and analytical databases, a warehouse and a data lake, and read how storage and scanning are billed.
+stage: core
+order: 350
+level: intermediate
+duration: 30
+objectives:
+  - Tell OLTP from OLAP and row from columnar storage
+  - Describe a data warehouse and a data lake and when each fits
+  - Explain scan-based pricing and one way to cut a bill
+  - Say why the same query can cost very different amounts
+  - Tell an additive measure (revenue) from one that does not add up (distinct customers, averages)
+prerequisites:
+  - core-cloud-storage-compute-and-access
+  - core-grain-facts-and-dimensions
+  - core-inside-the-database
+  - core-designing-a-star-schema
+  - core-data-beyond-tables
+  - core-git-branches-and-pull-requests
+  - core-testing-with-pytest
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'AWS: What is the difference between OLAP and OLTP? (accessed 2026-11-22)'
+    url: https://aws.amazon.com/compare/the-difference-between-olap-and-oltp/
+  - title: 'Apache Parquet documentation: Overview (accessed 2026-11-22)'
+    url: https://parquet.apache.org/docs/overview/
+  - title: 'DuckDB documentation: Reading and writing Parquet files (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/stable/data/parquet/overview
+  - title: 'DuckDB documentation: Querying Parquet metadata (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/stable/data/parquet/metadata
+  - title: 'AWS: What is a data lake? (accessed 2026-11-22)'
+    url: https://aws.amazon.com/what-is/data-lake/
+  - title: 'BigQuery documentation: BigQuery overview (accessed 2026-11-22)'
+    url: https://cloud.google.com/bigquery/docs/introduction
+  - title: 'Google Cloud: BigQuery pricing (accessed 2026-11-22)'
+    url: https://cloud.google.com/bigquery/pricing
+  - title: 'BigQuery documentation: Estimate and control costs (accessed 2026-11-22)'
+    url: https://cloud.google.com/bigquery/docs/best-practices-costs
+  - title: 'BigQuery documentation: GoogleSQL data types, data type sizes (accessed 2026-11-22)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types
+  - title: 'Kimball Group: Additive, Semi-Additive, and Non-Additive Facts (accessed 2026-11-22)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/additive-semi-additive-non-additive/
+  - title: 'DuckDB documentation: EXPLAIN (accessed 2026-11-22)'
+    url: https://duckdb.org/docs/stable/guides/meta/explain
+status: draft
+---
+
+TODO(owner): Team draft (D24), for you to edit; it ends Part 5 (SPEC D49). Not run: no BigQuery account (D48); the price is from the pricing page read on 2026-11-22 and the byte counts use the type sizes of the BigQuery page, so they estimate a scan and are not a bill. Doubts: added a short_title and four prerequisites; the lake source is the AWS page (the Google page could not be read); the pyarrow sizes of unit 1 depend on the writer of `orders.parquet` in C31; the pull request follows C30, whose steps were not yet available. C35 assumes only that C31 leaves `data/orders.parquet` with the six columns of orders; `to_parquet` writes it from the CSV when it is missing.
+
+## The question
+
+The owner of the three cafes has an offer from a supplier: a data warehouse, billed at about six dollars for each terabyte a query reads. The sales live in a CSV file of 1,800 orders and in the till's own database.
+
+> Why isn't the till's database the warehouse, what is a "data lake", and what would my weekly report cost?
+
+Two kinds of work already show in the cafes:
+
+| the work | what it touches | who does it |
+|---|---|---|
+| ring up an order | one whole row, written the moment the customer pays | the till, all day |
+| the weekly report | two or three columns of every row, read once | the owner, on Monday |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18), what does one row of `fact_sale` stand for?
+
+   <details>
+   <summary>answer</summary>
+
+   One order line of cafe-sales: 3,287 rows worth 22,754.25 dollars, the canceled order included.
+
+   </details>
+
+2. In *Data beyond tables* (C31), which of CSV and Parquet stores the values of one column together?
+
+   <details>
+   <summary>answer</summary>
+
+   Parquet, a column-oriented format. CSV keeps the values of one row together.
+
+   </details>
+
+## The big idea
+
+A warehouse is a database built to read a few columns of many rows, a lake is files kept as they arrived, and a cloud query is billed by the bytes it scans.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="cs-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o2" type="radio" name="cs" id="cs-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o2" type="radio" name="cs" id="cs-r1" aria-label="Step 1 of 4: The same table, stored twice" />
+<input class="sa-r r2 o4" type="radio" name="cs" id="cs-r2" aria-label="Step 2 of 4: The report needs B and D" />
+<input class="sa-r r3 o6" type="radio" name="cs" id="cs-r3" aria-label="Step 3 of 4: Row store: every row is read" />
+<input class="sa-r r4 o8" type="radio" name="cs" id="cs-r4" aria-label="Step 4 of 4: Column store: two blocks are read" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-out"><small>needed</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">8</i><i class="w4 d5">8</i></span></span><span class="sa-n c-flt"><small>row store</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">16</i><i class="w2 d7">16</i></span></span><span class="sa-n c-grp"><small>column</small><span><i class="w6 tmp">—</i><i class="w2 d7 hl">8</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="0 0 360 252" width="360" role="img" aria-labelledby="cs-t cs-d">
+<title id="cs-t">A column store reads only the columns a report needs</title>
+<desc id="cs-d">The same table of four columns, A to D, and four rows is drawn twice. Above, a row store keeps one block for each row, so each block holds the four cells of one row. Below, a column store keeps one block for each column, so each block holds the four cells of one column. The cells of columns B and D are shaded: they are what the report needs. In the row store all four row blocks are marked read, 16 cells. In the column store only the blocks of B and D are marked read, 8 cells, and the blocks of A and C are marked skipped.</desc>
+<text class="f10 b w2 tmp" x="10" y="29">1 · The same table, stored twice</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">2 · The report needs B and D</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">3 · Row store: every row is read</text>
+<text class="f10 b w2 d7" x="10" y="29">4 · Column store: two blocks are read</text>
+<text class="f11 b" x="10" y="14">Row store, column store</text>
+<text class="f10 b" x="10" y="52">Row store: a block for each row</text>
+<rect class="f-flt k2 w4 d5" x="8" y="58" width="164" height="22" rx="5" />
+<rect class="f-src k1" x="10" y="60" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="73">A1</text>
+<rect class="f-src k1" x="50" y="60" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="50" y="60" width="40" height="18" rx="3" />
+<text class="f10 m" x="70" y="73">B1</text>
+<rect class="f-src k1" x="90" y="60" width="40" height="18" rx="3" />
+<text class="f10 m" x="110" y="73">C1</text>
+<rect class="f-src k1" x="130" y="60" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="130" y="60" width="40" height="18" rx="3" />
+<text class="f10 m" x="150" y="73">D1</text>
+<rect class="f-flt k2 w4 d5" x="8" y="78" width="164" height="22" rx="5" />
+<rect class="f-src k1" x="10" y="80" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="93">A2</text>
+<rect class="f-src k1" x="50" y="80" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="50" y="80" width="40" height="18" rx="3" />
+<text class="f10 m" x="70" y="93">B2</text>
+<rect class="f-src k1" x="90" y="80" width="40" height="18" rx="3" />
+<text class="f10 m" x="110" y="93">C2</text>
+<rect class="f-src k1" x="130" y="80" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="130" y="80" width="40" height="18" rx="3" />
+<text class="f10 m" x="150" y="93">D2</text>
+<rect class="f-flt k2 w4 d5" x="8" y="98" width="164" height="22" rx="5" />
+<rect class="f-src k1" x="10" y="100" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="113">A3</text>
+<rect class="f-src k1" x="50" y="100" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="50" y="100" width="40" height="18" rx="3" />
+<text class="f10 m" x="70" y="113">B3</text>
+<rect class="f-src k1" x="90" y="100" width="40" height="18" rx="3" />
+<text class="f10 m" x="110" y="113">C3</text>
+<rect class="f-src k1" x="130" y="100" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="130" y="100" width="40" height="18" rx="3" />
+<text class="f10 m" x="150" y="113">D3</text>
+<rect class="f-flt k2 w4 d5" x="8" y="118" width="164" height="22" rx="5" />
+<rect class="f-src k1" x="10" y="120" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="133">A4</text>
+<rect class="f-src k1" x="50" y="120" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="50" y="120" width="40" height="18" rx="3" />
+<text class="f10 m" x="70" y="133">B4</text>
+<rect class="f-src k1" x="90" y="120" width="40" height="18" rx="3" />
+<text class="f10 m" x="110" y="133">C4</text>
+<rect class="f-src k1" x="130" y="120" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="130" y="120" width="40" height="18" rx="3" />
+<text class="f10 m" x="150" y="133">D4</text>
+<text class="f11 b w4 d5" x="184" y="100">reads 16 cells</text>
+<text class="f10 b" x="10" y="152">Column store: a block for each column</text>
+<rect class="f-ord k1 w2 d7" x="8" y="158" width="44" height="84" rx="5" />
+<rect class="f-src k1" x="10" y="160" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="173">A1</text>
+<rect class="f-src k1" x="10" y="180" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="193">A2</text>
+<rect class="f-src k1" x="10" y="200" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="213">A3</text>
+<rect class="f-src k1" x="10" y="220" width="40" height="18" rx="3" />
+<text class="f10 m" x="30" y="233">A4</text>
+<text class="f10 b m w2 d7" x="30" y="250">skipped</text>
+<rect class="f-grp k2 w2 d7" x="54" y="158" width="44" height="84" rx="5" />
+<rect class="f-src k1" x="56" y="160" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="56" y="160" width="40" height="18" rx="3" />
+<text class="f10 m" x="76" y="173">B1</text>
+<rect class="f-src k1" x="56" y="180" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="56" y="180" width="40" height="18" rx="3" />
+<text class="f10 m" x="76" y="193">B2</text>
+<rect class="f-src k1" x="56" y="200" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="56" y="200" width="40" height="18" rx="3" />
+<text class="f10 m" x="76" y="213">B3</text>
+<rect class="f-src k1" x="56" y="220" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="56" y="220" width="40" height="18" rx="3" />
+<text class="f10 m" x="76" y="233">B4</text>
+<text class="f10 b m w2 d7" x="76" y="250">read</text>
+<rect class="f-ord k1 w2 d7" x="100" y="158" width="44" height="84" rx="5" />
+<rect class="f-src k1" x="102" y="160" width="40" height="18" rx="3" />
+<text class="f10 m" x="122" y="173">C1</text>
+<rect class="f-src k1" x="102" y="180" width="40" height="18" rx="3" />
+<text class="f10 m" x="122" y="193">C2</text>
+<rect class="f-src k1" x="102" y="200" width="40" height="18" rx="3" />
+<text class="f10 m" x="122" y="213">C3</text>
+<rect class="f-src k1" x="102" y="220" width="40" height="18" rx="3" />
+<text class="f10 m" x="122" y="233">C4</text>
+<text class="f10 b m w2 d7" x="122" y="250">skipped</text>
+<rect class="f-grp k2 w2 d7" x="146" y="158" width="44" height="84" rx="5" />
+<rect class="f-src k1" x="148" y="160" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="148" y="160" width="40" height="18" rx="3" />
+<text class="f10 m" x="168" y="173">D1</text>
+<rect class="f-src k1" x="148" y="180" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="148" y="180" width="40" height="18" rx="3" />
+<text class="f10 m" x="168" y="193">D2</text>
+<rect class="f-src k1" x="148" y="200" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="148" y="200" width="40" height="18" rx="3" />
+<text class="f10 m" x="168" y="213">D3</text>
+<rect class="f-src k1" x="148" y="220" width="40" height="18" rx="3" />
+<rect class="f-out k3 w6 d3" x="148" y="220" width="40" height="18" rx="3" />
+<text class="f10 m" x="168" y="233">D4</text>
+<text class="f10 b m w2 d7" x="168" y="250">read</text>
+<text class="f11 b w2 d7" x="214" y="200">reads 8 cells</text>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="cs-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="cs-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="cs-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="cs-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="cs-r3"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="cs-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="cs-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="cs-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="cs-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx4" for="cs-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="cs-r1">1</label><label class="sa-sb sb2" for="cs-r2">2</label><label class="sa-sb sb3" for="cs-r3">3</label><label class="sa-sb sb4" for="cs-r4">4</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w2 tmp">A table can be stored row by row or column by column; the cells are the same.<span class="sa-chs"><span class="sa-ch pl">16 cells, two layouts</span></span></div>
+<div class="c-out w2 d3 tmp">A report usually needs a few columns of the table, and every row of them.<span class="sa-chs"><span class="sa-ch pl">8 cells needed</span></span></div>
+<div class="c-flt w2 d5 tmp">A row block holds all four cells of a row, so the cells of A and C come along too.<span class="sa-chs"><span class="sa-ch pl">16 cells read</span></span></div>
+<div class="c-grp w2 d7">A column block holds one column, so the blocks of A and C are never read.<span class="sa-chs"><span class="sa-ch pl">8 cells read</span><span class="sa-ch mi">2 blocks skipped</span></span></div>
+</div>
+<p class="ca-cap">A row store keeps the cells of a row together, so a report on two columns still reads every row. A column store keeps the cells of a column together, so it reads only those two.</p>
+<ol class="sa-steps">
+<li>The same table, stored twice</li>
+<li>The report needs B and D</li>
+<li>Row store: every row is read</li>
+<li>Column store: two blocks are read</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: row and column storage, warehouse and lake, the price of a scan, and measures that do not add up. The project step at the end builds a warehouse from them. Work in `cafe-report` on a new branch, with the Parquet file of C31 in `data/` and DuckDB added to the project:
+
+```bash
+git switch -c warehouse
+uv add duckdb
+```
+
+### 1. Two kinds of work, two ways to store a table
+
+**Idea.** AWS describes OLTP, online transaction processing, as storing and updating transactional data reliably in high volumes, and OLAP, online analytical processing, as combining and grouping data to analyze it. The till is OLTP and the weekly report is OLAP. A *row store* keeps the values of one row together, which suits the till: an order is written and read in one place. A *column store* keeps the values of one column together, which suits the report. Parquet is a column-oriented file format, and DuckDB's Parquet reader pushes filters and projections into the file scan, so a column the query does not use is not read.
+
+**Try it.** Save as `peek_parquet.py` in the project folder and run it with `uv run python peek_parquet.py`. DuckDB's `parquet_metadata` lists what is inside a Parquet file, and `total_compressed_size` is the bytes of each column's data:
+
+```python
+import duckdb
+
+print(
+    duckdb.sql("""
+    SELECT path_in_schema AS column_name, total_compressed_size AS bytes
+    FROM parquet_metadata('data/orders.parquet')
+    ORDER BY bytes DESC
+""")
+)
+```
+
+**Predict:** Which column takes the most space in the file, and which the least?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+┌────────────────┬───────┐
+│  column_name   │ bytes │
+│    varchar     │ int64 │
+├────────────────┼───────┤
+│ ordered_at     │ 13647 │
+│ order_id       │  9791 │
+│ customer_id    │  2500 │
+│ store_id       │   570 │
+│ payment_method │   550 │
+│ status         │   104 │
+└────────────────┴───────┘
+```
+
+These numbers come from a file written with pyarrow 26.0.1; the program that wrote your file may give other sizes.
+
+</details>
+
+*Why:* `ordered_at`, a different time for almost every order, is the largest, and `status`, which holds only two words, is the smallest by far. The values of one column look alike, so they compress well when they sit together. The whole file is 28,596 bytes against 82,348 for the CSV. A report that needs `store_id` and `status` reads two of the six columns, and the other four are not touched. Delete `peek_parquet.py`. *Goes deeper:* the Data Engineer track lesson *Storage shapes: rows, columns and files*.
+
+### 2. A warehouse and a lake
+
+**Idea.** AWS describes a *data lake* as a repository that stores structured and unstructured data as it is, without first structuring it, and says its schema is not defined when the data is captured. A *data warehouse* is the other way round: the structure is defined in advance, to make SQL queries fast, and the data is cleaned and transformed so that people can trust it. So the lake decides the shape when you read, and the warehouse decides it when you load.
+
+**Try it.** Save as `lake_demo.py` and run it. The first two lines read the same CSV file twice, as a reader would from a lake; the rest loads a value into a table that declared its type, as into a warehouse:
+
+```python
+import duckdb
+
+
+def types(query):
+    return {name: kind for name, kind, *_ in duckdb.sql("DESCRIBE " + query).fetchall()}
+
+
+print(types("SELECT * FROM read_csv('data/orders.csv')"))
+print(types("SELECT * FROM read_csv('data/orders.csv', all_varchar=true)"))
+
+duckdb.sql("CREATE TABLE stage (order_id INTEGER, ordered_at TIMESTAMP)")
+duckdb.sql("INSERT INTO stage VALUES (1, '2026-01-01 08:02:00')")
+try:
+    duckdb.sql("INSERT INTO stage VALUES ('twelve', '2026-01-01 09:00:00')")
+except duckdb.ConversionException as error:
+    print(str(error).splitlines()[0])
+```
+
+**Predict:** What types does each read give the six columns, and what happens to the row with `'twelve'`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'order_id': 'BIGINT', 'customer_id': 'BIGINT', 'store_id': 'BIGINT', 'ordered_at': 'TIMESTAMP', 'status': 'VARCHAR', 'payment_method': 'VARCHAR'}
+{'order_id': 'VARCHAR', 'customer_id': 'VARCHAR', 'store_id': 'VARCHAR', 'ordered_at': 'VARCHAR', 'status': 'VARCHAR', 'payment_method': 'VARCHAR'}
+Conversion Error: Could not convert string 'twelve' to INT32
+```
+
+</details>
+
+*Why:* the file did not change between the two reads. Each reader chose the types, guessed in the first and all text in the second: that is a lake, files read where they lie, with the shape decided by the reader. The declared `INTEGER` column refused `'twelve'` at the door, so wrong data cannot get in: that is the warehouse, shape first, load second. A lake takes anything and leaves the checking to read time. The BigQuery overview describes a design with a storage layer and a compute layer that operate independently, so that each can allocate resources without affecting the other. A lake fits when data arrives in many shapes and the questions are not known; a warehouse fits when the owner needs numbers that reconcile. Your own laptop will do both jobs in the project step. Delete `lake_demo.py`. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
+
+### 3. What a scan costs
+
+**Idea.** On BigQuery's on-demand model you are charged for the bytes each query processes, and the pricing page says you are charged for the data in the columns you select. It counts *logical* bytes, which are uncompressed and fixed by the type: the BigQuery data types page gives 8 bytes for a whole number or a date and 16 for a decimal, and 2 bytes plus the UTF-8 size for text, with a null counting as 0. A tebibyte (TiB) is 2^40 bytes.
+
+<Aside type="note" title="Price box, read on 2026-11-22">
+
+BigQuery on-demand queries: **$6.25 per TiB** processed; the first 1 TiB each month is free; charges are rounded up to the nearest MB, with a minimum of 10 MB processed per table a query references. Source: the BigQuery pricing page, read on 2026-11-22. The page has other pricing models, and prices change: read it again before you rely on a number. Every number below that uses the price carries this date.
+
+</Aside>
+
+**Try it.** The logical bytes of each column of `orders`. Whole numbers and the timestamp are 8 bytes each, a null is free, and text is 2 bytes plus its length:
+
+<RunSQL query={`WITH sizes AS (
+  SELECT 'order_id' AS column_name, 8 * COUNT(order_id) AS bytes FROM orders
+  UNION ALL SELECT 'customer_id', 8 * COUNT(customer_id) FROM orders
+  UNION ALL SELECT 'store_id', 8 * COUNT(store_id) FROM orders
+  UNION ALL SELECT 'ordered_at', 8 * COUNT(ordered_at) FROM orders
+  UNION ALL SELECT 'status', SUM(2 + strlen(status)) FROM orders
+  UNION ALL SELECT 'payment_method', SUM(2 + strlen(payment_method)) FROM orders
+)
+SELECT column_name, bytes, ROUND(bytes / POWER(2, 40) * 6.25 * 1000000, 2) AS micro_dollars
+FROM sizes
+ORDER BY bytes DESC;`} />
+
+**Predict:** Unit 1 ranked the columns by their size in the Parquet file. Which column is the largest by this count?
+
+Expected: 6 rows, 3 columns; `micro_dollars` is the price in millionths of a dollar.
+
+*Why:* `status` comes first with 19,799 bytes, although it was the smallest column in the file. Every `'completed'` counts 2 + 9 bytes, and compression does not change the count: BigQuery's cost page says on-demand queries are always charged by logical, uncompressed bytes. Compression is the provider's saving, not a discount. `customer_id` has 14,392 bytes, not 14,400, because one order has no customer.
+
+All six columns come to 89,283 bytes. A report that reads only `store_id` and `status` reads 14,400 + 19,799 = 34,199 bytes, about 38 percent of that: naming the columns you need is the first way to cut a bill, and the same table costs very different amounts depending on how it is read. The pricing page names a second way: partitioning and clustering a table reduce the data a query processes. At this size every price is far below a cent and the first TiB each month is free, so the cafes would pay nothing; the minimum of 10 MB per table matters more than the data does. The ratio is what carries to a table a million times larger. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
+
+### 4. Totals that add up, and totals that do not
+
+**Idea.** Kimball Group calls a measure *additive* when it can be summed across any dimension of its fact table, and *non-additive* when it cannot, such as a ratio. Units and sales are additive: the sum of the days is the week. For a measure that is not, their advice is to store its additive components, and to sum them before the final calculation.
+
+**Try it.** For Monday April 6 to Sunday April 12, add up the number of different customers who ordered on each day, and compare it with the number of different customers in the whole week (completed orders; a walk-in order with no customer is not counted):
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, COUNT(DISTINCT customer_id) AS customers
+  FROM orders
+  WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-04-06' AND DATE '2026-04-12'
+  GROUP BY day
+)
+SELECT SUM(customers) AS sum_of_daily,
+       (SELECT COUNT(DISTINCT customer_id) FROM orders
+        WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-04-06' AND DATE '2026-04-12') AS week_distinct
+FROM daily;`} />
+
+**Predict:** Will the sum of the daily counts be smaller than, equal to, or larger than the count of the week?
+
+Expected: 1 row, 2 columns.
+
+*Why:* 80 against 58. A customer who comes on three days is counted three times in the sum and once in the week, so the daily counts measure visits by different people, not people. Distinct counts, averages and ratios cannot be added across days, and a table that stores the daily number cannot give the weekly one. Store what does add: here the orders with their customer, from which any week can be counted again. An average has the same trouble: the mean of seven daily averages weighs a slow day like a busy one, so it differs from the average of all the orders of the week. Store the total sales and the number of orders as two additive columns, and divide at the end. *Goes deeper:* the Data Engineer track lesson *Dimensional models and slowly changing dimensions*.
+
+<Aside type="tip" title="Remember">
+
+- OLTP writes whole rows all day; OLAP reads a few columns of many rows. Column storage suits the second.
+- A lake keeps files as they arrived and the reader decides the shape; a warehouse decides the shape when it loads.
+- On-demand pricing follows the logical bytes of the columns a query reads, so name the columns you need.
+- Units and sales add up; distinct counts, averages and ratios do not.
+
+**Common trap:** adding up daily distinct counts to get a weekly one. 80 daily customers were 58 customers.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="core-warehouses-lakes-and-cost-1">
+
+**Price two columns of `order_items`.** Add up the logical bytes of `quantity` (a whole number) and `discount_usd` (a decimal) over the 3,287 lines, then the price in millionths of a dollar, with the price box of unit 3. The first column is written; add the second, then wrap the two rows to get one row. Expected: 1 row, 2 columns: the bytes and the price.
+
+<RunSQL query={`SELECT 'quantity' AS column_name, 8 * COUNT(quantity) AS bytes FROM order_items;`} />
+
+<details>
+<summary>Hint</summary>
+
+A decimal is 16 bytes. Add a second `SELECT` with `UNION ALL`, then put both in a `FROM (...)` and take `SUM(bytes)`. The price is the bytes divided by `POWER(2, 40)`, times 6.25 dollars, times 1,000,000.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT SUM(bytes) AS bytes,
+       ROUND(SUM(bytes) / POWER(2, 40) * 6.25 * 1000000, 2) AS micro_dollars
+FROM (
+  SELECT 'quantity' AS column_name, 8 * COUNT(quantity) AS bytes FROM order_items
+  UNION ALL SELECT 'discount_usd', ...
+);
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT SUM(bytes) AS bytes,
+       ROUND(SUM(bytes) / POWER(2, 40) * 6.25 * 1000000, 2) AS micro_dollars
+FROM (
+  SELECT 'quantity' AS column_name, 8 * COUNT(quantity) AS bytes FROM order_items
+  UNION ALL SELECT 'discount_usd', 16 * COUNT(discount_usd) FROM order_items
+);
+```
+
+```text
+bytes   micro_dollars
+78888   0.45
+```
+
+`quantity` is 26,296 bytes and `discount_usd` 52,592: the decimal costs twice a whole number for each line. Both are far under the 10 MB minimum.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="core-warehouses-lakes-and-cost-2">
+
+**Another week.** For Monday May 4 to Sunday May 10, compare the sum of the daily counts of different customers (completed orders) with the count of different customers in the week. Before you start, say in one sentence how the two numbers will compare. Expected: 1 row, 2 columns, and the sum is clearly larger than the week.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Unit 4 has the whole shape: a `WITH` of daily counts, a `SUM` of them, and a second count over the week. Change the two dates.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One row with two numbers, the first (the sum of seven daily counts) well above the second (the customers of the whole week)."*
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, COUNT(DISTINCT customer_id) AS customers
+  FROM orders
+  WHERE ...
+  GROUP BY day
+)
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH daily AS (
+  SELECT CAST(ordered_at AS DATE) AS day, COUNT(DISTINCT customer_id) AS customers
+  FROM orders
+  WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-05-04' AND DATE '2026-05-10'
+  GROUP BY day
+)
+SELECT SUM(customers) AS sum_of_daily,
+       (SELECT COUNT(DISTINCT customer_id) FROM orders
+        WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-05-04' AND DATE '2026-05-10') AS week_distinct
+FROM daily;
+```
+
+```text
+sum_of_daily   week_distinct
+74             57
+```
+
+The same gap as in unit 4, on other days: customers who came on several days are counted once for each day in the sum.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name one way to cut a scan-based bill, and say what a lake leaves for read time that a warehouse does at load time.
+
+   <details>
+   <summary>answer</summary>
+
+   Name only the columns you need (or partition and cluster the table). A lake leaves the shape of the data to the reader, and the checking of types and values; a warehouse fixes the shape and checks the data when it loads.
+
+   </details>
+
+<Exercise id="core-warehouses-lakes-and-cost-3">
+
+**Spot the flaw.** A colleague wants to read the orders cheaply. "I add `LIMIT 10`, so the query scans 10 rows instead of 1,800, and the bill is 10 over 1,800 of the price." Run the query. Expected: 10 rows, 6 columns. What would BigQuery's on-demand model bill for it, and what should the colleague do instead?
+
+<RunSQL query={`SELECT * FROM orders LIMIT 10;`} />
+
+<details>
+<summary>Hint</summary>
+
+The BigQuery page on controlling costs has a best practice about `LIMIT` for tables that are not clustered. Read what it says about the amount of data read.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The query returns 10 rows, and it is billed for ... of the table's bytes in the columns it selects. The fix is in the columns, not in the rows returned.
+
+</details>
+
+<Solution>
+
+For a table that is not clustered, the page says a `LIMIT` clause does not affect the amount of data read: you are billed for all the bytes of the columns the query reads, as the query indicates, although it returns a subset. `SELECT *` reads all six columns of all 1,800 orders, which unit 3 counted as 89,283 bytes, the same as without the `LIMIT`. The colleague should name the columns needed, as in unit 3, and use the free preview of the console to look at a table instead of querying it.
+
+</Solution>
+
+</Exercise>
+
+## Project step: a stand-in warehouse and its first bill
+
+Part 5 of the advanced core ends its project here. **The brief.** The owner wants to know what the weekly report would cost on a real warehouse before signing. On the branch `warehouse`, `cafe-report` gains a stand-in for it: the star schema of C18 loaded into a DuckDB file from Parquet files, one query plan read, one cost estimate with a dated price, and a test, then a pull request, reviewed and merged.
+
+**What to build.** Extend `download_data.py` so that it loops over the five tables (`stores`, `customers`, `products`, `orders`, `order_items`) and saves each as `data/<table>.csv`. Add `cafe_report/warehouse.py`. The lake is the Parquet files in `data/`; the warehouse is `data/warehouse.duckdb`, which Git ignores like the rest of `data/`. The module has these parts:
+
+| part | what it does |
+|---|---|
+| `TYPES` | each table with its column types, as in the notebook of C18 |
+| `STAR` | your `CREATE OR REPLACE TABLE` statements of C18, as one string, in the order `dim_store`, `dim_customer`, `dim_date`, `dim_product`, `dim_payment`, `fact_sale`; they read the source tables by name |
+| `to_parquet(data_dir)` | for each table without a Parquet file, `COPY (FROM read_csv('...', types=[...])) TO '...' (FORMAT parquet)` |
+| `build_warehouse(data_dir, database)` | a temporary view of each Parquet file (`FROM read_parquet('...')`), then `STAR` |
+| `explain(database, query)` | the plan of a query, with `EXPLAIN`, without running it |
+| `logical_bytes(con, table, columns)` | the logical bytes of the columns, by the type sizes of unit 3 |
+| `estimated_cost(scanned_bytes)` | bytes divided by 2^40, times the price per TiB of the price box |
+
+<details>
+<summary>A model of the three parts that are not routine</summary>
+
+```python
+PRICE_PER_TIB = 6.25  # US dollars, BigQuery on-demand queries, read on 2026-11-22; check it again
+BYTES_PER_TIB = 2**40
+MINIMUM_BYTES = 10 * 2**20  # BigQuery bills at least 10 MB for each table a query references
+
+
+def logical_bytes(con: duckdb.DuckDBPyConnection, table: str, columns: list[str]) -> int:
+    """Count the bytes BigQuery would see in `columns` of `table`, with its size for each type.
+
+    A whole number or a date is 8 bytes, a decimal 16, text 2 bytes plus its UTF-8 size, a null 0.
+    """
+    types = dict(
+        con.execute(
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ?",
+            [table],
+        ).fetchall()
+    )
+    total = 0
+    for column in columns:
+        if types[column] == "VARCHAR":
+            size = f"COALESCE(SUM(2 + strlen({column})), 0)"
+        elif types[column].startswith("DECIMAL"):
+            size = f"16 * COUNT({column})"
+        else:
+            size = f"8 * COUNT({column})"
+        total += con.execute(f"SELECT {size} FROM {table}").fetchone()[0]
+    return total
+
+
+def estimated_cost(scanned_bytes: int) -> float:
+    """Return the on-demand price, in US dollars, of scanning `scanned_bytes` (no free tier)."""
+    return scanned_bytes / BYTES_PER_TIB * PRICE_PER_TIB
+
+
+def main() -> None:
+    """Build the warehouse in data/, check the star, read one plan and estimate one cost."""
+    data = Path("data")
+    database = data / "warehouse.duckdb"
+    to_parquet(data)
+    build_warehouse(data, database)
+    con = duckdb.connect(str(database), read_only=True)
+    rows, sales = con.execute("SELECT COUNT(*), SUM(amount_usd) FROM fact_sale").fetchone()
+    print(f"fact_sale: {rows} rows, {sales} dollars")
+    print(explain(database, QUESTION))
+    reads = {
+        "fact_sale": ["store_key", "date_key", "amount_usd", "order_status"],
+        "dim_store": ["store_key", "store_name"],
+        "dim_date": ["date_key", "is_weekend"],
+    }
+    scanned = sum(logical_bytes(con, table, columns) for table, columns in reads.items())
+    billed = sum(max(logical_bytes(con, t, c), MINIMUM_BYTES) for t, c in reads.items())
+    print(f"scanned {scanned} bytes, costing {estimated_cost(scanned):.7f} dollars")
+    print(f"billed at least {billed} bytes, costing {estimated_cost(billed):.6f} dollars")
+```
+
+`QUESTION` is the query of C18 for sales by cafe and weekday or weekend: `fact_sale` joined to `dim_store` and `dim_date`, completed orders only, grouped by `store_name` and `is_weekend`. The module ends with `if __name__ == "__main__": main()`.
+
+</details>
+
+Write three tests in `tests/test_warehouse.py`: `estimated_cost(2**40)` is `6.25`; a table you make with `SELECT 1 AS n, 'ab' AS s, 2.50::DECIMAL(6,2) AS d` has 8, 4 and 16 logical bytes, and 12 for `n` and `s` together; and a star built into `tmp_path` has `(3287, 22754.25)` for `COUNT(*), SUM(amount_usd)` of `fact_sale`, and no row whose `store_key` finds no `dim_store` row. The last one calls `to_parquet(DATA)` first, so a clean clone needs only the download.
+
+Download the tables, build the warehouse, and run the checks. The plan is long; the part below is its bottom, where the data is read:
+
+```text
+$ uv run download_data.py
+saved data/stores.csv with 122 bytes
+saved data/customers.csv with 4669 bytes
+saved data/products.csv with 466 bytes
+saved data/orders.csv with 82348 bytes
+saved data/order_items.csv with 63641 bytes
+$ uv run python -m cafe_report.warehouse
+fact_sale: 3287 rows, 22754.25 dollars
+...
+╭─ Hash Join ─────────┴────────────────────╮
+│ Join Type: INNER                         │
+│ Conditions: store_key = store_key        │
+│ ~657 rows                                │
+╰─────────────────────┬────────────────────╯
+                      ├────────────────────────────────────────╮
+╭─ Seq Scan ──────────┴────────────────────╮  ╭─ Seq Scan ─────┴────────────────╮
+│ Table: warehouse.main.fact_sale          │  │ Table: warehouse.main.dim_store │
+│ Type: Sequential Scan                    │  │ Type: Sequential Scan           │
+│ Projections: store_key, date_key,        │  │ Projections: store_key,         │
+│              amount_usd                  │  │              store_name         │
+│ Filters: order_status = 'completed'      │  │ ~3 rows                         │
+│ ~657 rows                                │  ╰─────────────────────────────────╯
+╰──────────────────────────────────────────╯
+...
+scanned 144286 bytes, costing 0.0000008 dollars
+billed at least 31457280 bytes, costing 0.000179 dollars
+$ uv run pytest -q
+...............                                                          [100%]
+15 passed in 0.57s
+```
+
+The count of 15 tests assumes the 12 that C31 leaves and the 3 above; yours is your count plus three. The plan estimates `~657 rows` for the filtered scan of `fact_sale`, and the filter keeps 3,286 of its 3,287 rows: the `~` numbers are the planner's guesses from statistics and rules of thumb, as the DuckDB page says. The first estimate counts only the bytes the question reads, in three tables. The second applies the page's minimum of 10 MB for each table: three tables make 31,457,280 bytes, so the minimum is the price, and 0.000179 dollars is free under the first TiB each month.
+
+Write the estimate in the README, in a box with its date, so a reader knows when the price was true:
+
+```markdown
+## What a report costs (read on 2026-11-22)
+
+BigQuery on-demand queries: $6.25 per TiB processed, the first 1 TiB each month free, at least
+10 MB for each table a query references (cloud.google.com/bigquery/pricing). The weekly question
+reads 144,286 logical bytes in three tables: 0.0000008 dollars, or 0.000179 dollars with the
+minimum. Prices change; check the page before you rely on this.
+```
+
+Commit and push the branch, and open the pull request as in C30, from `warehouse` into `main`. Write a description of what changed and how to check it, and read the diff as the reviewer would. The transcript uses the local stand-in of C30 for the remote and the merge button:
+
+```text
+$ git add download_data.py cafe_report/warehouse.py tests/test_warehouse.py README.md pyproject.toml uv.lock
+$ git commit -m "Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate"
+[warehouse bc8b109] Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate
+ 6 files changed, 221 insertions(+), 6 deletions(-)
+ create mode 100644 cafe_report/warehouse.py
+ create mode 100644 tests/test_warehouse.py
+$ git push -u origin warehouse
+To /home/ana/cafe-report-backup.git
+ * [new branch]      warehouse -> warehouse
+$ git diff --stat main...warehouse
+ README.md                |   7 +++
+ cafe_report/warehouse.py | 153 +++++++++++++++++++++++++++++++++++++++++++++++
+ download_data.py         |  14 +++--
+ pyproject.toml           |   1 +
+ tests/test_warehouse.py  |  35 +++++++++++
+ uv.lock                  |  17 ++++++
+ 6 files changed, 221 insertions(+), 6 deletions(-)
+$ git switch main
+$ git merge --no-ff warehouse -m "Merge pull request #2 from warehouse"
+$ git push origin main
+$ git log --oneline --graph
+*   3a6acb1 Merge pull request #2 from warehouse
+|\
+| * bc8b109 Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate
+|/
+*   a1b5688 Merge pull request #1 from parquet-export
+```
+
+The `git diff --stat` is the review: six files, and none of them is data, a key or the database file. The reviewer's list: no data, key or database file in the diff; the tests pass; the price has its date, its unit and its source; the estimate says what it counts; ruff is clean. Your hashes and the numbers of the pull requests differ.
+
+**Done means.** Each check has a command, and the repository passes it:
+
+| # | check | command | done looks like |
+|---|---|---|---|
+| 1 | the lake and the warehouse exist | `ls data` | five `.csv`, five `.parquet` and `warehouse.duckdb` |
+| 2 | none of them is in Git | `git ls-files data`, `git status -s` | both print nothing |
+| 3 | the star is whole | `uv run python -m cafe_report.warehouse` | `fact_sale: 3287 rows, 22754.25 dollars` |
+| 4 | one plan read | the plan of that run | you can say which table is scanned, what the `Filters:` line means, and why `~657` is not the real count |
+| 5 | one dated estimate | the README | a price, its unit, its source and the date you read it |
+| 6 | tests and style | `uv run pytest -q`, `uv run ruff check`, `uv run ruff format --check` | all pass; the test count is yours plus three |
+| 7 | reviewed and merged | `git log --oneline --graph` | the branch joined `main` by a merge, after the review list |
+
+**Can you do it?** *I can say what a warehouse and a lake are for, load a star schema into a DuckDB file from Parquet, read its plan, estimate what a scan costs at a dated published price, and take the change through a reviewed pull request.*
+Test: Exercise core-warehouses-lakes-and-cost-2, done without opening the hints.
+
+The pattern to remember: **keep the lake as it arrived and the warehouse as you shaped it, read only the columns you need, and date every price.** Part 5 ends here. Part 6 starts with *What AI can and cannot do in data work* (C36).
