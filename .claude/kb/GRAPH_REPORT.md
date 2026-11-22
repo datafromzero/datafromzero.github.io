@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1440 nodes, 1619 edges, 187 communities (640 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 39, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 473, rule 10, script 157, skill 1, spec-section 25, starlight-component 6, style 7, symbol 276, template 2, token 12.
-- Edges: defines 276, imports 50, mentions 868, overrides 6, references 28, runs 11, specified-by 4, uses 339, uses-token 32, validated-by 5.
+- 1445 nodes, 1622 edges, 187 communities (644 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 40, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 477, rule 10, script 157, skill 1, spec-section 25, starlight-component 6, style 7, symbol 276, template 2, token 12.
+- Edges: defines 276, imports 50, mentions 871, overrides 6, references 28, runs 11, specified-by 4, uses 339, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -27,7 +27,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
 | 13 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 14 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
-| 15 | `S7` Datasets | spec-section | 23 | SPEC.md:311 |
+| 15 | `scripts/sync-research-issues.mjs` | script | 24 | scripts/sync-research-issues.mjs:1 |
 
 ## Communities
 
@@ -36,8 +36,8 @@ Label propagation; each community is named by its top-degree node.
 - **C1 Solution** (127): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
 - **C2 HANDOFF.md** (19): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; CLAUDE.md; S14 Content production (replaces migr…
 - **C3 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
-- **C4 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C5 Tech stack** (17): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C4 Tech stack** (18): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C8 sync-research-issues.mjs** (11): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md; research/issues/29-a-short-history-of-data-homepage-slider.md
