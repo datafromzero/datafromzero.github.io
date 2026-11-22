@@ -6,7 +6,7 @@ description: Compare transactional and analytical databases, a warehouse and a d
 stage: core
 order: 350
 level: intermediate
-duration: 30
+duration: 40
 objectives:
   - Tell OLTP from OLAP and row from columnar storage
   - Describe a data warehouse and a data lake and when each fits
@@ -50,7 +50,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), for you to edit; it ends Part 5 (SPEC D49). Not run: no BigQuery account (D48); the price is from the pricing page read on 2026-11-22 and the byte counts use the type sizes of the BigQuery page, so they estimate a scan and are not a bill. Doubts: added a short_title and four prerequisites; the lake source is the AWS page (the Google page could not be read); the pyarrow sizes of unit 1 depend on the writer of `orders.parquet` in C31; the pull request follows C30, whose steps were not yet available. C35 assumes only that C31 leaves `data/orders.parquet` with the six columns of orders; `to_parquet` writes it from the CSV when it is missing.
+TODO(owner): Team draft (D24), for you to edit; it ends Part 5 (SPEC D49). `reviewed` is yours to set. Not run: no BigQuery account (D48); the price is from the pricing page read on 2026-11-22 and the byte counts use the type sizes of the BigQuery page, so they estimate a scan and are not a bill. The project step was run end to end on a rebuilt C30 and C31 (13 tests, `--parquet`), on DuckDB 2.0.1 and 1.4.3. Doubts: short_title and prerequisites added; the lake source is the AWS page (the Google page could not be read); C35 assumes only `data/orders.csv` and the six-column `data/orders.parquet` of C31 (`to_parquet` writes it when missing).
 
 ## The question
 
@@ -69,12 +69,12 @@ Two kinds of work already show in the cafes:
 
 From memory first, then click to check.
 
-1. In [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18), what does one row of `fact_sale` stand for?
+1. In [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18), what is one row of `fact_sale`?
 
    <details>
    <summary>answer</summary>
 
-   One order line of cafe-sales: 3,287 rows worth 22,754.25 dollars, the canceled order included.
+   One order line of cafe-sales: 3,287 rows, 22,754.25 dollars.
 
    </details>
 
@@ -236,16 +236,16 @@ A warehouse is a database built to read a few columns of many rows, a lake is fi
 
 ## Learn by doing
 
-About 30 minutes, 4 new ideas: row and column storage, warehouse and lake, the price of a scan, and measures that do not add up. The project step at the end builds a warehouse from them. Work in `cafe-report` on a new branch, with the Parquet file of C31 in `data/` and DuckDB added to the project:
+About 40 minutes, 4 new ideas: row and column storage, warehouse and lake, the price of a scan, and measures that do not add up. The project step builds a warehouse from them. Work in `cafe-report` on a new branch `add-warehouse`, with the Parquet file that `--parquet` of C31 wrote in `data/`, and DuckDB added to the project:
 
 ```bash
-git switch -c warehouse
+git switch -c add-warehouse
 uv add duckdb
 ```
 
 ### 1. Two kinds of work, two ways to store a table
 
-**Idea.** AWS describes OLTP, online transaction processing, as storing and updating transactional data reliably in high volumes, and OLAP, online analytical processing, as combining and grouping data to analyze it. The till is OLTP and the weekly report is OLAP. A *row store* keeps the values of one row together, which suits the till: an order is written and read in one place. A *column store* keeps the values of one column together, which suits the report. Parquet is a column-oriented file format, and DuckDB's Parquet reader pushes filters and projections into the file scan, so a column the query does not use is not read.
+**Idea.** AWS describes OLTP, online transaction processing, as storing and updating transactional data reliably in high volumes, and OLAP, online analytical processing, as combining and grouping data to analyze it. A *row store* keeps the values of one row together, which suits the till: an order is written and read in one place. A *column store* keeps the values of one column together, which suits the report. Parquet is a column-oriented file format, and DuckDB's Parquet reader pushes filters and projections into the file scan, so a column the query does not use is not read.
 
 **Try it.** Save as `peek_parquet.py` in the project folder and run it with `uv run python peek_parquet.py`. DuckDB's `parquet_metadata` lists what is inside a Parquet file, and `total_compressed_size` is the bytes of each column's data:
 
@@ -271,20 +271,20 @@ print(
 │  column_name   │ bytes │
 │    varchar     │ int64 │
 ├────────────────┼───────┤
-│ ordered_at     │ 13647 │
+│ ordered_at     │ 14453 │
 │ order_id       │  9791 │
-│ customer_id    │  2500 │
+│ customer_id    │  2509 │
 │ store_id       │   570 │
 │ payment_method │   550 │
 │ status         │   104 │
 └────────────────┴───────┘
 ```
 
-These numbers come from a file written with pyarrow 26.0.1; the program that wrote your file may give other sizes.
+These numbers come from the file that `--parquet` of C31 writes (pandas with pyarrow 26.0.1); other versions may give other sizes.
 
 </details>
 
-*Why:* `ordered_at`, a different time for almost every order, is the largest, and `status`, which holds only two words, is the smallest by far. The values of one column look alike, so they compress well when they sit together. The whole file is 28,596 bytes against 82,348 for the CSV. A report that needs `store_id` and `status` reads two of the six columns, and the other four are not touched. Delete `peek_parquet.py`. *Goes deeper:* the Data Engineer track lesson *Storage shapes: rows, columns and files*.
+*Why:* `ordered_at`, a different time for almost every order, is the largest, and `status`, which holds only two words, is the smallest by far. The values of one column look alike, so they compress well when they sit together. The whole file is 31,526 bytes against 82,348 for the CSV. A report that needs `store_id` and `status` reads two of the six columns, and the other four are not touched. Delete `peek_parquet.py`. *Goes deeper:* the Data Engineer track lesson *Storage shapes: rows, columns and files*.
 
 ### 2. A warehouse and a lake
 
@@ -311,7 +311,7 @@ except duckdb.ConversionException as error:
     print(str(error).splitlines()[0])
 ```
 
-**Predict:** What types does each read give the six columns, and what happens to the row with `'twelve'`?
+**Predict:** What types does each read give, and what happens to the row with `'twelve'`?
 
 <details>
 <summary>Reveal the result</summary>
@@ -324,15 +324,15 @@ Conversion Error: Could not convert string 'twelve' to INT32
 
 </details>
 
-*Why:* the file did not change between the two reads. Each reader chose the types, guessed in the first and all text in the second: that is a lake, files read where they lie, with the shape decided by the reader. The declared `INTEGER` column refused `'twelve'` at the door, so wrong data cannot get in: that is the warehouse, shape first, load second. A lake takes anything and leaves the checking to read time. The BigQuery overview describes a design with a storage layer and a compute layer that operate independently, so that each can allocate resources without affecting the other. A lake fits when data arrives in many shapes and the questions are not known; a warehouse fits when the owner needs numbers that reconcile. Your own laptop will do both jobs in the project step. Delete `lake_demo.py`. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
+*Why:* each reader chose the types, guessed in the first read and all text in the second: that is a lake, files read where they lie, with the shape decided by the reader. The declared `INTEGER` column refused `'twelve'` at the door, so wrong data cannot get in: that is the warehouse, shape first, load second. A lake fits when data arrives in many shapes and the questions are not known; a warehouse fits when the owner needs numbers that reconcile. Delete `lake_demo.py`. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
 
 ### 3. What a scan costs
 
-**Idea.** On BigQuery's on-demand model you are charged for the bytes each query processes, and the pricing page says you are charged for the data in the columns you select. It counts *logical* bytes, which are uncompressed and fixed by the type: the BigQuery data types page gives 8 bytes for a whole number or a date and 16 for a decimal, and 2 bytes plus the UTF-8 size for text, with a null counting as 0. A tebibyte (TiB) is 2^40 bytes.
+**Idea.** On BigQuery's on-demand model you are charged for the bytes each query processes, and the pricing page says you are charged for the data in the columns you select. It counts *logical* bytes, which are uncompressed and fixed by the type: the BigQuery data types page gives 8 bytes for a whole number or a date, 16 for a decimal, 1 for a BOOL, and 2 bytes plus the UTF-8 size for text, with a null counting as 0. A tebibyte (TiB) is 2^40 bytes.
 
 <Aside type="note" title="Price box, read on 2026-11-22">
 
-BigQuery on-demand queries: **$6.25 per TiB** processed; the first 1 TiB each month is free; charges are rounded up to the nearest MB, with a minimum of 10 MB processed per table a query references. Source: the BigQuery pricing page, read on 2026-11-22. The page has other pricing models, and prices change: read it again before you rely on a number. Every number below that uses the price carries this date.
+BigQuery on-demand queries: **$6.25 per TiB** processed; the first 1 TiB each month is free; charges are rounded up to the nearest MB, with a minimum of 10 MB processed per table a query references and per query; the page does not say how many bytes an MB is. Source: the BigQuery pricing page, read on 2026-11-22. Prices change: read the page again before you rely on a number.
 
 </Aside>
 
@@ -354,9 +354,9 @@ ORDER BY bytes DESC;`} />
 
 Expected: 6 rows, 3 columns; `micro_dollars` is the price in millionths of a dollar.
 
-*Why:* `status` comes first with 19,799 bytes, although it was the smallest column in the file. Every `'completed'` counts 2 + 9 bytes, and compression does not change the count: BigQuery's cost page says on-demand queries are always charged by logical, uncompressed bytes. Compression is the provider's saving, not a discount. `customer_id` has 14,392 bytes, not 14,400, because one order has no customer.
+*Why:* `status` comes first with 19,799 bytes, although it was the smallest column in the file. Every `'completed'` counts 2 + 9 bytes, and compression does not change the count: BigQuery's cost page says on-demand queries are always charged by logical, uncompressed bytes. `customer_id` has 14,392 bytes, not 14,400, because one order has no customer.
 
-All six columns come to 89,283 bytes. A report that reads only `store_id` and `status` reads 14,400 + 19,799 = 34,199 bytes, about 38 percent of that: naming the columns you need is the first way to cut a bill, and the same table costs very different amounts depending on how it is read. The pricing page names a second way: partitioning and clustering a table reduce the data a query processes. At this size every price is far below a cent and the first TiB each month is free, so the cafes would pay nothing; the minimum of 10 MB per table matters more than the data does. The ratio is what carries to a table a million times larger. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
+All six columns come to 89,283 bytes. A report that reads only `store_id` and `status` reads 14,400 + 19,799 = 34,199 bytes, about 38 percent of that: naming the columns you need is the first way to cut a bill, and the same table costs very different amounts depending on how it is read. The pricing page names a second way: partitioning and clustering a table reduce the data a query processes. At this size every price is far below a cent and the first TiB each month is free, so the minimum of about 10 MB per table matters more than the data; the ratio is what carries to a table a million times larger. *Goes deeper:* the Data Engineer track lesson *File formats and partitioning*.
 
 ### 4. Totals that add up, and totals that do not
 
@@ -379,7 +379,7 @@ FROM daily;`} />
 
 Expected: 1 row, 2 columns.
 
-*Why:* 80 against 58. A customer who comes on three days is counted three times in the sum and once in the week, so the daily counts measure visits by different people, not people. Distinct counts, averages and ratios cannot be added across days, and a table that stores the daily number cannot give the weekly one. Store what does add: here the orders with their customer, from which any week can be counted again. An average has the same trouble: the mean of seven daily averages weighs a slow day like a busy one, so it differs from the average of all the orders of the week. Store the total sales and the number of orders as two additive columns, and divide at the end. *Goes deeper:* the Data Engineer track lesson *Dimensional models and slowly changing dimensions*.
+*Why:* 80 against 58. A customer who comes on three days is counted three times in the sum and once in the week, so the daily counts measure visits by different people, not people. A table that stores the daily count cannot give the weekly one; store what does add, here the orders with their customer, and count again for any week. An average has the same trouble: store the total sales and the number of orders, and divide at the end. *Goes deeper:* the Data Engineer track lesson *Dimensional models and slowly changing dimensions*.
 
 <Aside type="tip" title="Remember">
 
@@ -410,14 +410,7 @@ A decimal is 16 bytes. Add a second `SELECT` with `UNION ALL`, then put both in 
 <details>
 <summary>Half-solution</summary>
 
-```sql
-SELECT SUM(bytes) AS bytes,
-       ROUND(SUM(bytes) / POWER(2, 40) * 6.25 * 1000000, 2) AS micro_dollars
-FROM (
-  SELECT 'quantity' AS column_name, 8 * COUNT(quantity) AS bytes FROM order_items
-  UNION ALL SELECT 'discount_usd', ...
-);
-```
+The outer query is `SELECT SUM(bytes), ROUND(SUM(bytes) / POWER(2, 40) * 6.25 * 1000000, 2) FROM (...)`; the inner one has two rows, and the second is `UNION ALL SELECT 'discount_usd', ... FROM order_items`.
 
 </details>
 
@@ -437,7 +430,7 @@ bytes   micro_dollars
 78888   0.45
 ```
 
-`quantity` is 26,296 bytes and `discount_usd` 52,592: the decimal costs twice a whole number for each line. Both are far under the 10 MB minimum.
+`quantity` is 26,296 bytes and `discount_usd` 52,592: a decimal costs twice a whole number for each line.
 
 </Solution>
 
@@ -454,40 +447,20 @@ bytes   micro_dollars
 <details>
 <summary>Hint</summary>
 
-Unit 4 has the whole shape: a `WITH` of daily counts, a `SUM` of them, and a second count over the week. Change the two dates.
+Unit 4 has the whole shape; change the two dates.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"One row with two numbers, the first (the sum of seven daily counts) well above the second (the customers of the whole week)."*
-
-```sql
-WITH daily AS (
-  SELECT CAST(ordered_at AS DATE) AS day, COUNT(DISTINCT customer_id) AS customers
-  FROM orders
-  WHERE ...
-  GROUP BY day
-)
-```
+Expected output in words: *"One row with two numbers, the first (the sum of seven daily counts) well above the second (the customers of the whole week)."* The `WHERE` of both parts keeps completed orders between the two dates.
 
 </details>
 
 <Solution>
 
-```sql
-WITH daily AS (
-  SELECT CAST(ordered_at AS DATE) AS day, COUNT(DISTINCT customer_id) AS customers
-  FROM orders
-  WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-05-04' AND DATE '2026-05-10'
-  GROUP BY day
-)
-SELECT SUM(customers) AS sum_of_daily,
-       (SELECT COUNT(DISTINCT customer_id) FROM orders
-        WHERE status = 'completed' AND CAST(ordered_at AS DATE) BETWEEN DATE '2026-05-04' AND DATE '2026-05-10') AS week_distinct
-FROM daily;
-```
+Use the query of unit 4 and change the two dates, in both places, to `DATE '2026-05-04'` and `DATE '2026-05-10'`.
 
 ```text
 sum_of_daily   week_distinct
@@ -533,7 +506,7 @@ The query returns 10 rows, and it is billed for ... of the table's bytes in the 
 
 <Solution>
 
-For a table that is not clustered, the page says a `LIMIT` clause does not affect the amount of data read: you are billed for all the bytes of the columns the query reads, as the query indicates, although it returns a subset. `SELECT *` reads all six columns of all 1,800 orders, which unit 3 counted as 89,283 bytes, the same as without the `LIMIT`. The colleague should name the columns needed, as in unit 3, and use the free preview of the console to look at a table instead of querying it.
+For a table that is not clustered, the page says a `LIMIT` clause does not affect the amount of data read: you are billed for all the bytes of the columns the query reads, although it returns a subset. `SELECT *` reads all six columns of all 1,800 orders, which unit 3 counted as 89,283 bytes, the same as without the `LIMIT`. The colleague should name the columns needed, as in unit 3, and use the free preview of the console to look at a table instead of querying it.
 
 </Solution>
 
@@ -541,33 +514,33 @@ For a table that is not clustered, the page says a `LIMIT` clause does not affec
 
 ## Project step: a stand-in warehouse and its first bill
 
-Part 5 of the advanced core ends its project here. **The brief.** The owner wants to know what the weekly report would cost on a real warehouse before signing. On the branch `warehouse`, `cafe-report` gains a stand-in for it: the star schema of C18 loaded into a DuckDB file from Parquet files, one query plan read, one cost estimate with a dated price, and a test, then a pull request, reviewed and merged.
+Part 5 ends its project here. **The brief.** The owner wants to know what the weekly report would cost on a real warehouse before signing. On the branch `add-warehouse`, `cafe-report` gains a stand-in for it: the star schema of C18 loaded into a DuckDB file from Parquet files, one query plan read, one cost estimate with a dated price, and a test, then a pull request that Sam reviews and merges, as in C30.
 
 **What to build.** Extend `download_data.py` so that it loops over the five tables (`stores`, `customers`, `products`, `orders`, `order_items`) and saves each as `data/<table>.csv`. Add `cafe_report/warehouse.py`. The lake is the Parquet files in `data/`; the warehouse is `data/warehouse.duckdb`, which Git ignores like the rest of `data/`. The module has these parts:
 
 | part | what it does |
 |---|---|
 | `TYPES` | each table with its column types, as in the notebook of C18 |
-| `STAR` | your `CREATE OR REPLACE TABLE` statements of C18, as one string, in the order `dim_store`, `dim_customer`, `dim_date`, `dim_product`, `dim_payment`, `fact_sale`; they read the source tables by name |
+| `STAR` | your `CREATE OR REPLACE TABLE` statements of C18 as one string, dimensions first, then `fact_sale`; they read the source tables by name |
 | `to_parquet(data_dir)` | for each table without a Parquet file, `COPY (FROM read_csv('...', types=[...])) TO '...' (FORMAT parquet)` |
 | `build_warehouse(data_dir, database)` | a temporary view of each Parquet file (`FROM read_parquet('...')`), then `STAR` |
-| `explain(database, query)` | the plan of a query, with `EXPLAIN`, without running it |
+| `explain(con, query)` | the plan of a query on a connection you pass in, with `EXPLAIN` |
 | `logical_bytes(con, table, columns)` | the logical bytes of the columns, by the type sizes of unit 3 |
 | `estimated_cost(scanned_bytes)` | bytes divided by 2^40, times the price per TiB of the price box |
+| `QUESTION` | the query of C18 for sales by cafe and weekday or weekend: `fact_sale` joined to `dim_store` and `dim_date`, completed orders only |
+| `main()` | builds the warehouse, opens one read-only connection, and prints the rows and sum of `fact_sale`, the plan of `QUESTION`, the logical bytes and price of the columns it reads in the three tables (`store_key`, `date_key`, `amount_usd`, `order_status`, `store_name`, `is_weekend`), and the price with the minimum for each table |
+
+Pass the connection to `explain` and `logical_bytes`: DuckDB refuses to open a file read-write while another connection holds it read-only, and one connection is all the checks need.
 
 <details>
-<summary>A model of the three parts that are not routine</summary>
+<summary>A model of <code>logical_bytes</code></summary>
 
 ```python
-PRICE_PER_TIB = 6.25  # US dollars, BigQuery on-demand queries, read on 2026-11-22; check it again
-BYTES_PER_TIB = 2**40
-MINIMUM_BYTES = 10 * 2**20  # BigQuery bills at least 10 MB for each table a query references
-
-
 def logical_bytes(con: duckdb.DuckDBPyConnection, table: str, columns: list[str]) -> int:
     """Count the bytes BigQuery would see in `columns` of `table`, with its size for each type.
 
-    A whole number or a date is 8 bytes, a decimal 16, text 2 bytes plus its UTF-8 size, a null 0.
+    A whole number or a date is 8 bytes, a decimal 16, a boolean 1, text 2 bytes plus its UTF-8
+    size, and a null 0.
     """
     types = dict(
         con.execute(
@@ -581,45 +554,21 @@ def logical_bytes(con: duckdb.DuckDBPyConnection, table: str, columns: list[str]
             size = f"COALESCE(SUM(2 + strlen({column})), 0)"
         elif types[column].startswith("DECIMAL"):
             size = f"16 * COUNT({column})"
+        elif types[column] == "BOOLEAN":
+            size = f"COUNT({column})"
         else:
             size = f"8 * COUNT({column})"
         total += con.execute(f"SELECT {size} FROM {table}").fetchone()[0]
     return total
-
-
-def estimated_cost(scanned_bytes: int) -> float:
-    """Return the on-demand price, in US dollars, of scanning `scanned_bytes` (no free tier)."""
-    return scanned_bytes / BYTES_PER_TIB * PRICE_PER_TIB
-
-
-def main() -> None:
-    """Build the warehouse in data/, check the star, read one plan and estimate one cost."""
-    data = Path("data")
-    database = data / "warehouse.duckdb"
-    to_parquet(data)
-    build_warehouse(data, database)
-    con = duckdb.connect(str(database), read_only=True)
-    rows, sales = con.execute("SELECT COUNT(*), SUM(amount_usd) FROM fact_sale").fetchone()
-    print(f"fact_sale: {rows} rows, {sales} dollars")
-    print(explain(database, QUESTION))
-    reads = {
-        "fact_sale": ["store_key", "date_key", "amount_usd", "order_status"],
-        "dim_store": ["store_key", "store_name"],
-        "dim_date": ["date_key", "is_weekend"],
-    }
-    scanned = sum(logical_bytes(con, table, columns) for table, columns in reads.items())
-    billed = sum(max(logical_bytes(con, t, c), MINIMUM_BYTES) for t, c in reads.items())
-    print(f"scanned {scanned} bytes, costing {estimated_cost(scanned):.7f} dollars")
-    print(f"billed at least {billed} bytes, costing {estimated_cost(billed):.6f} dollars")
 ```
 
-`QUESTION` is the query of C18 for sales by cafe and weekday or weekend: `fact_sale` joined to `dim_store` and `dim_date`, completed orders only, grouped by `store_name` and `is_weekend`. The module ends with `if __name__ == "__main__": main()`.
+`PRICE_PER_TIB` is `6.25`, `BYTES_PER_TIB` is `2**40` and `MINIMUM_BYTES` is `10 * 2**20`, an assumption about the unit of the page's "10 MB".
 
 </details>
 
-Write three tests in `tests/test_warehouse.py`: `estimated_cost(2**40)` is `6.25`; a table you make with `SELECT 1 AS n, 'ab' AS s, 2.50::DECIMAL(6,2) AS d` has 8, 4 and 16 logical bytes, and 12 for `n` and `s` together; and a star built into `tmp_path` has `(3287, 22754.25)` for `COUNT(*), SUM(amount_usd)` of `fact_sale`, and no row whose `store_key` finds no `dim_store` row. The last one calls `to_parquet(DATA)` first, so a clean clone needs only the download.
+Write three tests in `tests/test_warehouse.py`: `estimated_cost(2**40)` is `6.25`; a table made with `SELECT 1 AS n, 'ab' AS s, 2.50::DECIMAL(6,2) AS d, true AS b` has 8, 4, 16 and 1 logical bytes, and 12 for `n` and `s` together; and a star built into `tmp_path` has `(3287, 22754.25)` for `COUNT(*), SUM(amount_usd)` of `fact_sale`, and no row whose `store_key` finds no `dim_store` row. The last one calls `to_parquet(DATA)` first, so a clean clone needs only the download.
 
-Download the tables, build the warehouse, and run the checks. The plan is long; the part below is its bottom, where the data is read:
+Download the tables, build the warehouse, and run the checks. The plan is long, with two hash joins above three scans; the box below is the scan of `fact_sale`:
 
 ```text
 $ uv run download_data.py
@@ -631,73 +580,59 @@ saved data/order_items.csv with 63641 bytes
 $ uv run python -m cafe_report.warehouse
 fact_sale: 3287 rows, 22754.25 dollars
 ...
-╭─ Hash Join ─────────┴────────────────────╮
-│ Join Type: INNER                         │
-│ Conditions: store_key = store_key        │
+╭─ Seq Scan ───────────────────────────────╮
+│ Table: warehouse.main.fact_sale          │
+│ Type: Sequential Scan                    │
+│ Projections: store_key, date_key,        │
+│              amount_usd                  │
+│ Filters: order_status = 'completed'      │
 │ ~657 rows                                │
-╰─────────────────────┬────────────────────╯
-                      ├────────────────────────────────────────╮
-╭─ Seq Scan ──────────┴────────────────────╮  ╭─ Seq Scan ─────┴────────────────╮
-│ Table: warehouse.main.fact_sale          │  │ Table: warehouse.main.dim_store │
-│ Type: Sequential Scan                    │  │ Type: Sequential Scan           │
-│ Projections: store_key, date_key,        │  │ Projections: store_key,         │
-│              amount_usd                  │  │              store_name         │
-│ Filters: order_status = 'completed'      │  │ ~3 rows                         │
-│ ~657 rows                                │  ╰─────────────────────────────────╯
 ╰──────────────────────────────────────────╯
 ...
-scanned 144286 bytes, costing 0.0000008 dollars
-billed at least 31457280 bytes, costing 0.000179 dollars
+scanned 143019 bytes, costing 0.0000008 dollars
+billed at least 31457280 bytes, costing about 0.000179 dollars
 $ uv run pytest -q
-...............                                                          [100%]
-15 passed in 0.57s
+................                                                         [100%]
+16 passed in 0.60s
 ```
 
-The count of 15 tests assumes the 12 that C31 leaves and the 3 above; yours is your count plus three. The plan estimates `~657 rows` for the filtered scan of `fact_sale`, and the filter keeps 3,286 of its 3,287 rows: the `~` numbers are the planner's guesses from statistics and rules of thumb, as the DuckDB page says. The first estimate counts only the bytes the question reads, in three tables. The second applies the page's minimum of 10 MB for each table: three tables make 31,457,280 bytes, so the minimum is the price, and 0.000179 dollars is free under the first TiB each month.
+The count of 16 tests is the 13 that C31 leaves plus the 3 above. The plan estimates `~657 rows` for the filtered scan of `fact_sale`, and the filter keeps 3,286 of its 3,287 rows: the `~` numbers are the planner's guesses from statistics and rules of thumb, as the DuckDB page says. The first estimate counts only the bytes the question reads, in three tables. The second applies the minimum of about 10 MB for each table, so the minimum is the price. The page does not say whether MB means 10^6 or 2^20 bytes; either way the price is under two ten-thousandths of a dollar, and free under the first TiB each month.
 
 Write the estimate in the README, in a box with its date, so a reader knows when the price was true:
 
 ```markdown
 ## What a report costs (read on 2026-11-22)
 
-BigQuery on-demand queries: $6.25 per TiB processed, the first 1 TiB each month free, at least
-10 MB for each table a query references (cloud.google.com/bigquery/pricing). The weekly question
-reads 144,286 logical bytes in three tables: 0.0000008 dollars, or 0.000179 dollars with the
-minimum. Prices change; check the page before you rely on this.
+BigQuery on-demand queries: $6.25 per TiB processed, the first 1 TiB each month free, a minimum of
+about 10 MB for each table and for each query (cloud.google.com/bigquery/pricing). The weekly
+question reads 143,019 logical bytes in three tables: 0.0000008 dollars, or about 0.000179
+dollars with the minimum. Prices change; check the page before you rely on this.
 ```
 
-Commit and push the branch, and open the pull request as in C30, from `warehouse` into `main`. Write a description of what changed and how to check it, and read the diff as the reviewer would. The transcript uses the local stand-in of C30 for the remote and the merge button:
+Commit and push the branch, and open the pull request as in C30, from `add-warehouse` into `main`, with a description of what changed and how to check it. Sam reviews in his clone, and merges the way the Merge button does; then you catch up:
 
 ```text
 $ git add download_data.py cafe_report/warehouse.py tests/test_warehouse.py README.md pyproject.toml uv.lock
 $ git commit -m "Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate"
-[warehouse bc8b109] Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate
- 6 files changed, 221 insertions(+), 6 deletions(-)
- create mode 100644 cafe_report/warehouse.py
- create mode 100644 tests/test_warehouse.py
-$ git push -u origin warehouse
-To /home/ana/cafe-report-backup.git
- * [new branch]      warehouse -> warehouse
-$ git diff --stat main...warehouse
- README.md                |   7 +++
- cafe_report/warehouse.py | 153 +++++++++++++++++++++++++++++++++++++++++++++++
- download_data.py         |  14 +++--
- pyproject.toml           |   1 +
- tests/test_warehouse.py  |  35 +++++++++++
- uv.lock                  |  17 ++++++
- 6 files changed, 221 insertions(+), 6 deletions(-)
-$ git switch main
-$ git merge --no-ff warehouse -m "Merge pull request #2 from warehouse"
+[add-warehouse 4b8085d] Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate
+ 6 files changed, 222 insertions(+), 6 deletions(-)
+$ git push -u origin add-warehouse
+ * [new branch]      add-warehouse -> add-warehouse
+$ cd ~/cafe-report-sam
+$ git fetch origin
+$ git diff --stat origin/main...origin/add-warehouse
+ 6 files changed, 222 insertions(+), 6 deletions(-)
+$ git merge --no-ff origin/add-warehouse -m "Merge pull request: add the stand-in warehouse"
 $ git push origin main
-$ git log --oneline --graph
-*   3a6acb1 Merge pull request #2 from warehouse
-|\
-| * bc8b109 Load the star schema into a DuckDB file from Parquet, with a plan and a cost estimate
-|/
-*   a1b5688 Merge pull request #1 from parquet-export
+$ cd ~/cafe-report
+$ git switch main
+$ git pull
+Fast-forward
+$ git branch -d add-warehouse
+Deleted branch add-warehouse (was 4b8085d).
 ```
 
-The `git diff --stat` is the review: six files, and none of them is data, a key or the database file. The reviewer's list: no data, key or database file in the diff; the tests pass; the price has its date, its unit and its source; the estimate says what it counts; ruff is clean. Your hashes and the numbers of the pull requests differ.
+Sam's review list: no data, key or database file in the diff (`git diff --stat` names six files); the tests pass; the price has its date, unit and source; the estimate says what it counts; ruff is clean. Your hashes differ.
 
 **Done means.** Each check has a command, and the repository passes it:
 
@@ -705,11 +640,11 @@ The `git diff --stat` is the review: six files, and none of them is data, a key 
 |---|---|---|---|
 | 1 | the lake and the warehouse exist | `ls data` | five `.csv`, five `.parquet` and `warehouse.duckdb` |
 | 2 | none of them is in Git | `git ls-files data`, `git status -s` | both print nothing |
-| 3 | the star is whole | `uv run python -m cafe_report.warehouse` | `fact_sale: 3287 rows, 22754.25 dollars` |
-| 4 | one plan read | the plan of that run | you can say which table is scanned, what the `Filters:` line means, and why `~657` is not the real count |
+| 3 | the star is whole | `uv run python -m cafe_report.warehouse` | `fact_sale: 3287 rows, 22754.25 dollars`, and `scanned 143019 bytes` |
+| 4 | one plan read | the plan of that run | you can say what the `Filters:` line means and why `~657` is not the real count |
 | 5 | one dated estimate | the README | a price, its unit, its source and the date you read it |
 | 6 | tests and style | `uv run pytest -q`, `uv run ruff check`, `uv run ruff format --check` | all pass; the test count is yours plus three |
-| 7 | reviewed and merged | `git log --oneline --graph` | the branch joined `main` by a merge, after the review list |
+| 7 | reviewed and merged | `git log --oneline -3` | the branch joined `main` by Sam's merge, after the review list |
 
 **Can you do it?** *I can say what a warehouse and a lake are for, load a star schema into a DuckDB file from Parquet, read its plan, estimate what a scan costs at a dated published price, and take the change through a reviewed pull request.*
 Test: Exercise core-warehouses-lakes-and-cost-2, done without opening the hints.
