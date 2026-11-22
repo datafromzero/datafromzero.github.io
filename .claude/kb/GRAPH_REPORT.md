@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1428 nodes, 1591 edges, 181 communities (646 isolated nodes).
+- 1428 nodes, 1592 edges, 181 communities (646 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 39, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 473, rule 10, script 151, skill 1, spec-section 25, starlight-component 6, style 7, symbol 270, template 2, token 12.
-- Edges: defines 270, imports 50, mentions 860, overrides 6, references 28, runs 11, specified-by 4, uses 325, uses-token 32, validated-by 5.
+- Edges: defines 270, imports 50, mentions 861, overrides 6, references 28, runs 11, specified-by 4, uses 325, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -24,7 +24,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:272 |
 | 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
-| 12 | `.claude/MISTAKES.md` | doc | 26 | .claude/MISTAKES.md:1 |
+| 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
 | 13 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
 | 14 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
 | 15 | `S7` Datasets | spec-section | 23 | SPEC.md:311 |
