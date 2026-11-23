@@ -4,8 +4,5 @@ description: A short, plain list of what is new on datafromzero and when, newest
 tableOfContents: false
 ---
 
-A short list of what changed on the site and in the curriculum, newest first. Each line comes from the
-bold first sentence of an entry in the project's `CHANGELOG.md`, which follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Curriculum versions follow
-[Semantic Versioning](https://semver.org/): a major version for a restructure or moved URLs, a minor
-version for new content, and a patch version for corrections.
+What is new in the lessons and on the site, newest first. Every change, with its technical detail,
+is in the full changelog on GitHub (link at the end of the page).
