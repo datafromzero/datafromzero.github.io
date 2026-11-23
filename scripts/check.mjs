@@ -20,7 +20,7 @@ const steps = [
 	['notebooks have no outputs (nbstripout)', 'npm', ['run', '--silent', 'check:notebooks']],
 	['Python cheatsheet patterns run on the cafe-sales data (skipped without pandas)', 'npm', ['run', '--silent', 'check:cheatsheet-python']],
 	['app-events dataset matches its generator and its planted quirks (skipped without Python 3)', 'npm', ['run', '--silent', 'check:app-events'], 'python3'],
-	['cafe-sales extras (settlements.csv, sales_clean.csv) match their generators (skipped without Python 3)', 'npm', ['run', '--silent', 'check:extras'], 'python3'],
+	['cafe-sales extras (settlements.csv, sales_clean.csv, take_home_export.csv) match their generators (skipped without Python 3)', 'npm', ['run', '--silent', 'check:extras'], 'python3'],
 ];
 
 const failed = [];
