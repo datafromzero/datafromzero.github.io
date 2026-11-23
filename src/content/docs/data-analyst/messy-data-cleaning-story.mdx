@@ -1,0 +1,440 @@
+---
+id: data-analyst-messy-data-cleaning-story
+title: 'A cleaning story: two inconsistent sources, one trusted table'
+description: Combine two inconsistent sources, document every cleaning decision and reconcile totals so another analyst can audit the result.
+stage: data-analyst
+order: 70
+level: intermediate
+duration: 30
+objectives:
+  - Profile two sources and list their conflicts
+  - Combine them with a mapping table and a merge that proves what it did
+  - Record each cleaning decision and its effect in a log
+  - Reconcile the totals of both sources and name every difference
+prerequisites:
+  - data-analyst-the-analysts-loop
+  - sql-text-functions
+  - sql-left-join-anti-join
+  - sql-ctes
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Date format functions, strptime and its format specifiers (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/2.0/sql/functions/dateformat.html
+status: draft
+---
+
+TODO(owner): Team draft for your edits (D24). The second source comes from `scripts/build-settlements-extract.py`, fixed rules, no randomness. Planted defects: D1 every 41st row twice; D2 four spellings per store; D3 blank merchant when order number mod 53 is 10; D4 `ORD-` prefix; D5 UTC text; D6 `$` text, one Campus day in cents; D7 six test payments; D8 Harbor May 18 to 24 missing; D9 order number mod 149 is 136 missing; D10 order 2075 charged as 2 units. The file is not published as a dataset (your call). Spelling and status mappings overlap two earlier lessons. The stub's sources were not primary. `reviewed` is yours to set.
+
+## The question
+
+This is chapter 1 of the dashboard project. Dana asks:
+
+> Before we build a dashboard, I need numbers I can defend. The till says card and mobile sales came to \$19,589.75. The payment processor sends a file. Which one is right, and can I have one table I can trust?
+
+The two sources are the till (`orders`, `order_items`, `products`) and the processor's export, one row per card or mobile payment (cash never reaches it). Its first rows:
+
+| settlement_id | order_ref | merchant | settled_at | amount | type |
+|---|---|---|---|---|---|
+| ST-000001 | TEST-0001 | Old Town | 01/01/2026 15:00 | \$0.01 | TEST |
+| ST-000002 | ORD-1001 | CAMPUS | 01/01/2026 16:02 | \$14.00 | SALE |
+| ST-000003 | ORD-1002 | Old Town␠ | 01/01/2026 23:38 | \$12.50 | SALE |
+
+The whole file has 1,557 rows. The till holds 1,547 completed card or mobile orders, order 2075 included as recorded.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Cleaning text in SQL*](/sql/text-functions/) (S10), why keep the original column beside a cleaned copy?
+
+   <details>
+   <summary>answer</summary>
+
+   The original is the evidence: the copy can be checked against it and rebuilt.
+
+   </details>
+
+2. In [*LEFT JOIN and finding rows with no match*](/sql/left-join-anti-join/) (S21), how do you list the rows of one table that have no partner in another?
+
+   <details>
+   <summary>answer</summary>
+
+   A LEFT JOIN and a filter on the other side's key being `NULL`, or `NOT EXISTS`.
+
+   </details>
+
+## The big idea
+
+Clean in layers you can name (profile, standardize, merge, log, reconcile), and finish only when every dollar of difference between the sources has a reason.
+
+## Learn by doing
+
+About 30 minutes, 4 ideas: profile, standardize, merge, log and reconcile. The editors hold a slice of the processor file, May 1 (11 rows, from the full file); each unit builds on the view of the unit before, so run them in order.
+
+### 1. Profile before you fix
+
+**Idea.** A *conflict* is the same thing written two ways. Profile each source column by column, and count what looks wrong before you change anything. The profile of the slice is one row of counts.
+
+**Try it:** build the slice as a view and profile it.
+
+<RunSQL query={`CREATE OR REPLACE VIEW raw_may1 AS
+SELECT * FROM (VALUES
+  ('ST-000919', 'TEST-0005', 'Old Town', '05/01/2026 14:00', '$0.01', 'TEST'),
+  ('ST-000920', 'ORD-2068', 'Harbor', '05/01/2026 14:38', '$4.25', 'SALE'),
+  ('ST-000921', 'ORD-2069', 'CAMPUS', '05/01/2026 14:49', '$3.25', 'SALE'),
+  ('ST-000922', 'ORD-2070', 'campus ', '05/01/2026 16:05', '$9.25', 'SALE'),
+  ('ST-000923', 'ORD-2072', 'Campus', '05/01/2026 17:10', '$16.75', 'SALE'),
+  ('ST-000923', 'ORD-2072', 'Campus', '05/01/2026 17:10', '$16.75', 'SALE'),
+  ('ST-000924', 'ORD-2074', 'Old Town ', '05/01/2026 20:08', '$9.50', 'SALE'),
+  ('ST-000925', 'ORD-2075', 'old town', '05/01/2026 20:25', '$30.50', 'SALE'),
+  ('ST-000926', 'ORD-2076', 'Old Town', '05/01/2026 22:18', '$13.75', 'SALE'),
+  ('ST-000927', 'ORD-2077', NULL, '05/01/2026 22:39', '$7.00', 'SALE'),
+  ('ST-000928', 'ORD-2078', 'Old Town ', '05/02/2026 00:39', '$18.50', 'SALE')
+) AS t(settlement_id, order_ref, merchant, settled_at, amount, type);
+
+SELECT COUNT(*) AS row_count,
+       COUNT(DISTINCT settlement_id) AS ids,
+       COUNT(DISTINCT merchant) AS spellings,
+       COUNT(*) FILTER (WHERE merchant IS NULL) AS blank_merchant,
+       COUNT(*) FILTER (WHERE type = 'TEST') AS tests
+FROM raw_may1;`} />
+
+**Predict:** the till has 3 stores. How many different merchant spellings does the slice use?
+
+Expected: 1 row, 5 columns.
+
+*Why:* 7 spellings for 3 stores (case, a trailing space, an alias), 11 rows but 10 ids (one exact copy), 1 blank merchant and 1 test payment. Three more conflicts need no count: the key is `ORD-2075` where the till says 2075; money is text with a dollar sign; time is UTC text, `05/02/2026 00:39` for an order the till stamps May 1 at 5:39 p.m.
+
+### 2. Standardize in a copy
+
+**Idea.** *Standardize* each conflict with one rule, written as a column of a new view, so the raw rows stay as they came. Exact copies go with `SELECT DISTINCT`, which compares every column. A *mapping table* sends every spelling to the store key, after `TRIM` and `LOWER`, so an alias is one more row. `strptime` turns the time text into a timestamp; its `%m/%d/%Y %H:%M` reads the processor's format.
+
+**Try it:** run unit 1 first, then build the clean copy.
+
+<RunSQL query={`CREATE OR REPLACE VIEW settled_clean AS
+WITH d AS (
+  SELECT DISTINCT * FROM raw_may1 WHERE type <> 'TEST'
+),
+store_map(name, store_id) AS (
+  VALUES ('old town', 1), ('campus', 2), ('berkeley campus', 2), ('harbor', 3), ('alameda harbor', 3)
+)
+SELECT d.settlement_id,
+       CAST(REPLACE(d.order_ref, 'ORD-', '') AS INTEGER) AS order_id,
+       m.store_id,
+       strptime(d.settled_at, '%m/%d/%Y %H:%M') AS settled_utc,
+       CAST(REPLACE(d.amount, '$', '') AS DECIMAL(10, 2)) AS amount
+FROM d
+LEFT JOIN store_map m ON m.name = LOWER(TRIM(d.merchant));
+
+SELECT * FROM settled_clean ORDER BY order_id;`} />
+
+**Predict:** how many rows come out, and which row has no store?
+
+Expected: 9 rows, 5 columns.
+
+*Why:* 11 rows become 10 (the copy) and then 9 (the test payment). Order 2077 has no store: the merchant was blank, and the mapping has nothing to match. Do not guess it; the till knows.
+
+### 3. Merge, then prove what the join did
+
+**Idea.** A *validated merge* joins on the key and then shows what the join did: matched pairs, rows in one source only, and pairs whose values disagree. A `FULL JOIN` keeps both unmatched sides. Check also anything that should be constant: here the gap in hours between the till's time and the processor's.
+
+**Try it:** run units 1 and 2 first. The till side is the card and mobile orders of May 1.
+
+<RunSQL query={`WITH till AS (
+  SELECT o.order_id, o.store_id, o.ordered_at,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS amount
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+    AND o.payment_method IN ('card', 'mobile')
+    AND CAST(o.ordered_at AS DATE) = DATE '2026-05-01'
+  GROUP BY o.order_id, o.store_id, o.ordered_at
+)
+SELECT COALESCE(t.order_id, s.order_id) AS order_id,
+       t.store_id AS till_store, s.store_id AS processor_store,
+       t.amount AS till_amount, s.amount AS processor_amount,
+       DATE_DIFF('hour', t.ordered_at, s.settled_utc) AS hours_gap,
+       CASE WHEN t.order_id IS NULL THEN 'only in processor file'
+            WHEN s.order_id IS NULL THEN 'only in till'
+            WHEN s.amount <> t.amount THEN 'amounts differ'
+            ELSE 'match' END AS status
+FROM till t
+FULL JOIN settled_clean s ON s.order_id = t.order_id
+ORDER BY order_id;`} />
+
+**Predict:** of the 10 till orders, how many get `match`? What are the others?
+
+Expected: 10 rows, 7 columns.
+
+*Why:* 8 match; order 2073 (Campus, \$13.50) is only in the till; order 2075 differs, \$197.00 in the till and \$30.50 at the processor. The till line has 20 Turkey Sandwiches, \$185.00; the processor charged 2, \$18.50: the extra zero of the dataset README, now with evidence from a second source. The hours gap is 7 on every matched row, so the processor's clock is UTC; the till's local time is the one to keep, and the file's order 2078 falls on May 2 only in UTC. Order 2077 takes its store from the till.
+
+### 4. The log, and every dollar of difference
+
+**Idea.** A *cleaning log* has one line per decision: the rule, and the rows or dollars it touched. Its twin is the *reconciliation*: both totals, the difference, and each part of it named, until nothing is unexplained. This is the full file.
+
+| step | rule | rows | dollars |
+|---|---|---|---:|
+| 1 | exact copies removed with `DISTINCT` | 1,557 to 1,520 | -447.00 |
+| 2 | 6 test payments dropped | 1,520 to 1,514 | -0.06 |
+| 3 | no dollar sign means cents: divided by 100 | 3 rows | none |
+| 4 | 12 spellings mapped to 3 stores; 29 blank merchants take the till's store | 1,514 | none |
+| 5 | processor time not used: the till's local time is kept (gap 8 hours to March 7, 7 from March 8) | 1,514 | none |
+| 6 | order 2075: quantity 20 corrected to 2 on the till | 1 line | -166.50 |
+| 7 | 33 till orders missing from the file: kept, the till is the sale | 33 orders | 416.50 |
+
+**Try it:** the till's total for card and mobile orders is the sum of its orders; the cleaned processor total is \$19,006.75 over 1,514 payments, and 9 order numbers are the isolated misses.
+
+<RunSQL query={`WITH till AS (
+  SELECT o.order_id, o.store_id, CAST(o.ordered_at AS DATE) AS d,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS amount
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed' AND o.payment_method IN ('card', 'mobile')
+  GROUP BY o.order_id, o.store_id, CAST(o.ordered_at AS DATE)
+),
+x AS (
+  SELECT (SELECT SUM(amount) FROM till) AS till_total,
+         19006.75 AS processor_total,
+         (SELECT SUM((oi.quantity - 2) * p.unit_price_usd)
+          FROM order_items oi JOIN products p ON p.product_id = oi.product_id
+          WHERE oi.order_item_id = 6952) AS order_2075,
+         (SELECT SUM(amount) FROM till
+          WHERE store_id = 3 AND d BETWEEN DATE '2026-05-18' AND DATE '2026-05-24') AS harbor_week,
+         (SELECT SUM(amount) FROM till
+          WHERE order_id IN (1179, 1328, 1626, 1775, 1924, 2073, 2222, 2520, 2669)) AS nine_orders
+)
+SELECT 'till minus processor' AS line, till_total - processor_total AS dollars FROM x
+UNION ALL SELECT 'order 2075: 18 sandwiches not charged', order_2075 FROM x
+UNION ALL SELECT 'Harbor May 18 to 24: nothing exported', harbor_week FROM x
+UNION ALL SELECT 'nine other orders not exported', nine_orders FROM x
+UNION ALL SELECT 'left unexplained', till_total - processor_total - order_2075 - harbor_week - nine_orders FROM x;`} />
+
+**Predict:** which of the three named causes is the largest?
+
+Expected: 5 rows, 2 columns.
+
+*Why:* the \$583.00 gap is Harbor's week, \$263.25 (24 orders), then order 2075, \$166.50, then nine orders, \$153.25, and nothing is left unexplained. The sources do not agree and neither is "right": the till holds every sale, and the processor corrected one entry. With the correction the till's card and mobile total is \$19,423.25, and the trusted table follows the till.
+
+<figure>
+<svg viewBox="0 0 360 182" width="360" role="img" aria-labelledby="da7-bridge-t da7-bridge-d">
+<title id="da7-bridge-t">Where the difference between the till and the processor file comes from</title>
+<desc id="da7-bridge-d">One horizontal bar of &#36;583.00, the till's total for card and mobile orders (&#36;19,589.75) minus the cleaned processor total (&#36;19,006.75). Harbor, May 18 to 24, &#36;263.25, 24 orders. Order 2075, &#36;166.50, 1 line. Nine other orders, &#36;153.25, 9 orders. The three parts add up to the whole difference, so nothing is left unexplained: 0.00 dollars.</desc>
+<g fill="currentColor">
+<text x="23.7" y="22.4" font-size="10.5" font-weight="600">The &#36;583.00 between the two totals, by cause</text>
+<rect x="29.7" y="42.4" width="137.3" height="28" rx="3" fill="#0072b2" />
+<path d="M98.4 70.4 L98.4 82.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="98.4" y="94.4" font-size="10" font-weight="600" text-anchor="middle">Harbor, May 18 to 24</text>
+<text x="98.4" y="107.4" font-size="9.5" text-anchor="middle">&#36;263.25 · 24 orders</text>
+<rect x="167" y="42.4" width="86.8" height="28" fill="#00a07a" />
+<path d="M210.4 70.4 L210.4 92.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="210.4" y="104.4" font-size="10" font-weight="600" text-anchor="middle">Order 2075</text>
+<text x="210.4" y="117.4" font-size="9.5" text-anchor="middle">&#36;166.50 · 1 line</text>
+<rect x="253.8" y="42.4" width="79.9" height="28" rx="3" fill="#9a6be0" />
+<path d="M293.8 70.4 L293.8 82.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="293.8" y="94.4" font-size="10" font-weight="600" text-anchor="middle">Nine other orders</text>
+<text x="293.8" y="107.4" font-size="9.5" text-anchor="middle">&#36;153.25 · 9 orders</text>
+<text x="23.7" y="144.4" font-size="10" font-weight="600">Left unexplained</text>
+<rect x="29.7" y="154.4" width="2" height="14" fill="currentColor" fill-opacity="0.9" />
+<text x="39.7" y="165.4" font-size="10" font-weight="600">&#36;0.00</text>
+</g>
+</svg>
+</figure>
+
+**Try it.** The table the dashboard chapters use, one row per sold line, with the 2075 correction and a label for walk-in orders:
+
+<RunSQL query={`CREATE OR REPLACE VIEW sales_clean AS
+SELECT oi.order_item_id AS line_id, o.order_id, o.ordered_at, CAST(o.ordered_at AS DATE) AS order_date,
+       s.store_name AS store, p.product_name AS product, p.category,
+       CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END AS quantity,
+       p.unit_price_usd AS unit_price, oi.discount_usd AS discount,
+       (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd AS amount,
+       o.payment_method, COALESCE(c.loyalty_tier, 'walk-in') AS loyalty_tier
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+JOIN stores s ON s.store_id = o.store_id
+LEFT JOIN customers c ON c.customer_id = o.customer_id
+WHERE o.status = 'completed';
+
+SELECT COUNT(*) AS lines, COUNT(DISTINCT order_id) AS orders, SUM(amount) AS revenue FROM sales_clean;`} />
+
+Expected: 1 row, 3 columns: 3,286 lines, 1,799 orders, revenue \$22,582.75 (\$22,749.25 as recorded, before the correction). Chapter 4 exports this table to a file.
+
+<Aside type="tip" title="Remember">
+
+- Profile first, count what is wrong, change nothing yet.
+- Standardize in a copy; a mapping table holds every spelling, and `DISTINCT` removes only exact copies.
+- A merge is not finished until you have counted matched, one-sided and disagreeing rows.
+- A log line names a rule and what it touched; a reconciliation ends at 0.00 unexplained.
+
+**Common trap:** agreeing on the grand total while errors of opposite sign hide inside it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-messy-data-cleaning-story-1">
+
+**Write the log of the May 1 slice.** Run unit 1 first. The editor types each raw row (dollars as a number, the test flag). Finish the log: one line for the raw rows, one after exact copies are removed and one after the test payment is dropped, each with its rows and dollars. Expected: 3 rows, 3 columns.
+
+<RunSQL query={`WITH typed AS (
+  SELECT settlement_id, type, CAST(REPLACE(amount, '$', '') AS DECIMAL(10, 2)) AS dollars
+  FROM raw_may1
+)
+SELECT 'raw rows' AS step, COUNT(*) AS rows_left, SUM(dollars) AS dollars_left
+FROM typed;`} />
+
+<details>
+<summary>Hint</summary>
+
+Stack three `SELECT` statements with `UNION ALL`. For the second, count and sum over `SELECT DISTINCT * FROM typed`; for the third, add `WHERE type <> 'TEST'` to it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT 'raw rows' AS step, COUNT(*), SUM(dollars) FROM typed
+UNION ALL
+SELECT 'exact copies removed', COUNT(*), SUM(dollars) FROM (SELECT DISTINCT * FROM typed)
+UNION ALL
+...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH typed AS (
+  SELECT settlement_id, type, CAST(REPLACE(amount, '$', '') AS DECIMAL(10, 2)) AS dollars
+  FROM raw_may1
+)
+SELECT 'raw rows' AS step, COUNT(*) AS rows_left, SUM(dollars) AS dollars_left FROM typed
+UNION ALL
+SELECT 'exact copies removed', COUNT(*), SUM(dollars) FROM (SELECT DISTINCT * FROM typed)
+UNION ALL
+SELECT 'test payment dropped', COUNT(*), SUM(dollars) FROM (SELECT DISTINCT * FROM typed WHERE type <> 'TEST');
+```
+
+The log reads 11 rows and \$129.51, then 10 rows and \$112.76 (the copy was \$16.75), then 9 rows and \$112.75 (the test payment was a cent).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-messy-data-cleaning-story-2">
+
+**Reconcile a new day.** The processor's rows for June 3 are below; they are another slice of the same file. Before you run anything, write as comments what you expect to find wrong in them. Then clean them and compare each store's processor total with the till's for card and mobile orders of that day (completed orders, as recorded). Expected: 3 rows, 4 columns (store, till, processor, difference).
+
+<RunSQL query={`CREATE OR REPLACE VIEW raw_jun3 AS
+SELECT * FROM (VALUES
+  ('ST-001224', 'ORD-2473', 'CAMPUS', '06/03/2026 14:09', '325', 'SALE'),
+  ('ST-001225', 'ORD-2474', 'Old Town ', '06/03/2026 14:55', '$19.00', 'SALE'),
+  ('ST-001226', 'ORD-2475', 'Berkeley Campus', '06/03/2026 15:48', '1700', 'SALE'),
+  ('ST-001227', 'ORD-2476', 'Old Town', '06/03/2026 17:36', '$3.00', 'SALE'),
+  ('ST-001228', 'ORD-2477', 'CAMPUS', '06/03/2026 18:07', '2400', 'SALE'),
+  ('ST-001229', 'ORD-2478', 'Old Town ', '06/03/2026 18:53', '$11.25', 'SALE'),
+  ('ST-001230', 'ORD-2479', 'old town', '06/03/2026 21:10', '$8.75', 'SALE'),
+  ('ST-001231', 'ORD-2480', 'Harbor', '06/03/2026 21:49', '$13.00', 'SALE'),
+  ('ST-001232', 'ORD-2481', 'OLD TOWN', '06/03/2026 21:59', '$27.50', 'SALE'),
+  ('ST-001233', 'ORD-2482', 'Harbor ', '06/04/2026 00:16', '$6.50', 'SALE')
+) AS t(settlement_id, order_ref, merchant, settled_at, amount, type);
+
+SELECT 'raw_jun3 is ready' AS note;
+-- Write your expectations, then your cleaning and reconciliation below.`} />
+
+<details>
+<summary>Hint</summary>
+
+Profile the `amount` column: which values have no dollar sign? Compare a Campus amount with what a latte costs. Join on the order number and group by the till's store.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three rows, one per store, with a difference of zero in each."*
+
+```sql
+SELECT store, till, processor, till - processor AS difference
+FROM ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH p AS (
+  SELECT CAST(REPLACE(order_ref, 'ORD-', '') AS INTEGER) AS order_id,
+         CASE WHEN amount LIKE '$%' THEN CAST(REPLACE(amount, '$', '') AS DECIMAL(10, 2))
+              ELSE CAST(amount AS DECIMAL(10, 2)) / 100 END AS amount
+  FROM (SELECT DISTINCT * FROM raw_jun3 WHERE type <> 'TEST')
+),
+till AS (
+  SELECT o.order_id, o.store_id, SUM(oi.quantity * pr.unit_price_usd - oi.discount_usd) AS amount
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products pr ON pr.product_id = oi.product_id
+  WHERE o.status = 'completed' AND o.payment_method IN ('card', 'mobile')
+    AND CAST(o.ordered_at AS DATE) = DATE '2026-06-03'
+  GROUP BY o.order_id, o.store_id
+)
+SELECT t.store_id AS store, SUM(t.amount) AS till, SUM(p.amount) AS processor, SUM(t.amount) - SUM(p.amount) AS difference
+FROM till t
+JOIN p ON p.order_id = t.order_id
+GROUP BY t.store_id
+ORDER BY t.store_id;
+```
+
+Three Campus amounts have no dollar sign: they are cents (`1700` is \$17.00), a unit mismatch. Left as dollars they would make Campus's day \$4,425.00. Treated as cents the stores read \$69.50, \$44.25 and \$19.50 on both sides, a difference of 0.00 each. Order 2482 sits on June 4 in the processor's UTC, which is why the join uses the order number and not the date.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the five layers of the cleaning story, and what you must be able to say about every dollar at the end.
+
+<details>
+<summary>answer</summary>
+
+Profile, standardize, merge, log, reconcile. Each dollar of difference between the sources has a named cause, or the reconciliation is not finished.
+
+</details>
+
+<Exercise id="data-analyst-messy-data-cleaning-story-3">
+
+**Spot the flaw.** A colleague finishes: "I removed the test payments, fixed the cents and compared totals. The processor file adds up to \$19,453.75 and the till to \$19,589.75, so they agree within 0.7 percent. Reconciled." The three parts of the gap are \$447.00 for 37 exact copies still in the file, -\$416.50 for 33 orders missing from it and -\$166.50 for order 2075.
+
+<RunSQL query={`SELECT 19589.75 - 19453.75 AS difference,
+       ROUND(100 * (19589.75 - 19453.75) / 19589.75, 2) AS percent;`} />
+
+Expected: 1 row, 2 columns. Run it, then use the three parts to show what the small difference hides, and say what is wrong with the method.
+
+<Solution>
+
+The query gives \$136.00, 0.69 percent. The parts, with their signs, add up to the same number:
+
+```sql
+SELECT 447.00 - 416.50 - 166.50 AS net, 447.00 + 416.50 + 166.50 AS gross_errors;
+```
+
+The net is -136.00 only because errors of opposite sign cancel: the gross size of the errors is \$1,030.00, a wrong order and 70 rows that are wrong in count. A grand total is the weakest test: it agrees whenever the errors cancel. The method needs the checks of units 3 and 4: row counts on both sides, the unmatched orders and every difference named.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can profile two sources, standardize them in copies, merge them and prove what the merge did, log each decision, and reconcile until every dollar has a reason.* Test: Exercise data-analyst-messy-data-cleaning-story-2, done without opening the hints.
+
+The pattern to remember: **clean in named layers, never overwrite the raw rows, and reconcile until nothing is unexplained.**
