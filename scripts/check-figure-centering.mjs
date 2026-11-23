@@ -2,7 +2,7 @@
  * Guard: every lesson figure is centered in its viewBox and nothing is cut off (MISTAKES.md, "a figure's content extent must be
  * centered in its viewBox"). Deterministic, no browser: it builds every spec in scripts/animations/ and measures the finished
  * markup with scripts/lib/figure-extent.mjs (the union of everything drawn across all steps against the middle of the viewBox),
- * then does the same for every figure pasted into src/content/docs/sql and core.
+ * then does the same for every figure pasted into any stage folder.
  *   node scripts/check-figure-centering.mjs
  * Part of `npm run check`. Tolerance: 3 px of viewBox (the generator rounds the shift to a whole pixel; text widths are estimates).
  */
@@ -33,7 +33,7 @@ for (const k of keys) {
 	}
 }
 let embedded = 0;
-for (const d of ['sql', 'core']) {
+for (const d of ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer']) {
 	const dir = new URL(`src/content/docs/${d}/`, root);
 	for (const f of readdirSync(dir).filter((x) => x.endsWith('.mdx'))) {
 		for (const m of readFileSync(new URL(f, dir), 'utf8').matchAll(/<figure class="(?:ca )?sa[^"]*">[\s\S]*?<\/figure>/g)) {

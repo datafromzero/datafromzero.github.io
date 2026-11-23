@@ -1,7 +1,7 @@
 /**
  * Re-pastes every concept figure and every data stepper in the lessons from the current generators (SPEC D41), so a change to a spec
  * or to scripts/lib/step-animation.mjs reaches the lessons. Safe to repeat.
- *   node scripts/refresh-concept-figures.mjs          rewrite src/content/docs/sql/*.mdx and src/content/docs/core/*.mdx
+ *   node scripts/refresh-concept-figures.mjs          rewrite every stage folder's .mdx lessons
  *   node scripts/refresh-concept-figures.mjs --check  change nothing; exit 1 if a lesson is out of date
  * A "CONCEPT: <key>" MDX comment line becomes the generator's markup. A `<figure class="ca ...">` is found by the id of its
  * pause checkbox (`id="<id>-pp"`), matched to the key whose generated figure has that id, and replaced up to its `</figure>`.
@@ -18,7 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { centeredViewX } from './lib/figure-extent.mjs';
 
 const root = new URL('../', import.meta.url);
-const lessonDirs = ['sql', 'core'].map((d) => new URL(`src/content/docs/${d}/`, root)); // core: the Statistics I concept animations (D49)
+const lessonDirs = ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer'].map((d) => new URL(`src/content/docs/${d}/`, root)); // core: the Statistics I concept animations (D49)
 const maker = new URL('scripts/make-animation.mjs', root).pathname;
 const check = process.argv.includes('--check');
 
