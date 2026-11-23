@@ -1,0 +1,526 @@
+---
+id: data-analyst-keeping-a-dashboard-right
+title: Keeping a dashboard right
+description: Add freshness, row-count and reconciliation checks to a dashboard and handle a change request without breaking the numbers.
+stage: data-analyst
+order: 120
+level: intermediate
+duration: 25
+objectives:
+  - Add a freshness label and a row-count check
+  - Reconcile a dashboard total with its source
+  - 'Handle a change request: assess it, version it and tell the readers'
+  - Write down who owns each number
+prerequisites:
+  - data-analyst-first-bi-dashboard
+  - data-analyst-metrics-and-kpi-dictionary
+datasets:
+  - cafe-sales
+reviewed: 2026-11-23
+sources:
+  - title: 'dbt documentation: Source freshness (page dated Oct 6, 2026; accessed 2026-11-23)'
+    url: https://docs.getdbt.com/docs/deploy/source-freshness
+  - title: 'dbt documentation: Sources, source data freshness (page dated Sep 16, 2026; accessed 2026-11-23)'
+    url: https://docs.getdbt.com/docs/build/sources
+  - title: 'Tableau Help: Tableau Public FAQ (accessed 2026-11-23)'
+    url: https://help.tableau.com/current/pro/desktop/en-us/public_faq.htm
+status: draft
+---
+
+TODO(owner): Team draft for your edits (D24). The stub's second source, a product page, supports no claim and the Tableau Public FAQ replaces it. The four loads are failures made by SQL from cafe-sales for this lesson, not a real refresh; Tableau Public and dbt were not run, and the dbt box rests on the two opened pages. Not on an opened page: whether a Tableau text object can show a date computed from the data, so the lesson says to paste it. Numbers: DuckDB 2.0.0. `reviewed` is yours to set.
+
+## The question
+
+This is chapter 6 of the dashboard project. Dana's dashboard is a published workbook made from a file, and every Monday you reload it from a fresh export. Four loads could arrive, and on the screen each one looks like a dashboard.
+
+| load | what went wrong |
+|---|---|
+| `ok` | nothing |
+| `harbor_stopped` | Harbor's feed stopped on June 23 |
+| `doubled` | the export was loaded twice |
+| `in_cents` | the last day of one cafe arrived in cents |
+
+By the end you have three checks and know what each one misses.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Testing on known answers with pytest*](/core/testing-with-pytest/) (C27), what is a known answer?
+
+   <details>
+   <summary>answer</summary>
+
+   A result you get from another route, such as by hand or from a second query, and compare with what the code returns.
+
+   </details>
+
+2. In *A KPI dictionary and a metrics layer* (chapter 5), at what grain do you test two dashboards?
+
+   <details>
+   <summary>answer</summary>
+
+   At the grain the dashboard shows, cell by cell, not only on the grand total.
+
+   </details>
+
+## The big idea
+
+A dashboard is right today only if something checks it every time it refreshes: is it fresh, is it complete, and does it add up to the source.
+
+## Learn by doing
+
+About 25 minutes, 4 ideas: freshness, rows and totals, a change request, owners. The SQL runs in the page. Run each block after the ones above it.
+
+### 1. Freshness: how old is the newest row
+
+**Idea.** A *freshness check* compares the age of the newest row with what you expect. Decide what it looks at: the table, or each cafe. The Tableau Public FAQ says it supports only extracted data, and that automatic refresh works only for Google Sheets, every 24 hours: for a CSV or an Excel file it "is not supported". So the freshness line of Dana's screen is yours to compute and paste each time.
+
+**Try it.** This block builds the source lines (completed orders, order 2075 counted as 2 units) and the four loads, then asks each load for its newest order of the whole table and of the cafe furthest behind.
+
+<RunSQL query={`CREATE OR REPLACE TABLE source_lines AS
+SELECT oi.order_item_id AS line_id, o.order_id, s.store_name AS store, o.ordered_at,
+       (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd AS amount
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed';
+
+CREATE OR REPLACE TABLE loads AS
+SELECT l.load_name, s.line_id, s.order_id, s.store, s.ordered_at,
+       CASE WHEN l.load_name = 'in_cents' AND s.store = 'Campus' AND CAST(s.ordered_at AS DATE) = DATE '2026-06-30'
+            THEN s.amount * 100 ELSE s.amount END AS amount
+FROM source_lines s
+CROSS JOIN (VALUES ('ok'), ('harbor_stopped'), ('doubled'), ('doubled'), ('in_cents')) AS l(load_name)
+WHERE NOT (l.load_name = 'harbor_stopped' AND s.store = 'Harbor' AND s.ordered_at >= '2026-06-24');
+
+WITH per_cafe AS (
+  SELECT load_name, store, MAX(ordered_at) AS newest FROM loads GROUP BY load_name, store
+)
+SELECT load_name, MAX(newest) AS table_newest, MIN(newest) AS stalest_cafe_newest
+FROM per_cafe
+GROUP BY load_name
+ORDER BY load_name;`} />
+
+**Predict:** which loads pass if you ask only for the newest order of the table, and which if you ask for the cafe furthest behind?
+
+Expected: 4 rows, 3 columns.
+
+*Why:* every load has its newest order on June 30 at 16:30, so a table-level check passes all four. The cafe furthest behind is Harbor in `harbor_stopped`, whose last order is June 23 at 14:02; in the other three it is Campus at 12:10 on June 30. A rule that works: every cafe has an order on the last day. The same query writes the screen's line, and it should print the stalest cafe, not the table.
+
+<figure>
+<svg viewBox="0 0 360 253" width="360" role="img" aria-labelledby="da12-feeds-t da12-feeds-d">
+<title id="da12-feeds-t">Order lines each day in June for the load harbor&#95;stopped, one small chart for each cafe</title>
+<desc id="da12-feeds-d">Three small bar charts one above the other, on one scale from 0 to 15 lines a day, for June 1 to June 30: Old Town in blue, Campus in green and Harbor in purple. Old Town and Campus have bars every day to June 30. Harbor has bars to June 23 and none from June 24 to June 30. The newest order of the whole table is still June 30 at 16:30, so a check on the table's newest order passes.</desc>
+<g fill="currentColor">
+<text x="31.2" y="22.4" font-size="10.5" font-weight="600">Lines loaded each day in June, harbor&#95;stopped</text>
+<text x="31.2" y="44.4" font-size="9.5" font-weight="600">Old Town</text>
+<path d="M59.2 80.4 L327.2 80.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<rect x="60" y="62.8" width="6.4" height="17.6" rx="1.5" fill="#0072b2" />
+<rect x="69" y="56.9" width="6.4" height="23.5" rx="1.5" fill="#0072b2" />
+<rect x="78" y="54" width="6.4" height="26.4" rx="1.5" fill="#0072b2" />
+<rect x="86.9" y="71.6" width="6.4" height="8.8" rx="1.5" fill="#0072b2" />
+<rect x="95.9" y="71.6" width="6.4" height="8.8" rx="1.5" fill="#0072b2" />
+<rect x="104.9" y="56.9" width="6.4" height="23.5" rx="1.5" fill="#0072b2" />
+<rect x="113.8" y="48.1" width="6.4" height="32.3" rx="1.5" fill="#0072b2" />
+<rect x="122.8" y="71.6" width="6.4" height="8.8" rx="1.5" fill="#0072b2" />
+<rect x="131.8" y="68.7" width="6.4" height="11.7" rx="1.5" fill="#0072b2" />
+<rect x="140.7" y="71.6" width="6.4" height="8.8" rx="1.5" fill="#0072b2" />
+<rect x="149.7" y="56.9" width="6.4" height="23.5" rx="1.5" fill="#0072b2" />
+<rect x="158.7" y="51.1" width="6.4" height="29.3" rx="1.5" fill="#0072b2" />
+<rect x="167.6" y="54" width="6.4" height="26.4" rx="1.5" fill="#0072b2" />
+<rect x="176.6" y="54" width="6.4" height="26.4" rx="1.5" fill="#0072b2" />
+<rect x="185.6" y="65.7" width="6.4" height="14.7" rx="1.5" fill="#0072b2" />
+<rect x="194.5" y="56.9" width="6.4" height="23.5" rx="1.5" fill="#0072b2" />
+<rect x="203.5" y="62.8" width="6.4" height="17.6" rx="1.5" fill="#0072b2" />
+<rect x="212.5" y="65.7" width="6.4" height="14.7" rx="1.5" fill="#0072b2" />
+<rect x="221.4" y="54" width="6.4" height="26.4" rx="1.5" fill="#0072b2" />
+<rect x="230.4" y="54" width="6.4" height="26.4" rx="1.5" fill="#0072b2" />
+<rect x="239.4" y="42.3" width="6.4" height="38.1" rx="1.5" fill="#0072b2" />
+<rect x="248.3" y="68.7" width="6.4" height="11.7" rx="1.5" fill="#0072b2" />
+<rect x="257.3" y="65.7" width="6.4" height="14.7" rx="1.5" fill="#0072b2" />
+<rect x="266.3" y="62.8" width="6.4" height="17.6" rx="1.5" fill="#0072b2" />
+<rect x="275.2" y="56.9" width="6.4" height="23.5" rx="1.5" fill="#0072b2" />
+<rect x="284.2" y="68.7" width="6.4" height="11.7" rx="1.5" fill="#0072b2" />
+<rect x="293.2" y="51.1" width="6.4" height="29.3" rx="1.5" fill="#0072b2" />
+<rect x="302.1" y="45.2" width="6.4" height="35.2" rx="1.5" fill="#0072b2" />
+<rect x="311.1" y="59.9" width="6.4" height="20.5" rx="1.5" fill="#0072b2" />
+<rect x="320" y="65.7" width="6.4" height="14.7" rx="1.5" fill="#0072b2" />
+<text x="31.2" y="106.4" font-size="9.5" font-weight="600">Campus</text>
+<path d="M59.2 142.4 L327.2 142.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<rect x="60" y="118.9" width="6.4" height="23.5" rx="1.5" fill="#00a07a" />
+<rect x="69" y="107.2" width="6.4" height="35.2" rx="1.5" fill="#00a07a" />
+<rect x="78" y="127.7" width="6.4" height="14.7" rx="1.5" fill="#00a07a" />
+<rect x="86.9" y="124.8" width="6.4" height="17.6" rx="1.5" fill="#00a07a" />
+<rect x="95.9" y="127.7" width="6.4" height="14.7" rx="1.5" fill="#00a07a" />
+<rect x="104.9" y="104.3" width="6.4" height="38.1" rx="1.5" fill="#00a07a" />
+<rect x="113.8" y="121.9" width="6.4" height="20.5" rx="1.5" fill="#00a07a" />
+<rect x="122.8" y="121.9" width="6.4" height="20.5" rx="1.5" fill="#00a07a" />
+<rect x="131.8" y="130.7" width="6.4" height="11.7" rx="1.5" fill="#00a07a" />
+<rect x="140.7" y="113.1" width="6.4" height="29.3" rx="1.5" fill="#00a07a" />
+<rect x="149.7" y="127.7" width="6.4" height="14.7" rx="1.5" fill="#00a07a" />
+<rect x="158.7" y="104.3" width="6.4" height="38.1" rx="1.5" fill="#00a07a" />
+<rect x="167.6" y="116" width="6.4" height="26.4" rx="1.5" fill="#00a07a" />
+<rect x="176.6" y="107.2" width="6.4" height="35.2" rx="1.5" fill="#00a07a" />
+<rect x="185.6" y="118.9" width="6.4" height="23.5" rx="1.5" fill="#00a07a" />
+<rect x="194.5" y="130.7" width="6.4" height="11.7" rx="1.5" fill="#00a07a" />
+<rect x="203.5" y="124.8" width="6.4" height="17.6" rx="1.5" fill="#00a07a" />
+<rect x="212.5" y="116" width="6.4" height="26.4" rx="1.5" fill="#00a07a" />
+<rect x="221.4" y="130.7" width="6.4" height="11.7" rx="1.5" fill="#00a07a" />
+<rect x="230.4" y="98.4" width="6.4" height="44" rx="1.5" fill="#00a07a" />
+<rect x="239.4" y="101.3" width="6.4" height="41.1" rx="1.5" fill="#00a07a" />
+<rect x="248.3" y="127.7" width="6.4" height="14.7" rx="1.5" fill="#00a07a" />
+<rect x="257.3" y="104.3" width="6.4" height="38.1" rx="1.5" fill="#00a07a" />
+<rect x="266.3" y="113.1" width="6.4" height="29.3" rx="1.5" fill="#00a07a" />
+<rect x="275.2" y="124.8" width="6.4" height="17.6" rx="1.5" fill="#00a07a" />
+<rect x="284.2" y="130.7" width="6.4" height="11.7" rx="1.5" fill="#00a07a" />
+<rect x="293.2" y="113.1" width="6.4" height="29.3" rx="1.5" fill="#00a07a" />
+<rect x="302.1" y="130.7" width="6.4" height="11.7" rx="1.5" fill="#00a07a" />
+<rect x="311.1" y="121.9" width="6.4" height="20.5" rx="1.5" fill="#00a07a" />
+<rect x="320" y="133.6" width="6.4" height="8.8" rx="1.5" fill="#00a07a" />
+<text x="31.2" y="168.4" font-size="9.5" font-weight="600">Harbor</text>
+<path d="M59.2 204.4 L327.2 204.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<rect x="60" y="195.6" width="6.4" height="8.8" rx="1.5" fill="#9a6be0" />
+<rect x="69" y="192.7" width="6.4" height="11.7" rx="1.5" fill="#9a6be0" />
+<rect x="78" y="195.6" width="6.4" height="8.8" rx="1.5" fill="#9a6be0" />
+<rect x="86.9" y="189.7" width="6.4" height="14.7" rx="1.5" fill="#9a6be0" />
+<rect x="95.9" y="186.8" width="6.4" height="17.6" rx="1.5" fill="#9a6be0" />
+<rect x="104.9" y="175.1" width="6.4" height="29.3" rx="1.5" fill="#9a6be0" />
+<rect x="113.8" y="178" width="6.4" height="26.4" rx="1.5" fill="#9a6be0" />
+<rect x="122.8" y="180.9" width="6.4" height="23.5" rx="1.5" fill="#9a6be0" />
+<rect x="131.8" y="183.9" width="6.4" height="20.5" rx="1.5" fill="#9a6be0" />
+<rect x="140.7" y="180.9" width="6.4" height="23.5" rx="1.5" fill="#9a6be0" />
+<rect x="149.7" y="195.6" width="6.4" height="8.8" rx="1.5" fill="#9a6be0" />
+<rect x="158.7" y="189.7" width="6.4" height="14.7" rx="1.5" fill="#9a6be0" />
+<rect x="167.6" y="186.8" width="6.4" height="17.6" rx="1.5" fill="#9a6be0" />
+<rect x="176.6" y="186.8" width="6.4" height="17.6" rx="1.5" fill="#9a6be0" />
+<rect x="185.6" y="192.7" width="6.4" height="11.7" rx="1.5" fill="#9a6be0" />
+<rect x="194.5" y="180.9" width="6.4" height="23.5" rx="1.5" fill="#9a6be0" />
+<rect x="203.5" y="180.9" width="6.4" height="23.5" rx="1.5" fill="#9a6be0" />
+<rect x="212.5" y="183.9" width="6.4" height="20.5" rx="1.5" fill="#9a6be0" />
+<rect x="221.4" y="198.5" width="6.4" height="5.9" rx="1.5" fill="#9a6be0" />
+<rect x="230.4" y="163.3" width="6.4" height="41.1" rx="1.5" fill="#9a6be0" />
+<rect x="239.4" y="178" width="6.4" height="26.4" rx="1.5" fill="#9a6be0" />
+<rect x="248.3" y="189.7" width="6.4" height="14.7" rx="1.5" fill="#9a6be0" />
+<rect x="257.3" y="189.7" width="6.4" height="14.7" rx="1.5" fill="#9a6be0" />
+<text x="267.5" y="182.4" font-size="9" font-weight="600">last order</text>
+<text x="267.5" y="193.4" font-size="9" font-weight="600">Jun 23, 14:02</text>
+<path d="M63.2 208.4 L63.2 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="63.2" y="221.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun 1</text>
+<path d="M126 208.4 L126 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="126" y="221.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun 8</text>
+<path d="M188.8 208.4 L188.8 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="188.8" y="221.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun 15</text>
+<path d="M251.5 208.4 L251.5 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="251.5" y="221.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun 22</text>
+<path d="M314.3 208.4 L314.3 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="314.3" y="221.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun 29</text>
+<text x="31.2" y="236.4" font-size="9" fill-opacity="0.85">Newest order in the whole table: Jun 30, 16:30</text>
+</g>
+</svg>
+</figure>
+
+<Aside title="In dbt">
+
+dbt calls this *source freshness*. A source gets a `loaded_at_field` and a `freshness` block with `warn_after` and `error_after`, each a count and a period, and `dbt source freshness` runs the check; its example output marks a source Passed or Stale. The page adds that `dbt build` does not include freshness checks, so they run as their own step.
+
+</Aside>
+
+### 2. Rows and totals: is it complete, and does it add up
+
+**Idea.** A *row-count check* compares the rows loaded with the rows the source holds under the same filter. A *reconciliation* compares a total with the source's total. They look at different things.
+
+**Try it.** Run unit 1 first. For each load, how many rows and what total are off against the source?
+
+<RunSQL query={`SELECT load_name,
+       COUNT(*) AS rows_loaded,
+       COUNT(*) - (SELECT COUNT(*) FROM source_lines) AS rows_off,
+       ROUND(SUM(amount), 2) AS total_loaded,
+       ROUND(SUM(amount) - (SELECT SUM(amount) FROM source_lines), 2) AS total_off
+FROM loads
+GROUP BY load_name
+ORDER BY load_name;`} />
+
+**Predict:** which load passes the row count and still gets the total wrong?
+
+Expected: 4 rows, 5 columns.
+
+*Why:* `in_cents` has the right 3,286 rows and a total \$2,029.50 too high: Campus's three lines of June 30 add to \$20.50, and a hundred times that adds \$2,029.50 more. `doubled` has 3,286 rows too many, and `harbor_stopped` 51 too few and \$383.00 less. Each failure has a first check that sees it, and the total sees all three.
+
+<figure>
+<svg viewBox="0 0 360 287" width="360" role="img" aria-labelledby="da12-catches-t da12-catches-d">
+<title id="da12-catches-t">Which check catches which broken load</title>
+<desc id="da12-catches-d">A grid of four loads in rows and four checks in columns. The load ok passes every check. For harbor&#95;stopped, the newest-order check on the table is missed and the other three, the newest order of each cafe, the row count and the total, catch it. For doubled, the two newest-order checks miss it and the row count and the total catch it. For in&#95;cents, only the total catches it; the other three checks miss it. The total is the only check that catches all three broken loads.</desc>
+<g fill="currentColor">
+<text x="20" y="22.4" font-size="10.5" font-weight="600">Which check catches which broken load</text>
+<text x="137" y="48.4" font-size="9" font-weight="600" text-anchor="middle">table</text>
+<text x="137" y="59.4" font-size="9" font-weight="600" text-anchor="middle">newest</text>
+<text x="195" y="48.4" font-size="9" font-weight="600" text-anchor="middle">cafe</text>
+<text x="195" y="59.4" font-size="9" font-weight="600" text-anchor="middle">newest</text>
+<text x="253" y="48.4" font-size="9" font-weight="600" text-anchor="middle">row</text>
+<text x="253" y="59.4" font-size="9" font-weight="600" text-anchor="middle">count</text>
+<text x="311" y="48.4" font-size="9" font-weight="600" text-anchor="middle">total</text>
+<text x="20" y="94.4" font-size="9.5" font-weight="600">ok</text>
+<path d="M20 66.4 L340 66.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="137" y="88.4" font-size="9" text-anchor="middle" fill-opacity="0.8">pass</text>
+<text x="195" y="88.4" font-size="9" text-anchor="middle" fill-opacity="0.8">pass</text>
+<text x="253" y="88.4" font-size="9" text-anchor="middle" fill-opacity="0.8">pass</text>
+<text x="311" y="88.4" font-size="9" text-anchor="middle" fill-opacity="0.8">pass</text>
+<text x="20" y="138.4" font-size="9.5" font-weight="600">harbor&#95;stopped</text>
+<path d="M20 110.4 L340 110.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="137" cy="126.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="137" y="146.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="195" cy="126.4" r="6" fill="#0072b2" />
+<text x="195" y="146.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<circle cx="253" cy="126.4" r="6" fill="#0072b2" />
+<text x="253" y="146.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<circle cx="311" cy="126.4" r="6" fill="#0072b2" />
+<text x="311" y="146.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<text x="20" y="182.4" font-size="9.5" font-weight="600">doubled</text>
+<path d="M20 154.4 L340 154.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="137" cy="170.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="137" y="190.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="195" cy="170.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="195" y="190.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="253" cy="170.4" r="6" fill="#0072b2" />
+<text x="253" y="190.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<circle cx="311" cy="170.4" r="6" fill="#0072b2" />
+<text x="311" y="190.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<text x="20" y="226.4" font-size="9.5" font-weight="600">in&#95;cents</text>
+<path d="M20 198.4 L340 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<circle cx="137" cy="214.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="137" y="234.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="195" cy="214.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="195" y="234.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="253" cy="214.4" r="6" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="253" y="234.4" font-size="9" text-anchor="middle">missed</text>
+<circle cx="311" cy="214.4" r="6" fill="#0072b2" />
+<text x="311" y="234.4" font-size="9" font-weight="600" text-anchor="middle">caught</text>
+<path d="M20 242.4 L340 242.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="20" y="258.4" font-size="9" fill-opacity="0.85">newest: the newest order, of the table or of the stalest cafe</text>
+<text x="20" y="270.4" font-size="9" fill-opacity="0.85">filled dot: the check fails on this load. ring: it passes.</text>
+</g>
+</svg>
+</figure>
+
+### 3. A change request
+
+**Idea.** A change request touches numbers readers already trust. Do three things: *assess* it by running the old rule and the new one side by side and listing what moves, *version* it by giving the change a version or a name of its own, and *tell* the readers with a note on the screen.
+
+Dana writes: "Count the canceled order. The tills rang it up." The screen has 13 numbers: the three cards, three cafes, four categories and the 7 a.m. orders of three cafes.
+
+**Try it.** Run unit 1 first. Compare the 13 numbers with completed orders only (version 1) and with every order (version 2), and list those that change.
+
+<RunSQL query={`WITH v(version, order_id, store, category, hr, amount) AS (
+  SELECT 1, o.order_id, s.store_name, p.category, hour(o.ordered_at),
+         (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  JOIN stores s ON s.store_id = o.store_id
+  WHERE o.status = 'completed'
+  UNION ALL
+  SELECT 2, o.order_id, s.store_name, p.category, hour(o.ordered_at),
+         (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  JOIN stores s ON s.store_id = o.store_id
+),
+numbers AS (
+  SELECT version, 'Revenue' AS card, SUM(amount) AS value FROM v GROUP BY version
+  UNION ALL SELECT version, 'Orders', COUNT(DISTINCT order_id) FROM v GROUP BY version
+  UNION ALL SELECT version, 'Revenue per order', SUM(amount) / COUNT(DISTINCT order_id) FROM v GROUP BY version
+  UNION ALL SELECT version, 'Revenue, ' || store, SUM(amount) FROM v GROUP BY version, store
+  UNION ALL SELECT version, 'Revenue, ' || category, SUM(amount) FROM v GROUP BY version, category
+  UNION ALL SELECT version, 'Orders at 07h, ' || store, COUNT(DISTINCT order_id) FROM v WHERE hr = 7 GROUP BY version, store
+)
+SELECT card,
+       ROUND(MAX(value) FILTER (WHERE version = 1), 2) AS version_1,
+       ROUND(MAX(value) FILTER (WHERE version = 2), 2) AS version_2
+FROM numbers
+GROUP BY card
+HAVING ROUND(MAX(value) FILTER (WHERE version = 1), 2) <> ROUND(MAX(value) FILTER (WHERE version = 2), 2)
+ORDER BY card;`} />
+
+**Predict:** how many of the 13 numbers change?
+
+Expected: 3 columns.
+
+*Why:* four change: Revenue, Orders, Campus and coffee, by the one Mocha that Campus canceled on March 1. Revenue per order rounds to the same \$12.55. Chapter 5's entry defines Revenue as net sales, and the request is for the other rule, which has its own name. So keep Revenue and add a card, with its own entry, then tell the readers:
+
+```text
+July 6, 2026. Revenue is unchanged (net sales, entry version 1).
+New card: Gross sales, \$22,671.75 (every order, list price), entry version 1.
+```
+
+### 4. Who owns each number
+
+**Idea.** A check nobody owns is a log nobody reads. Beside each card, write who says what it means, who runs the checks, when, and what happens when one fails.
+
+| card | meaning | checks | runs | when one fails |
+|---|---|---|---|---|
+| Revenue | Dana, entry version 1 | the analyst: freshness, rows, total | each Monday, before publishing | the old workbook stays up; Dana gets a message |
+
+The owner is a name, not a team. Gross sales gets its own row, with its own entry; the checks, the owner of the checks and the time stay the same. The row is the page you open when a number is questioned.
+
+<Aside type="tip" title="Remember">
+
+- Check freshness for each cafe, not for the table.
+- A row count and a total see different failures: run both.
+- A change request: assess with old and new side by side, version, tell.
+- Give each card an owner, a time and an action.
+
+**Common trap:** trusting the screen because the numbers look like numbers.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-keeping-a-dashboard-right-1">
+
+**Where did the rows go?** A new load, `load_gap`, is short of rows, and the total check only says "off". The editor counts the source rows for each cafe and month. Add the rows of `load_gap` and the difference, so that the check says where. Run unit 1 first. Expected: 15 rows, 5 columns.
+
+<RunSQL query={`CREATE OR REPLACE TABLE load_gap AS
+SELECT * FROM source_lines
+WHERE NOT (store = 'Old Town' AND ordered_at >= '2026-05-18' AND ordered_at < '2026-05-25');
+
+SELECT store, strftime(ordered_at, '%Y-%m') AS month, COUNT(*) AS rows_in_source
+FROM source_lines
+GROUP BY store, month
+ORDER BY store, month;`} />
+
+<details>
+<summary>Hint</summary>
+
+Count `load_gap` the same way in a second query, then join the two on `store` and `month`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+WITH s AS (SELECT store, strftime(ordered_at, '%Y-%m') AS month, COUNT(*) AS rows_in_source FROM source_lines GROUP BY store, month),
+     l AS (...)
+SELECT s.store, s.month, s.rows_in_source, l.rows_loaded, ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH s AS (
+  SELECT store, strftime(ordered_at, '%Y-%m') AS month, COUNT(*) AS rows_in_source
+  FROM source_lines GROUP BY store, month
+),
+l AS (
+  SELECT store, strftime(ordered_at, '%Y-%m') AS month, COUNT(*) AS rows_loaded
+  FROM load_gap GROUP BY store, month
+)
+SELECT s.store, s.month, s.rows_in_source, COALESCE(l.rows_loaded, 0) AS rows_loaded,
+       COALESCE(l.rows_loaded, 0) - s.rows_in_source AS rows_off
+FROM s
+LEFT JOIN l ON l.store = s.store AND l.month = s.month
+ORDER BY s.store, s.month;
+```
+
+Fourteen rows show 0; Old Town in 2026-05 shows 53 rows missing, the lines of its 28 orders from May 18 to 24, worth \$356.75. A total check says only "\$356.75 low". The check by cafe and month says where to look.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-keeping-a-dashboard-right-2">
+
+**A merge request.** Dana asks to show tea and coffee as one bar, "hot drinks". Before you run anything, write as comments which numbers and which headlines on the screen change. Then compute the new bar, the Revenue card and the bar's share of revenue. Run unit 1 first. Expected: your comments, then 1 row, 3 columns.
+
+<RunSQL query={`-- Write your list and your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Join `source_lines` to `order_items` on the line id, then to `products` for the category. `SUM(...) FILTER (WHERE category IN ('coffee', 'tea'))` adds the two categories.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One row: hot drinks a little over 14,000 dollars, the Revenue card, and a share of about three fifths."*
+
+```sql
+SELECT ROUND(SUM(sl.amount) FILTER (WHERE p.category IN ('coffee', 'tea')), 2) AS hot_drinks,
+       ...
+FROM source_lines sl
+JOIN order_items oi ON oi.order_item_id = sl.line_id
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT ROUND(SUM(sl.amount) FILTER (WHERE p.category IN ('coffee', 'tea')), 2) AS hot_drinks,
+       ROUND(SUM(sl.amount), 2) AS revenue,
+       ROUND(100 * SUM(sl.amount) FILTER (WHERE p.category IN ('coffee', 'tea')) / SUM(sl.amount), 1) AS share_pct
+FROM source_lines sl
+JOIN order_items oi ON oi.order_item_id = sl.line_id
+JOIN products p ON p.product_id = oi.product_id;
+```
+
+Hot drinks are \$14,034.50, 62.1 percent of the unchanged \$22,582.75. The Revenue card and the cafe bars do not move; the category chart loses a bar, and its headline, "Coffee brings in 48 percent of revenue", is now false. Headlines, sheet names and the README are numbers too: assess them as well, then version the note.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the three checks, and one failure that the freshness check misses.
+
+<details>
+<summary>answer</summary>
+
+Freshness, row count and reconciliation. Freshness misses a load that is on time but doubled, or one that has the right rows with wrong amounts.
+
+</details>
+
+<Exercise id="data-analyst-keeping-a-dashboard-right-3">
+
+**Spot the flaw.** A colleague writes a total check that "returns the cafes whose loaded total differs from the source; no rows means pass". She runs it on `load_empty`, a load whose job wrote nothing, and sees no rows.
+
+<RunSQL query={`CREATE OR REPLACE TABLE load_empty AS SELECT * FROM source_lines WHERE false;
+
+SELECT l.store, ROUND(SUM(l.amount), 2) AS loaded, s.source_total
+FROM load_empty l
+JOIN (SELECT store, ROUND(SUM(amount), 2) AS source_total FROM source_lines GROUP BY store) s ON s.store = l.store
+GROUP BY l.store, s.source_total
+HAVING ROUND(SUM(l.amount), 2) <> s.source_total;`} />
+
+Run unit 1 first. Expected: no rows. Say why the silence is wrong, and write a version that cannot pass on an empty load.
+
+<Solution>
+
+An empty load has no cafes to compare, so the query finds nothing wrong: a check that is silent when it passes is also silent when it found nothing to check. Start from the source and keep every cafe:
+
+```sql
+SELECT s.store, COALESCE(l.loaded, 0) AS loaded, s.source_total
+FROM (SELECT store, ROUND(SUM(amount), 2) AS source_total FROM source_lines GROUP BY store) s
+LEFT JOIN (SELECT store, ROUND(SUM(amount), 2) AS loaded FROM load_empty GROUP BY store) l ON l.store = s.store
+WHERE COALESCE(l.loaded, 0) <> s.source_total;
+```
+
+It returns 3 rows, one for each cafe, each with 0 loaded.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can add freshness, row-count and reconciliation checks, say what each one misses, assess a change request before it ships, and write who owns a number.* Test: Exercise data-analyst-keeping-a-dashboard-right-2, without the hints.
+
+The pattern to remember: **check each refresh for age, rows and totals, and change a trusted number only after you have seen what moves.**
