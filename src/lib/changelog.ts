@@ -56,6 +56,23 @@ export function groupByMonth(entries: ChangelogEntry[]): { month: string; entrie
 	return months;
 }
 
+/** Consecutive entries with the same date, so the page can show each date once (entries are already newest first). */
+export function groupByDay<T extends { date: string }>(entries: T[]): { date: string; entries: T[] }[] {
+	const days: { date: string; entries: T[] }[] = [];
+	for (const e of entries) {
+		const last = days[days.length - 1];
+		if (last?.date === e.date) last.entries.push(e);
+		else days.push({ date: e.date, entries: [e] });
+	}
+	return days;
+}
+
+/** `2026-11-23` becomes `Nov 23`. */
+export function dayLabel(date: string): string {
+	const [y, m, d] = date.split('-').map(Number);
+	return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
 /** `2026-11` becomes `November 2026`. */
 export function monthLabel(month: string): string {
 	const [y, m] = month.split('-').map(Number);

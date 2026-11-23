@@ -1,5 +1,5 @@
 ---
-title: Changelog
+title: "What's new"
 description: A short, plain list of what is new on datafromzero and when, newest first. The full detail is in CHANGELOG.md on GitHub.
 tableOfContents: false
 ---

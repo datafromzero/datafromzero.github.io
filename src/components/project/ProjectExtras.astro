@@ -10,7 +10,7 @@ import TrackChooser from './TrackChooser.astro';
 import CookieSettings from './CookieSettings.astro';
 import { loadCitation } from '../../lib/citation.ts';
 import { readRepoFile } from '../../lib/repo-files.ts';
-import { groupByMonth, monthLabel, parseChangelog, summaryHtml, type LessonRef } from '../../lib/changelog.ts';
+import { dayLabel, groupByDay, groupByMonth, monthLabel, parseChangelog, summaryHtml, type LessonRef } from '../../lib/changelog.ts';
 import { classify } from '../../lib/content-schemas.ts';
 import { ANALYTICS_ENABLED, GA_RETENTION, GITHUB_BRANCH, GITHUB_REPO } from '../../site';
 
@@ -22,18 +22,21 @@ const { id, lang } = Astro.props;
 const repo = `https://github.com/${GITHUB_REPO}`;
 
 // "What's new" (SPEC D54): only the bold summaries of CHANGELOG.md, by month; the detail stays in the file on GitHub.
-let changelog: { month: string; label: string; entries: { date: string; html: string }[] }[] = [];
+type Day = { date: string; label: string; entries: { html: string }[] };
+let changelog: { month: string; label: string; added: Day[]; otherCount: number; other: Day[] }[] = [];
 if (id === 'changelog') {
 	const { entries, problems } = parseChangelog(readRepoFile('CHANGELOG.md'));
 	if (problems.length) throw new Error(`CHANGELOG.md: ${problems.map((p) => `line ${p.line}: ${p.message}`).join('; ')}`);
 	const lessons: LessonRef[] = (await getCollection('docs'))
 		.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null && (d.data as { status?: string }).status === 'published')
 		.map((d) => ({ title: d.data.title, href: `/${classify(d.id).path}/` }));
-	changelog = groupByMonth(entries).map((m) => ({
-		month: m.month,
-		label: monthLabel(m.month),
-		entries: m.entries.map((e) => ({ date: e.date, html: summaryHtml(e.summary, lessons) })),
-	}));
+	const days = (list: typeof entries): Day[] =>
+		groupByDay(list.map((e) => ({ date: e.date, html: summaryHtml(e.summary, lessons) }))).map((d) => ({ date: d.date, label: dayLabel(d.date), entries: d.entries }));
+	// Added is the main list; Fixed, Changed and Removed sit in one closed <details> per month.
+	changelog = groupByMonth(entries).map((m) => {
+		const other = m.entries.filter((e) => e.group !== 'Added');
+		return { month: m.month, label: monthLabel(m.month), added: days(m.entries.filter((e) => e.group === 'Added')), otherCount: other.length, other: days(other) };
+	});
 }
 const cite = id === 'cite' ? loadCitation() : null;
 const mit = id === 'license' ? readRepoFile('LICENSE').trim() : '';
@@ -66,14 +69,23 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 		{changelog.map((m) => (
 			<>
 				<h2 id={m.month}>{m.label}</h2>
-				<ul>
-					{m.entries.map((e) => (
-						<li>
-							<time datetime={e.date}>{e.date.slice(5).replace('-', '/')}</time>
-							<span set:html={e.html} />
-						</li>
-					))}
-				</ul>
+				{m.added.map((d) => (
+					<>
+						<p class="day"><time datetime={d.date}>{d.label}</time></p>
+						<ul>{d.entries.map((e) => <li set:html={e.html} />)}</ul>
+					</>
+				))}
+				{m.otherCount > 0 && (
+					<details>
+						<summary>Fixes and other changes ({m.otherCount})</summary>
+						{m.other.map((d) => (
+							<>
+								<p class="day"><time datetime={d.date}>{d.label}</time></p>
+								<ul>{d.entries.map((e) => <li set:html={e.html} />)}</ul>
+							</>
+						))}
+					</details>
+				)}
 			</>
 		))}
 		<p class="news-list-more">
@@ -152,22 +164,26 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 	.news-list ul {
 		list-style: none;
 		padding: 0;
-		margin: 0.6em 0 0;
+		margin: 0.2em 0 0;
 	}
 	.news-list li {
-		display: grid;
-		grid-template-columns: 3.2rem 1fr;
-		column-gap: 12px;
 		margin: 0;
 		padding: 0.45em 0;
 		border-top: 1px solid var(--sl-color-hairline);
 		line-height: 1.5;
 	}
-	.news-list time {
+	.news-list .day {
+		margin: 1.4em 0 0;
 		font-family: var(--font-mono);
 		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		color: var(--sl-color-gray-3);
-		padding-top: 0.2em;
+	}
+	.news-list summary {
+		cursor: pointer;
+		margin-top: 1.6em;
+		color: var(--sl-color-gray-2);
 	}
 	.news-list li :global(code) {
 		overflow-wrap: anywhere;

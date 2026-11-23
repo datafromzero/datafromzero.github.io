@@ -65,7 +65,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 			collapsed: true,
 			items: [
 				{ label: 'About', link: '/about/' },
-				{ label: 'Changelog', link: '/changelog/' },
+				{ label: "What's new", link: '/changelog/' },
 				{ label: 'Cite', link: '/cite/' },
 				{ label: 'License', link: '/license/' },
 				{ label: 'Privacy', link: '/privacy/' },

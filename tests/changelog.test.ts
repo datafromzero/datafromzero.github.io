@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { groupByMonth, monthLabel, parseChangelog, summaryHtml } from '../src/lib/changelog.ts';
+import { dayLabel, groupByDay, groupByMonth, monthLabel, parseChangelog, summaryHtml } from '../src/lib/changelog.ts';
 
 const sample = `# Changelog
 
@@ -56,6 +56,14 @@ describe('groupByMonth', () => {
 			],
 		);
 		assert.equal(monthLabel('2026-11'), 'November 2026');
+	});
+});
+
+describe('groupByDay', () => {
+	test('shows each date once and labels it', () => {
+		const days = groupByDay([{ date: '2026-11-23' }, { date: '2026-11-23' }, { date: '2026-11-01' }]);
+		assert.deepEqual(days.map((d) => [d.date, d.entries.length]), [['2026-11-23', 2], ['2026-11-01', 1]]);
+		assert.equal(dayLabel('2026-11-03'), 'Nov 3');
 	});
 });
 
