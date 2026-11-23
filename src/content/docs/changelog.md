@@ -1,10 +1,8 @@
 ---
-title: Changelog
-description: Every notable change to datafromzero, by curriculum version.
+title: "What's new"
+description: A short, plain list of what is new on datafromzero and when, newest first. The full detail is in CHANGELOG.md on GitHub.
 tableOfContents: false
 ---
 
-This page shows the project's `CHANGELOG.md`, written in the
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Curriculum versions follow
-[Semantic Versioning](https://semver.org/): a major version for a restructure or moved URLs, a minor
-version for new content, and a patch version for corrections.
+What is new in the lessons and on the site, newest first. Every change, with its technical detail,
+is in the full changelog on GitHub (link at the end of the page).

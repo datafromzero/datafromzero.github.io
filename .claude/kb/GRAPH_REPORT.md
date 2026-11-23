@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1464 nodes, 1653 edges, 193 communities (644 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 53, dependency 25, design-section 15, doc 41, i18n 6, layout 1, module 24, npm-script 22, page 5, research-section 483, rule 10, script 163, skill 1, spec-section 25, starlight-component 6, style 7, symbol 282, template 2, token 12.
-- Edges: defines 282, imports 50, mentions 878, overrides 6, references 28, runs 11, specified-by 4, uses 357, uses-token 32, validated-by 5.
+- 1477 nodes, 1679 edges, 195 communities (644 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 41, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 483, rule 10, script 164, skill 1, spec-section 25, starlight-component 6, style 7, symbol 291, template 2, token 12.
+- Edges: defines 291, imports 50, mentions 894, overrides 6, references 28, runs 12, specified-by 4, uses 357, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -21,12 +21,12 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 6 | `.claude/HANDOFF.md` | doc | 49 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
 | 8 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
-| 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:272 |
+| 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:273 |
 | 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
-| 13 | `scripts/sync-research-issues.mjs` | script | 25 | scripts/sync-research-issues.mjs:1 |
-| 14 | `D31` Bottom taskbar (amended by D3… | decision | 24 | SPEC.md:58 |
+| 13 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
+| 14 | `scripts/sync-research-issues.mjs` | script | 25 | scripts/sync-research-issues.mjs:1 |
 | 15 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
 
 ## Communities
@@ -42,26 +42,26 @@ Label propagation; each community is named by its top-degree node.
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C8 sync-research-issues.mjs** (12): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md
 - **C9 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
-- **C10 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
-- **C11 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
-- **C12 sql-editor.ts** (10): src/scripts/sql-editor.ts; pkg:@codemirror/autocomplete; pkg:@codemirror/commands; pkg:@codemirror/lang-sql; pkg:@codemirror/language; pkg:@codemirror/state
+- **C10 changelog.ts** (10): src/lib/changelog.ts; src/lib/changelog.ts#ChangelogEntry; src/lib/changelog.ts#ChangelogProblem; src/lib/changelog.ts#LessonRef; src/lib/changelog.ts#dayLabel; src/lib/changelog.ts#groupByDay
+- **C11 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
+- **C12 roadmap.ts** (10): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES; src/lib/roadmap.ts#RoadmapLesson; src/lib/roadmap.ts#RoadmapStage
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C84 to C81, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C98 to C73, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C123 to C21, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C71, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C179 to C176, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C14, src/styles/math.css:17)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C15, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C25 to C41, design/README.md:181)
-- `M8` -mentions-> `D24` (C77 to C15, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C170 to C2, scripts/check-placeholders.mjs:2)
-- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C51 to C52, src/lib/repo-files.ts:4)
-- `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C74 to C182, SPEC.md:78)
+- `ctype:career` -specified-by-> `S5.4` (C85 to C82, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C99 to C73, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C124 to C23, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C27 to C71, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C180 to C177, src/layouts/HomeLayout.astro:39)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C15, src/styles/math.css:17)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C17, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C26 to C43, design/README.md:181)
+- `M8` -mentions-> `D24` (C77 to C17, CLAUDE.md:66)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C172 to C2, scripts/check-placeholders.mjs:2)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C185 to C53, src/lib/repo-files.ts:4)
+- `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C74 to C183, SPEC.md:78)
 
 ## Decisions (SPEC §1)
 
@@ -120,23 +120,24 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D51 | Math in lessons | Formulas are written in LaTeX between double dollar signs and rendere… | SPEC.md:78 §2 §6 |
 | D52 | The `app-events` dataset, v1 | `datasets/app-events/` v1: a fictional budgeting app with four tables… | SPEC.md:79 |
 | D53 | SQL modeling, access and database… | Four SQL lessons added: reading ER diagrams, access and injection, tr… | SPEC.md:80 |
+| D54 | What's new page | `/changelog/` is a short "What's new" list built from the bold summar… | SPEC.md:81 §9 |
 
 ## CONTRACT sections
 
-- §3 URL contract — SPEC.md:99-151 (includes §3.1, §3.2, §3.3, §3.4)
-- §5 Content model — SPEC.md:173-271 (includes §5.1, §5.2, §5.3, §5.4)
-- §6 Authoring components — SPEC.md:272-310 (includes §6.4)
-- §7 Datasets — SPEC.md:311-343
+- §3 URL contract — SPEC.md:100-152 (includes §3.1, §3.2, §3.3, §3.4)
+- §5 Content model — SPEC.md:174-272 (includes §5.1, §5.2, §5.3, §5.4)
+- §6 Authoring components — SPEC.md:273-311 (includes §6.4)
+- §7 Datasets — SPEC.md:312-344
 
 ## Where is…
 
 term: id — file:line
 
 - draft: `R:issues/29-a-short-history-of-data-homepage-slider#method-and-verdict-on-the-draft` — research/issues/29-a-short-history-of-data-homepage-slider.md:18
-- prerequisites: `S5.1` — SPEC.md:187
+- prerequisites: `S5.1` — SPEC.md:188
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `scripts/animations/concept-claim-trail.mjs` — scripts/animations/concept-claim-trail.mjs:1
-- slug: `S3.2` — SPEC.md:132
+- slug: `S3.2` — SPEC.md:133
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:98
 - dataset: `R:issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy#7-planted-error-exercises-on-the-caf-dataset-recommendation` — research/issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy.md:117
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
@@ -144,8 +145,8 @@ term: id — file:line
 - analytics: `R9` — CLAUDE.md:40
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:27
-- gsap: `pkg:gsap` — package.json:51
-- scroll: `S12` — SPEC.md:408
+- gsap: `pkg:gsap` — package.json:52
+- scroll: `S12` — SPEC.md:409
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
@@ -161,18 +162,18 @@ term: id — file:line
 - colab: `R:issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d#9-addendum-2026-11-18-learning-environment-colab-decided` — research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md:179
 - sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:12
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:52
+- katex: `pkg:katex` — package.json:53
 - math: `src/data/track-skills.ts#MATH` — src/data/track-skills.ts:126
-- mdx: `pkg:@astrojs/mdx` — package.json:37
-- auto-import: `pkg:astro-auto-import` — package.json:50
+- mdx: `pkg:@astrojs/mdx` — package.json:38
+- auto-import: `pkg:astro-auto-import` — package.json:51
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
 - quality gates: `M6` — CLAUDE.md:56
-- cspell: `pkg:cspell` — package.json:58
-- markdownlint: `pkg:markdownlint-cli2` — package.json:25
-- migration: `S14` — SPEC.md:478
+- cspell: `pkg:cspell` — package.json:59
+- markdownlint: `pkg:markdownlint-cli2` — package.json:26
+- migration: `S14` — SPEC.md:479
 - license: `R:issues/52-sql-core-academic-depth-interleaved-with-query-practice#5-citation-and-license-rules-for-whoever-builds-this` — research/issues/52-sql-core-academic-depth-interleaved-with-query-practice.md:71
-- changelog: `S9` — SPEC.md:360
-- zenodo: `S1` — SPEC.md:24
+- changelog: `scripts/check-changelog.ts` — scripts/check-changelog.ts:1
+- zenodo: `S9` — SPEC.md:361
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
 - hero: `src/components/home/Hero.astro` — src/components/home/Hero.astro:1
@@ -191,7 +192,7 @@ term: id — file:line
 - RunSQL: `src/components/content/RunSQL.astro` — src/components/content/RunSQL.astro:1
 - OpenInColab: `src/components/content/OpenInColab.astro` — src/components/content/OpenInColab.astro:1
 - astro.config.mjs: `astro.config.mjs` — astro.config.mjs:1
-- Authoring components: `S6` — SPEC.md:272
+- Authoring components: `S6` — SPEC.md:273
 
 ## Suggested questions
 

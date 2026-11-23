@@ -14,4 +14,7 @@ names, then only your lessons' map entries.
 - Never set `status: published`. Never invent facts or sources; cite only pages you opened.
 - Do not edit SPEC.md, CLAUDE.md, CHANGELOG.md, other lessons, `datasets/` or shared helpers unless the brief says so.
   If cspell needs a word, append it to the end of `project-words.txt`.
+  When the brief does ask for a changelog entry, every CHANGELOG.md bullet starts with a bold, dated, learner-facing
+  summary of at most about 20 words (`- **2026-11-23: What changed.** Detail.`); `/changelog/` shows only that
+  summary and `npm run check:changelog` fails without it (SPEC D54).
 - When review findings come back, fix all of them in one pass and make one new commit.

@@ -3,13 +3,15 @@
 // (SPEC §3.1): the roadmap map, the career quiz (src/lib/career-quiz.ts), the skills chart of /choose-your-track/ (src/data/track-skills.ts), the citation from CITATION.cff,
 // CHANGELOG.md, LICENSE, LICENSE-CONTENT, and the analytics section of the privacy page. Rendered after the
 // page's own Markdown. No client JS, except the career quiz's one small script (SPEC D33).
-import { createMarkdownProcessor } from '@astrojs/markdown-remark';
+import { getCollection } from 'astro:content';
 import RoadmapMap from './RoadmapMap.astro';
 import CareerQuiz from './CareerQuiz.astro';
 import TrackChooser from './TrackChooser.astro';
 import CookieSettings from './CookieSettings.astro';
 import { loadCitation } from '../../lib/citation.ts';
 import { readRepoFile } from '../../lib/repo-files.ts';
+import { dayLabel, groupByDay, groupByMonth, monthLabel, parseChangelog, summaryHtml, type LessonRef } from '../../lib/changelog.ts';
+import { classify } from '../../lib/content-schemas.ts';
 import { ANALYTICS_ENABLED, GA_RETENTION, GITHUB_BRANCH, GITHUB_REPO } from '../../site';
 
 interface Props {
@@ -19,10 +21,22 @@ interface Props {
 const { id, lang } = Astro.props;
 const repo = `https://github.com/${GITHUB_REPO}`;
 
-let changelogHtml = '';
+// "What's new" (SPEC D54): only the bold summaries of CHANGELOG.md, by month; the detail stays in the file on GitHub.
+type Day = { date: string; label: string; entries: { html: string }[] };
+let changelog: { month: string; label: string; added: Day[]; otherCount: number; other: Day[] }[] = [];
 if (id === 'changelog') {
-	const md = readRepoFile('CHANGELOG.md').replace(/^# .*\n/, ''); // the page title is the h1
-	changelogHtml = (await (await createMarkdownProcessor()).render(md)).code;
+	const { entries, problems } = parseChangelog(readRepoFile('CHANGELOG.md'));
+	if (problems.length) throw new Error(`CHANGELOG.md: ${problems.map((p) => `line ${p.line}: ${p.message}`).join('; ')}`);
+	const lessons: LessonRef[] = (await getCollection('docs'))
+		.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null && (d.data as { status?: string }).status === 'published')
+		.map((d) => ({ title: d.data.title, href: `/${classify(d.id).path}/` }));
+	const days = (list: typeof entries): Day[] =>
+		groupByDay(list.map((e) => ({ date: e.date, html: summaryHtml(e.summary, lessons) }))).map((d) => ({ date: d.date, label: dayLabel(d.date), entries: d.entries }));
+	// Added is the main list; Fixed, Changed and Removed sit in one closed <details> per month.
+	changelog = groupByMonth(entries).map((m) => {
+		const other = m.entries.filter((e) => e.group !== 'Added');
+		return { month: m.month, label: monthLabel(m.month), added: days(m.entries.filter((e) => e.group === 'Added')), otherCount: other.length, other: days(other) };
+	});
 }
 const cite = id === 'cite' ? loadCitation() : null;
 const mit = id === 'license' ? readRepoFile('LICENSE').trim() : '';
@@ -50,7 +64,35 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 	</section>
 )}
 
-{id === 'changelog' && <section class="extras changelog" set:html={changelogHtml} />}
+{id === 'changelog' && (
+	<section class="extras news-list">
+		{changelog.map((m) => (
+			<>
+				<h2 id={m.month}>{m.label}</h2>
+				{m.added.map((d) => (
+					<>
+						<p class="day"><time datetime={d.date}>{d.label}</time></p>
+						<ul>{d.entries.map((e) => <li set:html={e.html} />)}</ul>
+					</>
+				))}
+				{m.otherCount > 0 && (
+					<details>
+						<summary>Fixes and other changes ({m.otherCount})</summary>
+						{m.other.map((d) => (
+							<>
+								<p class="day"><time datetime={d.date}>{d.label}</time></p>
+								<ul>{d.entries.map((e) => <li set:html={e.html} />)}</ul>
+							</>
+						))}
+					</details>
+				)}
+			</>
+		))}
+		<p class="news-list-more">
+			The full detail of every change is in <a href={`${repo}/blob/${GITHUB_BRANCH}/CHANGELOG.md`}>CHANGELOG.md on GitHub</a>.
+		</p>
+	</section>
+)}
 
 {id === 'license' && (
 	<section class="extras">
@@ -119,8 +161,41 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 		padding-left: 1.4em;
 		list-style: disc;
 	}
-	.changelog :global(li) {
-		margin: 0.3em 0;
+	.news-list ul {
+		list-style: none;
+		padding: 0;
+		margin: 0.2em 0 0;
+	}
+	.news-list li {
+		margin: 0;
+		padding: 0.45em 0;
+		border-top: 1px solid var(--sl-color-hairline);
+		line-height: 1.5;
+	}
+	.news-list .day {
+		margin: 1.4em 0 0;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--sl-color-gray-3);
+	}
+	.news-list summary {
+		cursor: pointer;
+		margin-top: 1.6em;
+		color: var(--sl-color-gray-2);
+	}
+	.news-list li :global(code) {
+		overflow-wrap: anywhere;
+	}
+	.news-list-more {
+		margin-top: 2em;
+		color: var(--sl-color-gray-2);
+	}
+	@media print {
+		.news-list li {
+			break-inside: avoid;
+		}
 	}
 	.extras :global(a) {
 		text-decoration: underline;
