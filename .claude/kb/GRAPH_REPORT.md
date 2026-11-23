@@ -5,18 +5,18 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1522 nodes, 1724 edges, 193 communities (676 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 226, content-type 5, decision 55, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 500, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 297, template 2, token 12.
-- Edges: defines 297, imports 50, mentions 927, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- 1525 nodes, 1741 edges, 194 communities (672 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 226, content-type 5, decision 55, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 500, rule 10, script 168, skill 1, spec-section 25, starlight-component 6, style 7, symbol 298, template 2, token 12.
+- Edges: defines 298, imports 50, mentions 928, overrides 6, references 28, runs 12, specified-by 4, uses 378, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
 | # | Node | Type | Degree | Location |
 |---|---|---|---|---|
-| 1 | `src/components/content/Solution.astro` | component | 133 | src/components/content/Solution.astro:1 |
-| 2 | `src/components/content/Exercise.astro` | component | 132 | src/components/content/Exercise.astro:1 |
-| 3 | `D41` Lesson step-by-step figures | decision | 95 | SPEC.md:68 |
-| 4 | `src/components/content/RunSQL.astro` | component | 55 | src/components/content/RunSQL.astro:1 |
+| 1 | `src/components/content/Solution.astro` | component | 138 | src/components/content/Solution.astro:1 |
+| 2 | `src/components/content/Exercise.astro` | component | 137 | src/components/content/Exercise.astro:1 |
+| 3 | `D41` Lesson step-by-step figures | decision | 96 | SPEC.md:68 |
+| 4 | `src/components/content/RunSQL.astro` | component | 60 | src/components/content/RunSQL.astro:1 |
 | 5 | `.claude/HANDOFF.md` | doc | 52 | .claude/HANDOFF.md:1 |
 | 6 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
@@ -33,7 +33,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 Label propagation; each community is named by its top-degree node.
 
-- **C1 Solution** (135): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
+- **C1 Solution** (140): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
 - **C2 HANDOFF.md** (35): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; S12 Quality gates (CI on every PR and…; S5.1 Lesson (`src/content/docs/{stage}…; D32 Four career branches; S14 Content production (replaces migr…
 - **C3 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C4 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
@@ -51,17 +51,17 @@ Label propagation; each community is named by its top-degree node.
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
 - `ctype:career` -specified-by-> `S5.4` (C82 to C79, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C96 to C71, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C122 to C23, scripts/animations/concept-join.mjs:1)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C97 to C71, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C123 to C23, scripts/animations/concept-join.mjs:1)
 - `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C24 to C68, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C179 to C176, src/layouts/HomeLayout.astro:39)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C180 to C177, src/layouts/HomeLayout.astro:39)
 - `src/styles/math.css` -uses-token-> `token:--fg` (C72 to C15, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C18, .claude/skills/kb/SKILL.md:3)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C53, design/README.md:181)
 - `M8` -mentions-> `D24` (C75 to C18, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C171 to C2, scripts/check-placeholders.mjs:2)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C172 to C2, scripts/check-placeholders.mjs:2)
 - `M6` -mentions-> `D26` (C2 to C70, CLAUDE.md:62)
-- `scripts/check-lessons.mjs` -mentions-> `D47` (C169 to C2, scripts/check-lessons.mjs:10)
+- `scripts/check-lessons.mjs` -mentions-> `D47` (C170 to C2, scripts/check-lessons.mjs:10)
 
 ## Decisions (SPEC §1)
 
