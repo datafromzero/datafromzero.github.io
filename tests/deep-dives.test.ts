@@ -59,7 +59,7 @@ describe('deep dives in the real content and the sidebar', () => {
 	const docs = join(process.cwd(), 'src/content/docs');
 	const read = (stage: string) =>
 		readdirSync(join(docs, stage))
-			.filter((f) => f.endsWith('.md') && f !== 'index.md')
+			.filter((f) => /\.mdx?$/.test(f) && !/^index\.mdx?$/.test(f))
 			.map((f) => parse(readFileSync(join(docs, stage, f), 'utf8').match(/^---\n([\s\S]*?)\n---/)![1]) as { id: string; order: number; prerequisites: string[] });
 
 	for (const stage of Object.keys(DEEP_DIVES)) {
@@ -72,6 +72,16 @@ describe('deep dives in the real content and the sidebar', () => {
 			}
 		});
 	}
+
+	test('no main-path lesson in any stage depends on a deep-dive lesson', () => {
+		const stages = ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer'];
+		const all = stages.flatMap((stage) => read(stage).map((l) => ({ ...l, stage })));
+		const deep = new Set(all.filter((l) => l.stage in DEEP_DIVES && isDeepDive(l.stage, l.order)).map((l) => l.id));
+		assert.ok(deep.size >= 18);
+		for (const l of all.filter((x) => !deep.has(x.id))) {
+			assert.deepEqual((l.prerequisites ?? []).filter((p) => deep.has(p)), [], l.id);
+		}
+	});
 
 	test('the sidebar nests the deep dive as a collapsed, labeled group after the main path', () => {
 		for (const [label, id, codes] of [

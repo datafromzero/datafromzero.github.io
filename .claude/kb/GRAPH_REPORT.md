@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1522 nodes, 1722 edges, 193 communities (676 isolated nodes).
+- 1522 nodes, 1724 edges, 193 communities (676 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 226, content-type 5, decision 55, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 500, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 297, template 2, token 12.
-- Edges: defines 297, imports 50, mentions 925, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- Edges: defines 297, imports 50, mentions 927, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -100,7 +100,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D31 | Bottom taskbar (amended by D34, D… | A floating bar at the bottom of every page (homepage, project pages,… | SPEC.md:58 |
 | D32 | Four career branches | Data Analyst, Data Engineer, Data Scientist and ML / AI Engineer; Ana… | SPEC.md:59 §3.1 §5 |
 | D33 | Career quiz page | `/career-quiz/`: ten questions that suggest one of the four careers (… | SPEC.md:60 §15 |
-| D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 |
+| D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 §11 |
 | D35 | Mobile navigation: one bottom bar | On phones the bottom bar is the only navigation (owner decision, 2026… | SPEC.md:62 |
 | D36 | Mobile search sheet | Search opens as a full-screen glass sheet on phones and a glass dialo… | SPEC.md:63 |
 | D37 | Report a problem from any page | A "Report a problem" pane in the taskbar sheet that hands off to a Gi… | SPEC.md:64 §15 |
