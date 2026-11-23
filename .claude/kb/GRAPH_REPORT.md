@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1489 nodes, 1690 edges, 197 communities (649 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 42, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 490, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 293, template 2, token 12.
-- Edges: defines 293, imports 50, mentions 897, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- 1499 nodes, 1700 edges, 197 communities (658 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 499, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 293, template 2, token 12.
+- Edges: defines 293, imports 50, mentions 907, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -18,7 +18,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `D41` Lesson step-by-step figures | decision | 95 | SPEC.md:68 |
 | 4 | `src/components/content/RunSQL.astro` | component | 55 | src/components/content/RunSQL.astro:1 |
 | 5 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 49 | .claude/HANDOFF.md:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 50 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
 | 8 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
 | 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:273 |
@@ -34,7 +34,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (135): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/RunSQL.astro; src/components/content/OpenInColab.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
-- **C2 HANDOFF.md** (19): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; CLAUDE.md; S14 Content production (replaces migr…
+- **C2 HANDOFF.md** (20): .claude/HANDOFF.md; D44 Stage cheatsheets; a math block i…; D32 Four career branches; S3.1 Route map; S14 Content production (replaces migr…; CLAUDE.md
 - **C3 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C4 Tech stack** (18): S2 Tech stack; S1 Decision record; S3 URL contract; S4 Information architecture; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
 - **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
