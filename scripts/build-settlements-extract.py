@@ -1,13 +1,15 @@
-"""Builds the second source of the Data Analyst cleaning story (lesson `messy-data-cleaning-story`): a card-processor
-settlement export derived from the cafe-sales orders, with named defects planted by fixed rules (no random numbers).
+"""Builds `datasets/cafe-sales/v1/extras/settlements.csv`, the second source of the Data Analyst cleaning story (lesson
+`messy-data-cleaning-story`): a card-processor settlement export derived from the cafe-sales orders, with named defects planted by
+fixed rules (no random numbers). A derived, teaching-only file (SPEC D57); the five cafe-sales tables are not touched.
 
-    python3 scripts/build-settlements-extract.py --out DIR     write DIR/settlements_raw.csv
-    python3 scripts/build-settlements-extract.py --out DIR --day 2026-05-01   also print that day's rows as SQL VALUES
+    python3 scripts/build-settlements-extract.py                    write datasets/cafe-sales/v1/extras/settlements.csv
+    python3 scripts/build-settlements-extract.py --check            exit 1 unless the published file matches the script
+    python3 scripts/build-settlements-extract.py --day 2026-05-01   print that day's rows as SQL VALUES (for a lesson slice)
 
 The story: the processor settles card and mobile orders only (cash never reaches it), one row per payment, keyed by the till's
 order number. Reads only datasets/cafe-sales/v1/ (Python 3.9+, standard library). The same input always gives the same file.
 
-Planted defects, each by a rule, so a lesson can say exactly what is in the file:
+Planted defects, each by a rule, so a lesson and the README can say exactly what is in the file:
   D1  duplicate rows      every 41st row (index % 41 == 20, counted after sorting by time) is written twice: a retried export
   D2  merchant spelling   four spellings per store, chosen by order_id % 4 (case, trailing space, an alias)
   D3  silent null         merchant left empty when order_id % 53 == 10
@@ -21,6 +23,7 @@ Planted defects, each by a rule, so a lesson can say exactly what is in the file
                           extra zero), so the processor's amount is the true one
 """
 import csv
+import io
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -29,6 +32,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 CAFE = ROOT / "datasets" / "cafe-sales" / "v1"
+TARGET = CAFE / "extras" / "settlements.csv"
 LOCAL = ZoneInfo("America/Los_Angeles")
 SPELLINGS = {
     1: ["Old Town", "OLD TOWN", "Old Town ", "old town"],
@@ -79,22 +83,30 @@ def build():
 
 HEADER = ["settlement_id", "order_ref", "merchant", "settled_at", "amount", "type"]
 
+
+def render():
+    out = io.StringIO()
+    w = csv.writer(out, lineterminator="\n")
+    w.writerow(HEADER)
+    w.writerows(build())
+    return out.getvalue()
+
+
 if __name__ == "__main__":
-    if "--out" not in sys.argv:
-        print(__doc__)
-        sys.exit(0)
-    folder = Path(sys.argv[sys.argv.index("--out") + 1])
-    folder.mkdir(parents=True, exist_ok=True)
-    result = build()
-    with open(folder / "settlements_raw.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f, lineterminator="\n")
-        w.writerow(HEADER)
-        w.writerows(result)
-    print(f"wrote {len(result):,} rows to {folder / 'settlements_raw.csv'}")
-    if "--day" in sys.argv:
+    text = render()
+    if "--check" in sys.argv:
+        if not TARGET.exists() or TARGET.read_bytes().decode("utf-8") != text:
+            raise SystemExit(f"{TARGET.relative_to(ROOT)} differs from the generator (run the script without --check)")
+        print("extras/settlements.csv matches the generator.")
+    elif "--day" in sys.argv:
         day = sys.argv[sys.argv.index("--day") + 1]
         orders = {r["order_id"]: r["ordered_at"] for r in read("orders.csv")}
-        for r in result:
+        for r in build():
             local_day = orders.get(r[1].replace("ORD-", ""), "")[:10] if r[1].startswith("ORD-") else f"2026-{int(r[1][-2:]):02d}-01"
             if local_day == day:
                 print("(" + ", ".join("'" + v + "'" for v in r) + "),")
+    else:
+        TARGET.parent.mkdir(parents=True, exist_ok=True)
+        with open(TARGET, "w", newline="", encoding="utf-8") as f:
+            f.write(text)
+        print(f"wrote {len(text.splitlines()) - 1:,} rows to {TARGET.relative_to(ROOT)}")

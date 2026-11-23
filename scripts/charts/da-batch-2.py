@@ -195,7 +195,7 @@ def charts(settlements):
     s = Svg2("da8-wire-phone", "Wireframe of the same screen on a phone: one column",
              "A gray phone outline. Inside, from top to bottom: the title; two cards side by side, Revenue and Orders; one full-width card, Revenue per order; the three charts one under the other, each with its headline above it; "
              "and the footnote with the freshness line and the definitions. Side notes: cards two across, charts in one column in the order of the questions, headline kept above each chart, footnote last.")
-    s.frame(8, 4, 168, 372, opacity=0.6, rx=18)
+    s.frame(8, 4, 168, 380, opacity=0.6, rx=18)
     s.text(22, 26, "Dana's cafes", size=10.5, weight=600)
     s.frame(20, 36, 70, 38, opacity=0.4, fill="currentColor", fill_opacity=0.06)
     s.text(26, 50, "Revenue", size=9, opacity=0.85)
@@ -203,11 +203,11 @@ def charts(settlements):
     s.frame(96, 36, 70, 38, opacity=0.4, fill="currentColor", fill_opacity=0.06)
     s.text(102, 50, "Orders", size=9, opacity=0.85)
     s.text(102, 67, f"{orders:,}", size=12, weight=600)
-    s.frame(20, 80, 146, 30, opacity=0.4, fill="currentColor", fill_opacity=0.06)
+    s.frame(20, 80, 146, 38, opacity=0.4, fill="currentColor", fill_opacity=0.06)
     s.text(26, 93, "Revenue per order", size=9, opacity=0.85)
-    s.text(26, 106, money(rpo), size=12, weight=600)
+    s.text(26, 110, money(rpo), size=12, weight=600)
     for k, (head, kind) in enumerate((("Harbor: about half", "bars3"), ("Coffee: 48 percent of revenue", "bars4"), ("Harbor's 7 a.m. is quietest", "hours"))):
-        y = 118 + k * 74
+        y = 126 + k * 74
         s.frame(20, y, 146, 68, opacity=0.4, fill="currentColor", fill_opacity=0.04)
         s.text(26, y + 13, head, size=9, weight=600)
         base = y + 60
@@ -221,10 +221,10 @@ def charts(settlements):
             for sidx, hs in enumerate(((73, 53, 67), (79, 60, 71), (20, 43, 31))):
                 for j, o in enumerate(hs):
                     s.rect(30 + sidx * 44 + j * 12, base - o * 0.3, 8, o * 0.3, "currentColor", opacity=0.3, rx=2)
-    s.frame(20, 340, 146, 28, opacity=0.4, dash="3 3")
-    s.text(26, 352, "Data through June 30, 2026", size=8.5)
-    s.text(26, 362, "Revenue: completed orders", size=8.5)
-    for yy, t1, t2 in ((55, "cards two across,", "the third full width"), (190, "charts in one column,", "in the order of the questions"), (270, "a headline above", "each chart"), (354, "footnote last", "")):
+    s.frame(20, 348, 146, 28, opacity=0.4, dash="3 3")
+    s.text(26, 360, "Data through June 30, 2026", size=8.5)
+    s.text(26, 370, "Revenue: completed orders", size=8.5)
+    for yy, t1, t2 in ((55, "cards two across,", "the third full width"), (198, "charts in one column,", "in the order of the questions"), (278, "a headline above", "each chart"), (362, "footnote last", "")):
         s.line(176, yy, 192, yy, opacity=0.5)
         s.text(198, yy + 3, t1, size=9.5, weight=600)
         if t2:
