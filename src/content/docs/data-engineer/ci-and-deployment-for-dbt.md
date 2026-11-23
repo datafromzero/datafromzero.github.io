@@ -3,7 +3,7 @@ id: data-engineer-ci-and-deployment-for-dbt
 title: Review, CI and scheduled runs for dbt
 description: Run tests on every pull request, separate development from production and schedule trusted runs.
 stage: data-engineer
-order: 160
+order: 140
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests
 status: draft
 ---
+
+TODO(owner): CI/CD appears in 7 of 27 Data Engineer postings (#118).
 
 ## Warm-up
 

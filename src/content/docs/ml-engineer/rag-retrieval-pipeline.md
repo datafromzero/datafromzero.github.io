@@ -3,9 +3,9 @@ id: ml-engineer-rag-retrieval-pipeline
 title: 'A retrieval pipeline: chunk, embed, search, answer with citations'
 description: 'Build a small retrieval-augmented system: chunk documents, embed them, search, and answer with citations or abstain.'
 stage: ml-engineer
-order: 80
+order: 90
 level: advanced
-duration: 30
+duration: 35
 objectives:
   - Chunk documents and explain the size trade-off
   - Embed chunks and run a similarity search
@@ -23,6 +23,8 @@ sources:
     url: https://owasp.org/www-project-top-10-for-large-language-model-applications/
 status: draft
 ---
+
+TODO(owner): RAG appears in 11 of 28 ML Engineer postings (#118).
 
 ## Warm-up
 

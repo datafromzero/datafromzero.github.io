@@ -3,7 +3,7 @@ id: data-engineer-orchestration-with-airflow
 title: Scheduling a pipeline with Airflow
 description: Express a pipeline as an Airflow DAG with tasks, dependencies, a schedule and retries.
 stage: data-engineer
-order: 80
+order: 70
 level: advanced
 duration: 30
 objectives:
@@ -11,6 +11,7 @@ objectives:
   - Set a schedule with cron or an interval
   - Configure retries and alerts
   - Read a task log to find a failure
+  - Say how Dagster describes the same job as assets
 prerequisites:
   - data-engineer-pipeline-as-testable-code
 datasets:
@@ -23,6 +24,8 @@ sources:
     url: https://airflow.apache.org/docs/apache-airflow/stable/tutorial/index.html
 status: draft
 ---
+
+TODO(owner): Airflow appears in 10 of 27 Data Engineer postings and Dagster in 3 (#118): a Dagster paragraph, not a second tool.
 
 ## Warm-up
 

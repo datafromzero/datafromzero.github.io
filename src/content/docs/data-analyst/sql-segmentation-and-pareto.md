@@ -3,7 +3,7 @@ id: data-analyst-sql-segmentation-and-pareto
 title: Segments, Pareto and RFM in SQL
 description: 'Segment customers and products with window functions: cumulative share, the Pareto cut and recency-frequency-value groups.'
 stage: data-analyst
-order: 20
+order: 30
 level: advanced
 duration: 30
 objectives:
@@ -15,6 +15,7 @@ prerequisites:
   - data-analyst-the-analysts-loop
   - sql-rank-top-n
   - sql-conditional-aggregation
+  - data-analyst-querying-a-cloud-warehouse
 datasets:
   - cafe-sales
 reviewed: 2026-11-16
@@ -25,6 +26,8 @@ sources:
     url: https://datalemur.com/blog/sql-interview-patterns
 status: draft
 ---
+
+TODO(owner): SQL appears in 23 of 25 Data Analyst postings and is required in 19 (#118). Owner decision 2026-11-23: run the examples in the BigQuery sandbox, with a cost line.
 
 ## Warm-up
 

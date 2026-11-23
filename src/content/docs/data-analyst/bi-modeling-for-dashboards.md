@@ -3,7 +3,7 @@ id: data-analyst-bi-modeling-for-dashboards
 title: 'The model behind a dashboard: relationships, measures and filters'
 description: Connect a fact table to dimensions with relationships, tell measures from columns, and avoid double counting through filters.
 stage: data-analyst
-order: 70
+order: 90
 level: advanced
 duration: 30
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/
 status: draft
 ---
+
+TODO(owner): A BI tool is named in 22 of 25 Data Analyst postings (#118).
 
 ## Warm-up
 

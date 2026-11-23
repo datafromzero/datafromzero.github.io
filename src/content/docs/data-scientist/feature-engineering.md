@@ -3,7 +3,7 @@ id: data-scientist-feature-engineering
 title: Feature engineering
 description: 'Turn raw columns into model inputs: imputation, encoding, transforms and date features, without leaking the answer.'
 stage: data-scientist
-order: 70
+order: 90
 level: intermediate
 duration: 30
 objectives:
@@ -27,6 +27,8 @@ sources:
     url: https://pandas.pydata.org/docs/user_guide/reshaping.html
 status: draft
 ---
+
+TODO(owner): Mapped Should in #118.
 
 ## Warm-up
 

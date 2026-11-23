@@ -1,10 +1,10 @@
 ---
 id: data-engineer-logical-to-physical-design
-title: 'From a logical model to physical tables'
+title: From a logical model to physical tables
 short_title: Logical to physical
 description: Turn a logical model into physical tables, choosing how to store subtypes, weak entities and composite keys, and which types and indexes to declare.
 stage: data-engineer
-order: 135
+order: 120
 level: advanced
 duration: 35
 objectives:
@@ -29,6 +29,8 @@ status: draft
 ---
 
 TODO(owner): stub from research issue #107 (owner decision, 2026-11-21: the deep modeling material goes to the Data Engineer track, SPEC D53). It follows the SQL lesson *Designing tables: a workflow* and comes before *Dimensional models and slowly changing dimensions*. Sources are placeholders until the writer opens the pages that carry each claim.
+
+TODO(owner): Owner decision 2026-11-21 (D53). Modeling appears in 20 of 27 Data Engineer postings (#118).
 
 ## Warm-up
 

@@ -95,6 +95,12 @@ match the homepage and the career quiz. The eleven draft lessons were folded in;
 | `analytics-engineer-metrics-and-kpi-dictionary` | `data-analyst-metrics-and-kpi-dictionary` (not a duplicate of `core-defining-metrics`) |
 | `analytics-engineer-analytics-platform-capstone` | `data-engineer-analytics-platform-capstone`, a second Data Engineer project beside the pipeline design capstone |
 
+Later change (2026-11-23, `08-track-lists.md`): four of the Data Engineer lessons above were merged into others, so
+their ids no longer exist. `data-engineer-staging-intermediate-marts` is part of `data-engineer-dbt-project-and-first-model`,
+`data-engineer-jinja-and-macros` of `data-engineer-materializations-and-incremental-models`,
+`data-engineer-etl-elt-and-layers` of `data-engineer-role-and-lifecycle`, and `data-engineer-streaming-concepts` of
+`data-engineer-spark-distributed-processing`.
+
 - **Counts.** 159 lessons in 8 stages: Excel 22, SQL 30, Python 25, core 25, Data Analyst 13, Data Engineer 20,
   Data Scientist 12, ML Engineer 12. Seven stretch lessons remain (152 without them).
 - **Data Engineer order.** The Python pipeline lessons (10 to 90), then the dbt block (100 to 160), then Spark and

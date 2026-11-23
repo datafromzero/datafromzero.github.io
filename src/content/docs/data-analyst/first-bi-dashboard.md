@@ -1,15 +1,16 @@
 ---
 id: data-analyst-first-bi-dashboard
 title: Build and publish your first dashboard
-description: Build the designed dashboard in Power BI Desktop or Looker Studio, publish it, and write the README a non-technical reader can follow.
+description: Build a dashboard from a design and a model, publish it on Tableau Public and write a README. A short Power BI box shows the same steps.
 stage: data-analyst
-order: 80
+order: 100
 level: intermediate
-duration: 30
+duration: 35
 objectives:
-  - Connect a BI tool to a data file or database
+  - Connect Tableau Public to a data file
   - Build the dashboard from the design and the model
-  - Publish it so a non-technical reader can open it
+  - Publish it on Tableau Public so a non-technical reader can open it
+  - Find the same steps in Power BI (a short box in the lesson)
   - 'Write a short README: question, data, findings, limits'
 prerequisites:
   - data-analyst-bi-modeling-for-dashboards
@@ -25,6 +26,8 @@ sources:
     url: https://www.datacamp.com/blog/data-analytics-projects-all-levels
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: Tableau Public is the default BI tool and every BI lesson has a short Power BI box. Evidence from #118: Tableau named in 13 of 25 postings, Power BI in 12; a portfolio is asked for in 8 of 25.
 
 ## Warm-up
 

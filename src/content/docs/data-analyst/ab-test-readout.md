@@ -3,7 +3,7 @@ id: data-analyst-ab-test-readout
 title: Reading an A/B test result end to end
 description: 'Analyze a finished experiment in Python: sanity checks, the effect with an interval, guardrails and a ship or no-ship memo.'
 stage: data-analyst
-order: 100
+order: 60
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://docs.scipy.org/doc/scipy/reference/stats.html
 status: draft
 ---
+
+TODO(owner): A/B testing appears in 1 of 25 Data Analyst postings (#118): reading depth only, gap G9 (decision memos).
 
 ## Warm-up
 

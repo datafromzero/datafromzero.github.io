@@ -3,7 +3,7 @@ id: data-scientist-time-series-forecasting-basics
 title: Forecasting basics with honest backtesting
 description: Forecast with trend, seasonality and lag features, and test the forecast the way it will be used, by time.
 stage: data-scientist
-order: 100
+order: 120
 level: advanced
 duration: 30
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://pandas.pydata.org/docs/user_guide/timeseries.html
 status: draft
 ---
+
+TODO(owner): Gap G5 (honest evaluation) in #118.
 
 ## Warm-up
 
