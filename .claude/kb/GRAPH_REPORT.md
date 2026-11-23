@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1481 nodes, 1689 edges, 197 communities (642 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 41, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 483, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 293, template 2, token 12.
-- Edges: defines 293, imports 50, mentions 896, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- 1489 nodes, 1690 edges, 197 communities (649 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 42, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 490, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 293, template 2, token 12.
+- Edges: defines 293, imports 50, mentions 897, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -25,8 +25,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
-| 13 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
-| 14 | `scripts/sync-research-issues.mjs` | script | 25 | scripts/sync-research-issues.mjs:1 |
+| 13 | `scripts/sync-research-issues.mjs` | script | 26 | scripts/sync-research-issues.mjs:1 |
+| 14 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
 | 15 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
 
 ## Communities
@@ -40,7 +40,7 @@ Label propagation; each community is named by its top-degree node.
 - **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C6 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
 - **C7 site.ts** (15): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C8 sync-research-issues.mjs** (12): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/22-speed-benchmark-data-from-zero-vs-learning-sites-mobile-lab.md
+- **C8 sync-research-issues.mjs** (13): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md
 - **C9 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 - **C10 changelog.ts** (10): src/lib/changelog.ts; src/lib/changelog.ts#ChangelogEntry; src/lib/changelog.ts#ChangelogProblem; src/lib/changelog.ts#LessonRef; src/lib/changelog.ts#dayLabel; src/lib/changelog.ts#groupByDay
 - **C11 graph.ts** (10): src/lib/graph.ts; src/lib/graph.ts#GraphNode; src/lib/graph.ts#NodeKind; src/lib/graph.ts#checkGraph; src/lib/graph.ts#cycleErrors; src/lib/graph.ts#findCycles
