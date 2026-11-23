@@ -3,13 +3,15 @@
 // (SPEC §3.1): the roadmap map, the career quiz (src/lib/career-quiz.ts), the skills chart of /choose-your-track/ (src/data/track-skills.ts), the citation from CITATION.cff,
 // CHANGELOG.md, LICENSE, LICENSE-CONTENT, and the analytics section of the privacy page. Rendered after the
 // page's own Markdown. No client JS, except the career quiz's one small script (SPEC D33).
-import { createMarkdownProcessor } from '@astrojs/markdown-remark';
+import { getCollection } from 'astro:content';
 import RoadmapMap from './RoadmapMap.astro';
 import CareerQuiz from './CareerQuiz.astro';
 import TrackChooser from './TrackChooser.astro';
 import CookieSettings from './CookieSettings.astro';
 import { loadCitation } from '../../lib/citation.ts';
 import { readRepoFile } from '../../lib/repo-files.ts';
+import { groupByMonth, monthLabel, parseChangelog, summaryHtml, type LessonRef } from '../../lib/changelog.ts';
+import { classify } from '../../lib/content-schemas.ts';
 import { ANALYTICS_ENABLED, GA_RETENTION, GITHUB_BRANCH, GITHUB_REPO } from '../../site';
 
 interface Props {
@@ -19,10 +21,19 @@ interface Props {
 const { id, lang } = Astro.props;
 const repo = `https://github.com/${GITHUB_REPO}`;
 
-let changelogHtml = '';
+// "What's new" (SPEC D54): only the bold summaries of CHANGELOG.md, by month; the detail stays in the file on GitHub.
+let changelog: { month: string; label: string; entries: { date: string; html: string }[] }[] = [];
 if (id === 'changelog') {
-	const md = readRepoFile('CHANGELOG.md').replace(/^# .*\n/, ''); // the page title is the h1
-	changelogHtml = (await (await createMarkdownProcessor()).render(md)).code;
+	const { entries, problems } = parseChangelog(readRepoFile('CHANGELOG.md'));
+	if (problems.length) throw new Error(`CHANGELOG.md: ${problems.map((p) => `line ${p.line}: ${p.message}`).join('; ')}`);
+	const lessons: LessonRef[] = (await getCollection('docs'))
+		.filter((d) => classify(d.id).kind === 'lesson' && classify(d.id).locale === null && (d.data as { status?: string }).status === 'published')
+		.map((d) => ({ title: d.data.title, href: `/${classify(d.id).path}/` }));
+	changelog = groupByMonth(entries).map((m) => ({
+		month: m.month,
+		label: monthLabel(m.month),
+		entries: m.entries.map((e) => ({ date: e.date, html: summaryHtml(e.summary, lessons) })),
+	}));
 }
 const cite = id === 'cite' ? loadCitation() : null;
 const mit = id === 'license' ? readRepoFile('LICENSE').trim() : '';
@@ -50,7 +61,26 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 	</section>
 )}
 
-{id === 'changelog' && <section class="extras changelog" set:html={changelogHtml} />}
+{id === 'changelog' && (
+	<section class="extras news-list">
+		{changelog.map((m) => (
+			<>
+				<h2 id={m.month}>{m.label}</h2>
+				<ul>
+					{m.entries.map((e) => (
+						<li>
+							<time datetime={e.date}>{e.date.slice(5).replace('-', '/')}</time>
+							<span set:html={e.html} />
+						</li>
+					))}
+				</ul>
+			</>
+		))}
+		<p class="news-list-more">
+			The full detail of every change is in <a href={`${repo}/blob/${GITHUB_BRANCH}/CHANGELOG.md`}>CHANGELOG.md on GitHub</a>.
+		</p>
+	</section>
+)}
 
 {id === 'license' && (
 	<section class="extras">
@@ -119,8 +149,37 @@ const ccby = id === 'license' ? readRepoFile('LICENSE-CONTENT').trim() : '';
 		padding-left: 1.4em;
 		list-style: disc;
 	}
-	.changelog :global(li) {
-		margin: 0.3em 0;
+	.news-list ul {
+		list-style: none;
+		padding: 0;
+		margin: 0.6em 0 0;
+	}
+	.news-list li {
+		display: grid;
+		grid-template-columns: 3.2rem 1fr;
+		column-gap: 12px;
+		margin: 0;
+		padding: 0.45em 0;
+		border-top: 1px solid var(--sl-color-hairline);
+		line-height: 1.5;
+	}
+	.news-list time {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--sl-color-gray-3);
+		padding-top: 0.2em;
+	}
+	.news-list li :global(code) {
+		overflow-wrap: anywhere;
+	}
+	.news-list-more {
+		margin-top: 2em;
+		color: var(--sl-color-gray-2);
+	}
+	@media print {
+		.news-list li {
+			break-inside: avoid;
+		}
 	}
 	.extras :global(a) {
 		text-decoration: underline;

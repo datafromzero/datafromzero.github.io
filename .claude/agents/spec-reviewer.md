@@ -17,6 +17,7 @@ Check, in this order:
    from SPEC §15.
 2. SPEC.md sections touched by the diff (open only those sections; use `node scripts/kb.mjs query` to find them).
    A CONTRACT change must also update SPEC.md (decision row) and CHANGELOG.md in the same change.
+   Every CHANGELOG.md bullet starts with a bold, dated, learner-facing summary (`- **2026-11-23: What changed.** Detail.`, SPEC D54).
 3. For visual work: `design/README.md` tokens and the approved design (port, don't redesign).
 
 Output (max ~20 lines): `VERDICT: approve | changes needed`, then numbered findings as
