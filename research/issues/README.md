@@ -29,3 +29,4 @@ Copies of the GitHub issues labelled `research`, refreshed by `npm run research:
 | [#107](107-module-3-knowledge-pack-domain-and-data-modeling-design-work.md) | open | Research: Module 3 knowledge pack — domain and data modeling (design workflow, ER diagrams, UML, multiplicity) |
 | [#113](113-certifications-and-official-courses-for-working-with-ai-assi.md) | open | Research: certifications and official courses for working with AI assistants — what exists, and whether Part 6 should mention them |
 | [#114](114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md) | open | Research: a prompt recipe for data work — vendor guidance, evidence, and limits (follow-up to #113) |
+| [#118](118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md) | open | Research: what employers will hire for in 2026 and beyond — demand, entry-level skills, AI changes, proof, tools and competitors per data career, with mapping to the four tracks |

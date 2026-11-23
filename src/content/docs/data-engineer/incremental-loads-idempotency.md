@@ -3,7 +3,7 @@ id: data-engineer-incremental-loads-idempotency
 title: Incremental loads and idempotent reruns
 description: Load only new data with a watermark, and design every step so running it twice gives the same table.
 stage: data-engineer
-order: 30
+order: 40
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://duckdb.org/docs/stable/sql/statements/transactions
 status: draft
 ---
+
+TODO(owner): Mapped Must in #118.
 
 ## Warm-up
 

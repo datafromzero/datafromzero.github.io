@@ -3,7 +3,7 @@ id: data-analyst-case-interview-practice
 title: 'Analytics case questions: define, diagnose, design, judge'
 description: 'Practice the four case families out loud: define a metric, diagnose a drop, design a test and judge a trade-off.'
 stage: data-analyst
-order: 110
+order: 140
 level: advanced
 duration: 30
 objectives:
@@ -27,6 +27,8 @@ sources:
     url: https://datalemur.com/blog/sql-interview-patterns
 status: draft
 ---
+
+TODO(owner): Gaps G4 and G7 (framing a vague request; interview-shaped practice with a published rubric) in #118.
 
 ## Warm-up
 

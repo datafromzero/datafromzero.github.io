@@ -3,7 +3,7 @@ id: data-scientist-logistic-regression-in-practice
 title: 'Logistic regression: predicting yes or no'
 description: Predict a yes-or-no outcome, read coefficients as odds, and choose a probability threshold from the cost of errors.
 stage: data-scientist
-order: 20
+order: 40
 level: intermediate
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://scikit-learn.org/stable/modules/model_evaluation.html
 status: draft
 ---
+
+TODO(owner): Classical core in #118.
 
 ## Warm-up
 

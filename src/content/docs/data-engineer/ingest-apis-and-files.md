@@ -25,6 +25,8 @@ sources:
 status: draft
 ---
 
+TODO(owner): Gap G6 (dirty-data practice) in #118.
+
 ## Warm-up
 
 Draft: the owner writes this section.

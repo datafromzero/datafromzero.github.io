@@ -3,7 +3,7 @@ id: ml-engineer-tuning-and-class-imbalance
 title: Tuning hyperparameters and handling imbalanced classes
 description: Search settings with cross-validation, handle rare positive classes with weights and thresholds, and avoid tuning on the test set.
 stage: ml-engineer
-order: 30
+order: 40
 level: advanced
 duration: 30
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://scikit-learn.org/stable/modules/model_evaluation.html
 status: draft
 ---
+
+TODO(owner): Mapped Should in #118.
 
 ## Warm-up
 

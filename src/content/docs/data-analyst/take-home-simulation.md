@@ -1,20 +1,21 @@
 ---
 id: data-analyst-take-home-simulation
-title: A take-home simulation, graded like a hiring manager
-description: Scope a take-home to its time budget, profile the data first, answer the question asked and finish with a recommendation.
+title: 'Simulation: a take-home graded like a hiring manager'
+description: Pass timed SQL drills at a published bar and a dirty-data take-home, scored by the rubric printed in the lesson.
 stage: data-analyst
-order: 120
+order: 160
 level: advanced
-duration: 30
+duration: 90
 objectives:
+  - Answer timed SQL drills at the bar of a published hiring screen
   - Scope a take-home to a stated time budget
   - Profile and log data-quality problems before analyzing
-  - Answer the question asked and validate the result
   - End with a recommendation and next steps
-  - Review your own submission against the grading lens
+  - Score your own submission against the printed rubric
 prerequisites:
   - data-analyst-messy-data-cleaning-story
   - data-analyst-case-interview-practice
+  - data-analyst-ai-assisted-analysis
 datasets:
   - messy-orders-export
 reviewed: 2026-11-16
@@ -25,6 +26,8 @@ sources:
     url: https://www.sqlpad.io/tutorial/data-analyst-sql-take-home-raw-csv-business-recommendation/
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: this is the track's 90-minute simulation with the rubric printed in the lesson, and the timed SQL drills at GitLab's published bar go inside it. Evidence from #118: finding F14, gap G7 (interview-shaped practice).
 
 ## Warm-up
 

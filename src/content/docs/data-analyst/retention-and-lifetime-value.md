@@ -3,7 +3,7 @@ id: data-analyst-retention-and-lifetime-value
 title: Reading retention, churn and lifetime value
 description: Read a retention curve, separate age effects from calendar effects, and compute churn and lifetime value with stated assumptions.
 stage: data-analyst
-order: 40
+order: 50
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://datalemur.com/blog/sql-interview-patterns
 status: draft
 ---
+
+TODO(owner): Mapped Should in #118 (track mapping).
 
 ## Warm-up
 

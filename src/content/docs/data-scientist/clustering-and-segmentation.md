@@ -3,9 +3,9 @@ id: data-scientist-clustering-and-segmentation
 title: 'Clustering: finding groups without labels'
 description: Group similar customers with k-means, choose the number of groups sensibly, and describe each cluster in plain words.
 stage: data-scientist
-order: 80
+order: 100
 level: intermediate
-duration: 30
+duration: 25
 objectives:
   - Explain how k-means assigns and updates clusters
   - Scale features before clustering and explain why
@@ -25,6 +25,8 @@ sources:
     url: https://scikit-learn.org/stable/modules/preprocessing.html
 status: draft
 ---
+
+TODO(owner): Shortened 2026-11-23: mapped Could in #118, so keep it small. Keep the choice of k and what clusters cannot prove.
 
 ## Warm-up
 

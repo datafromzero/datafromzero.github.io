@@ -3,7 +3,7 @@ id: data-scientist-regularization
 title: 'Regularization: keeping a model simple on purpose'
 description: Shrink coefficients with L1 and L2 penalties and choose the strength with cross-validation.
 stage: data-scientist
-order: 40
+order: 60
 level: intermediate
 duration: 25
 objectives:

@@ -3,7 +3,7 @@ id: data-engineer-file-formats-and-partitioning
 title: File formats and partitioning
 description: Choose between CSV, JSON and Parquet, understand row versus columnar storage and partition data so queries read less.
 stage: data-engineer
-order: 40
+order: 30
 level: intermediate
 duration: 25
 objectives:
@@ -26,6 +26,8 @@ sources:
     url: https://iceberg.apache.org/docs/latest/
 status: draft
 ---
+
+TODO(owner): Shortened 2026-11-23: file formats appear in 3 of 27 Data Engineer postings (#118), so keep literacy only: choose Parquet over CSV and avoid the small-files trap.
 
 ## Warm-up
 

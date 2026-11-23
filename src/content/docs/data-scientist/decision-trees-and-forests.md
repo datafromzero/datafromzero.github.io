@@ -3,7 +3,7 @@ id: data-scientist-decision-trees-and-forests
 title: Decision trees and random forests
 description: Grow a decision tree by repeated splits, see why one tree overfits, and average many trees in a random forest.
 stage: data-scientist
-order: 50
+order: 70
 level: intermediate
 duration: 30
 objectives:

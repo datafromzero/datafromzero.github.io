@@ -3,7 +3,7 @@ id: data-analyst-dashboard-design
 title: Designing a dashboard people will use
 description: Choose the few numbers that matter, lay them out on one screen, label freshness and write one headline per chart.
 stage: data-analyst
-order: 60
+order: 80
 level: intermediate
 duration: 25
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://www.data-to-viz.com/
 status: draft
 ---
+
+TODO(owner): Dashboard duties appear in 18 of 25 Data Analyst postings (#118).
 
 ## Warm-up
 

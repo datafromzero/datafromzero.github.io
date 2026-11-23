@@ -1,20 +1,23 @@
 ---
 id: data-engineer-analytics-platform-capstone
-title: 'A dbt capstone: one serious analytics project'
-description: Design a layered dbt project on warehouse data with tests, docs, CI and a README that defends grain and keys.
+title: 'Capstone: a pipeline repo someone else can run'
+description: Ship ingestion, dbt models, tests, CI, a backfill story and a cost note in one repository, with a graded AI verification log.
 stage: data-engineer
-order: 300
+order: 180
 level: advanced
-duration: 30
+duration: 180
 objectives:
-  - Choose a public dataset and a business domain and state the grain of each mart
-  - Plan layers, tests, documentation and CI for the project
-  - Write a README that defends the grain and key choices
+  - Ship ingestion, dbt models, tests and CI as one repository another person can run
+  - State the grain of each mart and defend the key choices in the README
+  - Write a backfill story and a cost note
   - Prove the models serve real questions with a small BI or SQL layer
+  - 'Hand in an AI verification log: accept, revise or reject, and the check that decided each'
 prerequisites:
   - data-engineer-dimensional-models-and-scd
   - data-engineer-ci-and-deployment-for-dbt
   - data-engineer-backfills-and-failure-recovery
+  - data-engineer-cloud-warehouse-in-practice
+  - data-engineer-pipeline-capstone-design
 datasets:
   - cafe-sales
 reviewed: 2026-11-16
@@ -27,6 +30,8 @@ sources:
     url: https://docs.getdbt.com/docs/deploy/continuous-integration
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: this is the track capstone (180 minutes), grading an AI verification log in the format of the core capstone. Evidence from #118: finding F13; a portfolio is asked for in 3 to 4 of 27 Data Engineer postings; gap G2.
 
 ## Warm-up
 

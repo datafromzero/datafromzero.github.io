@@ -3,9 +3,9 @@ id: ml-engineer-serving-a-model-api
 title: Serving a model behind an API
 description: Wrap a model in an API with input validation and a health check, package it in a container and deploy it to a reachable URL.
 stage: ml-engineer
-order: 110
+order: 130
 level: advanced
-duration: 30
+duration: 35
 objectives:
   - Write an endpoint that validates input and returns a prediction
   - Add a health check
@@ -27,6 +27,8 @@ sources:
     url: https://scikit-learn.org/stable/model_persistence.html
 status: draft
 ---
+
+TODO(owner): Docker appears in 9 of 28 ML Engineer postings; SFIA MLNG level 3 (#118).
 
 ## Warm-up
 

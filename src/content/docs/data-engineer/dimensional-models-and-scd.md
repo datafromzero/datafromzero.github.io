@@ -3,7 +3,7 @@ id: data-engineer-dimensional-models-and-scd
 title: Dimensional models and slowly changing dimensions
 description: Build facts and dimensions with surrogate keys, and track attribute history with Type 1 and Type 2 snapshots.
 stage: data-engineer
-order: 140
+order: 130
 level: advanced
 duration: 30
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Create a snapshot that records history
   - Query the dimension as of a past date
 prerequisites:
-  - data-engineer-staging-intermediate-marts
+  - data-engineer-dbt-project-and-first-model
   - core-designing-a-star-schema
 datasets:
   - cafe-sales
@@ -24,6 +24,8 @@ sources:
     url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/
 status: draft
 ---
+
+TODO(owner): Modeling appears in 20 of 27 Data Engineer postings (#118).
 
 ## Warm-up
 

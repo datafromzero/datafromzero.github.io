@@ -3,7 +3,7 @@ id: data-engineer-backfills-and-failure-recovery
 title: Backfills, reruns and recovering from failure
 description: Rerun history safely with catchup and backfill, recover from a failed run without duplicates and write a blameless incident note.
 stage: data-engineer
-order: 90
+order: 80
 level: advanced
 duration: 30
 objectives:
@@ -26,6 +26,8 @@ sources:
     url: https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html
 status: draft
 ---
+
+TODO(owner): DDaT "repeatable, reliable" duty in #118; the incident note is the decision-memo practice of gap G9.
 
 ## Warm-up
 
