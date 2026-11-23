@@ -10,6 +10,7 @@ const steps = [
 	['markdown style (markdownlint)', 'npm', ['run', '--silent', 'lint:md']],
 	['knowledge graph is current', 'npm', ['run', '--silent', 'check:kb']],
 	['lesson rules from the mistakes log', 'npm', ['run', '--silent', 'check:lessons']],
+	['lesson figures match their generators and are centered in their viewBox', 'npm', ['run', '--silent', 'check:figures']],
 	['build + schema + internal links', 'npm', ['run', '--silent', 'build']],
 	['no owner placeholders on deployed pages', 'npm', ['run', '--silent', 'check:placeholders']],
 	['prerequisite graph', 'npm', ['run', '--silent', 'check:graph']],
