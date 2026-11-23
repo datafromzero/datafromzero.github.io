@@ -3,7 +3,7 @@ id: ml-engineer-text-embeddings-and-transformers
 title: 'Text as numbers: tokens, embeddings and transformers'
 description: Turn text into tokens and embeddings, compare meaning with cosine similarity and read what attention does in plain language.
 stage: ml-engineer
-order: 60
+order: 70
 level: advanced
 duration: 30
 objectives:
@@ -24,6 +24,8 @@ sources:
     url: https://arxiv.org/abs/1706.03762
 status: draft
 ---
+
+TODO(owner): Embeddings appear in 8 of 28 ML Engineer postings (#118).
 
 ## Warm-up
 

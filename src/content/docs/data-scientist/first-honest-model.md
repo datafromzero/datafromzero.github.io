@@ -3,7 +3,7 @@ id: data-scientist-first-honest-model
 title: Your first honest model with scikit-learn
 description: Fit a linear model with scikit-learn on a held-out split and compare it with the baseline, using the fit and predict grammar.
 stage: data-scientist
-order: 10
+order: 20
 level: intermediate
 duration: 30
 objectives:
@@ -14,6 +14,7 @@ objectives:
 prerequisites:
   - core-metrics-and-error-costs
   - core-linear-regression-basics
+  - data-scientist-exploring-before-modeling
 datasets:
   - app-events
 reviewed: 2026-11-16
@@ -26,6 +27,8 @@ sources:
     url: https://developers.google.com/machine-learning/crash-course
 status: draft
 ---
+
+TODO(owner): Gap G5 (honest evaluation) in #118.
 
 ## Warm-up
 

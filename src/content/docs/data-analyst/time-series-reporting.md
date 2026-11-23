@@ -3,7 +3,7 @@ id: data-analyst-time-series-reporting
 title: Period-over-period reporting without fooling yourself
 description: Report week-over-week, month-over-month and year-over-year changes with the right comparison and incomplete periods flagged.
 stage: data-analyst
-order: 30
+order: 40
 level: advanced
 duration: 30
 objectives:
@@ -26,6 +26,8 @@ sources:
     url: https://pandas.pydata.org/docs/user_guide/timeseries.html
 status: draft
 ---
+
+TODO(owner): Reporting duties appear in 18 of 25 Data Analyst postings (#118).
 
 ## Warm-up
 

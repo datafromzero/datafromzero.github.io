@@ -3,7 +3,7 @@ id: data-scientist-gradient-boosting
 title: Gradient boosting
 description: Build a strong model from many small trees fitted in sequence, and tune the few settings that matter.
 stage: data-scientist
-order: 60
+order: 80
 level: advanced
 duration: 30
 objectives:

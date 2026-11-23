@@ -24,7 +24,7 @@ export const ROADMAP_STAGES: readonly StageDef[] = [
 	{ id: 'data-analyst', title: 'Data Analyst', code: 'DA', branch: true },
 	{ id: 'data-engineer', title: 'Data Engineer', code: 'DE', branch: true },
 	{ id: 'data-scientist', title: 'Data Scientist', code: 'DS', branch: true },
-	{ id: 'ml-engineer', title: 'ML / AI Engineer', code: 'ML', branch: true },
+	{ id: 'ml-engineer', title: 'ML / AI Engineer', code: 'MLE', branch: true },
 ];
 
 /**
@@ -36,6 +36,34 @@ export const CHEATSHEETS: Readonly<Record<string, { label: string; href: string 
 	excel: { label: 'Excel in a nutshell', href: '/excel/cheatsheet/' },
 	python: { label: 'Python in a nutshell', href: '/python/cheatsheet/' },
 };
+
+/**
+ * Optional deep dives (SPEC D55): lessons of a stage whose `order` is at least `fromOrder` form a separate, labeled
+ * group after the main path. No schema field: the order band is the marker. The sidebar, /start/ and the lesson
+ * header read this one constant; no main-path lesson may depend on a deep-dive lesson (`npm run check:graph`).
+ */
+export interface DeepDiveDef {
+	fromOrder: number;
+	title: string;
+	note: string;
+}
+
+export const DEEP_DIVES: Readonly<Record<string, DeepDiveDef>> = {
+	'data-engineer': { fromOrder: 200, title: 'Deep dive: database internals', note: 'Optional, not required for a first job.' },
+	'ml-engineer': { fromOrder: 200, title: 'Deep dive: deep learning and NLP', note: 'Optional, not required for a first job.' },
+};
+
+/** True when a lesson of `stage` with this `order` sits in the stage's deep dive. */
+export function isDeepDive(stage: string, order: number): boolean {
+	const d = DEEP_DIVES[stage];
+	return d !== undefined && order >= d.fromOrder;
+}
+
+/** The label shown for a deep dive: its title, then the note. */
+export function deepDiveLabel(stage: string): string | undefined {
+	const d = DEEP_DIVES[stage];
+	return d && `${d.title}. ${d.note}`;
+}
 
 /** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8`; `undefined` for an unknown stage. */
 export function lessonCode(stage: string, order: number): string | undefined {
@@ -65,6 +93,8 @@ export interface RoadmapLesson {
 	/** One-line name for lists (D47): the short title when there is one, else the title. */
 	label: string;
 	href: string;
+	/** True for a lesson in the stage's optional deep dive (`DEEP_DIVES`). */
+	deepDive: boolean;
 	/** Codes of the prerequisites that are on the roadmap (other stages included), in the frontmatter order. */
 	needs: string[];
 }
@@ -77,7 +107,10 @@ export interface RoadmapStage {
 	/** Landing page, only when it exists (links must not break). */
 	href: string | null;
 	branch: boolean;
+	/** All lessons in order, main path first, then the deep dive (`deepDive: true`) when the stage has one. */
 	lessons: RoadmapLesson[];
+	/** The stage's deep-dive label, when it has one. */
+	deepDiveLabel: string | null;
 }
 
 /**
@@ -92,6 +125,7 @@ export function groupRoadmap(lessons: MapLesson[], landings: ReadonlySet<string>
 		number: String(i + 1).padStart(2, '0'),
 		href: landings.has(s.id) ? `/${s.id}/` : null,
 		branch: s.branch,
+		deepDiveLabel: deepDiveLabel(s.id) ?? null,
 		lessons: lessons
 			.filter((l) => l.stage === s.id)
 			.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
@@ -101,6 +135,7 @@ export function groupRoadmap(lessons: MapLesson[], landings: ReadonlySet<string>
 				title: l.title,
 				label: l.short_title ?? l.title,
 				href: l.href,
+				deepDive: isDeepDive(l.stage, l.order),
 				needs: l.prerequisites.filter((p) => codeOf.has(p)).map((p) => codeOf.get(p)!),
 			})),
 	}));

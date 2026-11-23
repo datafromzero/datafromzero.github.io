@@ -3,9 +3,9 @@ id: data-analyst-metrics-and-kpi-dictionary
 title: A KPI dictionary and a metrics layer
 description: Define each KPI once with an owner, a definition and caveats, and see how a semantic layer serves it to every tool.
 stage: data-analyst
-order: 90
+order: 110
 level: advanced
-duration: 25
+duration: 30
 objectives:
   - 'Write a KPI entry: definition, grain, owner and caveats'
   - Explain why defining a metric once avoids conflicting numbers
@@ -24,6 +24,8 @@ sources:
     url: https://experimentguide.com/
 status: draft
 ---
+
+TODO(owner): Gap G3 (metric definition) in #118.
 
 ## Warm-up
 

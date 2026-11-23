@@ -19,7 +19,7 @@ describe('lessonCode', () => {
 		assert.equal(lessonCode('excel', 220), 'E22');
 		assert.equal(lessonCode('sql', 80), 'S8');
 		assert.equal(lessonCode('data-analyst', 30), 'DA3');
-		assert.equal(lessonCode('ml-engineer', 120), 'ML12');
+		assert.equal(lessonCode('ml-engineer', 120), 'MLE12');
 	});
 	test('an inserted lesson keeps its neighbors codes', () => {
 		assert.equal(lessonCode('excel', 25), 'E2.5');

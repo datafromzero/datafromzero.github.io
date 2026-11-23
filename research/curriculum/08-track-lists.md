@@ -129,6 +129,25 @@ Ten lessons, 280 min, slugs and orders 200–290 unchanged: `query-plans-and-ope
 2. **Optional field (MINOR §5 CONTRACT change).** An optional `part`/`module` field; D49 already has a pending `part` TODO for the core, so one field could serve both later.
 3. **Separate stage:** changes the stage enum, folder and URLs. Not recommended.
 
+## Deep dive: deep learning and NLP (optional, after ML; added by the owner, 2026-11-23)
+
+Eight lessons, 255 min, orders 200 to 270, not counted in the 705-minute main path (16 lessons). The owner found deep learning and NLP thin in the main path. Evidence from #118: PyTorch in 16 of 28 ML Engineer postings, a training duty in 16 of 28, fine-tuning in 7 of 28, embeddings in 8 of 28. Label: "Deep dive: deep learning and NLP. Optional, not required for a first job." Same mechanism as the database deep dive (`DEEP_DIVES`, order band, no schema change). Prerequisites point only at ML main-path or DS lessons.
+
+| Order | Lesson | Min | Prerequisites |
+|---:|---|---:|---|
+| 200 | Convolutional networks and images (`cnns-and-images`) | 35 | neural networks (50), training practice (60) |
+| 210 | Attention and the transformer, built from scratch (`attention-and-transformers-from-scratch`) | 35 | text as numbers (70), neural networks (50) |
+| 220 | Tokenization: how text becomes tokens (`tokenization`) | 30 | text as numbers (70) |
+| 230 | Classic NLP: TF-IDF, text classification, named entities and topics (`classic-nlp`) | 30 | text as numbers (70), DS logistic regression |
+| 240 | Fine-tuning a small model with LoRA, for real (`fine-tuning-a-small-model`) | 35 | fine-tune or not (110), training practice (60), text as numbers (70) |
+| 250 | Embeddings and semantic search in depth (`embeddings-and-semantic-search-in-depth`) | 30 | retrieval pipeline (90), text as numbers (70) |
+| 260 | Evaluating generative models (`evaluating-generative-models`) | 30 | LLM and RAG evaluation (100), LLM APIs (80) |
+| 270 | GPUs on free tiers: Colab and Kaggle in practice (`gpus-on-free-tiers`) | 30 | training practice (60), neural networks (50) |
+
+Computer-vision lessons show real sample images in color where that helps (inputs, learned filters, feature maps, augmentations, right and wrong predictions) from an openly licensed dataset whose license is checked and cited (for example Oxford-IIIT Pet, CC BY-SA 4.0), as static optimized images (WebP or AVIF, lazy-loaded, width and height set, alt text) made at build time or by a script from real model runs; no JavaScript.
+
+**Lesson codes:** the ML Engineer prefix is MLE (MLE1 to MLE16, deep dive MLE20 to MLE27), not ML (owner, 2026-11-23). The counts that the files produce: Data Analyst 17, Data Engineer 28, Data Scientist 16, ML Engineer 24, curriculum 217 (the counts below, written before this section, say 209 and ML 16).
+
 ## SPEC and CHANGELOG changes that would follow
 
 - **Counts:** tracks go from 68 to 77: DA 13 → 17, DE 31 → 28 (18 main + 10 deep dive), DS 12 → 16, ML 12 → 16. The curriculum goes from **200 to 209** lessons in 8 stages; `v1.0.0` stays 132.

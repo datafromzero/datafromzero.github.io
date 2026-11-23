@@ -3,7 +3,7 @@ id: data-scientist-model-interpretation-and-fairness
 title: Explaining a model and checking where it fails
 description: Explain a model with permutation importance and partial dependence, and check error rates across groups.
 stage: data-scientist
-order: 90
+order: 110
 level: advanced
 duration: 30
 objectives:
@@ -11,6 +11,7 @@ objectives:
   - Draw a partial dependence plot
   - Compare error rates across groups and name a fairness risk
   - Write a short model card
+  - Complete a short governance checklist before release
 prerequisites:
   - data-scientist-gradient-boosting
 datasets:
@@ -23,6 +24,8 @@ sources:
     url: https://developers.google.com/machine-learning/crash-course
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: add a governance checklist. Evidence from #118: finding F12, gap G10 (governance basics).
 
 ## Warm-up
 

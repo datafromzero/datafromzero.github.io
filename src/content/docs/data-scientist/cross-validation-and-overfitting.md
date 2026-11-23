@@ -3,7 +3,7 @@ id: data-scientist-cross-validation-and-overfitting
 title: Overfitting and cross-validation
 description: See overfitting as a gap between training and test error, and estimate a model's performance with cross-validation.
 stage: data-scientist
-order: 30
+order: 50
 level: intermediate
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://developers.google.com/machine-learning/crash-course
 status: draft
 ---
+
+TODO(owner): DDaT junior floor and gap G5 (honest evaluation) in #118.
 
 ## Warm-up
 

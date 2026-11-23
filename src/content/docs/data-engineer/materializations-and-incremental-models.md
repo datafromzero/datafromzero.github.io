@@ -1,18 +1,19 @@
 ---
 id: data-engineer-materializations-and-incremental-models
-title: Views, tables and incremental models
-description: Choose between view, table and incremental materializations by cost and freshness, and write a safe incremental model.
+title: Materializations and macros
+description: Choose view, table or incremental with a cost line, and write one Jinja macro that several models share.
 stage: data-engineer
-order: 120
+order: 110
 level: advanced
-duration: 30
+duration: 35
 objectives:
-  - Compare view, table and ephemeral materializations
-  - Write an incremental model with a unique key
-  - Explain full-refresh and when to use it
-  - Estimate the cost trade-off of each choice
+  - Compare view, table and ephemeral materializations and choose one with a cost line
+  - Write an incremental model with a unique key and explain full-refresh
+  - Use a Jinja variable and loop in a model
+  - Write a macro and call it from several models
+  - Compile a model, read the generated SQL and say when a macro hurts readability
 prerequisites:
-  - data-engineer-staging-intermediate-marts
+  - data-engineer-dbt-project-and-first-model
   - data-engineer-incremental-loads-idempotency
   - sql-create-table-constraints
 datasets:
@@ -25,8 +26,12 @@ sources:
     url: https://docs.getdbt.com/docs/build/incremental-models
   - title: 'DuckDB documentation: CREATE VIEW statement'
     url: https://duckdb.org/docs/stable/sql/statements/create_view
+  - title: 'dbt documentation: Jinja and macros'
+    url: https://docs.getdbt.com/docs/build/jinja-macros
 status: draft
 ---
+
+TODO(owner): Merged 2026-11-23 (owner-approved): `jinja-and-macros` folded into this lesson. Gap G8 (cost lines) in #118.
 
 ## Warm-up
 

@@ -1,20 +1,23 @@
 ---
 id: data-analyst-portfolio-case-study
-title: Writing a case study a hiring manager reads in two minutes
-description: 'Package a project as a case study: business problem first, evidence, limits and one change you made beyond the brief.'
+title: 'Capstone: a dashboard project and case study'
+description: Ship a cleaning log, a dashboard, KPI entries and a case study a hiring manager reads in two minutes, with a graded AI verification log.
 stage: data-analyst
-order: 130
+order: 170
 level: intermediate
-duration: 25
+duration: 180
 objectives:
-  - Open a README with a one-sentence business problem
-  - Show results in business terms with one chart per claim
+  - Ship the cleaning log, the dashboard and the KPI entries as one project
+  - Open a README with a one-sentence business problem and one chart per claim
   - Write a limitations paragraph and a beyond-the-brief note
+  - 'Hand in an AI verification log: accept, revise or reject, and the check that decided each'
   - Check the project with the two-minute scan test
 prerequisites:
   - data-analyst-first-bi-dashboard
   - data-analyst-take-home-simulation
   - core-git-branches-and-pull-requests
+  - data-analyst-ai-assisted-analysis
+  - data-analyst-keeping-a-dashboard-right
 datasets:
   - cafe-sales
 reviewed: 2026-11-16
@@ -27,6 +30,8 @@ sources:
     url: https://www.coursera.org/professional-certificates/google-data-analytics
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: this is the track capstone (180 minutes). It grades an AI verification log in the format of the core capstone. Evidence from #118: a portfolio is asked for in 8 of 25 Data Analyst postings; gap G2.
 
 ## Warm-up
 

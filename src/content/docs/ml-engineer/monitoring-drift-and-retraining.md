@@ -3,7 +3,7 @@ id: ml-engineer-monitoring-drift-and-retraining
 title: Monitoring, drift and retraining
 description: Watch a deployed model for drift, latency and cost, and define when to retrain, roll back or stop.
 stage: ml-engineer
-order: 120
+order: 140
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://mlflow.org/docs/latest/
 status: draft
 ---
+
+TODO(owner): Monitoring appears in 9 of 28 ML Engineer postings (#118). The quality gate here is the track's second home for gap G1.
 
 ## Warm-up
 

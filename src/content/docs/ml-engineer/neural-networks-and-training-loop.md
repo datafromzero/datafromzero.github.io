@@ -3,9 +3,9 @@ id: ml-engineer-neural-networks-and-training-loop
 title: Neural networks and the training loop
 description: Build a small neural network, follow the training loop of batches, loss and learning rate, and watch it overfit.
 stage: ml-engineer
-order: 40
+order: 50
 level: advanced
-duration: 30
+duration: 35
 objectives:
   - Describe a neuron, a layer and a loss function
   - 'Explain the training loop: forward pass, loss, backward pass, update'
@@ -26,6 +26,8 @@ sources:
     url: https://developers.google.com/machine-learning/crash-course
 status: draft
 ---
+
+TODO(owner): PyTorch appears in 16 of 28 ML Engineer postings (#118).
 
 ## Warm-up
 

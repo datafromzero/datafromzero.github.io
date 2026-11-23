@@ -3,7 +3,7 @@ id: data-engineer-dbt-tests-and-documentation
 title: 'Tests and documentation: how a model earns trust'
 description: Add unique, not-null, accepted-values and relationship tests, write documentation and read the lineage graph.
 stage: data-engineer
-order: 130
+order: 100
 level: intermediate
 duration: 30
 objectives:
@@ -12,7 +12,7 @@ objectives:
   - Document models and columns
   - Read the lineage graph to find what a change affects
 prerequisites:
-  - data-engineer-staging-intermediate-marts
+  - data-engineer-dbt-project-and-first-model
   - data-engineer-data-quality-checks
 datasets:
   - cafe-sales
@@ -24,6 +24,8 @@ sources:
     url: https://docs.getdbt.com/docs/build/documentation
 status: draft
 ---
+
+TODO(owner): Testing appears in 23 of 27 Data Engineer postings; gap G1 (#118).
 
 ## Warm-up
 

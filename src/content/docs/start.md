@@ -58,5 +58,5 @@ such as typos are welcome as pull requests.
 
 Four stages in order, then four career branches. Open a stage to see its lessons in the order to study
 them. Each lesson has a short code to keep track of where you are: E1, E2 … for Excel, S for SQL, P for
-Python, C for the advanced core, and DA, DE, DS and ML for the branches. "Needs" lists the codes of the
+Python, C for the advanced core, and DA, DE, DS and MLE for the branches. "Needs" lists the codes of the
 lessons to finish first.

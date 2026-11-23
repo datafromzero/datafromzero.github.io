@@ -3,15 +3,15 @@ id: data-engineer-data-quality-checks
 title: Data quality checks that fail loudly
 description: Check completeness, uniqueness, validity, freshness and volume, and decide what happens to bad records.
 stage: data-engineer
-order: 70
+order: 60
 level: intermediate
-duration: 30
+duration: 35
 objectives:
   - Name the dimensions of data quality
-  - Write checks for nulls, duplicate keys and out-of-range values
-  - Add freshness and volume checks
+  - Write checks for nulls, duplicate keys, out-of-range values, freshness and volume
+  - Write a data contract and name the failure that must never be silent
   - Decide whether a failed check stops the run or quarantines rows
-  - Reconcile output counts with input counts
+  - Reconcile output counts with input counts and read basic observability signals
 prerequisites:
   - data-engineer-pipeline-as-testable-code
 datasets:
@@ -24,6 +24,8 @@ sources:
     url: https://docs.getdbt.com/docs/build/data-tests
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: add a contracts and observability segment, and a "break the data" practice set. Evidence from #118: finding F6; gap G1.
 
 ## Warm-up
 

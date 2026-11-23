@@ -3,7 +3,7 @@ id: ml-engineer-deep-learning-training-practice
 title: 'Training deep models well: regularization and transfer learning'
 description: Control overfitting with dropout and early stopping, and start from a pretrained model instead of from scratch.
 stage: ml-engineer
-order: 50
+order: 60
 level: advanced
 duration: 30
 objectives:
@@ -25,6 +25,8 @@ sources:
     url: https://developers.google.com/machine-learning/guides/rules-of-ml
 status: draft
 ---
+
+TODO(owner): A training duty appears in 16 of 28 ML Engineer postings (#118). Owner note, 2026-11-23: computer vision lessons show real sample images in color where that helps understanding: input samples, learned filters, feature maps, augmentations, and right and wrong predictions. The images come from an openly licensed dataset (check and cite the license, for example Oxford-IIIT Pet, CC BY-SA 4.0). They are static, optimized images (WebP or AVIF, lazy-loaded, width and height set, alt text), generated at build time or by a script from real model runs. There is no JavaScript.
 
 ## Warm-up
 

@@ -3,7 +3,7 @@ id: data-analyst-messy-data-cleaning-story
 title: 'A cleaning story: two inconsistent sources, one trusted table'
 description: Combine two inconsistent sources, document every cleaning decision and reconcile totals so another analyst can audit the result.
 stage: data-analyst
-order: 50
+order: 70
 level: intermediate
 duration: 30
 objectives:
@@ -27,6 +27,8 @@ sources:
     url: https://www.jstatsoft.org/article/view/v059i10
 status: draft
 ---
+
+TODO(owner): Cleaning appears in 21 of 25 Data Analyst postings; gaps G6 and G1 (#118). Owner decision 2026-11-23: this lesson becomes chapter 1 of the dashboard project, so its cleaned table feeds the dashboard lessons and the capstone.
 
 ## Warm-up
 

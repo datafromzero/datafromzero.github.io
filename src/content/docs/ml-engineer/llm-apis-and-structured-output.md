@@ -3,7 +3,7 @@ id: ml-engineer-llm-apis-and-structured-output
 title: Calling LLM APIs and getting structured output
 description: Call a language-model API, control temperature, require JSON output, validate it and keep a cost and latency budget.
 stage: ml-engineer
-order: 70
+order: 80
 level: advanced
 duration: 30
 objectives:
@@ -23,6 +23,8 @@ sources:
     url: https://www.nist.gov/itl/ai-risk-management-framework
 status: draft
 ---
+
+TODO(owner): Owner decision 2026-11-23: add a cost and latency segment (the budget is measured, not guessed). Evidence from #118: prompting in 9 of 28 postings; gap G8.
 
 ## Warm-up
 
