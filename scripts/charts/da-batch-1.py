@@ -188,7 +188,7 @@ def charts():
             "Three small bar charts side by side on one scale from 0 to 2,000 dollars, one for each store, with a bar for each month from January to June. "
             f"Old Town in blue: {fmt(1)}. Campus in green: {fmt(2)}. "
             f"Harbor in purple has bars only for April, May and June, {fmt(3)}, because the store opened on April 1. "
-            "Revenue counts completed orders only.")
+            "Revenue counts completed orders only, and Old Town's May bar includes order 2075 as recorded.")
     Y = Axis(0, 2000, 150, 34)
     title_line(s, "Revenue by store and month (completed, US dollars)", 8, 10)
     for v in (0, 1000, 2000):
@@ -211,7 +211,7 @@ def charts():
     full, three = 89283, 48599
     s = Svg("da2-bytes", "Logical bytes the preview query reads: all six columns of orders against three",
             f"Two horizontal bars on a scale from 0 to 100,000 bytes. SELECT star FROM orders reads about {full:,} bytes. Naming order_id, ordered_at and status reads about {three:,} bytes, "
-            f"{100 * (full - three) / full:.0f} percent fewer. Both are estimates from the BigQuery data type sizes, and a LIMIT clause does not change them.")
+            f"{100 * (full - three) / full:.0f} percent fewer. Both are estimates from the BigQuery data type sizes, and on a table that is not clustered a LIMIT clause does not change them.")
     X = Axis(0, 100000, 112, 300)
     title_line(s, "Bytes read by the preview query (estimate)", 8, 8)
     for i, (label, v, col) in enumerate((("SELECT * (6 columns)", full, OCHRE), ("3 named columns", three, BLUE))):
@@ -231,7 +231,7 @@ def charts():
     cn = cost_numbers(c)
     s = Svg("da2-billed", "Bytes read against the 10 MB minimum per table, for a three-table query and its five-table first draft",
             f"Two horizontal bars on a scale from 0 to 60 MB. The three-table query reads about {cn['q2_read']:,} bytes but is billed at least {3 * 10} MB, 10 MB for each table it references. "
-            f"The first draft joins two more tables it never uses, reads about {cn['q3_read']:,} bytes and is billed at least {5 * 10} MB. The bytes actually read are too small to see on this scale.")
+            f"The first draft joins two more tables it does not need, reads about {cn['q3_read']:,} bytes (a join key counts in both tables) and is billed at least {5 * 10} MB. The bytes actually read are too small to see on this scale.")
     X = Axis(0, 60, 112, 300)
     title_line(s, "Billed minimum, MB (10 MB per table referenced)", 8, 8)
     for i, (label, n) in enumerate((("3 tables", 3), ("5 tables (first draft)", 5))):
@@ -508,7 +508,10 @@ def bq_bytes(con, table, columns):
 
 def cost_numbers(con):
     q2 = {"orders": ["order_id", "ordered_at", "status"], "order_items": ["order_id", "product_id", "quantity", "discount_usd"], "products": ["product_id", "category", "unit_price_usd"]}
+    # the first draft also joins stores and customers: their join keys count on both sides (orders.store_id and orders.customer_id
+    # as well as stores.store_id and customers.customer_id), plus one more column read from each new table
     q3 = dict(q2, stores=["store_id", "store_name"], customers=["customer_id", "loyalty_tier"])
+    q3["orders"] = q2["orders"] + ["store_id", "customer_id"]
     return {
         "q2_read": sum(bq_bytes(con, t, cols) for t, cols in q2.items()),
         "q3_read": sum(bq_bytes(con, t, cols) for t, cols in q3.items()),
