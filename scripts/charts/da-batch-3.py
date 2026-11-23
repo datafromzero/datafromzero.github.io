@@ -15,6 +15,7 @@ with order 2075 counted as 2 units (line 6952) unless a label says "as typed". R
 import importlib.util
 import re
 import sys
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import duckdb
@@ -55,6 +56,11 @@ def cafe():
 
 def title_line(s, text, x, y):
     s.text(x, y, text, size=10.5, weight=600)
+
+
+def half_up(v, places=2):
+    """Prints an exact Decimal the way the lessons' ROUND does (a tie such as 48.775 goes up: 48.78, not the float's 48.77)."""
+    return str(Decimal(v).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
 
 
 def q(con, sql):
@@ -266,16 +272,21 @@ def charts():
 
     # ---- da14, chart 1: revenue per day (net sales over days with orders) by cafe and month, order 2075 as 2 units ----
     rpd = {}
-    for st, m, v in q(c, """SELECT store, month, SUM(quantity * unit_price - discount) / COUNT(DISTINCT order_date)
+    rpd_txt = {}
+    for st, m, total, days in q(c, """SELECT store, month, SUM(quantity * unit_price - discount), COUNT(DISTINCT order_date)
         FROM lines WHERE status = 'completed' GROUP BY store, month ORDER BY store, month"""):
-        rpd.setdefault(st, {})[int(m[5:])] = float(v)
+        exact = Decimal(total) / Decimal(days)  # exact decimal: the label is rounded half up
+        rpd.setdefault(st, {})[int(m[5:])] = float(exact)
+        rpd_txt.setdefault(st, {})[int(m[5:])] = half_up(exact)
     assert round(rpd["Old Town"][1], 2) == 51.32 and round(rpd["Old Town"][2], 2) == 41.5 and round(rpd["Campus"][4], 2) == 41.73
     changes = sorted(((100 * (rpd[st][m] / rpd[st][m - 1] - 1), st, m) for st in rpd for m in rpd[st] if m - 1 in rpd[st]))
     assert len(changes) == 12 and changes[0][1:] == ("Old Town", 2) and round(changes[0][0], 1) == -19.1, changes[:3]
+    assert changes[-1][1:] == ("Campus", 5) and round(changes[-1][0], 1) == 30.5 and changes[1][1:] == ("Campus", 3) and changes[2][1:] == ("Old Town", 6), changes
+    assert rpd_txt["Harbor"][6] == "48.78", rpd_txt["Harbor"]
     s = Svg("da14-swing", "Revenue per day by cafe and month, January to June",
             "A line chart from January to June, on a scale from 36 to 58 dollars of net sales per day, one line for each cafe: Old Town in blue, Campus in green, Harbor in purple, which starts in April. "
-            + " ".join(f"{st}: " + ", ".join(f"{MON[f'{m:02d}']} {v:.2f}" for m, v in sorted(rpd[st].items())) + "." for st in ("Old Town", "Campus", "Harbor"))
-            + f" Old Town's fall from January to February, {changes[0][0]:.1f} percent, is the largest of the 12 month-to-month changes; the next are {changes[1][0]:.1f} percent (Campus, March) and {changes[2][0]:.1f} percent (Old Town, June).")
+            + " ".join(f"{st}: " + ", ".join(f"{MON[f'{m:02d}']} {rpd_txt[st][m]}" for m, v in sorted(rpd[st].items())) + "." for st in ("Old Town", "Campus", "Harbor"))
+            + f" Old Town's fall from January to February, {changes[0][0]:.1f} percent, is the largest fall of the 12 month-to-month changes; the next falls are {changes[1][0]:.1f} percent (Campus, March) and {changes[2][0]:.1f} percent (Old Town, June). The largest rise is Campus in May, +{changes[-1][0]:.1f} percent.")
     X = Axis(1, 6, 44, 286)
     Y = Axis(36, 58, 190, 40)
     title_line(s, "Net sales per day, by cafe and month (dollars)", 8, 10)

@@ -161,16 +161,18 @@ def charts():
 
     # ---- da17, chart 4: two claims of the model case study, one chart each ----
     c = cafe()
-    per_day = {st: (days, float(net)) for st, days, net in q(c, "SELECT store, COUNT(DISTINCT order_date), SUM(amount) FROM sales_clean GROUP BY 1")}
-    seven = {st: n for st, n in q(c, "SELECT store, COUNT(DISTINCT order_id) FROM sales_clean WHERE EXTRACT(hour FROM ordered_at) = 7 GROUP BY 1")}
-    assert per_day == {"Campus": (181, 8998.75), "Harbor": (91, 4606.25), "Old Town": (181, 8977.75)} and seven == {"Campus": 79, "Harbor": 20, "Old Town": 73}, (per_day, seven)
+    # One window for all three cafes, the 91 days Harbor has been open (April 1 to June 30): never a 91-day rate beside a 181-day rate.
+    window = "order_date >= DATE '2026-04-01'"
+    per_day = {st: (days, float(net)) for st, days, net in q(c, f"SELECT store, COUNT(DISTINCT order_date), SUM(amount) FROM sales_clean WHERE {window} GROUP BY 1")}
+    seven = {st: n for st, n in q(c, f"SELECT store, COUNT(DISTINCT order_id) FROM sales_clean WHERE EXTRACT(hour FROM ordered_at) = 7 AND {window} GROUP BY 1")}
+    assert per_day == {"Campus": (91, 4531.0), "Harbor": (91, 4606.25), "Old Town": (91, 4670.25)} and seven == {"Campus": 43, "Harbor": 20, "Old Town": 45}, (per_day, seven)
     rate = {st: round(net / days, 2) for st, (days, net) in per_day.items()}
     seven_rate = {st: round(seven[st] / per_day[st][0], 2) for st in per_day}
-    assert rate == {"Campus": 49.72, "Harbor": 50.62, "Old Town": 49.6} and seven_rate == {"Campus": 0.44, "Harbor": 0.22, "Old Town": 0.4}, (rate, seven_rate)
+    assert rate == {"Campus": 49.79, "Harbor": 50.62, "Old Town": 51.32} and seven_rate == {"Campus": 0.47, "Harbor": 0.22, "Old Town": 0.49}, (rate, seven_rate)
     s = Svg("da17-claims", "Two claims, one chart each: net sales per open day, and orders at 7 a.m. per open day",
-            "Two small bar charts from zero, one cafe per bar. Net sales per open day in dollars: Harbor 50.62 over 91 open days, Campus 49.72 and Old Town 49.60 over 181 open days each; the three are level. "
-            "Orders at 7 a.m. per open day: Campus 0.44 (79 orders), Old Town 0.40 (73 orders) and Harbor 0.22 (20 orders), about half of each older cafe. Completed orders, January 1 to June 30, 2026, order 2075 counted as 2 units.")
-    s.text(8, 10, "Claim 1: Harbor sells as much per open day", size=10, weight=600)
+            "Two small bar charts from zero, one cafe per bar. Net sales per open day in dollars: Harbor 50.62, Campus 49.79 and Old Town 51.32, each over the same 91 open days; Harbor sits between the two older cafes. "
+            "Orders at 7 a.m. per open day: Campus 0.47 (43 orders), Old Town 0.49 (45 orders) and Harbor 0.22 (20 orders), under half of each older cafe. Completed orders, April 1 to June 30, 2026, order 2075 counted as 2 units.")
+    s.text(8, 10, "Claim 1: Harbor sells at the level of the rest", size=10, weight=600)
     X1 = Axis(0, 60, 80, 232)
     y = 22
     for st in ("Harbor", "Campus", "Old Town"):
@@ -179,7 +181,7 @@ def charts():
         s.rect(X1(0), y, X1(rate[st]) - X1(0), 16, STORE_COLOR[st], rx=2.5)
         s.text(X1(rate[st]) + 6, y + 12, f"{rate[st]:.2f} · {days} days", size=9.5, weight=600)
         y += 22
-    s.text(8, y + 8, "Net sales divided by days with orders, in dollars", size=9, opacity=0.85)
+    s.text(8, y + 8, "Net sales per day with orders, in dollars, April 1 to June 30", size=9, opacity=0.85)
     y += 34
     s.text(8, y, "Claim 2: its 7 a.m. hour is the thin one", size=10, weight=600)
     y += 12
@@ -189,7 +191,7 @@ def charts():
         s.rect(X2(0), y, X2(seven_rate[st]) - X2(0), 16, STORE_COLOR[st], rx=2.5)
         s.text(X2(seven_rate[st]) + 6, y + 12, f"{seven_rate[st]:.2f} · {seven[st]} orders", size=9.5, weight=600)
         y += 22
-    s.text(8, y + 8, "Orders placed at 7 a.m. divided by days with orders", size=9, opacity=0.85)
+    s.text(8, y + 8, "Orders at 7 a.m. per day with orders, April 1 to June 30", size=9, opacity=0.85)
     out["da17-claims"] = s.render()
     return out
 
