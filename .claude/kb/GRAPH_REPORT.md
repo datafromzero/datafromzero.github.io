@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1499 nodes, 1700 edges, 197 communities (658 isolated nodes).
+- 1499 nodes, 1701 edges, 197 communities (658 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 209, content-type 5, decision 54, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 499, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 293, template 2, token 12.
-- Edges: defines 293, imports 50, mentions 907, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- Edges: defines 293, imports 50, mentions 908, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,11 +17,11 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/components/content/Exercise.astro` | component | 132 | src/components/content/Exercise.astro:1 |
 | 3 | `D41` Lesson step-by-step figures | decision | 95 | SPEC.md:68 |
 | 4 | `src/components/content/RunSQL.astro` | component | 55 | src/components/content/RunSQL.astro:1 |
-| 5 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 50 | .claude/HANDOFF.md:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 51 | .claude/HANDOFF.md:1 |
+| 6 | `src/components/content/OpenInColab.astro` | component | 51 | src/components/content/OpenInColab.astro:1 |
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
-| 8 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
-| 9 | `S6` Authoring components | spec-section | 30 | SPEC.md:273 |
+| 8 | `S6` Authoring components | spec-section | 31 | SPEC.md:273 |
+| 9 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
 | 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
 | 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
@@ -53,7 +53,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `ctype:career` -specified-by-> `S5.4` (C85 to C82, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C99 to C73, scripts/animations/concept-columnar-scan.mjs:2)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C125 to C23, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C27 to C71, src/scripts/run-sql.ts:2)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C24 to C71, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C182 to C179, src/layouts/HomeLayout.astro:39)
 - `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C15, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C17, .claude/skills/kb/SKILL.md:3)
