@@ -167,7 +167,10 @@ About 35 minutes, 5 new ideas: who sets the question and its words, how to sort 
   GROUP BY customer_id
 )
 SELECT
-  (SELECT COUNT(*) FROM customers WHERE loyalty_tier = 'gold') AS gold_tier,
+  (SELECT COUNT(*)
+   FROM per_customer p
+   JOIN customers c ON c.customer_id = p.customer_id
+   WHERE c.loyalty_tier = 'gold') AS gold_tier,
   (SELECT COUNT(*) FROM per_customer WHERE orders >= 10) AS ten_orders,
   (SELECT COUNT(*) FROM per_customer WHERE months = 6) AS every_month,
   (SELECT COUNT(*)
@@ -179,7 +182,7 @@ Expected: 1 row, 4 columns.
 
 **Predict:** Which meaning gives the most customers, and how many customers meet all three?
 
-*Why:* 15, 86 and 50, and only 3 for all three. No meaning is wrong: each answers another question, who earns the reward, who comes often, who comes steadily. An offer sent to "regular customers" reaches different people under each, so the sentence that fixes the meaning is part of the answer.
+*Why:* 14, 86 and 50, and only 3 for all three. No meaning is wrong: each answers another question, who earns the reward, who comes often, who comes steadily. An offer sent to "regular customers" reaches different people under each, so the sentence that fixes the meaning is part of the answer.
 
 ### 2. Sort the work into three piles
 
@@ -232,7 +235,7 @@ Expected: 1 row, 4 columns.
 <details>
 <summary>Reveal the result</summary>
 
-No. On average the pair did worse than the better of the two alone (Hedges' g = -0.23, a standardized difference). The pair gained where the person alone had beaten the AI, and lost where the AI alone had beaten the person.
+No. In these experiments the pair did worse on average than the better of the two alone (Hedges' g = -0.23, a standardized difference). It lost on tasks of making decisions and gained on tasks of creating content. The pair gained where the person alone had beaten the AI, and lost where the AI alone had beaten the person.
 
 </details>
 
@@ -260,7 +263,7 @@ Expected: 3 rows, 3 columns.
 
 ### 5. Personal data stays out of the tool
 
-**Idea.** Personal data is any information that relates to an identified or identifiable living person; the European Commission lists a name and surname, a home address and an IP address among its examples. A prompt travels to a service you do not run. Never paste personal data into a tool, and do not paste your employer's confidential data either.
+**Idea.** Personal data is any information that relates to an identified or identifiable living person; the European Commission lists a name and surname, a home address and an IP address among its examples.
 
 **Try it.** A real cafe's customer export has seven columns: `customer_id`, `full_name`, `email`, `phone`, `signup_date`, `city`, `loyalty_tier`.
 
@@ -273,7 +276,7 @@ None. Paste the column names and types, and sample rows you invented, as the con
 
 </details>
 
-*Why:* the context pack asks for sample rows, so the pack is where this rule bites. Invented rows show the assistant the same columns at no risk. Exercise 3 tests a belief that tempts people to paste anyway.
+*Why:* a prompt travels to a service you do not run, so the rule is: never paste personal data, and do not paste your employer's confidential data either. The context pack asks for sample rows, so the pack is where the rule bites; invented rows show the same columns at no risk. Exercise 3 tests a belief that tempts people to paste anyway.
 
 <Aside type="tip" title="Remember">
 
@@ -366,7 +369,7 @@ The first query gives Campus 37, Harbor 36 and Old Town 37, so Harbor is last. T
 
 <Exercise id="core-what-stays-human-2">
 
-**Why did ten customers not come in June?** The owner asks for the customers whose last completed order was before June 1. Before you start, write what you expect in words: how many rows, and which columns the five tables could give you. List the customers with their id, tier, city, signup date, date of last order and number of orders, then write three sentences: what the table shows, what it cannot show, and your decision, stop or ask someone. Expected: 10 rows, 6 columns.
+**Whose last order came before June?** The owner asks for the customers whose last completed order was before June 1. Before you start, write what you expect in words: what each row describes. List the customers with their id, tier, city, signup date, date of last order and number of orders, then write three sentences: what the table shows, what it cannot show, and your decision, stop or ask someone. Expected: 6 columns.
 
 <RunSQL query={`-- Write your query here, then press Run.`} />
 
@@ -380,7 +383,7 @@ Group the completed orders by customer. A customer's last order is the maximum o
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"Ten customers, their last orders between late April and the last day of May, mostly with more than three orders each."* Write the question of the third sentence before you look at the table: which column of the five could tell you why?
+Expected output in words: *"Ten customers, their last orders between late April and the last day of May, mostly with more than three orders each."* Check: your query returns 10 rows. Write the question of the third sentence before you look at the table: which column of the five could tell you why?
 
 </details>
 
@@ -430,39 +433,41 @@ A sample answer: *Ten customers have no completed order in June; their last orde
 
 <Exercise id="core-what-stays-human-3">
 
-**Spot the flaw.** An analyst removed `full_name`, `email` and `phone` from the customers table and pasted the rest, `customer_id`, `signup_date`, `city` and `loyalty_tier`, into a free assistant. Her note said: "No names, so it is not personal data." Run the query. How many of the 150 customers are the only one with their city, signup date and tier, and what is the flaw? Expected: 1 row, 2 columns.
+**Spot the flaw.** An analyst replaced every `customer_id` with `md5(customer_id)`, a hash: scrambled-looking text that the same input always gives. She pasted the hashes and each customer's `loyalty_tier` into a free assistant. Her note said: "Hashed, so nobody can be identified." Run the query, which hashes the numbers 1 to 1,000 and looks for the 150 customer hashes among them. What does the result show, and what is the flaw? Expected: 1 row, 2 columns.
 
-<RunSQL query={`WITH groups AS (
-  SELECT city, signup_date, loyalty_tier, COUNT(*) AS customers
+<RunSQL query={`WITH hashed AS (
+  SELECT md5(CAST(customer_id AS VARCHAR)) AS customer_hash
   FROM customers
-  GROUP BY city, signup_date, loyalty_tier
+), guesses AS (
+  SELECT n, md5(CAST(n AS VARCHAR)) AS h
+  FROM range(1, 1001) AS t(n)
 )
-SELECT SUM(customers) FILTER (WHERE customers = 1) AS alone,
-       SUM(customers) AS all_customers
-FROM groups;`} />
+SELECT COUNT(*) AS hashes, COUNT(g.n) AS recovered
+FROM hashed d
+LEFT JOIN guesses g ON g.h = d.customer_hash;`} />
 
 <details>
 <summary>Hint</summary>
 
-Think of someone who knows when a friend joined the loyalty program and where she lives. What would they find in the rows?
+The same input always gives the same hash. What can someone do who has a list of possible inputs?
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-The first number is most of the second. Ask what "identifiable" means for a row nobody else shares.
+Compare the two numbers. Then ask whether a hash of a number that anyone could guess hides it.
 
 </details>
 
 <Solution>
 
 ```text
-alone  all_customers
-138    150
+hashes  recovered
+150     150
 ```
 
-138 of the 150 customers are the only one with their city, signup date and tier, so anyone who knows those facts about a person can pick out the row. The European Commission's page says that different pieces of information, which together can lead to the identification of a particular person, may also be personal data. Removing the names did not remove the people, and `customer_id` still points to a table that holds them. The fix is the rule of unit 5: paste the column names and invented rows. Coarser groups help but settle nothing: by city and tier alone the smallest group has 2 customers, and the rows are still real people. Verdict: **reject**.
+Every one of the 150 hashes matches a guess, because the ids are small numbers that anyone can try. A hash is a fixed rule, not a lock: the same id gives the same hash in every file, so rows still link to one customer, and the id stays a key to a real person. The fix is the rule of unit 5: paste no ids at all, or a random token from a lookup table that you keep and never paste. Verdict: **reject**.
 
 </Solution>
 
