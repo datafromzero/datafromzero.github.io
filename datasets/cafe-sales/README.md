@@ -96,5 +96,8 @@ Real data is never clean, so a few rows are odd on purpose. Lessons point to the
 gives the same rows. `python3 scripts/build-cafe-sales.py --check` confirms that the CSV files match
 the script. It needs Python 3.10 or later, and openpyxl 3.1 for the `.xlsx` file.
 
+The payment method of each order is drawn at random with the same weights in every store and every
+month: card 55, mobile 30, cash 15. Any difference in payment mix between stores or months is chance.
+
 A released version never changes. A change to columns or values creates a new folder (`v2/`), and
 `v1/` stays as it is, so old notebooks and spreadsheets keep working.
