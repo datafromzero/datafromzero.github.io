@@ -1,0 +1,431 @@
+---
+id: data-analyst-ab-test-readout
+title: Reading an A/B test result end to end
+short_title: Reading an A/B test
+description: 'Read a finished experiment as an analyst: pre-flight checks, the lift in people and dollars with intervals, a rule written first, and a decision memo.'
+stage: data-analyst
+order: 60
+level: advanced
+duration: 30
+objectives:
+  - Run the pre-flight checks that can void a result before reading it
+  - Report a lift in people and in dollars per 1,000 signups, each with an interval
+  - Say how a result with an interval around zero differs from a result of no effect
+  - Write the decision memo against the rule stated in advance
+prerequisites:
+  - core-experiments-ab-testing
+  - core-comparing-groups
+  - core-telling-the-story
+  - data-analyst-the-analysts-loop
+datasets:
+  - app-events
+reviewed: 2026-11-23
+sources:
+  - title: 'Microsoft Research, Diagnosing sample ratio mismatch in A/B testing (accessed 2026-11-23)'
+    url: https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/
+status: published
+---
+
+## The question
+
+Priya, who runs the budgeting app `app-events`, writes:
+
+> Three tests finished. Which of them can I ship? One line each, and tell me what it is worth in money.
+
+In each test a coin put every new signup into control or the variant. "Bought" means a Plus purchase within 14 days of signing up.
+
+| test | what changed | people | bought, control | bought, variant |
+|---|---|---:|---:|---:|
+| `paywall_v2` | a redesigned paywall | 5,419 | 343 of 2,706 | 415 of 2,713 |
+| `welcome_tips` | tips on the first screens | 4,968 | 304 of 2,449 | 306 of 2,519 |
+| `signup_flow_v2` | a new signup screen | 5,481 | 272 of 2,878 | 292 of 2,603 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Designing an A/B test*](/core/experiments-ab-testing/) (C14), what do you do before you read any result, and what p-value sounds the alarm?
+
+   <details>
+   <summary>answer</summary>
+
+   Count the people in each group against the planned split. A sample-ratio test with p below 0.0005 voids the test.
+
+   </details>
+
+2. In [*Comparing two groups*](/core/comparing-groups/) (C9), what does the interval of a gap tell you that its p-value does not?
+
+   <details>
+   <summary>answer</summary>
+
+   How big the gap could be: the range of effects the data cannot rule out.
+
+   </details>
+
+## The big idea
+
+Read a test in a fixed order: the checks that can void it, the effect in the units of the decision, the rule written before launch, then a memo that ends in a decision.
+
+## Learn by doing
+
+About 30 minutes, 3 ideas: the pre-flight, the effect in people and dollars, the memo. The extractions are read-only (run them on `app-events`); the editors use their results.
+
+### 1. Check before you read
+
+**Idea.** A *pre-flight check* is a test of the test, run before any effect is read. Three can void a result: the split (C14), the *balance* (do the groups hold the same kinds of people?) and the *window* (has every person had the whole follow-up?). The Microsoft Research page says that every test should pass the sample-ratio check before it is analyzed.
+
+Split p-values, repeated from C14: 0.92 for `paywall_v2`, 0.32 for `welcome_tips`, 0.0002 for `signup_flow_v2`. Window: the last signup of each test plus 14 days (March 22, May 10 and June 21) came before the export on July 1.
+
+The balance check compares each group's mix of signup platforms, counted by this extraction:
+
+```sql
+-- read-only: runs on app-events (the editors of this page hold only cafe-sales)
+SELECT a.experiment, a.variant AS arm, e.platform, COUNT(*) AS people
+FROM experiment_assignments a
+JOIN events e ON e.user_id = a.user_id AND e.event_name = 'signup_complete'
+GROUP BY a.experiment, a.variant, e.platform
+ORDER BY a.experiment, a.variant, e.platform;
+```
+
+**Try it:** the largest gap, in points, between the platform shares of the two groups.
+
+<RunSQL query={`WITH c(experiment, arm, platform, people) AS (
+  VALUES ('paywall_v2', 'control', 'android', 827), ('paywall_v2', 'control', 'ios', 921), ('paywall_v2', 'control', 'web', 958),
+         ('paywall_v2', 'variant', 'android', 818), ('paywall_v2', 'variant', 'ios', 895), ('paywall_v2', 'variant', 'web', 1000),
+         ('welcome_tips', 'control', 'android', 815), ('welcome_tips', 'control', 'ios', 864), ('welcome_tips', 'control', 'web', 770),
+         ('welcome_tips', 'variant', 'android', 802), ('welcome_tips', 'variant', 'ios', 895), ('welcome_tips', 'variant', 'web', 822),
+         ('signup_flow_v2', 'control', 'android', 1020), ('signup_flow_v2', 'control', 'ios', 1070), ('signup_flow_v2', 'control', 'web', 788),
+         ('signup_flow_v2', 'variant', 'android', 656), ('signup_flow_v2', 'variant', 'ios', 1187), ('signup_flow_v2', 'variant', 'web', 760)
+),
+s AS (
+  SELECT experiment, arm, platform, 100.0 * people / SUM(people) OVER (PARTITION BY experiment, arm) AS share
+  FROM c
+),
+d AS (
+  SELECT experiment, platform,
+         MAX(share) FILTER (WHERE arm = 'variant') - MAX(share) FILTER (WHERE arm = 'control') AS gap
+  FROM s
+  GROUP BY experiment, platform
+)
+SELECT experiment, ROUND(MAX(ABS(gap)), 1) AS largest_gap_points
+FROM d
+GROUP BY experiment
+ORDER BY experiment;`} />
+
+**Predict:** two tests differ by about a point or less, because chance moves a share by that much. How large is the gap of the third: about 3, 5 or 10 points?
+
+Expected: 3 rows, 2 columns.
+
+*Why:* the other two tests differ by 1.4 and 1.5 points; the third is far larger. A test that fails a pre-flight check gets no effect read; Exercise 2 finds where its groups differ.
+
+### 2. The effect in the units of the decision
+
+**Idea.** A decision uses people and money, not points, so convert: *per 1,000 signups*, with the same interval. For money, define the metric first: *revenue per signup* is the list price of the plan a person bought within 14 days, \$7.99 monthly or \$59.99 annual, and \$0 for no purchase. Few people buy the annual plan, but each is worth about eight monthly buyers.
+
+The extraction for `paywall_v2` counts the people and, for the buyers, the plan; the editors below use its counts.
+
+```sql
+-- read-only: runs on app-events
+WITH first_plan AS (
+  SELECT subscription_id, user_id, MIN(started_on) AS started_on, MIN_BY(plan, updated_at) AS plan_at_start
+  FROM subscriptions
+  GROUP BY subscription_id, user_id
+),
+bought AS (
+  SELECT DISTINCT ON (a.user_id) a.user_id, f.plan_at_start
+  FROM experiment_assignments a
+  JOIN events p ON p.user_id = a.user_id AND p.event_name = 'purchase'
+   AND p.event_ts >= a.assigned_at AND p.event_ts < a.assigned_at + INTERVAL 14 DAY
+  JOIN first_plan f ON f.user_id = a.user_id AND f.started_on = CAST(p.event_ts AS DATE)
+  WHERE a.experiment = 'paywall_v2'
+  ORDER BY a.user_id, p.event_ts
+)
+SELECT a.variant, COUNT(*) AS n,
+       COUNT(*) FILTER (WHERE b.plan_at_start = 'plus_monthly') AS monthly,
+       COUNT(*) FILTER (WHERE b.plan_at_start = 'plus_annual') AS annual
+FROM experiment_assignments a
+LEFT JOIN bought b USING (user_id)
+WHERE a.experiment = 'paywall_v2'
+GROUP BY a.variant
+ORDER BY a.variant;
+```
+
+**Try it:** the gap in buyers per 1,000 signups, with its 95 percent interval (the gap plus or minus 1.96 standard errors).
+
+<RunSQL query={`WITH g(arm, n, buyers) AS (
+  VALUES ('control', 2706, 343), ('variant', 2713, 415)
+),
+r AS (
+  SELECT c.buyers * 1.0 / c.n AS p0, t.buyers * 1.0 / t.n AS p1, c.n AS n0, t.n AS n1
+  FROM g c JOIN g t ON c.arm = 'control' AND t.arm = 'variant'
+)
+SELECT ROUND(1000 * (p1 - p0)) AS extra_buyers_per_1000,
+       ROUND(1000 * (p1 - p0 - 1.96 * SQRT(p0 * (1 - p0) / n0 + p1 * (1 - p1) / n1))) AS low,
+       ROUND(1000 * (p1 - p0 + 1.96 * SQRT(p0 * (1 - p0) / n0 + p1 * (1 - p1) / n1))) AS high
+FROM r;`} />
+
+Expected: 1 row, 3 columns.
+
+**Try it.** Now the money. Each person's revenue is 0, 7.99 or 59.99, so the mean and the variance follow from the three counts.
+
+<RunSQL query={`WITH arms(arm, n, monthly, annual) AS (
+  VALUES ('control', 2706, 262, 81), ('variant', 2713, 312, 103)
+),
+m AS (
+  SELECT arm, n,
+         (7.99 * monthly + 59.99 * annual) / n AS mean,
+         (7.99 * 7.99 * monthly + 59.99 * 59.99 * annual) / n AS mean_sq
+  FROM arms
+),
+v AS (
+  SELECT arm, n, mean, (mean_sq - mean * mean) * n / (n - 1) AS var FROM m
+)
+SELECT ROUND(c.mean, 2) AS control, ROUND(t.mean, 2) AS variant,
+       ROUND(t.mean - c.mean, 2) AS gap,
+       ROUND(t.mean - c.mean - 1.96 * SQRT(c.var / c.n + t.var / t.n), 2) AS low,
+       ROUND(t.mean - c.mean + 1.96 * SQRT(c.var / c.n + t.var / t.n), 2) AS high
+FROM v c JOIN v t ON c.arm = 'control' AND t.arm = 'variant';`} />
+
+**Predict:** the buyer gap has an interval clear of zero. Will the interval of the dollar gap per signup sit as clearly above zero?
+
+Expected: 1 row, 5 columns.
+
+*Why:* 26 more buyers per 1,000 signups (8 to 45), but \$0.63 more revenue per signup (\$0.04 to \$1.21): its low end is 4 cents, so the money gain barely clears zero. Per 1,000 signups the dollar gap is \$627, from \$42 to \$1,212. Nothing is wrong with the data: a lumpy value (two prices, one rare) spreads the estimate, so the dollar figure is noisier than the buyer count.
+
+### 3. The rule, then the memo
+
+**Idea.** The rule of C14 was written before launch: ship if the lift is at least 2 points, its interval stays above 0 and the cancel guardrail's interval stays below +5 points; drop if even the top of the lift's interval is below 2 points or the bottom of the guardrail's interval is above +5; otherwise keep running. No new analysis here: C14's numbers go beside that rule and into a memo that ends in a decision. The guardrail, from C14: of the buyers, 48 of 343 in control and 75 of 415 in the variant canceled within 30 days, a gap of +4.1 points (-1.1 to +9.3).
+
+<figure>
+<svg viewBox="0 0 360 355" width="360" role="img" aria-labelledby="da6-readout-t da6-readout-d">
+<title id="da6-readout-t">The readout of paywall&#95;v2: three effects with 95 percent intervals</title>
+<desc id="da6-readout-d">Three rows, each with a dot for the estimate and a bar for its 95 percent interval. Extra buyers per 1,000 signups: 26, from 8 to 45; a dashed line marks 20, the bar of 2 points set in advance. Extra revenue per signup: 0.63 dollars, from 0.04 to 1.21. Gap in the share of buyers who canceled within 30 days: 4.1 points, from -1.1 to 9.3; a dashed line marks +5, the limit set in advance, and the interval crosses it. The first two intervals are above zero and the third includes zero.</desc>
+<g fill="currentColor">
+<text x="16.6" y="22.4" font-size="10.5" font-weight="600">paywall&#95;v2: what the test says, in the units of the decision</text>
+<text x="16.6" y="46.4" font-size="10" font-weight="600">Extra buyers per 1,000 signups</text>
+<text x="215.7" y="66.4" font-size="10" font-weight="600" text-anchor="middle">+26 (8 to 45)</text>
+<path d="M28.6 92.4 L338.6 92.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M80.3 72.4 L80.3 92.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M183.6 72.4 L183.6 92.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.7" stroke-dasharray="3 3" />
+<text x="183.6" y="121.4" font-size="9.5" text-anchor="middle" fill-opacity="0.9">rule: 20 (2 points)</text>
+<path d="M80.3 92.4 L80.3 96.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="80.3" y="107.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M183.6 92.4 L183.6 96.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="183.6" y="107.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">20</text>
+<path d="M287 92.4 L287 96.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="287" y="107.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">40</text>
+<path d="M120.4 80.4 L311.1 80.4" fill="none" stroke="#0072b2" stroke-width="3" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="215.7" cy="80.4" r="5" fill="#0072b2" />
+<text x="16.6" y="138.4" font-size="10" font-weight="600">Extra revenue per signup, dollars</text>
+<text x="188.9" y="158.4" font-size="10" font-weight="600" text-anchor="middle">+&#36;0.63 (&#36;0.04 to &#36;1.21)</text>
+<path d="M28.6 184.4 L338.6 184.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M67.4 164.4 L67.4 184.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M67.4 184.4 L67.4 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="67.4" y="199.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0.0</text>
+<path d="M164.2 184.4 L164.2 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="164.2" y="199.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0.5</text>
+<path d="M261.1 184.4 L261.1 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="261.1" y="199.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">1.0</text>
+<path d="M75.6 172.4 L302.1 172.4" fill="none" stroke="#0072b2" stroke-width="3" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="188.9" cy="172.4" r="5" fill="#0072b2" />
+<text x="16.6" y="230.4" font-size="10" font-weight="600">Cancels within 30 days, buyers: gap in points</text>
+<text x="185.1" y="250.4" font-size="10" font-weight="600" text-anchor="middle">+4.1 (-1.1 to +9.3)</text>
+<path d="M28.6 276.4 L338.6 276.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M106.1 256.4 L106.1 276.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<path d="M203 256.4 L203 276.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.7" stroke-dasharray="3 3" />
+<text x="203" y="305.4" font-size="9.5" text-anchor="middle" fill-opacity="0.9">limit: +5</text>
+<path d="M106.1 276.4 L106.1 280.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="106.1" y="291.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M183.6 276.4 L183.6 280.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="183.6" y="291.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">4</text>
+<path d="M261.1 276.4 L261.1 280.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="261.1" y="291.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">8</text>
+<path d="M338.6 276.4 L338.6 280.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" />
+<text x="338.6" y="291.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M84.8 264.4 L286.3 264.4" fill="none" stroke="#ad9100" stroke-width="3" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="185.1" cy="264.4" r="5" fill="#ad9100" />
+<text x="16.6" y="326.4" font-size="9.5" fill-opacity="0.8">95 percent intervals, 5,419 signups; the rule and the</text>
+<text x="16.6" y="338.4" font-size="9.5" fill-opacity="0.8">guardrail numbers are those of C14</text>
+</g>
+</svg>
+</figure>
+
+> **Decision:** keep `paywall_v2` running; do not ship it yet.
+> **Context:** you asked whether to ship the redesigned paywall, tested on 5,419 signups from January 12 to March 8.
+> **Tension:** more people bought, but the money gain barely clears zero and the guardrail cannot rule out too high a rise in cancellations.
+> **Evidence:** the split was fair (p = 0.92) and the groups matched within 1.5 points. Per 1,000 signups, 26 more people bought Plus within 14 days (8 to 45) and first-purchase revenue rose \$627 (\$42 to \$1,212). Among buyers, 4.1 points more canceled within 30 days (-1.1 to +9.3); the limit is +5.
+> **Recommendation:** extend the test until the top of the guardrail interval is below +5; then ship if the lift still clears 2 points, and drop if the bottom of that interval passes +5.
+
+*Why:* the lift passes (26 per 1,000 is 2.6 points, interval above 0) but the guardrail's top, +9.3, is above the limit, so the rule says keep running. The last line says what would change the decision.
+
+<Aside type="tip" title="Remember">
+
+- Pre-flight first: split, balance and window. A failed check voids the test.
+- Give the effect in the units of the decision, with its interval.
+- Read against the rule written before launch, never against the p-value alone.
+- End with a memo: a decision, the evidence and what would change it.
+
+**Common trap:** reading a win off the dashboard before counting the groups.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-ab-test-readout-1">
+
+**The rule on all three tests.** Apply the lift part of C14's rule: *void* if the split p-value is below 0.0005; otherwise *lift passes* if the gap is at least 2 points and its interval stays above 0, *drop* if even the top of the interval is below 2 points, else *keep running*. The editor gives each gap and its plus-or-minus margin in points. Add a `verdict` column. Expected: 3 rows, 4 columns.
+
+<RunSQL query={`SELECT test, ROUND(gap, 1) AS gap_points, ROUND(margin, 1) AS plus_or_minus
+FROM (
+  SELECT test, split_p, 100 * (b1 * 1.0 / n1 - b0 * 1.0 / n0) AS gap,
+         196 * SQRT((b0 * 1.0 / n0) * (1 - b0 * 1.0 / n0) / n0 + (b1 * 1.0 / n1) * (1 - b1 * 1.0 / n1) / n1) AS margin
+  FROM (VALUES ('paywall_v2', 2706, 343, 2713, 415, 0.92),
+               ('welcome_tips', 2449, 304, 2519, 306, 0.32),
+               ('signup_flow_v2', 2878, 272, 2603, 292, 0.0002)) AS t(test, n0, b0, n1, b1, split_p)
+) AS g
+ORDER BY test;`} />
+
+<details>
+<summary>Hint</summary>
+
+A `CASE` takes the first true branch, so test the split first. The interval is `gap - margin` to `gap + margin`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+CASE WHEN split_p < 0.0005 THEN 'void'
+     WHEN ... THEN 'lift passes'
+     ...
+```
+
+</details>
+
+<Solution>
+
+Add this column to the `SELECT`:
+
+```sql
+       CASE WHEN split_p < 0.0005 THEN 'void'
+            WHEN gap >= 2 AND gap - margin > 0 THEN 'lift passes'
+            WHEN gap + margin < 2 THEN 'drop'
+            ELSE 'keep running' END AS verdict
+```
+
+`paywall_v2`: 2.6 plus or minus 1.8 (0.8 to 4.5 before rounding): the lift passes, the guardrail is still to read. `welcome_tips`: -0.3 plus or minus 1.8 (-2.1 to 1.6): *drop*, because the top is below the bar of 2 points. A flat result is not "no effect": the data allow anything from 2.1 fewer to 1.6 more buyers per 100 signups, and rule out only a lift as large as the bar. `signup_flow_v2`: 1.8 plus or minus 1.6: *void*, because its split fails before any interval is read.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-ab-test-readout-2">
+
+**Write the memo for a test that failed its check.** `signup_flow_v2` split 2,878 and 2,603 people (p = 0.0002), and the dashboard shows 9.5 percent against 11.2 percent bought. Of the people in control, 1,020 signed up on Android; of the variant, 656. First write as a comment the first line of your memo, a decision. Then compute each group's Android share and write the five-part memo as comments. Expected: your memo, then 2 rows, 2 columns.
+
+<RunSQL query={`-- Write your memo and your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Put the counts in a `VALUES` list and divide.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two rows: control a little over a third Android, the variant about a quarter."*
+
+```sql
+WITH g(arm, n, android) AS (VALUES ('control', 2878, 1020), ...)
+SELECT arm, ROUND(100.0 * android / n, 1) AS android_share ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH g(arm, n, android) AS (
+  VALUES ('control', 2878, 1020), ('variant', 2603, 656)
+)
+SELECT arm, ROUND(100.0 * android / n, 1) AS android_share
+FROM g
+ORDER BY arm;
+```
+
+Control is 35.4 percent Android and the variant 25.2. The evidence needs one more count, from `app-events`:
+
+```sql
+-- read-only: runs on app-events
+SELECT COUNT(*) AS no_assignment,
+       COUNT(*) FILTER (WHERE e.platform = 'android') AS android
+FROM users u
+JOIN events e ON e.user_id = u.user_id AND e.event_name = 'signup_complete'
+LEFT JOIN experiment_assignments a ON a.user_id = u.user_id
+WHERE u.signup_date BETWEEN DATE '2026-05-04' AND DATE '2026-06-07' AND a.user_id IS NULL;
+```
+
+It returns 367 and 367: every person who signed up in the window without an assignment row is on Android. A memo:
+
+> **Decision:** no decision from this test; find out why Android signups are missing from it and run it again.
+> **Context:** you asked whether to ship the new signup screen, tested from May 4 to June 7.
+> **Tension:** the dashboard shows a win, but the groups are not the ones planned.
+> **Evidence:** the split fails (p = 0.0002) and the groups differ by 10.2 points in Android share. 367 people who signed up in the window have no assignment row, all on Android. The groups are not comparable, so the shown gap of 1.8 points does not measure the screen.
+> **Recommendation:** look into the missing assignments; read a new test only after its split and platform mix pass.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: in what order do you read a test, and what ends the memo?
+
+<details>
+<summary>answer</summary>
+
+Pre-flight checks, the effect in people and dollars with intervals, the rule written first, then the memo. The last line says what happens next and what would change it.
+
+</details>
+
+<Exercise id="data-analyst-ab-test-readout-3">
+
+**Spot the flaw.** A colleague writes: "Inside the `paywall_v2` lift, web stands out: 202 of 1,000 variant people bought against 143 of 958 in control, an interval clear of zero; iOS and Android are not. So the redesign works on web: ship it to web only."
+
+<RunSQL query={`SELECT platform,
+       ROUND(100 * (b1 * 1.0 / n1 - b0 * 1.0 / n0), 1) AS gap_points,
+       ROUND(196 * SQRT((b0 * 1.0 / n0) * (1 - b0 * 1.0 / n0) / n0 + (b1 * 1.0 / n1) * (1 - b1 * 1.0 / n1) / n1), 1) AS plus_or_minus
+FROM (VALUES ('android', 827, 80, 818, 84), ('ios', 921, 120, 895, 129), ('web', 958, 143, 1000, 202)) AS p(platform, n0, b0, n1, b1)
+ORDER BY platform;`} />
+
+Expected: 3 rows, 3 columns. Run it, then test her claim that web differs from iOS, and say what is wrong with the method.
+
+<Solution>
+
+The query gives web 5.3 points plus or minus 3.4, iOS 1.4 plus or minus 3.2 and Android 0.6 plus or minus 2.9. Test web minus iOS:
+
+```sql
+WITH g AS (
+  SELECT platform, b1 * 1.0 / n1 - b0 * 1.0 / n0 AS gap,
+         (b0 * 1.0 / n0) * (1 - b0 * 1.0 / n0) / n0 + (b1 * 1.0 / n1) * (1 - b1 * 1.0 / n1) / n1 AS var
+  FROM (VALUES ('ios', 921, 120, 895, 129), ('web', 958, 143, 1000, 202)) AS p(platform, n0, b0, n1, b1)
+)
+SELECT ROUND(100 * (w.gap - i.gap), 1) AS web_minus_ios_points,
+       ROUND(196 * SQRT(w.var + i.var), 1) AS plus_or_minus
+FROM g w JOIN g i ON w.platform = 'web' AND i.platform = 'ios';
+```
+
+It gives 3.9 plus or minus 4.6, so the interval, -0.7 to 8.5, includes zero: the data cannot say that web and iOS differ. The platform split was not in the rule written before launch; she looked at three groups after the result and kept the one with the biggest gap, and the biggest of several gaps looks larger than a typical one. The planned reading is the whole test, 26 more buyers per 1,000 signups; a platform effect is a question for a new test.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can run the pre-flight checks, report a lift in people and dollars with intervals, say what a flat result rules out, and write a memo against a rule stated in advance.* Test: Exercise data-analyst-ab-test-readout-2, done without opening the hints.
+
+The pattern to remember: **check the test, then read it in the units of the decision, against the rule written first, and end in a memo.**

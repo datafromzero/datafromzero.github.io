@@ -1,0 +1,471 @@
+---
+id: data-analyst-bi-modeling-for-dashboards
+title: 'The model behind a dashboard: relationships, measures and filters'
+short_title: The dashboard model
+description: Choose the grain of the fact table, define measures that recompute in every cell, and predict how a filter travels so that no number is counted twice.
+stage: data-analyst
+order: 90
+level: advanced
+duration: 30
+objectives:
+  - Choose the grain of a dashboard's fact table
+  - Define a measure that counts the right thing in every cell, totals included
+  - Tell a measure from a calculated column
+  - Predict how a filter travels across a relationship and where it stops
+prerequisites:
+  - data-analyst-dashboard-design
+  - core-grain-facts-and-dimensions
+  - core-designing-a-star-schema
+datasets:
+  - cafe-sales
+reviewed: 2026-11-23
+sources:
+  - title: 'Kimball Group: Grain (accessed 2026-11-23)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/grain/
+  - title: 'Tableau Help: Relationships (accessed 2026-11-23)'
+    url: https://help.tableau.com/current/pro/desktop/en-us/relate_tables.htm
+  - title: 'Microsoft Learn: Create and manage relationships in Power BI Desktop (accessed 2026-11-23)'
+    url: https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-create-and-manage-relationships
+  - title: 'Microsoft Learn: Measures in Power BI Desktop (accessed 2026-11-23)'
+    url: https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-measures
+  - title: 'Microsoft Learn: Create calculated columns in Power BI Desktop (accessed 2026-11-23)'
+    url: https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-calculated-columns
+status: published
+---
+
+## The question
+
+This is chapter 3 of the dashboard project. Dana opens the first draft and frowns:
+
+> The Orders card says 3,286. We have never sold that many. And Orders looks wrong when I click Bakery.
+
+Two cards, two different mistakes. The data is the table of chapter 1, built from `orders` (one row per visit), `order_items` (one row per product line), `products` and `stores`.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Grain, facts and dimensions*](/core/grain-facts-and-dimensions/) (C17), what does the grain of a table say?
+
+   <details>
+   <summary>answer</summary>
+
+   What one row stands for: one line of an order, for example, or one order.
+
+   </details>
+
+2. In [*Designing a star schema*](/core/designing-a-star-schema/) (C18), what do the rows of a fact table and a dimension table hold?
+
+   <details>
+   <summary>answer</summary>
+
+   A fact row holds measurements and the keys of its dimensions; a dimension row describes one thing (a product, a store).
+
+   </details>
+
+3. In [*Using an AI assistant for Python, with checks*](/python/ai-assisted-code/) (P27), Exercise 3, why did the average of six monthly averages not give the average of all the tea lines?
+
+   <details>
+   <summary>answer</summary>
+
+   Each month's average counted once, however many lines the month had, so every month got the same weight.
+
+   </details>
+
+## The big idea
+
+A filter travels from the one side of a relationship to the many side, and every measure counts the rows it is given: declare the grain first, then define each measure for that grain.
+
+<figure class="ca sa not-content t8">
+<input class="ca-pp" type="checkbox" id="ff-pp" aria-label="Pause the animation" />
+<input class="sa-r r0 o1" type="radio" name="ff" id="ff-r0" aria-label="Play automatically" checked />
+<input class="sa-r r1 o1" type="radio" name="ff" id="ff-r1" aria-label="Step 1 of 5: Three tables, two links" />
+<input class="sa-r r2 o2" type="radio" name="ff" id="ff-r2" aria-label="Step 2 of 5: A filter on products" />
+<input class="sa-r r3 o4" type="radio" name="ff" id="ff-r3" aria-label="Step 3 of 5: It reaches the lines" />
+<input class="sa-r r4 o6" type="radio" name="ff" id="ff-r4" aria-label="Step 4 of 5: It stops at the fact table" />
+<input class="sa-r r5 o8" type="radio" name="ff" id="ff-r5" aria-label="Step 5 of 5: Count from the lines" />
+<div class="sa-cn" aria-hidden="true"><span class="sa-n c-flt"><small>filters</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">1</i><i class="w6 d3">1</i></span></span><span class="sa-n c-src"><small>tables</small><span><i class="w1 tmp">—</i><i class="w1 d2 tmp hl">1</i><i class="w2 d3 tmp hl">2</i><i class="w4 d5">2</i></span></span><span class="sa-n c-mat"><small>lines</small><span><i class="w2 tmp">—</i><i class="w2 d3 tmp hl">2 of 4</i><i class="w4 d5">2 of 4</i></span></span><span class="sa-n c-flt"><small>orders</small><span><i class="w4 tmp">—</i><i class="w2 d5 tmp hl">all</i><i class="w2 d7">all</i></span></span></div>
+<svg class="sa-svg ca-svg" viewBox="-1 0 360 262" width="360" role="img" aria-labelledby="ff-t ff-d">
+<title id="ff-t">A filter flows from the one side to the many side and stops there</title>
+<desc id="ff-d">Three tables. Products on the left, order_items in the middle with four lines, and orders on the right. A line labeled sold in joins the primary key of products to the product foreign key of order_items: each product is sold in zero or many lines and each line has exactly one product. A line labeled contains joins the primary key of orders to the order foreign key of order_items: each order contains one or many lines and each line belongs to exactly one order. A filter, category equals A, is set on products. It reaches order_items, where two of the four lines are kept and shaded. It does not reach orders, which keeps all its rows. A count of order keys taken from the order_items lines follows the filter.</desc>
+<text class="f10 b w1 tmp" x="10" y="29">1 · Three tables, two links</text>
+<text class="f10 b w1 d2 tmp" x="10" y="29">2 · A filter on products</text>
+<text class="f10 b w2 d3 tmp" x="10" y="29">3 · It reaches the lines</text>
+<text class="f10 b w2 d5 tmp" x="10" y="29">4 · It stops at the fact table</text>
+<text class="f10 b w2 d7" x="10" y="29">5 · Count from the lines</text>
+<text class="f11 b" x="10" y="14">Filters run one side to many side</text>
+<rect class="s-src" x="4" y="50" width="80" height="72" rx="6" />
+<text class="f11 b" x="12" y="65">products</text>
+<path class="bx" d="M4 72h80" />
+<text class="f10 b mo" x="12" y="90">PK key</text>
+<text class="f10" x="12" y="112">category</text>
+<rect class="s-flt u1 d2 tmp" x="1" y="47" width="86" height="78" rx="8" />
+<rect class="s-src" x="276" y="78" width="80" height="50" rx="6" />
+<text class="f11 b" x="284" y="93">orders</text>
+<path class="bx" d="M276 100h80" />
+<text class="f10 b mo" x="284" y="118">PK key</text>
+<rect class="s-out" x="140" y="40" width="80" height="172" rx="6" />
+<rect class="f-mat k2 w6 d3" x="144" y="140" width="72" height="16" rx="3" />
+<rect class="f-mat k2 w6 d3" x="144" y="176" width="72" height="16" rx="3" />
+<text class="f11 b" x="148" y="55">order_items</text>
+<path class="bx" d="M140 62h80" />
+<text class="f10 b mo" x="148" y="90">FK product</text>
+<text class="f10 b mo" x="148" y="118">FK order</text>
+<text class="f10" x="150" y="152">line 1</text>
+<text class="f10" x="150" y="170">line 2</text>
+<text class="f10" x="150" y="188">line 3</text>
+<text class="f10" x="150" y="206">line 4</text>
+<path class="cf" d="M93 86L120.5 86" />
+<g><path class="cf" d="M89 81L89 91M93 81L93 91M84 86L93 86M131 86L140 91M131 86L140 81M140 86L127.5 86" /><circle class="cf" cx="124" cy="86" r="3.5" /><text class="cv m" x="112" y="80">sold in</text></g>
+<path class="cf" d="M267 114L233 114" />
+<g><path class="cf" d="M271 119L271 109M267 119L267 109M276 114L267 114M229 114L220 109M229 114L220 119M220 114L233 114M233 109L233 119" /><text class="cv m" x="252.5" y="108">contains</text><path class="ct" d="M223.9 104.5L229.9 101L229.9 108Z" /></g>
+<g class="w7 d2"><rect class="f-flt k2" x="4" y="134" width="84" height="24" rx="6" /><text class="f11 m" x="46" y="150">category = A</text></g>
+<g class="w6 d3"><rect class="f-mat k2" x="130" y="222" width="100" height="24" rx="6" /><text class="f11 m" x="180" y="238">lines kept: 2 of 4</text></g>
+<text class="f10 b m w4 d5" x="316" y="150">all rows stay</text>
+<text class="f10 m w4 d5" x="316" y="164">not reached</text>
+<g class="w2 d7"><rect class="f-out k3" x="260" y="222" width="96" height="24" rx="6" /><text class="f11 m" x="308" y="238">count order keys</text></g>
+</svg>
+<div class="sa-ctl">
+<label class="ca-btn" for="ff-pp"><span class="ca-pa"><span aria-hidden="true">&#10074;&#10074;</span> Pause</span><span class="ca-pl"><span aria-hidden="true">&#9654;</span> Play</span></label>
+<label class="ca-btn ca-au" for="ff-r0"><span aria-hidden="true">&#9654;</span> Play</label>
+<span class="sa-nav bk bk0" aria-hidden="true"></span>
+<span class="sa-nav bk bk1" aria-hidden="true"></span>
+<label class="sa-nav bk bk2" for="ff-r1"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk3" for="ff-r2"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk4" for="ff-r3"><span class="sr">Back</span></label>
+<label class="sa-nav bk bk5" for="ff-r4"><span class="sr">Back</span></label>
+<label class="sa-nav nx nx0" for="ff-r1"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx1" for="ff-r2"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx2" for="ff-r3"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx3" for="ff-r4"><span class="sr">Next</span></label>
+<label class="sa-nav nx nx4" for="ff-r5"><span class="sr">Next</span></label>
+<label class="sa-nav nx rs nx5" for="ff-r1"><span class="sr">Start over</span></label>
+<span class="sa-sbs"><label class="sa-sb sb1" for="ff-r1">1</label><label class="sa-sb sb2" for="ff-r2">2</label><label class="sa-sb sb3" for="ff-r3">3</label><label class="sa-sb sb4" for="ff-r4">4</label><label class="sa-sb sb5" for="ff-r5">5</label></span>
+</div>
+<div class="sa-now" aria-hidden="true">
+<div class="c-src w1 tmp">Each link joins a key of the one side to the matching key of the many side.<span class="sa-chs"><span class="sa-ch pl">3 tables</span><span class="sa-ch pl">2 links</span></span></div>
+<div class="c-flt w1 d2 tmp">A filter is set on a column of one table, here the category of a product.<span class="sa-chs"><span class="sa-ch pl">1 filter</span></span></div>
+<div class="c-mat w2 d3 tmp">The filter keeps only the many-side rows that match it.<span class="sa-chs"><span class="sa-ch pl">2 of 4 lines kept</span></span></div>
+<div class="c-flt w2 d5 tmp">It does not climb from the many side to the other table, so orders keeps every row.<span class="sa-chs"><span class="sa-ch pl">orders unfiltered</span></span></div>
+<div class="c-out w2 d7">A count taken from the lines follows the filter; a count of the other table does not.<span class="sa-chs"><span class="sa-ch ch">count the order keys on the lines</span></span></div>
+</div>
+<p class="ca-cap">A filter set on a one-side table reaches the many-side rows that match it, and it does not climb back to the table at the other end. Count from the table the filter reaches.</p>
+<ol class="sa-steps">
+<li>Three tables, two links</li>
+<li>A filter on products</li>
+<li>It reaches the lines</li>
+<li>It stops at the fact table</li>
+<li>Count from the lines</li>
+</ol>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 ideas: the grain of the fact, totals that do not add, measures against columns, and where a filter stops. Run unit 1 first: the later units use its view.
+
+### 1. Declare the grain, then count for it
+
+**Idea.** The grain of a fact table "establishes exactly what a single fact table row represents" (Kimball). Dana's dashboard sells products, so the grain is one order line, and the line carries its order's keys. A card that counts rows then counts lines. The count of orders is a *distinct* count of the order key.
+
+**Try it:** the table at line grain, and the two ways to count.
+
+<RunSQL query={`CREATE OR REPLACE VIEW flat AS
+SELECT o.order_id, o.store_id, o.customer_id, o.status, oi.order_item_id AS line_id, p.category,
+       (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd AS amount
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id;
+
+SELECT COUNT(*) AS card_counting_rows,
+       COUNT(DISTINCT order_id) AS card_counting_orders,
+       SUM(amount) AS revenue
+FROM flat
+WHERE status = 'completed';`} />
+
+**Predict:** a distinct count of the order key gives the real number of orders. Is it closer to 1,000, 1,800 or 2,500?
+
+Expected: 1 row, 3 columns.
+
+*Why:* 1,799 orders (one of the 1,800 is canceled); the card that counts rows shows 3,286, 83 percent more. The revenue is right at this grain, \$22,582.75, because an amount belongs to a line. Order 2075 touches the revenue (as 2 units) and not the order count. Dana's first draft counted rows, so it sums the right thing under the wrong name.
+
+### 2. A total is a measure too
+
+**Idea.** A *measure* is calculated for each cell of a chart, from the rows that cell's filters leave. The total is one more cell, worked out from all the rows.
+
+**Try it:** distinct orders by category, with the total.
+
+<RunSQL query={`SELECT category, COUNT(DISTINCT order_id) AS orders
+FROM flat
+WHERE status = 'completed'
+GROUP BY category
+UNION ALL
+SELECT 'all categories', COUNT(DISTINCT order_id)
+FROM flat
+WHERE status = 'completed'
+ORDER BY orders DESC;`} />
+
+**Predict:** do the four categories add up to the total, to less, or to more? By how many orders?
+
+Expected: 5 rows, 2 columns.
+
+*Why:* coffee 1,258, bakery 648, tea 470 and food 406 add up to 2,782, which is 983 more than the 1,799 of the total row. Nothing is wrong: an order with a coffee and a bagel is in the coffee cell, in the bakery cell and once in the total cell, so 983 of the 2,782 counts repeat an order already counted in another category. A distinct count does not add up across a dimension that splits an order. A dashboard that adds the bars, or hides the total row, shows a number that is not the number of orders.
+
+<figure>
+<svg viewBox="0 0 360 241" width="360" role="img" aria-labelledby="da9-nonadd-t da9-nonadd-d">
+<title id="da9-nonadd-t">Distinct orders by category against the total of all orders</title>
+<desc id="da9-nonadd-d">A horizontal bar chart of completed orders on a scale from 0 to 3,000. coffee 1,258, bakery 648, tea 470, food 406. The total cell is 1,799 orders. A last bar stacks the four category bars end to end: it reaches 2,782, and the part beyond 1,799, 983 orders, is drawn in ochre. An order with lines in two categories is counted in each category bar and once in the total.</desc>
+<g fill="currentColor">
+<text x="29" y="22.4" font-size="10.5" font-weight="600">Orders by category, the total, the bars added</text>
+<text x="29" y="54.4" font-size="10" font-weight="600">coffee</text>
+<rect x="129" y="42.4" width="78.8" height="16" rx="3" fill="#0072b2" />
+<text x="213.8" y="54.9" font-size="10">1,258</text>
+<text x="29" y="78.4" font-size="10">bakery</text>
+<rect x="129" y="66.4" width="40.6" height="16" rx="3" fill="#0072b2" />
+<text x="175.6" y="78.9" font-size="10">648</text>
+<text x="29" y="102.4" font-size="10">tea</text>
+<rect x="129" y="90.4" width="29.5" height="16" rx="3" fill="#0072b2" />
+<text x="164.4" y="102.9" font-size="10">470</text>
+<text x="29" y="126.4" font-size="10">food</text>
+<rect x="129" y="114.4" width="25.4" height="16" rx="3" fill="#0072b2" />
+<text x="160.4" y="126.9" font-size="10">406</text>
+<text x="29" y="152.4" font-size="10" font-weight="600">all categories</text>
+<rect x="129" y="140.4" width="112.7" height="16" rx="3" fill="#00a07a" />
+<text x="247.7" y="152.9" font-size="10" font-weight="600">1,799</text>
+<text x="29" y="184.4" font-size="10" font-weight="600">four bars added</text>
+<rect x="129" y="172.4" width="78.8" height="16" fill="#0072b2" fill-opacity="1" />
+<rect x="207.8" y="172.4" width="40.6" height="16" fill="#0072b2" fill-opacity="0.75" />
+<rect x="248.4" y="172.4" width="29.5" height="16" fill="#0072b2" fill-opacity="1" />
+<rect x="277.9" y="172.4" width="25.4" height="16" fill="#0072b2" fill-opacity="0.75" />
+<rect x="241.7" y="172.4" width="61.6" height="16" fill="#ad9100" />
+<text x="301.3" y="202.4" font-size="10" font-weight="600" text-anchor="end">2,782: 983 more than the total</text>
+<path d="M129 208.4 L317 208.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M129 208.4 L129 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="129" y="224.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M191.7 208.4 L191.7 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="191.7" y="224.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1,000</text>
+<path d="M254.3 208.4 L254.3 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="254.3" y="224.4" font-size="10" text-anchor="middle" fill-opacity="0.8">2,000</text>
+<path d="M317 208.4 L317 212.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="317" y="224.4" font-size="10" text-anchor="middle" fill-opacity="0.8">3,000</text>
+</g>
+</svg>
+</figure>
+
+### 3. Measure, calculated column and the total cell
+
+**Idea.** A *calculated column* is a formula that gives a result for every row of a table: the amount of a line, which needs the price from `products`. Microsoft's page says it "calculates a result for every row in the table", and lists import-mode columns as materialized, derived when the data refreshes. A measure (unit 2) is not stored per row: it is worked out when the report asks, for each cell, and Microsoft's page says its calculated results change as you interact with the report. Revenue is a measure (a sum of the column).
+
+**Try it:** run unit 1 first. Revenue per order by store, a total cell, and the average of the three store cells.
+
+<RunSQL query={`WITH r AS (
+  SELECT s.store_name AS store, SUM(f.amount) AS revenue, COUNT(DISTINCT f.order_id) AS orders
+  FROM flat f
+  JOIN stores s ON s.store_id = f.store_id
+  WHERE f.status = 'completed'
+  GROUP BY s.store_name
+)
+SELECT cell, revenue_per_order
+FROM (
+  SELECT 1 AS k, store AS cell, ROUND(revenue / orders, 2) AS revenue_per_order FROM r
+  UNION ALL SELECT 2, 'total cell', ROUND(SUM(revenue) / SUM(orders), 2) FROM r
+  UNION ALL SELECT 3, 'average of the three', ROUND(AVG(revenue / orders), 2) FROM r
+) AS t
+ORDER BY k, cell;`} />
+
+**Predict:** the total cell of a ratio measure shows the average of the cells above it, or revenue over orders for all the rows?
+
+Expected: 5 rows, 2 columns.
+
+*Why:* the total cell reads 12.55, the ratio of all the rows; the average of the three cells is 12.63. Harbor's 355 orders weigh less than Old Town's 729, and an average of cells gives each store the same weight. A ratio measure is recomputed from the rows of every cell, total included, and is never an average of the cells. Define it once, and the tool computes it in every cell.
+
+<details>
+<summary>Check: column or measure?</summary>
+
+In `flat`, `amount` is a calculated column (a value stored for every line); revenue per order is a measure (a ratio recomputed for each cell).
+
+</details>
+
+### 4. Where a filter stops
+
+**Idea.** A relationship joins a table with unique keys (the *one* side, a dimension) to a table that repeats them (the *many* side, the fact). With a single direction, a filter on the one side reaches the many side. A card counts the rows of the table its measure comes from.
+
+**Try it:** run unit 1 first. Dana clicks Bakery. A card that counts the rows of `orders` and a card that counts distinct orders of the fact:
+
+<RunSQL query={`SELECT (SELECT COUNT(*) FROM orders WHERE status = 'completed') AS orders_table_rows,
+       (SELECT COUNT(DISTINCT order_id) FROM flat WHERE status = 'completed' AND category = 'bakery') AS orders_from_fact;`} />
+
+**Predict:** after the click, how many orders does the second card show: about 648, about 703 or 1,799?
+
+Expected: 1 row, 2 columns.
+
+*Why:* the distinct count from the fact reads 648, the orders with a bakery line (703 is the number of bakery lines). The `orders` table is not filtered: its card still reads 1,799, because a filter does not climb from the many side to the one. Dana's second symptom is the wiring, not the data. The fix is to count from the fact, which the filter reaches, or to give the fact table the order's attributes (a star).
+
+<Aside title="In Tableau Public: relationships">
+
+On the Data Source page, relationships connect logical tables: drag a second table next to the first until the line appears and match the fields. The Help page says Tableau builds the joins from the fields each sheet uses, keeps each table's level of detail, and that you do not choose a join type. Check each card against the numbers on this page.
+
+</Aside>
+
+<Aside title="Power BI: relationships and measures">
+
+On the Modeling tab, Manage relationships, then New: pick the two tables and their columns, and a cardinality of Many to one, with the many side on the fact. Cross filter direction Single means filtering choices in connected tables work on the table where values are aggregated; Both treats two tables as one, and Microsoft advises against it when two fact tables share dimensions. Make a measure with Modeling, then New measure.
+
+</Aside>
+
+<Aside type="tip" title="Remember">
+
+- Declare the grain first; a card that counts rows counts the grain.
+- Count a coarser thing (orders) with a distinct count of its key.
+- A total is a measure: distinct counts and ratios do not add up from their parts.
+- Filters run from the one side to the many side; count from where the filter lands.
+
+**Common trap:** summing the bars of a distinct count and calling the total a bug.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-bi-modeling-for-dashboards-1">
+
+**A column worked out once, then two measures.** Dana wants morning against the rest of the day. The editor adds a calculated column, `part_of_day`: *morning* before 11 a.m. by the order's time, else *later*. It then gives the revenue of each part. Add the distinct orders of each part and a `total` row with its own distinct count, then say whether the two parts add up to the total. Run unit 1 first. Expected: 3 rows, 3 columns.
+
+<RunSQL query={`CREATE OR REPLACE VIEW flat_day AS
+SELECT f.*, CASE WHEN EXTRACT(hour FROM o.ordered_at) < 11 THEN 'morning' ELSE 'later' END AS part_of_day
+FROM flat f
+JOIN orders o ON o.order_id = f.order_id;
+
+SELECT part_of_day, SUM(amount) AS revenue
+FROM flat_day
+WHERE status = 'completed'
+GROUP BY part_of_day
+ORDER BY part_of_day;`} />
+
+<details>
+<summary>Hint</summary>
+
+The `total` row is a second `SELECT` without `GROUP BY`, stacked with `UNION ALL`. Put the `ORDER BY` after the last `SELECT`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT part_of_day, SUM(amount) AS revenue, COUNT(DISTINCT order_id) AS orders
+FROM flat_day
+...
+UNION ALL
+SELECT 'total', ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT part_of_day, SUM(amount) AS revenue, COUNT(DISTINCT order_id) AS orders
+FROM flat_day
+WHERE status = 'completed'
+GROUP BY part_of_day
+UNION ALL
+SELECT 'total', SUM(amount), COUNT(DISTINCT order_id)
+FROM flat_day
+WHERE status = 'completed'
+ORDER BY revenue;
+```
+
+Morning \$8,387.00 from 678 orders, later \$14,195.75 from 1,121, total \$22,582.75 from 1,799. This time the orders add up: 678 + 1,121 = 1,799. The part of the day is worked out from the order's time, so every order has one value and sits in one part. In unit 2 the category belonged to the line, so an order could sit in two. A distinct count adds up across a dimension only when each order has a single value of it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-bi-modeling-for-dashboards-2">
+
+**A share that must respect the store filter.** Dana filters the dashboard to Harbor and asks for each category's share of revenue. Before you start, write in a comment what the four shares must add up to. Then write the query. Run unit 1 first. Expected: 4 rows, 3 columns (category, revenue, share in percent).
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Harbor is `store_id = 3`. The denominator is the revenue of all Harbor rows: `SUM(SUM(f.amount)) OVER ()` after the `GROUP BY`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Four categories, coffee a little under half, and shares that add to 100."*
+
+```sql
+SELECT category, SUM(amount) AS revenue,
+       ROUND(100 * SUM(amount) / SUM(SUM(amount)) OVER (), 1) AS share
+FROM flat
+WHERE ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT category, SUM(amount) AS revenue,
+       ROUND(100 * SUM(amount) / SUM(SUM(amount)) OVER (), 1) AS share
+FROM flat
+WHERE status = 'completed' AND store_id = 3
+GROUP BY category
+ORDER BY revenue DESC;
+```
+
+Coffee 47.0, food 22.6, bakery 15.8 and tea 14.6 percent of Harbor's \$4,606.25, adding to 100. The window sums the grouped rows, so the filter shrinks the denominator with the numerator. A denominator taken from the whole table would give coffee 9.6 percent and four shares that add to 20.4.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what does the grain declare, and why does a filter on products not change a count of the `orders` table?
+
+<details>
+<summary>answer</summary>
+
+The grain says what one row of the fact table stands for. A filter runs from the one side of a relationship to the many side: products filter the order lines, and the order lines do not filter the orders table.
+
+</details>
+
+<Exercise id="data-analyst-bi-modeling-for-dashboards-3">
+
+**Spot the flaw.** A colleague defines the card: "Revenue = the sum of quantity times unit price over completed lines, with order 2075 as 2 units." She says it ties out because it is "within 0.4 percent of the cafe's figure of \$22,582.75".
+
+<RunSQL query={`SELECT SUM((CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd) AS her_revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed';`} />
+
+Expected: 1 row, 1 column. Run it, then find out what the difference is made of, and say what is wrong with the measure.
+
+<Solution>
+
+The query gives \$22,666.75, \$84.00 above the cafe's figure. The difference is the column she left out:
+
+```sql
+SELECT SUM(oi.discount_usd) AS discounts
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+WHERE o.status = 'completed';
+```
+
+Discounts total \$84.00. The dataset README defines the amount of a line as quantity times price minus discount, so her measure is a different metric with a close value. "Within 0.4 percent" is not tying out: a card ties out when the difference is zero or fully explained. Subtract the discount in the column that holds the line amount.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can declare the grain, count orders with a distinct count, explain why totals do not add, tell a measure from a calculated column, and predict where a filter stops.* Test: Exercise data-analyst-bi-modeling-for-dashboards-2, done without opening the hints.
+
+The pattern to remember: **declare the grain, define each measure for it, and check that bars add up to the card.**

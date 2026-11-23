@@ -1,0 +1,435 @@
+---
+id: data-analyst-case-interview-practice
+title: 'Analytics case questions: define, diagnose, design, judge'
+short_title: Analytics case questions
+description: 'Practice the four case families out loud: define a metric, diagnose a drop, design a test and judge a trade-off.'
+stage: data-analyst
+order: 140
+level: advanced
+duration: 30
+objectives:
+  - Answer a define-the-metric case with a primary metric and guardrails
+  - Walk a diagnose-a-drop case in the fixed order
+  - Outline a test design with duration and decision rule
+  - Judge a trade-off and name the check that would change the decision
+  - Narrate assumptions out loud
+prerequisites:
+  - core-diagnosing-a-movement
+  - core-experiments-ab-testing
+datasets:
+  - cafe-sales
+reviewed: 2026-11-23
+sources:
+  - title: 'Meta Careers: Preparing for your initial interview, data scientist (undated; accessed 2026-11-23)'
+    url: https://www.metacareers.com/DS-prep-initial/
+  - title: 'GitLab handbook: Data Analytics job description (last modified Oct 30, 2026; accessed 2026-11-23)'
+    url: https://handbook.gitlab.com/job-description-library/marketing/enterprise-data/data-analyst/
+status: published
+---
+
+## The question
+
+An interviewer, or a manager, hands you a one-line case and waits. You have five minutes and no laptop. These four lines are one case of each family:
+
+| family | the case |
+|---|---|
+| define | Dana: "Tell me whether Harbor is doing well." |
+| diagnose | "Old Town's revenue fell from January to February. Why?" |
+| design | "Would a free pastry with every coffee raise orders?" |
+| judge | "Take 20 percent off coffee at 7 a.m. at Harbor: worth it?" |
+
+Employers publish how they screen. Meta describes its first data scientist interview as a 45-minute conversation with analytical and technical parts, and GitLab lists interviews with a data team member, a business team member and an executive. The four families are this lesson's grouping. Answer aloud, then score yourself, 0 to 2 on each line:
+
+| criterion | 0 | 1 | 2 |
+|---|---|---|---|
+| frames | jumps in | one question, or no decision named | restates, asks two or more, names the decision |
+| structures | no order | an order, not announced | announces the steps first |
+| defines | undefined words | some parts | numerator, denominator, unit, window, and a guardrail where success is asked |
+| checks | opinions | a check named | checks in a stated order, with numbers and units |
+| concludes | no recommendation | a recommendation | recommendation, assumptions aloud, what would change it |
+
+Ten points; 8 is a pass here, and the bar is ours.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Diagnosing a metric that moved*](/core/diagnosing-a-movement/) (C13), in what order do you walk a movement?
+
+   <details>
+   <summary>answer</summary>
+
+   The pipeline, the calendar, the segments, then a change of mix against a change of rate.
+
+   </details>
+
+2. In [*Designing an A/B test*](/core/experiments-ab-testing/) (C14), what does the minimum detectable effect come from? Write it as one sentence for a free-pastry test.
+
+   <details>
+   <summary>answer</summary>
+
+   From the decision, the smallest lift worth acting on, and not from the data. For example: "The least rise in orders per day that would pay for the free pastry."
+
+   </details>
+
+## The big idea
+
+Answer a case in four moves: frame it, announce your steps, check with data in a fixed order, and finish with a recommendation and what would change it.
+
+## Learn by doing
+
+About 30 minutes, 4 cases, one for each family. Say each answer aloud before you read ours. The SQL runs in the page. Run each block after the ones above it.
+
+### 1. Define: "Is Harbor doing well?"
+
+**Idea.** A define case is vague on purpose. Do not answer it: frame it. Ask what "well" is compared with, for which decision and by when. Then state the metric with its four parts (C12) and a *guardrail*, a second number that must not get worse.
+
+**Try it.** Completed orders for each cafe since April 1, the 91 days all three were open, with order 2075 counted as 2 units:
+
+<RunSQL query={`CREATE OR REPLACE VIEW sales AS
+SELECT o.order_id, s.store_name AS store, o.ordered_at, CAST(o.ordered_at AS DATE) AS order_date,
+       p.category,
+       (CASE WHEN oi.order_item_id = 6952 THEN 2 ELSE oi.quantity END) * p.unit_price_usd - oi.discount_usd AS amount
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+JOIN stores s ON s.store_id = o.store_id
+WHERE o.status = 'completed';
+
+SELECT store,
+       COUNT(DISTINCT order_date) AS days,
+       ROUND(COUNT(DISTINCT order_id) * 1.0 / COUNT(DISTINCT order_date), 2) AS orders_per_day,
+       ROUND(SUM(amount) / COUNT(DISTINCT order_id), 2) AS revenue_per_order
+FROM sales
+WHERE ordered_at >= DATE '2026-04-01'
+GROUP BY store
+ORDER BY store;`} />
+
+**Predict:** on orders per day, is Harbor ahead of the older cafes, level or behind?
+
+Expected: 3 rows, 4 columns.
+
+*Why:* Harbor takes 3.90 orders a day, Campus 3.98 and Old Town 4.01: level, 2 to 3 percent fewer. Its orders are slightly larger: \$12.98 against \$12.52 and \$12.80. Out loud: *"What is well compared with, for which decision, by when? Assuming Dana decides whether to keep going: my metric is completed orders per open day since April 1, against the older cafes over the same days; my guardrail is revenue per order, so that a discount cannot buy orders. Harbor is level, 3.90 against 3.98 and 4.01. I would keep going and check again at six months."*
+
+### 2. Diagnose: "Old Town's February"
+
+**Idea.** Walk C13's order aloud and stop when something explains the move: the pipeline (are the rows all there), the calendar (the length of the months), the segments (where it moved), then orders against order size. When nothing explains it, say so.
+
+**Try it.** Old Town for January and February:
+
+<RunSQL query={`SELECT strftime(order_date, '%Y-%m') AS month,
+       COUNT(DISTINCT order_date) AS days,
+       ROUND(SUM(amount), 2) AS revenue,
+       ROUND(SUM(amount) / COUNT(DISTINCT order_date), 2) AS revenue_per_day,
+       ROUND(COUNT(DISTINCT order_id) * 1.0 / COUNT(DISTINCT order_date), 2) AS orders_per_day,
+       ROUND(SUM(amount) / COUNT(DISTINCT order_id), 2) AS revenue_per_order
+FROM sales
+WHERE store = 'Old Town' AND order_date < DATE '2026-03-01'
+GROUP BY month
+ORDER BY month;`} />
+
+**Predict:** once the length of the months is allowed for, how big is the fall in revenue per day?
+
+Expected: 2 rows, 6 columns.
+
+*Why:* every day has orders (31 and 28 days). Revenue falls 27.0 percent, from \$1,591.00 to \$1,162.00, and 19.1 percent per day, so the calendar explains 8 of the 27 points. Orders per day fall 10.9 percent and revenue per order 9.2: both moved. Now the segments:
+
+<RunSQL query={`SELECT category,
+       ROUND(SUM(amount) FILTER (WHERE order_date < DATE '2026-02-01'), 2) AS january,
+       ROUND(SUM(amount) FILTER (WHERE order_date >= DATE '2026-02-01'), 2) AS february,
+       ROUND(SUM(amount) FILTER (WHERE order_date >= DATE '2026-02-01') - SUM(amount) FILTER (WHERE order_date < DATE '2026-02-01'), 2) AS change
+FROM sales
+WHERE store = 'Old Town' AND order_date < DATE '2026-03-01'
+GROUP BY category
+ORDER BY change;`} />
+
+**Predict:** which category fell most, and did any rise?
+
+Expected: 4 rows, 4 columns.
+
+*Why:* coffee fell \$283.25, tea \$117.00 and food \$78.75, while bakery rose \$50.00: coffee is 66 percent of the \$429.00 fall, and no single category explains it.
+
+<figure>
+<svg viewBox="0 0 360 257" width="360" role="img" aria-labelledby="da14-swing-t da14-swing-d">
+<title id="da14-swing-t">Revenue per day by cafe and month, January to June</title>
+<desc id="da14-swing-d">A line chart from January to June, on a scale from 36 to 58 dollars of net sales per day, one line for each cafe: Old Town in blue, Campus in green, Harbor in purple, which starts in April. Old Town: Jan 51.32, Feb 41.50, Mar 50.15, Apr 51.41, May 54.90, Jun 47.53. Campus: Jan 48.99, Feb 53.87, Mar 46.48, Apr 41.73, May 54.46, Jun 53.03. Harbor: Apr 53.22, May 49.89, Jun 48.78. Old Town's fall from January to February, -19.1 percent, is the largest fall of the 12 month-to-month changes; the next falls are -13.7 percent (Campus, March) and -13.4 percent (Old Town, June). The largest rise is Campus in May, +30.5 percent.</desc>
+<g fill="currentColor">
+<text x="14.4" y="22.4" font-size="10.5" font-weight="600">Net sales per day, by cafe and month (dollars)</text>
+<path d="M50.4 175.1 L292.4 175.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="42.4" y="178.6" font-size="9" text-anchor="end" fill-opacity="0.8">40</text>
+<path d="M50.4 141 L292.4 141" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="42.4" y="144.5" font-size="9" text-anchor="end" fill-opacity="0.8">45</text>
+<path d="M50.4 106.9 L292.4 106.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="42.4" y="110.4" font-size="9" text-anchor="end" fill-opacity="0.8">50</text>
+<path d="M50.4 72.9 L292.4 72.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="42.4" y="76.4" font-size="9" text-anchor="end" fill-opacity="0.8">55</text>
+<text x="50.4" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jan</text>
+<text x="98.8" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Feb</text>
+<text x="147.2" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Mar</text>
+<text x="195.6" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Apr</text>
+<text x="244" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">May</text>
+<text x="292.4" y="218.4" font-size="9" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<path d="M50.4 97.9 L98.8 164.9 L147.2 106 L195.6 97.3 L244 73.5 L292.4 123.8" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="50.4" cy="97.9" r="4" fill="#0072b2" />
+<circle cx="98.8" cy="164.9" r="4" fill="#0072b2" />
+<circle cx="147.2" cy="106" r="4" fill="#0072b2" />
+<circle cx="195.6" cy="97.3" r="4" fill="#0072b2" />
+<circle cx="244" cy="73.5" r="4" fill="#0072b2" />
+<circle cx="292.4" cy="123.8" r="4" fill="#0072b2" />
+<path d="M50.4 113.8 L98.8 80.6 L147.2 131 L195.6 163.3 L244 76.5 L292.4 86.3" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="50.4" cy="113.8" r="4" fill="#00a07a" />
+<circle cx="98.8" cy="80.6" r="4" fill="#00a07a" />
+<circle cx="147.2" cy="131" r="4" fill="#00a07a" />
+<circle cx="195.6" cy="163.3" r="4" fill="#00a07a" />
+<circle cx="244" cy="76.5" r="4" fill="#00a07a" />
+<circle cx="292.4" cy="86.3" r="4" fill="#00a07a" />
+<path d="M195.6 85 L244 107.7 L292.4 115.3" fill="none" stroke="#9a6be0" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="195.6" cy="85" r="4" fill="#9a6be0" />
+<circle cx="244" cy="107.7" r="4" fill="#9a6be0" />
+<circle cx="292.4" cy="115.3" r="4" fill="#9a6be0" />
+<text x="302.4" y="89.8" font-size="9.5" font-weight="600">Campus</text>
+<text x="302.4" y="112.3" font-size="9.5" font-weight="600">Harbor</text>
+<text x="302.4" y="132.8" font-size="9.5" font-weight="600">Old Town</text>
+<text x="107.8" y="168.9" font-size="9.5" font-weight="600">Feb: 41.50</text>
+<text x="14.4" y="240.4" font-size="9" fill-opacity="0.85">Net sales over days with orders; order 2075 counted as 2 units</text>
+</g>
+</svg>
+</figure>
+
+Out loud: *"Nothing is missing. February is shorter, which explains 8 points of 27. Fewer orders a day and smaller orders both fell, mostly in coffee. It is the largest fall of the 12 monthly changes, yet Campus fell 13.7 percent in March, so swings of this size happen. I found no cause in the data; I would ask Old Town what changed, and watch March."*
+
+### 3. Design: "Would a free pastry raise orders?"
+
+**Idea.** A design case needs five things: the unit you randomize, the arms, the primary metric with a guardrail, the duration, and the decision rule written first. A cafe cannot randomize people at the till, so randomize *cafe-days*. Duration follows C14's sizing: for a mean, days per arm are about 15.68 times the variance of the daily count, divided by the square of the rise worth acting on; 15.68 is 2 × (1.96 + 0.84)², the bar and power of C14.
+
+**Try it.** The spread of orders per cafe-day, and the days per arm for two rises:
+
+<RunSQL query={`WITH day_counts AS (
+  SELECT store, order_date, COUNT(DISTINCT order_id) AS orders
+  FROM sales
+  GROUP BY store, order_date
+),
+s AS (SELECT AVG(orders) AS mean, VAR_SAMP(orders) AS variance FROM day_counts)
+SELECT ROUND(mean, 2) AS orders_per_day,
+       ROUND(SQRT(variance), 2) AS spread,
+       CEIL(15.68 * variance / POWER(0.10 * mean, 2)) AS days_for_10pct,
+       CEIL(15.68 * variance / POWER(0.25 * mean, 2)) AS days_for_25pct
+FROM s;`} />
+
+**Predict:** how many cafe-days per arm to catch a 10 percent rise in orders per day, and a 25 percent rise?
+
+Expected: 1 row, 4 columns.
+
+*Why:* orders per day average 3.97 with a spread of 1.40, so 196 cafe-days per arm catch a 10 percent rise (0.40 orders a day) and 32 catch 25 percent (0.99). With three cafes each day gives three cafe-days: 392 cafe-days is 131 days, 19 whole weeks, and 64 is 22 days, 4 whole weeks.
+
+<figure>
+<svg viewBox="0 0 360 195" width="360" role="img" aria-labelledby="da14-days-t da14-days-d">
+<title id="da14-days-t">Cafe-days per arm needed to catch a rise in orders per day</title>
+<desc id="da14-days-d">A horizontal bar chart of the cafe-days needed in each arm of a test, on a scale from 0 to 800. To catch a rise of 5 percent in orders per day: 781. 10 percent: 196. 25 percent: 32. 50 percent: 8. Orders per day average 3.97 with a spread of 1.40. The smaller the rise worth finding, the longer the test.</desc>
+<g fill="currentColor">
+<text x="31.1" y="22.4" font-size="10.5" font-weight="600">Cafe-days per arm to catch a rise in orders</text>
+<text x="31.1" y="58.4" font-size="9.5" font-weight="600">+5 percent</text>
+<rect x="97.1" y="46.4" width="158.2" height="16" rx="3" fill="#0072b2" />
+<text x="261.2" y="58.9" font-size="10" font-weight="600">781 cafe-days</text>
+<text x="31.1" y="86.4" font-size="9.5" font-weight="600">+10 percent</text>
+<rect x="97.1" y="74.4" width="39.7" height="16" rx="3" fill="#0072b2" />
+<text x="142.8" y="86.9" font-size="10" font-weight="600">196 cafe-days</text>
+<text x="31.1" y="114.4" font-size="9.5" font-weight="600">+25 percent</text>
+<rect x="97.1" y="102.4" width="6.5" height="16" rx="3" fill="#0072b2" />
+<text x="109.6" y="114.9" font-size="10" font-weight="600">32 cafe-days</text>
+<text x="31.1" y="142.4" font-size="9.5" font-weight="600">+50 percent</text>
+<rect x="97.1" y="130.4" width="2" height="16" rx="3" fill="#0072b2" />
+<text x="104.7" y="142.9" font-size="10" font-weight="600">8 cafe-days</text>
+<text x="31.1" y="166.4" font-size="9" fill-opacity="0.85">Per arm. Completed orders per cafe-day, three cafes, January</text>
+<text x="31.1" y="178.4" font-size="9" fill-opacity="0.85">to June. The smaller the rise worth finding, the longer the test.</text>
+</g>
+</svg>
+</figure>
+
+Out loud: *"I would randomize cafe-days, balanced by weekday. Primary metric: orders per day; guardrail: revenue per order, since the pastry costs money. If a 25 percent rise is the least that pays, four weeks. Rule, written first: keep the pastry if orders per day rise by at least 0.99 and the guardrail does not fall. Risk: loyalty customers who see both arms."*
+
+### 4. Judge: "Is 20 percent off coffee at 7 a.m. worth it?"
+
+**Idea.** A judge case has no right answer, only a defended one. Size what is at stake, say how each side could be wrong, decide, and name the check that would change your decision. A discount of 20 percent keeps revenue only if orders rise by a quarter, since 1 ÷ 0.8 is 1.25.
+
+**Try it.** Harbor's orders that include a coffee at 7 a.m., from April 1 to June 30:
+
+<RunSQL query={`SELECT COUNT(DISTINCT order_id) AS coffee_orders_at_7,
+       ROUND(SUM(amount), 2) AS coffee_revenue,
+       ROUND(0.2 * SUM(amount), 2) AS discount_cost,
+       ROUND(0.2 / 0.8 * COUNT(DISTINCT order_id), 1) AS extra_orders_to_break_even
+FROM sales
+WHERE store = 'Harbor' AND hour(ordered_at) = 7 AND category = 'coffee';`} />
+
+**Predict:** how many extra coffee orders at 7 a.m. in 91 days pay for the discount, on revenue alone?
+
+Expected: 1 row, 4 columns.
+
+*Why:* 15 orders and \$121.50 of coffee; the discount gives away \$24.30 if nobody changes, and it breaks even at 3.8 more orders in 91 days. The bet is small both ways. Out loud: *"At most \$24.30 a quarter is at stake, and four extra orders would pay for it on revenue alone. A test could not see four orders against a daily spread of 1.4, so I would run it for a month as a pilot. The check that changes my answer is the margin on a coffee: at a margin of 60 cents on the dollar the break-even rise is 50 percent, not 25."*
+
+<Aside type="tip" title="Remember">
+
+- Frame first, announce your steps, check in a fixed order, end with what would change it.
+- Define: a metric with four parts, plus a guardrail.
+- Diagnose: pipeline, calendar, segments, mix or rate; say when nothing explains it.
+- Design: unit, arms, metric, duration from the rise worth finding, a rule written first.
+- Judge: size the stake, decide, name the check that would change it.
+
+**Common trap:** starting to compute before you have said what the number is for.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-case-interview-practice-1">
+
+**Diagnose: "Campus's April."** Campus's revenue per day fell from March to April. The editor counts the orders and the days of each month. Add the orders per day and the revenue per order, then walk the case aloud in C13's order. Run unit 1 first. Expected: 2 rows, 5 columns.
+
+<RunSQL query={`SELECT strftime(order_date, '%Y-%m') AS month,
+       COUNT(DISTINCT order_id) AS orders,
+       COUNT(DISTINCT order_date) AS days
+FROM sales
+WHERE store = 'Campus' AND order_date >= DATE '2026-03-01' AND order_date < DATE '2026-05-01'
+GROUP BY month
+ORDER BY month;`} />
+
+<details>
+<summary>Hint</summary>
+
+Orders per day is orders divided by days. Revenue per order is `SUM(amount) / COUNT(DISTINCT order_id)`, in the same `GROUP BY`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT strftime(order_date, '%Y-%m') AS month,
+       COUNT(DISTINCT order_id) AS orders,
+       COUNT(DISTINCT order_date) AS days,
+       ROUND(COUNT(DISTINCT order_id) * 1.0 / COUNT(DISTINCT order_date), 2) AS orders_per_day,
+       ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT strftime(order_date, '%Y-%m') AS month,
+       COUNT(DISTINCT order_id) AS orders,
+       COUNT(DISTINCT order_date) AS days,
+       ROUND(COUNT(DISTINCT order_id) * 1.0 / COUNT(DISTINCT order_date), 2) AS orders_per_day,
+       ROUND(SUM(amount) / COUNT(DISTINCT order_id), 2) AS revenue_per_order
+FROM sales
+WHERE store = 'Campus' AND order_date >= DATE '2026-03-01' AND order_date < DATE '2026-05-01'
+GROUP BY month
+ORDER BY month;
+```
+
+March has 124 orders in 31 days (4.00 a day) and \$11.62 an order; April 103 in 30 (3.43) and \$12.16. Out loud: every day has orders; April is one day shorter, which explains little; orders per day fall 14.2 percent while orders grow 4.6 percent larger, so revenue per day falls 10.2 percent, from \$46.48 to \$41.73. The cause is fewer orders, not smaller ones. I found nothing in the data that says why, so I would ask Campus and check May.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-case-interview-practice-2">
+
+**Judge: "A second espresso machine for Campus?"** Campus's busiest hour is 7 a.m., with 79 orders in 181 days. Dana asks for a second machine. Before you run anything, say aloud what you would size and what would change your answer. Then count, for the days of the whole period that have a Campus order at 7 a.m., how many days had 1, 2, 3 or more orders in that hour. Run unit 1 first. Expected: your answer, then 3 rows, 2 columns.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+First count the orders in the 7 a.m. hour of each day with a `GROUP BY` on `order_date`, then count how many days have each count.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three rows: most days one order, fewer days two, a couple of days three."*
+
+```sql
+WITH per_day AS (
+  SELECT order_date, COUNT(DISTINCT order_id) AS orders_in_hour
+  FROM sales
+  WHERE store = 'Campus' AND ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH per_day AS (
+  SELECT order_date, COUNT(DISTINCT order_id) AS orders_in_hour
+  FROM sales
+  WHERE store = 'Campus' AND hour(ordered_at) = 7
+  GROUP BY order_date
+)
+SELECT orders_in_hour, COUNT(*) AS days
+FROM per_day
+GROUP BY orders_in_hour
+ORDER BY orders_in_hour;
+```
+
+49 days have 1 order, 12 have 2 and 2 have 3: 63 days with an order at 7 a.m. out of 181, never more than 3 in the hour. Out loud: the busiest hour holds at most 3 orders, so the data shows no queue to relieve. I would decline for now. The checks that would change it: how many orders one machine makes in an hour and how long customers wait at the peak, neither of which this file holds, and a rise in volume.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name the four families and the five lines of the rubric.
+
+<details>
+<summary>answer</summary>
+
+Define, diagnose, design and judge. Frames, structures, defines, checks and concludes.
+
+</details>
+
+<Exercise id="data-analyst-case-interview-practice-3">
+
+**Spot the flaw.** For a design case, a candidate sizes a test of a new price on daily revenue. She takes each cafe's revenue for each month, 15 numbers, and runs the sizing for a 10 percent rise: "15 days per arm, so a test of about two weeks."
+
+<RunSQL query={`WITH month_revenue AS (
+  SELECT store, strftime(order_date, '%Y-%m') AS month, SUM(amount) AS revenue
+  FROM sales
+  GROUP BY store, month
+),
+s AS (SELECT AVG(revenue) AS mean, VAR_SAMP(revenue) AS variance FROM month_revenue)
+SELECT CEIL(15.68 * variance / POWER(0.10 * mean, 2)) AS per_arm
+FROM s;`} />
+
+Run unit 1 first. Expected: 1 row, 1 column. Run it, then size the test properly and say what is wrong.
+
+<Solution>
+
+The query gives 15, but its spread is the spread of cafe-months, so 15 counts cafe-months: more than a year of three cafes. The test randomizes cafe-days, so the spread must be that of daily revenue:
+
+```sql
+WITH day_revenue AS (
+  SELECT store, order_date, SUM(amount) AS revenue
+  FROM sales
+  GROUP BY store, order_date
+),
+s AS (SELECT AVG(revenue) AS mean, VAR_SAMP(revenue) AS variance FROM day_revenue)
+SELECT CEIL(15.68 * variance / POWER(0.10 * mean, 2)) AS per_arm
+FROM s;
+```
+
+It gives 360 cafe-days per arm (daily revenue averages \$49.85 with a spread of \$23.87), 24 times more. A months-sized spread is small because a month averages 30 noisy days; the days of the test inherit the noise of days.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can frame a vague case, define a metric with a guardrail, walk a drop in order, size a test from the rise worth finding, and judge a trade-off with the check that would change it.* Test: Exercise data-analyst-case-interview-practice-2, answered aloud and scored on the rubric.
+
+The pattern to remember: **frame, announce, check in order, and end with a recommendation and what would change it.**

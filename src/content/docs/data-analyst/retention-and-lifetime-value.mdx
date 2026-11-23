@@ -1,0 +1,460 @@
+---
+id: data-analyst-retention-and-lifetime-value
+title: Reading retention, churn and lifetime value
+short_title: Retention, churn, LTV
+description: Read a retention curve, separate age effects from calendar effects, and compute churn and lifetime value with stated assumptions.
+stage: data-analyst
+order: 50
+level: advanced
+duration: 30
+objectives:
+  - Read a retention curve and a cohort table, counting a person only when the window is over
+  - Separate age effects from calendar effects and from a change in who signs up
+  - Define churn (logo and revenue) and say which one a decision needs
+  - Compute a simple lifetime value and a cost-to-win ratio with stated assumptions
+prerequisites:
+  - data-analyst-the-analysts-loop
+  - data-analyst-querying-a-cloud-warehouse
+  - sql-cohort-retention
+  - core-defining-metrics
+  - core-diagnosing-a-movement
+datasets:
+  - app-events
+reviewed: 2026-11-23
+sources:
+  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/pricing
+  - title: 'Google Cloud: Batch load data (accessed 2026-11-23)'
+    url: https://docs.cloud.google.com/bigquery/docs/batch-loading-data
+  - title: 'Google Cloud: GoogleSQL aggregate function calls (accessed 2026-11-23)'
+    url: https://docs.cloud.google.com/bigquery/docs/reference/standard-sql/aggregate-function-calls
+  - title: 'Google Cloud: GoogleSQL date functions (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://docs.cloud.google.com/bigquery/docs/reference/standard-sql/date_functions
+  - title: 'DuckDB documentation: Aggregate functions, arg_min and its alias min_by (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/stable/sql/functions/aggregates
+status: published
+---
+
+## The question
+
+Priya runs a fictional budgeting app, `app-events`: a free tier, and a paid plan called Plus at \$7.99 a month or \$59.99 a year. She asks two things before she renews the ad budget: are newer users sticking less than older ones, and what is a Plus subscriber worth against what it costs to win one? The data covers January 1 to June 30, 2026; the export was taken on July 1.
+
+| user_id | signup_date | channel | plan_at_signup |
+|---:|---|---|---|
+| 10001 | 2026-01-01 | organic_search | free |
+| 10002 | 2026-01-01 | app_store | free |
+
+21,841 people have a row in `users`; five channels bring them in.
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Cohorts and retention*](/sql/cohort-retention/) (S27), what is the denominator of a retention percentage?
+
+   <details>
+   <summary>answer</summary>
+
+   The size of the cohort: everyone who started that month, whether or not they were ever active.
+
+   </details>
+
+2. In [*Diagnosing a metric that moved*](/core/diagnosing-a-movement/) (C13), what is a mix shift?
+
+   <details>
+   <summary>answer</summary>
+
+   A movement that comes from a change in who is in the group, the share of each segment, and not from how each segment behaves.
+
+   </details>
+
+## The big idea
+
+Read retention by age and count a person only once the window is over; define churn by the decision it feeds; put a stated churn and a stated cost into lifetime value.
+
+## Learn by doing
+
+About 30 minutes, 4 ideas: retention by age, churn, lifetime value, the memo. The extraction queries are read-only blocks: run them in DuckDB after loading `app-events.sql`, or in BigQuery after uploading the files as in the warehouse lesson (`events.csv` is 13 MB, under the 100 MB limit of a console upload).
+
+### 1. Retention by age, and who signed up
+
+**Idea.** *Retention by age* asks, for each person, whether they were active in the 30 days that start `age` months after signup. Age is measured from each person's own signup, so cohorts line up. Count a person in a window only when the whole window ended before the data did; otherwise a young cohort looks worse at every age. *Active* is a choice: here a `session_start` or an `add_expense`.
+
+```sql
+-- read-only: runs on app-events (the editors of this page hold only cafe-sales)
+WITH activity AS (
+  SELECT DISTINCT user_id, CAST(event_ts AS DATE) AS day
+  FROM events
+  WHERE event_name IN ('session_start', 'add_expense')
+),
+cells AS (
+  SELECT u.channel, k.age,
+         EXISTS (SELECT 1 FROM activity a
+                 WHERE a.user_id = u.user_id
+                   AND a.day BETWEEN u.signup_date + 30 * k.age AND u.signup_date + 30 * k.age + 29) AS active
+  FROM users u
+  CROSS JOIN (SELECT UNNEST([0, 1, 2, 3]) AS age) k
+  WHERE u.signup_date + 30 * (k.age + 1) <= DATE '2026-07-01'
+)
+SELECT age, COUNT(*) AS people, ROUND(100.0 * AVG(active::INT), 1) AS pct_active
+FROM cells
+GROUP BY age
+ORDER BY age;
+```
+
+**Predict:** in days 0 to 29, 82.2 percent of people are active. In days 30 to 59, will the share fall by less than a quarter, by about half, or by more than three quarters?
+
+<details>
+<summary>Reveal the result</summary>
+
+| age | days | people | active |
+|---:|---|---:|---:|
+| 0 | 0 to 29 | 18,022 | 82.2% |
+| 1 | 30 to 59 | 13,086 | 15.2% |
+| 2 | 60 to 89 | 8,932 | 6.2% |
+| 3 | 90 to 119 | 5,893 | 3.1% |
+
+</details>
+
+*Why:* the share falls by more than three quarters, from 82.2 to 15.2 percent, and the people drop from 18,022 to 5,893 because each age keeps only the people whose window is over. Running it in BigQuery needs edits (for example date arithmetic and `FILTER`); check each against the pages and a dry run.
+
+> **Cost line.** Reads about 6,207,956 bytes of 2 tables (estimate from types: `events` 5,578,020, `users` 629,936), billed at least 20 MB, about 0.00011 to 0.00012 dollars at \$6.25 per TiB (BigQuery pricing page, read 2026-11-23). **Cheaper:** save the 45,219 distinct active user-days once, 16 bytes each, 723,504 bytes, and read that instead of `events`: 87 percent fewer bytes from that table.
+
+Now the calendar. Split the age-1 window by cohort month and by whether the person came from paid social, the channel that the campaign that began April 13 added. The extraction is the same query with a `GROUP BY` on the signup month and the channel; its results for the four cohorts that have a complete window are pasted below.
+
+**Try it:** January's rates with April's mix, and April's rates with January's.
+
+<RunSQL query={`WITH cells(cohort, grp, people, active) AS (
+  VALUES ('January', 'paid social', 272, 14), ('January', 'others', 2553, 435),
+         ('April', 'paid social', 1133, 61), ('April', 'others', 2953, 538)
+),
+r AS (
+  SELECT cohort, grp, 100.0 * active / people AS rate,
+         1.0 * people / SUM(people) OVER (PARTITION BY cohort) AS share
+  FROM cells
+),
+j AS (SELECT grp, rate, share FROM r WHERE cohort = 'January'),
+a AS (SELECT grp, rate, share FROM r WHERE cohort = 'April')
+SELECT ROUND(SUM(j.share * j.rate), 1) AS january,
+       ROUND(SUM(a.share * a.rate), 1) AS april,
+       ROUND(SUM(j.share * a.rate), 1) AS april_with_january_mix,
+       ROUND(SUM(a.share * j.rate), 1) AS january_with_april_mix
+FROM j JOIN a ON a.grp = j.grp;`} />
+
+**Predict:** April's retention at age 1 is 1.2 points below January's. What would it be with January's mix of channels?
+
+Expected: 1 row, 4 columns.
+
+*Why:* 17.0 percent, above January's 15.9. Paid social made up 9.6 percent of January's cohort and 27.7 percent of April's, and its people are active at about 5 percent against 17 or 18 percent for the others. Counted the other way, January's rates with April's mix give 13.7: under either order the mix costs about 2.2 to 2.3 points. Inside each group the rate did not fall (5.1 to 5.4 and 17.0 to 18.2, within about a point of sampling noise). The curve falls with age for everyone; a newer cohort looks worse because of whom it holds.
+
+<figure>
+<svg viewBox="0 0 360 216" width="360" role="img" aria-labelledby="da5-retention-t da5-retention-d">
+<title id="da5-retention-t">Share of people active in each 30-day window after signup, by channel group</title>
+<desc id="da5-retention-d">A line chart on a scale from 0 to 20 percent with three windows after signup: days 30 to 59, 60 to 89 and 90 to 119. others 17.1, 6.5 and 3.4 percent; paid social 5.1, 2.6 and 0.3 percent. Both fall with age, and paid social is lowest in every window. Others means every channel except paid social. A person counts in a window only when the whole window ended before July 1, 2026.</desc>
+<g fill="currentColor">
+<text x="38.2" y="22.4" font-size="10.5" font-weight="600">People active in each 30-day window after signup</text>
+<path d="M84.2 182.4 L232.2 182.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="76.2" y="185.9" font-size="10" text-anchor="end" fill-opacity="0.8">0%</text>
+<path d="M84.2 148.9 L232.2 148.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="76.2" y="152.4" font-size="10" text-anchor="end" fill-opacity="0.8">5%</text>
+<path d="M84.2 115.4 L232.2 115.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="76.2" y="118.9" font-size="10" text-anchor="end" fill-opacity="0.8">10%</text>
+<path d="M84.2 81.9 L232.2 81.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="76.2" y="85.4" font-size="10" text-anchor="end" fill-opacity="0.8">15%</text>
+<path d="M84.2 48.4 L232.2 48.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="76.2" y="51.9" font-size="10" text-anchor="end" fill-opacity="0.8">20%</text>
+<text x="96.2" y="199.4" font-size="10" text-anchor="middle" fill-opacity="0.8">days 30-59</text>
+<text x="158.2" y="199.4" font-size="10" text-anchor="middle" fill-opacity="0.8">days 60-89</text>
+<text x="220.2" y="199.4" font-size="10" text-anchor="middle" fill-opacity="0.8">days 90-119</text>
+<path d="M96.2 67.6 L158.2 138.6 L220.2 159.5" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="96.2" cy="67.6" r="4" fill="#0072b2" />
+<circle cx="158.2" cy="138.6" r="4" fill="#0072b2" />
+<circle cx="220.2" cy="159.5" r="4" fill="#0072b2" />
+<text x="234.2" y="163" font-size="10">everyone else 3.4%</text>
+<text x="96.2" y="58.6" font-size="10" text-anchor="middle">17.1%</text>
+<path d="M96.2 148.5 L158.2 164.8 L220.2 180.1" fill="none" stroke="#9a6be0" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="96.2" cy="148.5" r="4" fill="#9a6be0" />
+<circle cx="158.2" cy="164.8" r="4" fill="#9a6be0" />
+<circle cx="220.2" cy="180.1" r="4" fill="#9a6be0" />
+<text x="234.2" y="183.6" font-size="10">paid social 0.3%</text>
+<text x="96.2" y="139.5" font-size="10" text-anchor="middle">5.1%</text>
+</g>
+</svg>
+</figure>
+
+### 2. Churn: logo or revenue
+
+**Idea.** *Logo churn* is the share of customers who left; *revenue churn* is the share of the recurring revenue that left. They differ when customers pay different amounts, so choose by the decision: a discount or a price change needs revenue churn, support staffing and onboarding need logo churn. Measure only the subscriptions that have had the whole window, here those started by March 31, so 90 days have passed. Take the plan at the start, not the plan of the latest row, because some monthly subscribers switch to annual.
+
+```sql
+-- read-only: runs on app-events
+WITH latest AS (
+  SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY updated_at DESC) AS rn
+                 FROM subscriptions) WHERE rn = 1
+),
+starts AS (
+  SELECT subscription_id, MIN_BY(plan, updated_at) AS plan_at_start FROM subscriptions GROUP BY subscription_id
+)
+SELECT s.plan_at_start AS plan, COUNT(*) AS started,
+       COUNT(*) FILTER (WHERE l.ended_on IS NOT NULL AND l.ended_on <= l.started_on + 90) AS canceled_in_90_days
+FROM latest l
+JOIN starts s ON s.subscription_id = l.subscription_id
+WHERE l.started_on <= DATE '2026-03-31'
+GROUP BY s.plan_at_start
+ORDER BY plan;
+```
+
+It returns `plus_annual` 290 started, 17 canceled, and `plus_monthly` 969 started, 373 canceled. Monthly revenue per customer is \$7.99 on the monthly plan and \$59.99 divided by 12 on the annual one.
+
+**Try it.**
+
+<RunSQL query={`WITH plans(plan, started, canceled, monthly_price) AS (
+  VALUES ('plus_monthly', 969, 373, 7.99), ('plus_annual', 290, 17, 59.99 / 12)
+)
+SELECT ROUND(100.0 * SUM(canceled) / SUM(started), 1) AS logo_churn_pct,
+       ROUND(100.0 * SUM(canceled * monthly_price) / SUM(started * monthly_price), 1) AS revenue_churn_pct
+FROM plans;`} />
+
+**Predict:** which is higher, logo churn or revenue churn?
+
+Expected: 1 row, 2 columns.
+
+*Why:* revenue churn, 33.3 against 31.0 percent: the monthly plan loses 38.5 percent of its subscriptions in 90 days and the annual plan 5.9, and a monthly subscription carries more revenue each month.
+
+### 3. Lifetime value, with its assumptions out loud
+
+**Idea.** This lesson uses one simple model: the *lifetime value* of a monthly subscriber is the monthly price ÷ the monthly churn, so a subscriber who leaves 1 time in 4 stays 4 months on average. It rests on two assumptions that you write down: churn is constant, and revenue is the price, not profit. Churn per renewal is the cancellations divided by the renewals faced, over renewals 1 to 5; stopping at 5 is our choice. Put it next to what it costs to win a buyer: the cost per signup divided by the share of signups who start a monthly plan within 14 days. The ad costs per signup are the fictional ones of the dataset README: \$4.50 paid search, \$2.00 paid social, \$3.00 referral reward, \$0 for organic search and the app store.
+
+The extraction (a `GROUP BY channel` on the renewals each monthly subscription faced, and on the signups of January 1 to June 16) gives the counts pasted here.
+
+**Try it.**
+
+<RunSQL query={`CREATE OR REPLACE VIEW channel_value AS
+WITH channels(channel, renewals_faced, canceled, signups, monthly_buyers, cost_per_signup) AS (
+  VALUES ('app_store', 766, 137, 4256, 343, 0.00), ('organic_search', 1409, 217, 5263, 600, 0.00),
+         ('paid_search', 395, 76, 2653, 179, 4.50), ('paid_social', 180, 65, 4519, 131, 2.00),
+         ('referral', 1410, 170, 3486, 619, 3.00)
+)
+SELECT channel, cost_per_signup,
+       CAST(canceled AS DOUBLE) / renewals_faced AS churn,
+       7.99 / (CAST(canceled AS DOUBLE) / renewals_faced) AS ltv,
+       CAST(monthly_buyers AS DOUBLE) / signups AS conv,
+       cost_per_signup / (CAST(monthly_buyers AS DOUBLE) / signups) AS cost_per_buyer
+FROM channels;
+
+SELECT channel, ROUND(100 * churn, 1) AS churn_pct, ROUND(ltv, 2) AS ltv,
+       ROUND(cost_per_buyer, 2) AS cost_per_buyer, ROUND(ltv / NULLIF(cost_per_buyer, 0), 2) AS ltv_to_cost
+FROM channel_value
+ORDER BY ltv_to_cost DESC NULLS LAST;`} />
+
+**Predict:** which channels earn back what they cost to win a buyer, a value above 1?
+
+Expected: 5 rows, 5 columns.
+
+*Why:* only referral: 3.92, against 0.62 for paid search and 0.32 for paid social. Organic search and the app store have no ad cost, so their ratio is undefined, not infinite. Paid social's churn rests on 180 renewals: 36.1 percent, with a 95 percent (Wilson) interval of 29 to 43, so its ratio lies between 0.27 and 0.39, below 1 at either end. The dataset notes say the `paywall_v2` test multiplies its buyers' first-renewal cancel chance by 1.3, but only 40 of the 180 renewals come from its variant, and the other 140 cancel at 35.7 percent against 37.5, so it does not explain this. The constant-churn assumption is rough: across all channels the cancel rate is 19.3 percent at the first renewal and 11.4 at the fourth.
+
+<figure>
+<svg viewBox="0 0 360 318" width="360" role="img" aria-labelledby="da5-ltv-t da5-ltv-d">
+<title id="da5-ltv-t">Lifetime value and acquisition cost for each monthly-plan buyer, by channel</title>
+<desc id="da5-ltv-d">A horizontal bar chart in dollars, from 0 to 80. For each of five channels a green bar is the lifetime value of a monthly-plan buyer and an ochre bar is the cost to win one. referral: value 66, cost 17, ratio 3.9; organic search: value 52, no ad cost assumed, ratio undefined; app store: value 45, no ad cost assumed, ratio undefined; paid search: value 42, cost 67, ratio 0.6; paid social: value 22, cost 69, ratio 0.3. Ad costs are fictional assumptions written in the dataset notes, and lifetime value assumes a constant monthly churn.</desc>
+<g fill="currentColor">
+<text x="29.8" y="22.4" font-size="10.5" font-weight="600">Value of a monthly-plan buyer and cost to win one</text>
+<text x="29.8" y="62.4" font-size="10" font-weight="600">referral</text>
+<rect x="117.8" y="42.4" width="127.6" height="14" rx="3" fill="#00a07a" />
+<text x="251.4" y="53.4" font-size="10">&#36;66</text>
+<rect x="117.8" y="60.4" width="32.5" height="14" rx="3" fill="#ad9100" />
+<text x="156.3" y="71.4" font-size="10" font-weight="600">&#36;17, ratio 3.9</text>
+<text x="29.8" y="106.4" font-size="10" font-weight="600">organic search</text>
+<rect x="117.8" y="86.4" width="99.9" height="14" rx="3" fill="#00a07a" />
+<text x="223.7" y="97.4" font-size="10">&#36;52</text>
+<text x="119.8" y="115.4" font-size="10" fill-opacity="0.85">no ad cost assumed</text>
+<text x="29.8" y="150.4" font-size="10" font-weight="600">app store</text>
+<rect x="117.8" y="130.4" width="86" height="14" rx="3" fill="#00a07a" />
+<text x="209.8" y="141.4" font-size="10">&#36;45</text>
+<text x="119.8" y="159.4" font-size="10" fill-opacity="0.85">no ad cost assumed</text>
+<text x="29.8" y="194.4" font-size="10" font-weight="600">paid search</text>
+<rect x="117.8" y="174.4" width="79.9" height="14" rx="3" fill="#00a07a" />
+<text x="203.7" y="185.4" font-size="10">&#36;42</text>
+<rect x="117.8" y="192.4" width="128.4" height="14" rx="3" fill="#ad9100" />
+<text x="252.2" y="203.4" font-size="10" font-weight="600">&#36;67, ratio 0.6</text>
+<text x="29.8" y="238.4" font-size="10" font-weight="600">paid social</text>
+<rect x="117.8" y="218.4" width="42.6" height="14" rx="3" fill="#00a07a" />
+<text x="166.4" y="229.4" font-size="10">&#36;22</text>
+<rect x="117.8" y="236.4" width="132.8" height="14" rx="3" fill="#ad9100" />
+<text x="256.6" y="247.4" font-size="10" font-weight="600">&#36;69, ratio 0.3</text>
+<path d="M117.8 262.4 L271.8 262.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M117.8 262.4 L117.8 266.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="117.8" y="279.4" font-size="10" text-anchor="middle" fill-opacity="0.8">&#36;0</text>
+<path d="M156.3 262.4 L156.3 266.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="156.3" y="279.4" font-size="10" text-anchor="middle" fill-opacity="0.8">&#36;20</text>
+<path d="M194.8 262.4 L194.8 266.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="194.8" y="279.4" font-size="10" text-anchor="middle" fill-opacity="0.8">&#36;40</text>
+<path d="M233.3 262.4 L233.3 266.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="233.3" y="279.4" font-size="10" text-anchor="middle" fill-opacity="0.8">&#36;60</text>
+<path d="M271.8 262.4 L271.8 266.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="271.8" y="279.4" font-size="10" text-anchor="middle" fill-opacity="0.8">&#36;80</text>
+<rect x="117.8" y="292.4" width="10" height="10" rx="2" fill="#00a07a" />
+<text x="133.8" y="301.4" font-size="10">lifetime value</text>
+<rect x="225.8" y="292.4" width="10" height="10" rx="2" fill="#ad9100" />
+<text x="241.8" y="301.4" font-size="10">cost to win a buyer</text>
+</g>
+</svg>
+</figure>
+
+### 4. End in a memo
+
+> **Decision:** do not renew paid social at the assumed cost per signup, and test a larger referral reward in July.
+> **Context:** Priya asked whether to renew the ad budget; the data covers January 1 to June 30.
+> **Tension:** the ad costs are assumptions, lifetime value assumes constant churn and counts revenue, not profit, and the newest cohorts look worse mostly because of the channel mix.
+> **Evidence:** a month after signup, 5.1 percent of paid-social people are active against 17.1 percent of everyone else. A monthly-plan buyer is worth \$22 from paid social and costs \$69 to win (ratio 0.32); referral is worth \$66 and costs \$17 (3.92); paid search is 0.62.
+> **Recommendation:** pause paid social, put its budget into the referral test, and recompute with real ad costs.
+
+<Aside type="tip" title="Remember">
+
+- Retention by age counts a person only when the whole window ended before the data.
+- A newer cohort can look worse because of who it holds; compare the groups inside it.
+- Logo churn counts customers, revenue churn counts money; pick by the decision.
+- Lifetime value = monthly price ÷ monthly churn, with constant churn and revenue as assumptions you state.
+- A ratio with a zero cost is undefined; give a range when the sample is small.
+
+**Common trap:** calling a newer cohort worse without looking at who signed up.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-retention-and-lifetime-value-1">
+
+**What would paid search have to cost?** Use the view `channel_value` of unit 3 (run unit 3 first). Add a column `break_even_cost`: the cost per signup at which a channel's lifetime value just equals its cost to win a buyer. Expected: 5 rows, 4 columns.
+
+<RunSQL query={`SELECT channel, ROUND(ltv, 2) AS ltv, cost_per_signup
+FROM channel_value
+ORDER BY channel;`} />
+
+<details>
+<summary>Hint</summary>
+
+The ratio is 1 when `cost_per_signup / conv` equals `ltv`, so the break-even cost per signup is `ltv * conv`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT channel, ROUND(ltv, 2) AS ltv, cost_per_signup,
+       ROUND(... , 2) AS break_even_cost
+FROM channel_value
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT channel, ROUND(ltv, 2) AS ltv, cost_per_signup,
+       ROUND(ltv * conv, 2) AS break_even_cost
+FROM channel_value
+ORDER BY channel;
+```
+
+The break-even costs per signup are \$3.60 for the app store, \$5.91 for organic search, \$2.80 for paid search, \$0.64 for paid social and \$11.77 for referral. Paid search would have to cost \$2.80 instead of the assumed \$4.50 to pay back, and paid social 64 cents instead of \$2.00.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-retention-and-lifetime-value-2">
+
+**Drop the cells that are not complete.** The editor holds the size of each signup cohort and the retention cells of unit 1 (a cohort, an age, the people whose window was over, how many were active). Report each cohort's share active at each age, with its people, only for cells where the whole cohort was observed. Before you start, write in a comment how you will tell a complete cell from a partial one. Expected: 9 rows, 4 columns.
+
+<RunSQL query={`WITH sizes(cohort, size) AS (
+  VALUES ('January', 2825), ('February', 2686), ('March', 3142), ('April', 4086), ('May', 5077)
+),
+cells(cohort, age, people, active) AS (
+  VALUES ('January', 1, 2825, 449), ('February', 1, 2686, 417), ('March', 1, 3142, 475), ('April', 1, 4086, 599), ('May', 1, 347, 49),
+         ('January', 2, 2825, 167), ('February', 2, 2686, 171), ('March', 2, 3142, 198), ('April', 2, 279, 14),
+         ('January', 3, 2825, 86), ('February', 3, 2686, 91), ('March', 3, 382, 7)
+)
+SELECT * FROM cells ORDER BY age, cohort;`} />
+
+<details>
+<summary>Hint</summary>
+
+A cell is complete when its `people` equals the `size` of its cohort: join `cells` to `sizes` on the cohort and keep those rows.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Nine cells, with a share between 3 and 16 percent."*
+
+```sql
+SELECT c.cohort, c.age, c.people, ROUND(100.0 * c.active / c.people, 1) AS pct_active
+FROM cells c JOIN sizes s ON s.cohort = c.cohort
+WHERE ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT c.cohort, c.age, c.people, ROUND(100.0 * c.active / c.people, 1) AS pct_active
+FROM cells c
+JOIN sizes s ON s.cohort = c.cohort
+WHERE c.people = s.size
+ORDER BY c.age, c.cohort;
+```
+
+The nine shares are January to April at age 1 (15.9, 15.5, 15.1, 14.7), January to March at age 2 (5.9, 6.4, 6.3) and January and February at age 3 (3.0, 3.4). The three cells left out cover 347 of 5,077 people in May, 279 of 4,086 in April and 382 of 3,142 in March; shown, they would read 14.1, 5.0 and 1.8 and make the youngest cohort look worst at every age, when each holds only the first days of its cohort.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: say the two assumptions behind a simple lifetime value, and what makes a ratio undefined.
+
+<details>
+<summary>answer</summary>
+
+Churn is constant and revenue is the price, not profit. A ratio is undefined when its cost is zero, because dividing by zero says nothing about whether the channel pays back.
+
+</details>
+
+<Exercise id="data-analyst-retention-and-lifetime-value-3">
+
+**Spot the flaw.** A colleague estimates a monthly subscription's lifetime from the subscriptions of January to March that have ended: "the average life is 2.1 months, so a subscriber is worth \$17." The table holds the 969 monthly subscriptions started from January 1 to March 31, with the months paid up to June 30: one for the start, plus one for each renewal (day 30, 60 and so on) that falls on or before June 30 and before the subscription's end date.
+
+<RunSQL query={`WITH months(ended, subscriptions, months_paid) AS (
+  VALUES (true, 441, 942), (false, 528, 2561)
+)
+SELECT ROUND(7.99 * months_paid / subscriptions, 2) AS ltv_estimate
+FROM months
+WHERE ended;`} />
+
+Expected: 1 row, 1 column. Run it, then show with the same table that the estimate cannot be right, and say what is wrong with the method.
+
+<Solution>
+
+The query gives 17.07. But all 969 subscriptions have already paid 3,503 months between them, 3.62 months each, which is \$28.88 each so far:
+
+```sql
+SELECT ROUND(7.99 * SUM(months_paid) / SUM(subscriptions), 2) AS paid_so_far
+FROM months;
+```
+
+An estimate below what people have already paid is impossible. The method counts only the subscriptions that ended, which are the short ones: the 528 still active are the longest lives and are left out. Use every subscription with the renewals each one faced, as in unit 3.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read retention by age and count a person only when the window is over, tell a change of mix from a change of behavior, say which churn a decision needs, and compute a lifetime value and a cost ratio with my assumptions written down.* Test: Exercise data-analyst-retention-and-lifetime-value-2, done without opening the hints.
+
+The pattern to remember: **count a person only when the window is over, compare inside the groups, choose the churn by the decision, and say the assumptions of every lifetime value.**

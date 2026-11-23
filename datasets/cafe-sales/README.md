@@ -90,6 +90,98 @@ Real data is never clean, so a few rows are odd on purpose. Lessons point to the
 - Five customers signed up but never ordered.
 - About one customer in five was referred by another customer.
 
+## Extras (derived, teaching-only files)
+
+`v1/extras/` holds three files that are **not part of the five tables** and are not described by `schema.yaml`'s tables: they are
+derived from them for one lesson each in the Data Analyst stage. The five tables, `cafe-sales.sql` and `cafe-sales.xlsx` do not
+change. All three files are synthetic, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), UTF-8, comma-separated, with a
+header row and `\n` line endings. Neither ships an `.xlsx` or `.sql` version.
+
+| File | Rows | One row is | Made by |
+|---|---:|---|---|
+| `v1/extras/settlements.csv` | 1,557 | one line of a card processor's export (the second source of the cleaning story) | `scripts/build-settlements-extract.py` |
+| `v1/extras/sales_clean.csv` | 3,286 | one sold line of a completed order (the input of the Tableau Public dashboard) | `scripts/build-sales-clean.py` |
+| `v1/extras/take_home_export.csv` | 2,007 | one order line of a till export for April to June (Part B of the take-home simulation) | `scripts/build-take-home-extract.py` |
+
+Each script has no random numbers and a `--check` mode (`python3 scripts/build-settlements-extract.py --check`) that confirms the
+file matches it; `npm run check` runs all three. The first tag that contains the extras is the next pre-release, `v0.3.0` (SPEC D57), so
+a lesson links them as `https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.3.0/datasets/cafe-sales/v1/extras/settlements.csv`
+(and the other two names); until that tag exists the files are on `main` only.
+
+### settlements.csv
+
+The processor settles **card and mobile orders only** (cash never reaches it), one row per payment, keyed by the till's order number.
+It is derived from the completed card and mobile orders of `orders` (1,547) and is dirty on purpose. Every column is text.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `settlement_id` | text | Key of the processor row, `ST-000001` and up, in time order |
+| `order_ref` | text | The till's order number with a prefix, `ORD-1002`; a test payment has `TEST-0001` and so on |
+| `merchant` | text | The cafe's name as the processor spells it; empty (missing) on 30 rows |
+| `settled_at` | text | Time of the payment as `MM/DD/YYYY HH:MM`, in UTC |
+| `amount` | text | The amount charged, `$12.50`; three rows are whole cents (`1250`) |
+| `type` | text | `SALE` (1,551 rows) or `TEST` (6 rows) |
+
+Planted defects, each by a rule, so a lesson can say exactly what is in the file:
+
+1. **Exact copies.** Every 41st row (after sorting by time) is written twice, a retried export: 37 extra rows, so 1,520 different rows.
+2. **Merchant spellings.** Four spellings per cafe, chosen by `order_id % 4`: case, a trailing space, an alias (`Berkeley Campus`,
+   `Alameda Harbor`). 12 spellings for 3 cafes.
+3. **Silent blanks.** `merchant` is empty when `order_id % 53 = 10`: 30 rows, 29 different payments.
+4. **Key prefix.** `order_ref` is `ORD-` plus the order number, not the number.
+5. **Time zone and format.** `settled_at` is UTC text, not the till's local `ordered_at`: 8 hours later until March 7, 7 hours later
+   from March 8 (daylight saving time starts on March 8, 2026).
+6. **Amount as text, one day in cents.** Amounts carry a dollar sign; the three Campus payments of June 3 are in whole cents.
+7. **Test payments.** Six rows of type `TEST`, `$0.01`, at Old Town at 07:00 local on the first day of each month.
+8. **A failed batch.** No row at all for Harbor from May 18 to May 24 (local dates): 24 orders never exported.
+9. **A terminal offline.** Orders with `order_id % 149 = 136` were never exported: 9 orders.
+10. **A corrected charge.** Order 2075 (the extra-zero line of the surprises above): the till says 20 Turkey Sandwiches (\$197.00 for the
+    order), the processor charged 2 (\$30.50).
+
+After removing the copies and the tests the file holds 1,514 payments worth \$19,006.75; the till's 1,547 orders are worth \$19,589.75
+as recorded, a difference of \$583.00: \$263.25 for Harbor's week, \$166.50 for order 2075 and \$153.25 for the 9 other orders.
+
+### sales_clean.csv
+
+The `sales_clean` table of the Data Analyst lessons as a file: the lines of the 1,799 completed orders (the canceled order and its line
+are left out), with order 2075's line corrected to quantity 2. It has 14 columns.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `line_id` | integer | `order_item_id` of the line |
+| `order_id` | integer | The order the line belongs to |
+| `ordered_at` | timestamp | Local time of the order, `YYYY-MM-DD HH:MM:SS` |
+| `order_date` | date | The date part of `ordered_at` |
+| `store` | text | `store_name` of the order's store |
+| `product` | text | `product_name` of the line |
+| `category` | text | `coffee`, `tea`, `bakery` or `food` |
+| `quantity` | integer | Units sold; 2 (not 20) on line 6952 |
+| `unit_price` | decimal | `unit_price_usd` of the product |
+| `discount` | decimal | `discount_usd` of the line |
+| `amount` | decimal | `quantity × unit_price − discount`; the amounts add up to \$22,582.75 |
+| `payment_method` | text | `card`, `mobile` or `cash` |
+| `loyalty_tier` | text | The customer's tier, or `walk-in` for the one order without a customer |
+| `hour` | text | The local hour of the order with a leading zero and an `h`, `07h` to `17h`, a label for charts |
+
+### take_home_export.csv
+
+The till's own export of every line of every order from April 1 to June 30, 2026 (all three cafes; all completed, since the one
+canceled order is in March), dirty on purpose. It has 14 columns: `line_id`, `order_id`, `ordered_at`, `store_code`, `store`,
+`customer_id`, `product`, `category`, `quantity`, `unit_price`, `discount`, `line_total` (quantity × unit price − discount, as the till
+wrote it), `status` and `payment_method`. 2,007 rows, including the summary row.
+
+Planted defects, each by a rule (the script's docstring has the exact rules):
+
+1. **Mixed date text.** `ordered_at` is `2026-05-14 14:35:00`, except when `order_id % 6 = 2`, where it is `05/14/2026 2:35 PM`: 330 rows.
+2. **Double scans.** 15 lines are written twice, with a new `line_id` (the original plus 100000) directly under the first.
+3. **Refund lines.** 12 lines are followed by a line of the same order and product with quantity −1 and a new `line_id` (the original
+   plus 200000). The real tables hold no refunds, so this defect has no clean twin.
+4. **Store renamed.** From June 1 the store with code `S3` is exported as `Harbor Wharf` (197 rows); its code stays `S3`.
+5. **Summary row.** The last row has no `line_id` and product `TOTAL`: the sums of quantity (3,159), discount (\$53.00) and line total
+   (\$14,026.25).
+
+Inherited from the real data: order 2075, line 6952, 20 Turkey Sandwiches where 2 were meant, on May 1.
+
 ## How it was made
 
 `scripts/build-cafe-sales.py` generates every file from a fixed random seed, so running it again
