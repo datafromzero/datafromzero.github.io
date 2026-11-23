@@ -45,6 +45,7 @@
  */
 
 import { link as erdLink } from './erd.mjs';
+import { centeredViewX } from './figure-extent.mjs';
 
 const MAX_STEPS = 6;
 const ROLES = ['src', 'mat', 'flt', 'grp', 'out', 'win', 'ord'];
@@ -212,6 +213,12 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 		return `<div class="sa-cn" aria-hidden="true">${cells.join('')}</div>`;
 	};
 
+	/**
+	 * The viewBox's left edge that centers the drawing: the middle of everything drawn, across all steps, lands on the middle of
+	 * the viewBox (a figure that uses 280 of its 360 px would otherwise sit left of its column).
+	 */
+	const viewX = () => centeredViewX(stack[0].join('\n'), w, !!loop);
+
 	const api = {
 		/** A group; children are drawn by `body()`. With no effect it is a plain `<g>`. */
 		g(fx, body, ...extra) {
@@ -227,7 +234,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 		circle(x, y, r, c, fx) {
 			push(`<circle${cls(c, fxClasses(fx))} cx="${num(x)}" cy="${num(y)}" r="${num(r)}" />`);
 		},
-		/** `align`: 's' start, 'e' end, 'm' middle. `c`: size and weight classes: f10 f11 f14 b mu. */
+		/** `align`: 's' start, 'e' end, 'm' middle. `c`: size and weight classes: f9 f10 f11 f14 b mu. */
 		text(x, y, s, c = '', fx, align = 's') {
 			const a = align === 'e' ? 'e' : align === 'm' ? 'm' : '';
 			push(`<text${cls(c, a, fxClasses(fx))} x="${num(x)}" y="${num(y)}">${esc(s)}</text>`);
@@ -386,7 +393,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				cols.forEach((col, i) => {
 					const e = col.align === 'e';
 					const tx = e ? xs[i] + col.w - 5 : xs[i] + 5;
-					api.text(tx, y + rh / 2 + 4, col.text, [head ? 'f10 b' : (col.c ?? 'f11'), c].filter(Boolean).join(' '), undefined, e ? 'e' : 's');
+					api.text(tx, y + rh / 2 + 4, col.text, [head ? ['f10 b', col.c].filter(Boolean).join(' ') : (col.c ?? 'f11'), c].filter(Boolean).join(' '), undefined, e ? 'e' : 's');
 				});
 			});
 		},
@@ -403,7 +410,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 					.concat(caps.map((c, i) => `<input class="sa-r r${i + 1} o${lastPhase(i + 1)}" type="radio" name="${id}" id="${id}-r${i + 1}" aria-label="Step ${i + 1} of ${n}: ${escA(c)}" />`))
 					.join('\n');
 				const svg =
-					`<svg class="sa-svg ca-svg" viewBox="0 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
+					`<svg class="sa-svg ca-svg" viewBox="${viewX()} 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
 					`<title id="${id}-t">${esc(title)}</title>\n<desc id="${id}-d">${esc(desc)}</desc>\n${stack[0].join('\n')}\n</svg>`;
 				const lab = (cls, target, inner) => `<label class="${cls}" for="${id}-${target}">${inner}</label>`;
 				const range = Array.from({ length: n + 1 }, (_, k) => k);
@@ -432,7 +439,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				)
 				.join('\n');
 			const svg =
-				`<svg class="sa-svg" viewBox="0 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
+				`<svg class="sa-svg" viewBox="${viewX()} 0 ${w} ${h}" width="${w}" role="img" aria-labelledby="${id}-t ${id}-d">\n` +
 				`<title id="${id}-t">${esc(title)}</title>\n<desc id="${id}-d">${esc(desc)}</desc>\n${stack[0].join('\n')}\n</svg>`;
 			// Back and Next are labels for the neighbor radio; one of each is shown per state (CSS), the first Back is a
 			// disabled stub and the last Next starts over.

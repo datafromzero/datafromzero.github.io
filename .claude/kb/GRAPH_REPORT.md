@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1522 nodes, 1724 edges, 193 communities (676 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 226, content-type 5, decision 55, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 23, page 5, research-section 500, rule 10, script 166, skill 1, spec-section 25, starlight-component 6, style 7, symbol 297, template 2, token 12.
-- Edges: defines 297, imports 50, mentions 927, overrides 6, references 28, runs 12, specified-by 4, uses 363, uses-token 32, validated-by 5.
+- 1530 nodes, 1735 edges, 194 communities (676 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 226, content-type 5, decision 55, dependency 25, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 24, page 5, research-section 500, rule 10, script 168, skill 1, spec-section 25, starlight-component 6, style 7, symbol 302, template 2, token 12.
+- Edges: defines 302, imports 50, mentions 931, overrides 6, references 28, runs 14, specified-by 4, uses 363, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -22,9 +22,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 7 | `astro.config.mjs` | config | 42 | astro.config.mjs:1 |
 | 8 | `S6` Authoring components | spec-section | 31 | SPEC.md:276 |
 | 9 | `D42` In-page SQL runner | decision | 30 | SPEC.md:69 |
-| 10 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
-| 11 | `src/site.ts` | module | 29 | src/site.ts:1 |
-| 12 | `.claude/MISTAKES.md` | doc | 27 | .claude/MISTAKES.md:1 |
+| 10 | `.claude/MISTAKES.md` | doc | 29 | .claude/MISTAKES.md:1 |
+| 11 | `agent:LESSON-STANDARD` | agent | 29 | .claude/agents/LESSON-STANDARD.md:1 |
+| 12 | `src/site.ts` | module | 29 | src/site.ts:1 |
 | 13 | `scripts/sync-research-issues.mjs` | script | 26 | scripts/sync-research-issues.mjs:1 |
 | 14 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
 | 15 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C82 to C79, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C96 to C71, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C122 to C23, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C24 to C68, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C179 to C176, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C72 to C15, src/styles/math.css:17)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C18, .claude/skills/kb/SKILL.md:3)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C53, design/README.md:181)
-- `M8` -mentions-> `D24` (C75 to C18, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C171 to C2, scripts/check-placeholders.mjs:2)
-- `M6` -mentions-> `D26` (C2 to C70, CLAUDE.md:62)
-- `scripts/check-lessons.mjs` -mentions-> `D47` (C169 to C2, scripts/check-lessons.mjs:10)
+- `ctype:career` -specified-by-> `S5.4` (C83 to C80, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C97 to C72, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C123 to C25, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C24 to C69, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C180 to C177, src/layouts/HomeLayout.astro:39)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C73 to C15, src/styles/math.css:17)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C19, .claude/skills/kb/SKILL.md:3)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C34 to C54, design/README.md:181)
+- `M8` -mentions-> `D24` (C76 to C19, CLAUDE.md:66)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C172 to C2, scripts/check-placeholders.mjs:2)
+- `M6` -mentions-> `D26` (C2 to C71, CLAUDE.md:62)
+- `scripts/check-lessons.mjs` -mentions-> `D47` (C170 to C2, scripts/check-lessons.mjs:10)
 
 ## Decisions (SPEC §1)
 
@@ -100,7 +100,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D31 | Bottom taskbar (amended by D34, D… | A floating bar at the bottom of every page (homepage, project pages,… | SPEC.md:58 |
 | D32 | Four career branches | Data Analyst, Data Engineer, Data Scientist and ML / AI Engineer; Ana… | SPEC.md:59 §3.1 §5 |
 | D33 | Career quiz page | `/career-quiz/`: ten questions that suggest one of the four careers (… | SPEC.md:60 §15 |
-| D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 §11 |
+| D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 |
 | D35 | Mobile navigation: one bottom bar | On phones the bottom bar is the only navigation (owner decision, 2026… | SPEC.md:62 |
 | D36 | Mobile search sheet | Search opens as a full-screen glass sheet on phones and a glass dialo… | SPEC.md:63 |
 | D37 | Report a problem from any page | A "Report a problem" pane in the taskbar sheet that hands off to a Gi… | SPEC.md:64 §15 |
@@ -146,7 +146,7 @@ term: id — file:line
 - analytics: `R9` — CLAUDE.md:40
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:27
-- gsap: `pkg:gsap` — package.json:52
+- gsap: `pkg:gsap` — package.json:53
 - scroll: `S12` — SPEC.md:412
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
@@ -163,14 +163,14 @@ term: id — file:line
 - colab: `R:issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d#9-addendum-2026-11-18-learning-environment-colab-decided` — research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md:179
 - sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:12
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:53
+- katex: `pkg:katex` — package.json:54
 - math: `src/data/track-skills.ts#MATH` — src/data/track-skills.ts:126
-- mdx: `pkg:@astrojs/mdx` — package.json:38
-- auto-import: `pkg:astro-auto-import` — package.json:51
+- mdx: `pkg:@astrojs/mdx` — package.json:39
+- auto-import: `pkg:astro-auto-import` — package.json:52
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
 - quality gates: `M6` — CLAUDE.md:56
-- cspell: `pkg:cspell` — package.json:59
-- markdownlint: `pkg:markdownlint-cli2` — package.json:26
+- cspell: `pkg:cspell` — package.json:60
+- markdownlint: `pkg:markdownlint-cli2` — package.json:27
 - migration: `S14` — SPEC.md:482
 - license: `R:issues/52-sql-core-academic-depth-interleaved-with-query-practice#5-citation-and-license-rules-for-whoever-builds-this` — research/issues/52-sql-core-academic-depth-interleaved-with-query-practice.md:71
 - changelog: `scripts/check-changelog.ts` — scripts/check-changelog.ts:1

@@ -72,7 +72,7 @@ export default function make({ id = 'ij' } = {}) {
 
 	a.text(10, 20, 'order_items: 7 lines', 'f11 b');
 	a.text(150, 20, 'products: 5 of 16 rows', 'f11 b');
-	a.row(10, 30, [{ w: 72, text: 'order_item_id', align: 'e' }, { w: 60, text: 'product_id', align: 'e' }], { head: true, tint: tint('src', 2) });
+	a.row(10, 30, [{ w: 72, text: 'order_item_id', align: 'e', c: 'f9' }, { w: 60, text: 'product_id', align: 'e' }], { head: true, tint: tint('src', 2) });
 	a.row(150, 30, [{ w: 58, text: 'product_id', align: 'e' }, { w: 106, text: 'product_name' }, { w: 36, text: 'pairs', align: 'e' }], { head: true, tint: tint('src', 2) });
 	LINES.forEach(([oi, p], i) =>
 		a.row(10, 50 + 20 * i, [{ w: 72, text: oi, align: 'e' }, { w: 60, text: p, align: 'e' }], { tint: SHADE[p], tintCols: [1, 1], tintFx: { in: STEP[p] } }),

@@ -172,6 +172,20 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   `short_title` of 25 characters) and an apostrophe ended a single-quoted TypeScript string. → **Frontmatter written by a script goes
   through one quoting helper for every value; check the limits before writing (objectives 2 to 5, description at most 160, short
   title at most 24) and run `npm run build` right after the script.**
+- 2026-11-23 — 33 of 112 lesson figures sat 13 to 71 px left of their column: the generator drew on a fixed 360 px canvas
+  from x = 10, and most figures use only part of it, so the viewBox's middle was never the drawing's middle. The counter
+  row under them was off-center too. → **A figure's content extent (everything it draws, across all steps) must be
+  centered in its viewBox, and the generator does it: `anim().build()` sets the viewBox's x from
+  `scripts/lib/figure-extent.mjs`, a hand-drawn static figure gets the same shift from `refresh-concept-figures`, and
+  `npm run check:figures` (`scripts/check-figure-centering.mjs`, in `npm run check`) re-measures every spec and every
+  figure in the lessons (3 px tolerance). Never hand-edit a viewBox; run `node scripts/refresh-concept-figures.mjs`.**
+  A new text class needs its size in `SIZES` there. (Step animations, concept animations.)
+- 2026-11-23 — `refresh-concept-figures` rewrote `sql/case-expressions.mdx` and `sql/rank-top-n.mdx` with another lesson's
+  figure: three pairs of specs share a figure id (cs, ij, rt) and the script matched on the id alone, so the last spec won;
+  `sql/inner-join.mdx` also differed because its header label had been shrunk by hand with a `style` attribute. → **The
+  script now tells specs with one id apart by the figure's `<title>`, stops on an ambiguous one, and fails when an id
+  repeats on a page. A fix to a figure goes in its spec (here class `f9`), never into the pasted markup, because the
+  next refresh undoes it; `npm run check:figures` fails on a lesson that is out of date.**
 
 ## Datasets and generated files
 
