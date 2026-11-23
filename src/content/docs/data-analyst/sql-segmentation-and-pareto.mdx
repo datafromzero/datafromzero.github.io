@@ -1,0 +1,478 @@
+---
+id: data-analyst-sql-segmentation-and-pareto
+title: Segments, Pareto and RFM in SQL
+description: 'Segment customers and products with window functions: cumulative share, the Pareto cut and recency-frequency-value groups.'
+stage: data-analyst
+order: 30
+level: advanced
+duration: 30
+objectives:
+  - Compute a cumulative share and find the products behind 80 percent of revenue
+  - Assign recency, frequency and value groups with NTILE
+  - Label customers by segment with CASE
+  - State the segment definitions and the date they were computed
+prerequisites:
+  - data-analyst-the-analysts-loop
+  - sql-window-functions
+  - sql-rank-top-n
+  - sql-case-expressions
+  - sql-conditional-aggregation
+  - data-analyst-querying-a-cloud-warehouse
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Window functions (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/stable/sql/functions/window_functions
+  - title: 'GitLab, Staff Data Analyst job posting on Greenhouse (accessed 2026-11-23)'
+    url: https://job-boards.greenhouse.io/gitlab/jobs/8827370002
+  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/pricing
+  - title: 'Google Cloud: GoogleSQL numbering functions, NTILE (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/numbering_functions
+status: draft
+---
+
+TODO(owner): Team draft for your edits (D24). The stub's sources (a blog of interview patterns) were dropped: not primary. The BigQuery cost lines were not run live (no Google login); they are estimates from type sizes (see the warehouse lesson's note). The timed drill follows the SQL skills of one GitLab posting for a Staff Data Analyst, a senior role, so it is one employer's bar, not a market norm. The segment cut-offs (terciles, 60 days for "new") are this lesson's choices. NTILE and the window frame are the same in BigQuery's docs; only the date arithmetic differs. `reviewed` is yours to set.
+
+## The question
+
+Dana wants to protect what matters most: the best products on the menu and the best customers. She asks which products bring most of the money, and which customers to thank or win back. Everything is as of July 1, 2026, the day after the data ends; the numbers count completed orders and include order 2075, the 20-unit line, unless a sentence says otherwise.
+
+The customers look like this, one row each; every customer has a signup date, and the orders table says what each one bought and when:
+
+| customer_id | signup_date | city | loyalty_tier |
+|---:|---|---|---|
+| 1 | 2025-06-04 | Berkeley | bronze |
+| 2 | 2025-06-04 | Berkeley | silver |
+| 3 | 2025-06-06 | Oakland | gold |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Window functions: keep the rows, add the context*](/sql/window-functions/) (S14), how do you write a running total of `revenue` in order of date, and how many rows does the query return?
+
+   <details>
+   <summary>answer</summary>
+
+   `SUM(revenue) OVER (ORDER BY day)`. The row count does not change: a window function adds a column.
+
+   </details>
+
+2. In [*Labels and buckets with CASE*](/sql/case-expressions/) (S12), what happens to a row that matches none of the `WHEN` lines and has no `ELSE`?
+
+   <details>
+   <summary>answer</summary>
+
+   The `CASE` gives `NULL` for that row.
+
+   </details>
+
+## The big idea
+
+Rank the rows by what you measure, add a running share, and cut where the share reaches your line: the same tool finds the top products and builds customer groups.
+
+## Learn by doing
+
+About 30 minutes, 5 ideas: the cumulative share, the three RFM scores, the labels, the check and the dated definition, the memo. Units 2 to 4 share two views, so run them in order.
+
+### 1. A running share finds the cut
+
+**Idea.** A *Pareto cut* asks for the smallest set of top items whose share of the total reaches a line, often 80 percent. Rank the items by revenue, add a running total, and divide it by the grand total. Use `ROWS` framing and a tie-breaker so each row adds one item, in an order you can repeat.
+
+**Try it:** the 15 products that sold, best first, with their running share of revenue.
+
+<RunSQL query={`WITH revenue AS (
+  SELECT p.product_name,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY p.product_name
+)
+SELECT product_name,
+       ROUND(revenue, 2) AS revenue,
+       ROW_NUMBER() OVER (ORDER BY revenue DESC, product_name) AS rank_no,
+       ROUND(100.0 * SUM(revenue) OVER (ORDER BY revenue DESC, product_name
+                                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                   / SUM(revenue) OVER (), 1) AS cumulative_pct
+FROM revenue
+ORDER BY revenue DESC, product_name;`} />
+
+**Predict:** how many of the 15 products does it take to reach 80 percent?
+
+Expected: 15 rows, 4 columns (`product_name`, `revenue`, `rank_no`, `cumulative_pct`).
+
+*Why:* the running share is 79.7 percent after 10 products and 84.8 after 11, so it takes 11 of 15: 73 percent of the menu, not 20. The 80/20 pattern does not hold here, and the last four products bring 15.2 percent. Order 2075 puts Turkey Sandwich third; with the line corrected it is fourth (\$1,802.25), and still 11 products are needed. The DuckDB documentation says a window with `ORDER BY` defaults to `RANGE`, where the current row means the row and all its peers; `ROWS` means only the current row, and the product name settles ties.
+
+> **Cost line.** Reads about 139,857 bytes of 3 tables (estimate from types), billed at least 30 MB, about 0.00017 to 0.00018 dollars at \$6.25 per TiB (BigQuery pricing page, read 2026-11-23). BigQuery's `SUM() OVER` and `ROW_NUMBER` work as written. **Cheaper:** keep the 15-row result as a sheet and rank from it.
+
+<figure>
+<svg viewBox="0 0 360 251" width="360" role="img" aria-labelledby="da3-pareto-t da3-pareto-d">
+<title id="da3-pareto-t">Cumulative share of revenue by product rank, 15 products</title>
+<desc id="da3-pareto-d">A line chart of the cumulative share of revenue, from 0 to 100 percent, against the rank of the product, 1 to 15, best seller first. The line rises from 13 percent for Latte and stays close to the gray diagonal that would mean equal sales for every product. It crosses 80 percent at product 11 of 15, and reaches 100 percent at product 15. Revenue counts completed orders and includes order 2075 as recorded.</desc>
+<g fill="currentColor">
+<text x="20.5" y="22.4" font-size="10.5" font-weight="600">Cumulative share of revenue, by product rank</text>
+<path d="M68.5 202.4 L334.5 202.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="62.5" y="205.9" font-size="10" text-anchor="end" fill-opacity="0.8">0%</text>
+<path d="M68.5 170.4 L334.5 170.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="62.5" y="173.9" font-size="10" text-anchor="end" fill-opacity="0.8">20%</text>
+<path d="M68.5 138.4 L334.5 138.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="62.5" y="141.9" font-size="10" text-anchor="end" fill-opacity="0.8">40%</text>
+<path d="M68.5 106.4 L334.5 106.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="62.5" y="109.9" font-size="10" text-anchor="end" fill-opacity="0.8">60%</text>
+<path d="M68.5 74.4 L334.5 74.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="62.5" y="77.9" font-size="10" text-anchor="end" fill-opacity="0.8">80%</text>
+<path d="M68.5 42.4 L334.5 42.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="62.5" y="45.9" font-size="10" text-anchor="end" fill-opacity="0.8">100%</text>
+<path d="M68.5 202.4 L334.5 42.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" stroke-dasharray="4 3" />
+<text x="334.5" y="164" font-size="10" text-anchor="end" fill-opacity="0.85">same share for every product</text>
+<path d="M68.5 74.4 L334.5 74.4" fill="none" stroke="#ad9100" stroke-width="1.5" stroke-opacity="0.9" stroke-dasharray="5 3" />
+<path d="M68.5 202.4 L86.2 181.8 L103.9 166.9 L121.7 153.1 L139.4 140.1 L157.1 127.8 L174.9 116.2 L192.6 104.8 L210.3 93.8 L228.1 83.3 L245.8 74.9 L263.5 66.7 L281.3 59.6 L299 53.6 L316.7 47.9 L334.5 42.4" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="86.2" cy="181.8" r="4" fill="#0072b2" />
+<circle cx="103.9" cy="166.9" r="4" fill="#0072b2" />
+<circle cx="121.7" cy="153.1" r="4" fill="#0072b2" />
+<circle cx="139.4" cy="140.1" r="4" fill="#0072b2" />
+<circle cx="157.1" cy="127.8" r="4" fill="#0072b2" />
+<circle cx="174.9" cy="116.2" r="4" fill="#0072b2" />
+<circle cx="192.6" cy="104.8" r="4" fill="#0072b2" />
+<circle cx="210.3" cy="93.8" r="4" fill="#0072b2" />
+<circle cx="228.1" cy="83.3" r="4" fill="#0072b2" />
+<circle cx="245.8" cy="74.9" r="4" fill="#0072b2" />
+<circle cx="263.5" cy="66.7" r="5" fill="#ad9100" />
+<circle cx="281.3" cy="59.6" r="4" fill="#0072b2" />
+<circle cx="299" cy="53.6" r="4" fill="#0072b2" />
+<circle cx="316.7" cy="47.9" r="4" fill="#0072b2" />
+<circle cx="334.5" cy="42.4" r="4" fill="#0072b2" />
+<text x="78.5" y="50.4" font-size="10" font-weight="600">11 of 15 products</text>
+<text x="78.5" y="63.4" font-size="10" font-weight="600">are needed to reach 80%</text>
+<path d="M167.8 53.6 L257.5 63.7" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.6" />
+<text x="86.2" y="220.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1</text>
+<text x="157.1" y="220.4" font-size="10" text-anchor="middle" fill-opacity="0.8">5</text>
+<text x="245.8" y="220.4" font-size="10" text-anchor="middle" fill-opacity="0.8">10</text>
+<text x="334.5" y="220.4" font-size="10" text-anchor="middle" fill-opacity="0.8">15</text>
+<text x="334.5" y="234.4" font-size="10" text-anchor="end" fill-opacity="0.8">product rank, best seller first</text>
+</g>
+</svg>
+</figure>
+
+### 2. Three scores with NTILE
+
+**Idea.** RFM describes a customer by three numbers: *recency*, the days since the last completed order; *frequency*, the number of orders; and *monetary value*, the revenue. `NTILE(3)` splits the customers into three groups of nearly equal size, numbered 1 to 3 in the order you give it, so give it the order in which a bigger number is better. Customers who tie on a value can land in different groups, so end every order with `customer_id`.
+
+Run this one first: it saves one row for each customer in a view, then counts the customers by recency score and frequency score.
+
+**Try it.**
+
+<RunSQL query={`CREATE OR REPLACE VIEW customer_totals AS
+SELECT o.customer_id,
+       MIN(CAST(o.ordered_at AS DATE)) AS first_order,
+       MAX(CAST(o.ordered_at AS DATE)) AS last_order,
+       DATE_DIFF('day', MAX(CAST(o.ordered_at AS DATE)), DATE '2026-07-01') AS recency_days,
+       COUNT(DISTINCT o.order_id) AS orders,
+       SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed' AND o.customer_id IS NOT NULL
+GROUP BY o.customer_id;
+
+WITH scored AS (
+  SELECT *,
+         NTILE(3) OVER (ORDER BY recency_days DESC, customer_id) AS r,
+         NTILE(3) OVER (ORDER BY orders, customer_id) AS f,
+         NTILE(3) OVER (ORDER BY revenue, customer_id) AS m
+  FROM customer_totals
+)
+SELECT r, f, COUNT(*) AS customers
+FROM scored
+GROUP BY r, f
+ORDER BY r, f;`} />
+
+**Predict:** how many customers score 3 for recency and 3 for frequency?
+
+Expected: 9 rows, 3 columns.
+
+*Why:* 16 customers, out of 144 who have a completed order (the walk-in order has no customer, and customer 42 has only the canceled one). Each score has 48 customers. Recency is sorted from the most days to the fewest, so score 3 is the most recent: 1 to 5 days. The customers at exactly 5 days are in both score 3 and score 2.
+
+### 3. Name the groups with CASE
+
+**Idea.** A rule is only a label if you can read it aloud. Write the segments in a `CASE`, with the rule that guards the others first. Frequency counts orders, so a customer who joined in June cannot have a high one: label customers who signed up in the last 60 days *new* before anything else.
+
+**Try it:** build the segments, keep them in a view, and count them.
+
+<RunSQL query={`CREATE OR REPLACE VIEW segments AS
+WITH scored AS (
+  SELECT *,
+         NTILE(3) OVER (ORDER BY recency_days DESC, customer_id) AS r,
+         NTILE(3) OVER (ORDER BY orders, customer_id) AS f,
+         NTILE(3) OVER (ORDER BY revenue, customer_id) AS m
+  FROM customer_totals
+)
+SELECT s.*, c.signup_date,
+       CASE WHEN c.signup_date >= DATE '2026-05-02' THEN 'new'
+            WHEN s.r = 3 AND s.f = 3 AND s.m = 3 THEN 'champion'
+            WHEN s.r = 1 AND s.f >= 2 THEN 'slipping'
+            WHEN s.f = 1 THEN 'light'
+            ELSE 'steady' END AS segment
+FROM scored s
+JOIN customers c ON c.customer_id = s.customer_id;
+
+SELECT segment, COUNT(customer_id) AS customers, ROUND(SUM(revenue), 2) AS revenue,
+       ROUND(100.0 * SUM(revenue) / SUM(SUM(revenue)) OVER (), 1) AS revenue_pct
+FROM segments
+GROUP BY segment
+ORDER BY revenue DESC;`} />
+
+**Predict:** how many customers are *slipping* (a recency score of 1 with at least 2 for frequency)?
+
+Expected: 5 rows, 4 columns.
+
+*Why:* 30, who bring 27.3 percent of revenue. The other segments are 50 steady, 15 champions, 28 light and 21 new. A customer who is *new* is never in a later line of the `CASE`, because a `CASE` stops at the first `WHEN` that is true. Revenue and orders move together here (correlation 0.95), so only the champion rule uses monetary value.
+
+> **Cost line.** Reads about 170,831 bytes of 4 tables (estimate from types), billed at least 40 MB, about 0.00023 to 0.00024 dollars (pricing page, read 2026-11-23). In BigQuery the date arithmetic differs: `DATE_DIFF(end, start, DAY)`. **Cheaper:** save the 144-row `customer_totals` result and score from it.
+
+<figure>
+<svg viewBox="0 0 360 228" width="360" role="img" aria-labelledby="da3-rfm-t da3-rfm-d">
+<title id="da3-rfm-t">Share of revenue by customer segment, 144 customers with a completed order</title>
+<desc id="da3-rfm-d">A horizontal bar chart of the share of revenue by segment, on a scale from 0 to 50 percent: steady 41.1 percent from 50 customers; slipping 27.3 percent from 30 customers; champion 20.2 percent from 15 customers; light 7.9 percent from 28 customers; new 3.5 percent from 21 customers. Segments come from recency, frequency and monetary terciles as of July 1, 2026, plus a new-customer label. Revenue includes order 2075 as recorded.</desc>
+<g fill="currentColor">
+<text x="41.7" y="22.4" font-size="10.5" font-weight="600">Revenue share by segment (number of customers)</text>
+<text x="41.7" y="57.4" font-size="10">steady</text>
+<rect x="117.7" y="44.4" width="148" height="16" rx="3" fill="#0072b2" />
+<text x="273.6" y="56.9" font-size="10">41.1% (50)</text>
+<text x="41.7" y="87.4" font-size="10" font-weight="600">slipping</text>
+<rect x="117.7" y="74.4" width="98.3" height="16" rx="3" fill="#ad9100" />
+<text x="223.9" y="86.9" font-size="10">27.3% (30)</text>
+<text x="41.7" y="117.4" font-size="10">champion</text>
+<rect x="117.7" y="104.4" width="72.7" height="16" rx="3" fill="#0072b2" />
+<text x="198.4" y="116.9" font-size="10">20.2% (15)</text>
+<text x="41.7" y="147.4" font-size="10">light</text>
+<rect x="117.7" y="134.4" width="28.4" height="16" rx="3" fill="#0072b2" />
+<text x="154.1" y="146.9" font-size="10">7.9% (28)</text>
+<text x="41.7" y="177.4" font-size="10">new</text>
+<rect x="117.7" y="164.4" width="12.6" height="16" rx="3" fill="#0072b2" />
+<text x="138.3" y="176.9" font-size="10">3.5% (21)</text>
+<path d="M117.7 194.4 L297.7 194.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M117.7 194.4 L117.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="117.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0%</text>
+<path d="M153.7 194.4 L153.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="153.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">10%</text>
+<path d="M189.7 194.4 L189.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="189.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">20%</text>
+<path d="M225.7 194.4 L225.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="225.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">30%</text>
+<path d="M261.7 194.4 L261.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="261.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">40%</text>
+<path d="M297.7 194.4 L297.7 198.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="297.7" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">50%</text>
+</g>
+</svg>
+</figure>
+
+### 4. Check a label against the customer, and date the definition
+
+**Idea.** A tercile always makes a bottom third, even if nobody has left. Check a label against something it did not use: how long this customer normally waits between orders. A customer who has been silent for more than twice their own usual gap, the days between first and last order divided by the number of gaps, has really gone quiet.
+
+**Try it:** the same segments, with the count that passes the check.
+
+<RunSQL query={`SELECT segment, COUNT(*) AS customers,
+       COUNT(CASE WHEN orders > 1
+                   AND recency_days > 2.0 * DATE_DIFF('day', first_order, last_order) / (orders - 1)
+                  THEN 1 END) AS silent
+FROM segments
+GROUP BY segment
+ORDER BY segment;`} />
+
+**Predict:** how many of the 30 slipping customers have been silent for more than twice their usual gap?
+
+Expected: 5 rows, 3 columns (it reads the view of unit 3).
+
+*Why:* 20 of 30. The other 10 are quiet by rank but not unusual for them. The definitions are part of the result, so write them down with their date:
+
+> **Segments as of 2026-07-01**, completed orders from January 1 to June 30, 144 customers, order 2075 included (it adds \$166.50 to customer 94, a champion either way). Scores are terciles of recency (days since the last order, fewest best), orders and revenue, ties by `customer_id`. *New*: signed up since May 2. *Champion*: 3, 3 and 3. *Slipping*: recency 1, frequency 2 or 3. *Light*: frequency 1. *Steady*: the rest.
+
+### 5. End in a memo
+
+> **Decision:** send the win-back note to the 20 slipping customers who have been silent for more than twice their usual gap, and keep all 15 products on the menu.
+> **Context:** Dana wants to protect her best products and customers; the data runs from January 1 to June 30 and the segments are dated July 1.
+> **Tension:** the 80/20 rule does not describe this menu, and a tercile always labels a bottom third, so neither a cut nor a segment can be trusted on its own.
+> **Evidence:** 11 of 15 products are needed to reach 80 percent of revenue, and the last four bring 15.2 percent. Of 30 slipping customers, who bring 27.3 percent of revenue, 20 are silent for more than twice their own usual gap.
+> **Recommendation:** write to the 20 now, recompute the segments with the same definitions on August 1, and cut a product only after a test shows its sales do not move other items.
+
+<Aside type="tip" title="Remember">
+
+- A Pareto cut is the smallest top set whose running share reaches the line: rank, add, divide, with `ROWS` and a tie-breaker.
+- `NTILE(3)` numbers groups in the order you give it; order so that 3 is best, and end with `customer_id`.
+- A `CASE` stops at the first true `WHEN`: put the guard (new customers) first.
+- Check a label against something it did not use, and date every definition.
+
+**Common trap:** reading a tercile as a verdict: the bottom third exists whether or not anyone left.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-sql-segmentation-and-pareto-1">
+
+**Pareto of units.** Rank the products by units sold instead of revenue. The editor lists the units; add the rank and the running share of units, as in unit 1. Expected: 15 rows, 4 columns. How many products reach 80 percent of the units, and which product is 14th by units?
+
+<RunSQL query={`SELECT p.product_name, SUM(oi.quantity) AS units
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY p.product_name
+ORDER BY units DESC, p.product_name;`} />
+
+<details>
+<summary>Hint</summary>
+
+Put the query in a `WITH units AS (...)` and add the two window columns of unit 1 to a `SELECT` from it; the running share divides by `SUM(units) OVER ()`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+WITH units AS (
+  ...
+)
+SELECT product_name, units,
+       ROW_NUMBER() OVER (ORDER BY units DESC, product_name) AS rank_no,
+       ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH units AS (
+  SELECT p.product_name, SUM(oi.quantity) AS units
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY p.product_name
+)
+SELECT product_name, units,
+       ROW_NUMBER() OVER (ORDER BY units DESC, product_name) AS rank_no,
+       ROUND(100.0 * SUM(units) OVER (ORDER BY units DESC, product_name
+                                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                   / SUM(units) OVER (), 1) AS cumulative_pct
+FROM units
+ORDER BY units DESC, product_name;
+```
+
+The running share is 77.8 percent after 10 products and 83.0 after 11: 11 products again. The order is not the same as by revenue: Turkey Sandwich, third by revenue, is 14th by units (213), because it costs \$9.25. Order 2075 adds 18 units to it. A Pareto answers a question about its measure only.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-sql-segmentation-and-pareto-2">
+
+**Timed drill: 20 minutes.** Dana asks: "Where do my customers come from? For each cafe, what share of the revenue comes from people who live in another city?" For each store, report its customers, how many of them live in another city than the store's, its revenue, and the share of the revenue that comes from those visitors, highest share first. Use completed orders from January 1 to June 30, and order 2075 as recorded. Before you start, write the shape of the answer in a comment. Expected: 3 rows, 5 columns.
+
+Score yourself: (1) the joins are the right ones and no row is multiplied; (2) a CTE holds the lines before the aggregation; (3) the "other city" test is a conditional inside the aggregate, not a second query; (4) you checked the revenue against a total computed another way.
+
+<RunSQL query={`-- Write the shape of the answer, then your query, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+The tables are `stores` and `customers` (both have a `city`), `orders`, `order_items` and `products`. Count customers with `COUNT(DISTINCT ...)`, and put a `CASE` inside it for the visitors.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One row for each store: customers, visitors, revenue and a share between 10 and 15 percent."*
+
+```sql
+WITH lines AS (
+  SELECT s.store_name, s.city AS store_city, cu.city AS home_city, cu.customer_id,
+         ... AS amount
+  FROM orders o
+  JOIN stores s ON s.store_id = o.store_id
+  ...
+)
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH lines AS (
+  SELECT s.store_name, s.city AS store_city, cu.city AS home_city, cu.customer_id,
+         oi.quantity * p.unit_price_usd - oi.discount_usd AS amount
+  FROM orders o
+  JOIN stores s ON s.store_id = o.store_id
+  JOIN customers cu ON cu.customer_id = o.customer_id
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+)
+SELECT store_name,
+       COUNT(DISTINCT customer_id) AS customers,
+       COUNT(DISTINCT CASE WHEN home_city <> store_city THEN customer_id END) AS visitors,
+       ROUND(SUM(amount), 2) AS revenue,
+       ROUND(100.0 * SUM(CASE WHEN home_city <> store_city THEN amount ELSE 0 END) / SUM(amount), 1) AS visitor_share
+FROM lines
+GROUP BY store_name
+ORDER BY visitor_share DESC;
+```
+
+The rows are Old Town (108 customers, 65 visitors, \$9,137.25, 14.3 percent), Campus (107, 64, \$8,998.75, 13.4) and Harbor (90, 33, \$4,606.25, 10.9). The three revenues add up to \$22,742.25, which is \$7.00 under the completed total of \$22,749.25: the inner join to `customers` drops the walk-in order of \$7.00, which has no customer. With order 2075 corrected, Old Town's share is 14.6 percent and the order of the stores does not change.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what do R, F and M stand for, and what does a tercile always do to a group of customers?
+
+<details>
+<summary>answer</summary>
+
+Recency, frequency and monetary value. A tercile always makes a bottom third, whether or not anyone has left.
+
+</details>
+
+<Exercise id="data-analyst-sql-segmentation-and-pareto-3">
+
+**Spot the flaw.** A colleague wants to message only customers who are still around, so she adds a filter to the scoring step: `WHERE last_order >= DATE '2026-06-01'`. Then she counts the slipping customers (recency score 1, frequency score 2 or 3) and the longest silence among them. She says the list holds the customers who have been quiet longest. It reads the view `customer_totals` of unit 2.
+
+<RunSQL query={`WITH active AS (
+  SELECT *,
+         NTILE(3) OVER (ORDER BY recency_days DESC, customer_id) AS r,
+         NTILE(3) OVER (ORDER BY orders, customer_id) AS f
+  FROM customer_totals
+  WHERE last_order >= DATE '2026-06-01'
+)
+SELECT COUNT(*) AS slipping, MAX(recency_days) AS longest_silence_days
+FROM active
+WHERE r = 1 AND f >= 2;`} />
+
+Expected: 1 row, 2 columns. Compare with the 30 slipping customers of unit 3. What went wrong, and what is the fix?
+
+<Solution>
+
+The query returns 32 slipping customers and a longest silence of 30 days; unit 3's 30 slipping customers include silences of up to 51 days. The filter runs before the window function, so the 10 customers whose last order was before June, the quietest ones, are gone before the scores are cut. The terciles are then cut among the 134 who ordered in June, and "slipping" means the least recent of the recent. Score everyone first in the `WITH`, and filter in the query that reads it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can find the Pareto cut of a measure with a running share, score customers with NTILE in the right direction, label them with a CASE that puts the guard first, and write down the definition with its date.* Test: Exercise data-analyst-sql-segmentation-and-pareto-2, done in 20 minutes without opening the hints.
+
+The pattern to remember: **rank, add a running share, cut at your line; score with NTILE in the direction where 3 is best; label with the guard first; check the label against the customer; date the definition.**

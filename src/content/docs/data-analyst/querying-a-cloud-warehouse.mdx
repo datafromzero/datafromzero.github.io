@@ -1,0 +1,400 @@
+---
+id: data-analyst-querying-a-cloud-warehouse
+title: Querying a cloud warehouse
+description: 'Run the track SQL in the BigQuery sandbox and put a cost line under every query: bytes scanned and one cheaper rewrite.'
+stage: data-analyst
+order: 20
+level: intermediate
+duration: 30
+objectives:
+  - Load the cafe-sales tables into the BigQuery sandbox
+  - Run the track SQL there and read the bytes scanned
+  - 'Write a cost line under each query: bytes scanned and one cheaper rewrite'
+  - Export a result for a BI tool
+prerequisites:
+  - data-analyst-the-analysts-loop
+  - core-warehouses-lakes-and-cost
+  - sql-ctes
+datasets:
+  - cafe-sales
+reviewed: 2026-11-23
+sources:
+  - title: 'Google Cloud: BigQuery sandbox (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://cloud.google.com/bigquery/docs/sandbox
+  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/pricing
+  - title: 'Google Cloud: Estimate and control costs in BigQuery (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://cloud.google.com/bigquery/docs/best-practices-costs
+  - title: 'Google Cloud: GoogleSQL data types, data type sizes (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types
+  - title: 'Google Cloud: Loading data from a local file (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/docs/loading-data-local
+  - title: 'Google Cloud: Schema auto-detection (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/docs/schema-detect
+  - title: 'Google Cloud: GoogleSQL date functions (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions
+  - title: 'Google Cloud: GoogleSQL query syntax (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax
+  - title: 'Google Cloud: Export query results to a file (accessed 2026-11-23; page updated 2026-11-16)'
+    url: https://cloud.google.com/bigquery/docs/export-file
+  - title: 'Google Cloud: Query partitioned tables (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://cloud.google.com/bigquery/docs/querying-partitioned-tables
+  - title: 'DuckDB documentation: Date functions (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/stable/sql/functions/date
+status: draft
+---
+
+TODO(owner): The BigQuery steps were not run live (no Google login). Each rests on the pages in `sources`, and every byte count is an estimate from their type sizes, computed with DuckDB, not a validator figure: please run one dry run per cost line and compare. Open points: the opened pages do not say which types auto-detect gives prices (FLOAT64 is assumed), where the console creates a dataset, whether the sandbox allows `CREATE TABLE ... PARTITION BY`, or what "MB" means on the pricing page; that a `WHERE` on an unpartitioned column leaves the estimate unchanged is inferred (Exercise 3's dry run would settle it). The data URLs use the `v0.1.0` tag.
+
+## The question
+
+Dana wants the monthly revenue of each menu category in a sheet. Her accountant adds a second question: what does each query cost to run on the warehouse? You will answer both, with a **cost line** under every query. The data is `cafe-sales`; the five tables go into the BigQuery sandbox.
+
+| table | rows | what the question reads |
+|---|---:|---|
+| `orders` | 1,800 | when, and whether it was completed |
+| `order_items` | 3,287 | quantity and discount of each line |
+| `products` | 16 | category and price |
+| `customers` | 150 | not needed here |
+| `stores` | 3 | not needed here |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Warehouses, data lakes and what things cost*](/core/warehouses-lakes-and-cost/) (C35), what does BigQuery count when it prices a query?
+
+   <details>
+   <summary>answer</summary>
+
+   The logical (uncompressed) bytes of the columns the query reads: 8 for a whole number, a date or a timestamp, 2 plus the UTF-8 size for text, and 0 for a null.
+
+   </details>
+
+2. In [*Working with dates and time*](/sql/dates-and-time/) (S11), write the DuckDB expression for the first day of the month of `ordered_at`, as a date.
+
+   <details>
+   <summary>answer</summary>
+
+   `CAST(DATE_TRUNC('month', ordered_at) AS DATE)`. DuckDB's `DATE_TRUNC` always returns a timestamp, so the `CAST` turns it back into a date.
+
+   </details>
+
+## The big idea
+
+A warehouse bills for the columns a query reads, so every query gets a cost line: the bytes it reads, the price on a date, and one cheaper way to ask.
+
+## Learn by doing
+
+About 30 minutes, 5 ideas: the sandbox, the dialect, the cost line, the export, the memo. The editors run DuckDB on `cafe-sales`; the BigQuery versions are shown beside them.
+
+### 1. Set up the sandbox
+
+**Idea.** The BigQuery sandbox lets you use BigQuery without a credit card or a billing account. Its limits are those of the free tier: 1 TiB of query data processed each month and 10 GiB of storage, and tables, views and partitions expire after 60 days. Among the features it does not support are streaming data, DML statements and the Data Transfer Service, so this track uses `SELECT` and `WITH` only.
+
+1. Open BigQuery Studio in the Google Cloud console, sign in, accept the terms, and create a project. That enables the sandbox.
+2. Create a dataset in the project; the lesson calls it `cafe`.
+3. Download the five CSV files of `cafe-sales` (`stores.csv`, `customers.csv`, `products.csv`, `orders.csv`, `order_items.csv` in `https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.1.0/datasets/cafe-sales/v1/`).
+4. For each file, open the dataset and choose **Create table**. Set **Create table from** to **Upload**, the file format to **CSV**, name the table after the file, tick **Auto-detect** under Schema, and create it. A file loaded from your computer in the console cannot exceed 100 MB; these are far smaller.
+5. Open the **Schema** tab of each table. Auto-detect reads `YYYY-MM-DD` as a `DATE` and `YYYY-MM-DD HH:MM:SS` as a `TIMESTAMP`. The cost lines below assume whole numbers are `INT64` and prices and discounts `FLOAT64`; if your schema differs, your numbers will too.
+
+### 2. The same SQL, a few edits
+
+**Idea.** Most of the track's SQL runs in BigQuery as it is. The edits are small: the argument order of date functions, the quoting of a date part, and the table names. DuckDB writes `date_trunc(part, date)`; BigQuery writes `DATE_TRUNC(date_value, date_granularity)` with the part unquoted. `DATE_TRUNC` of a timestamp returns a timestamp in both, so BigQuery's `DATE()` turns it into a date (in UTC unless you pass a time zone). Similarly DuckDB's `date_diff(part, startdate, enddate)` is BigQuery's `DATE_DIFF(end_date, start_date, granularity)`. A table is written as a name in backticks, with your project in front.
+
+**Try it** in DuckDB: revenue of each category in each month, completed orders only.
+
+<RunSQL query={`SELECT CAST(DATE_TRUNC('month', o.ordered_at) AS DATE) AS month,
+       p.category,
+       ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY month, p.category
+ORDER BY month, p.category;`} />
+
+The same query for BigQuery, with the three edits:
+
+```sql
+-- BigQuery
+SELECT DATE_TRUNC(DATE(o.ordered_at), MONTH) AS month,
+       p.category,
+       ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+FROM `PROJECT.cafe.orders` AS o
+JOIN `PROJECT.cafe.order_items` AS oi ON oi.order_id = o.order_id
+JOIN `PROJECT.cafe.products` AS p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+GROUP BY month, p.category
+ORDER BY month, p.category;
+```
+
+**Predict:** how many rows does the result have?
+
+Expected: the columns `month`, `category` and `revenue`.
+
+*Why:* 6 months and 4 categories make 24 rows, and the 24 revenues add up to \$22,749.25, the total of the completed orders. That total includes order 2075, a 20-unit Turkey Sandwich line that should have been 2; set aside, the total is \$22,582.75. BigQuery accepts the alias `month` in `GROUP BY`, as DuckDB does.
+
+### 3. Put a cost line under every query
+
+**Idea.** A *cost line* has three parts: the bytes the query reads, the price with its date, and one cheaper rewrite. BigQuery shows the estimate before you run: the query validator says "This query will process … when run", and `bq query --dry_run` prints the bytes. You can also work it out from the column types.
+
+**Try it:** count the bytes of the columns the query above reads, in each table, with BigQuery's sizes.
+
+<RunSQL query={`SELECT 'orders' AS tbl,
+       8 * COUNT(order_id) + 8 * COUNT(ordered_at) + SUM(2 + strlen(status)) AS bytes
+FROM orders
+UNION ALL
+SELECT 'order_items',
+       8 * COUNT(order_id) + 8 * COUNT(product_id) + 8 * COUNT(quantity) + 8 * COUNT(discount_usd)
+FROM order_items
+UNION ALL
+SELECT 'products',
+       8 * COUNT(product_id) + SUM(2 + strlen(category)) + 8 * COUNT(unit_price_usd)
+FROM products;`} />
+
+**Predict:** add the three counts. BigQuery's on-demand price has a rule for very small queries. Will it bill about that many bytes, or more?
+
+Expected: 3 rows, 2 columns.
+
+<details>
+<summary>Reveal the result</summary>
+
+The three counts add up to 154,152 bytes. The pricing page says charges are rounded up with a minimum of 10 MB processed for each table a query references, so this query is billed at least 30 MB.
+
+</details>
+
+*Why:* the page does not say whether MB means 10^6 or 2^20 bytes; at \$6.25 per TiB, 30 MB is about 170 to 179 millionths of a dollar. The first 1 TiB each month is free.
+
+> **Cost line.** Reads about 154,152 bytes (estimate from types), billed at least 30 MB: 10 MB for each of 3 tables, about 0.00017 to 0.00018 dollars at \$6.25 per TiB (pricing page, read 2026-11-23), and free inside the first TiB of the month. **Cheaper:** run it once and export the 24 rows; the chart reads the file, not three tables.
+
+The same cost line for the query most people write first, a preview:
+
+```sql
+-- BigQuery
+SELECT * FROM `PROJECT.cafe.orders` LIMIT 10;
+```
+
+> **Cost line.** Reads about 89,283 bytes (all six columns; a `LIMIT` does not lower it), billed at least 10 MB, about 57 to 60 millionths of a dollar (pricing page, read 2026-11-23). **Cheaper:** name `order_id`, `ordered_at` and `status`: about 48,599 bytes, 46 percent fewer; or open the table's **Preview** tab, which the cost page says shows data at no charge.
+
+<figure>
+<svg viewBox="0 0 360 171" width="360" role="img" aria-labelledby="da2-bytes-t da2-bytes-d">
+<title id="da2-bytes-t">Logical bytes the preview query reads: all six columns of orders against three</title>
+<desc id="da2-bytes-d">Two horizontal bars on a scale from 0 to 100,000 bytes. SELECT star FROM orders reads about 89,283 bytes. Naming order&#95;id, ordered&#95;at and status reads about 48,599 bytes, 46 percent fewer. Both are estimates from the BigQuery data type sizes, and a LIMIT clause does not change them.</desc>
+<g fill="currentColor">
+<text x="23" y="22.4" font-size="10.5" font-weight="600">Bytes read by the preview query (estimate)</text>
+<text x="23" y="61.4" font-size="10">SELECT &#42; (6 columns)</text>
+<rect x="127" y="48.4" width="167.9" height="18" rx="3" fill="#ad9100" />
+<text x="302.9" y="61.4" font-size="10" font-weight="600">89,283</text>
+<text x="23" y="101.4" font-size="10">3 named columns</text>
+<rect x="127" y="88.4" width="91.4" height="18" rx="3" fill="#0072b2" />
+<text x="226.4" y="101.4" font-size="10" font-weight="600">48,599</text>
+<path d="M127 120.4 L315 120.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M127 120.4 L127 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="127" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M221 120.4 L221 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="221" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">50,000</text>
+<path d="M315 120.4 L315 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="315" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">100,000</text>
+<text x="315" y="154.4" font-size="10" text-anchor="end" fill-opacity="0.8">logical bytes</text>
+</g>
+</svg>
+</figure>
+
+At this size both versions are billed the same minimum: only the bytes fall. A table a hundred thousand times bigger would read about 8.9 GB against 4.9 GB, and past the free terabyte each run would cost about \$0.05 against \$0.03.
+
+<figure>
+<svg viewBox="0 0 360 171" width="360" role="img" aria-labelledby="da2-billed-t da2-billed-d">
+<title id="da2-billed-t">Bytes read against the 10 MB minimum per table, for a three-table query and its five-table first draft</title>
+<desc id="da2-billed-d">Two horizontal bars on a scale from 0 to 60 MB. The three-table query reads about 154,152 bytes but is billed at least 30 MB, 10 MB for each table it references. The first draft joins two more tables it never uses, reads about 156,572 bytes and is billed at least 50 MB. The bytes actually read are too small to see on this scale.</desc>
+<g fill="currentColor">
+<text x="29.8" y="22.4" font-size="10.5" font-weight="600">Billed minimum, MB (10 MB per table referenced)</text>
+<text x="29.8" y="61.4" font-size="10">3 tables</text>
+<rect x="133.8" y="48.4" width="94" height="18" rx="3" fill="#0072b2" />
+<text x="235.8" y="61.4" font-size="10" font-weight="600">30 MB</text>
+<text x="29.8" y="101.4" font-size="10">5 tables (first draft)</text>
+<rect x="133.8" y="88.4" width="156.7" height="18" rx="3" fill="#ad9100" />
+<text x="298.5" y="101.4" font-size="10" font-weight="600">50 MB</text>
+<path d="M133.8 120.4 L321.8 120.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M133.8 120.4 L133.8 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="133.8" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M196.5 120.4 L196.5 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="196.5" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">20</text>
+<path d="M259.1 120.4 L259.1 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="259.1" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">40</text>
+<path d="M321.8 120.4 L321.8 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="321.8" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">60</text>
+<text x="321.8" y="154.4" font-size="10" text-anchor="end" fill-opacity="0.8">megabytes (MB)</text>
+</g>
+</svg>
+</figure>
+
+The second figure shows where the bill comes from at this size: the minimum for each table a query references, not the bytes it reads. It compares the category query with a first draft that also joined `stores` and `customers` and never used them: 2 more tables, 20 MB more, for about 2,400 more bytes.
+
+### 4. Export one result for the BI tool
+
+**Idea.** A BI tool reads a file, not your query. In the console, run the query and save the results: BigQuery offers a local file in CSV or newline-delimited JSON, Google Drive, Google Sheets and Cloud Storage. The command-line tool cannot download results to a local file, and a CSV cannot hold nested or repeated columns, which our flat results never do.
+
+Save the 24 rows of unit 2 as CSV. The dashboard lessons of this track start from a file like it.
+
+### 5. End in a memo
+
+The accountant gets one page, in the format of C15.
+
+> **Decision:** run the track's SQL in the BigQuery sandbox, and put a cost line under every query.
+> **Context:** the accountant asked what a monthly category report costs on the warehouse; the sandbox needs no card.
+> **Tension:** the data is so small that the bill is the 10 MB minimum for each table, not the bytes, so a rewrite shows in the bytes and not in the dollars until the tables grow.
+> **Evidence:** the category query reads about 154,152 bytes from 3 tables and is billed at least 30 MB, under 0.0002 dollars, free inside the first terabyte; about 35,000 runs of it fit in a month.
+> **Recommendation:** use the sandbox, name columns, join only the tables you need, export the 24 rows once, and rerun the dry run when a table grows or after 60 days, when the sandbox tables expire.
+
+<Aside type="tip" title="Remember">
+
+- The sandbox needs no card and allows `SELECT` and `WITH`; tables expire after 60 days.
+- Edits to port the SQL: date function order, unquoted date parts, backticked table names.
+- Bytes read come from the types of the columns a query reads; a `LIMIT` does not lower them.
+- Each table a query references is billed at least 10 MB, so at this size the bill is the minimum.
+- Put a cost line under each query: bytes, dated price, one cheaper rewrite.
+
+**Common trap:** adding `LIMIT 10` to save money.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-querying-a-cloud-warehouse-1">
+
+**Revenue by store for May.** Here is the query, in BigQuery's form:
+
+```sql
+-- BigQuery
+SELECT s.store_name,
+       ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+FROM `PROJECT.cafe.orders` AS o
+JOIN `PROJECT.cafe.stores` AS s ON s.store_id = o.store_id
+JOIN `PROJECT.cafe.order_items` AS oi ON oi.order_id = o.order_id
+JOIN `PROJECT.cafe.products` AS p ON p.product_id = oi.product_id
+WHERE o.status = 'completed'
+  AND o.ordered_at >= TIMESTAMP '2026-05-01' AND o.ordered_at < TIMESTAMP '2026-06-01'
+GROUP BY s.store_name;
+```
+
+Write its cost line. The editor counts the bytes of `order_items` and `products`; add the two tables that are missing. Expected: 4 rows, 2 columns, one for each table.
+
+<RunSQL query={`SELECT 'order_items' AS tbl,
+       8 * COUNT(order_id) + 8 * COUNT(product_id) + 8 * COUNT(quantity) + 8 * COUNT(discount_usd) AS bytes
+FROM order_items
+UNION ALL
+SELECT 'products', 8 * COUNT(product_id) + 8 * COUNT(unit_price_usd)
+FROM products;`} />
+
+<details>
+<summary>Hint</summary>
+
+`orders` is read for `order_id`, `store_id`, `ordered_at` and `status`; `stores` for `store_id` and `store_name`. Whole numbers and timestamps are 8 bytes each; text is `2 + strlen(...)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT 'orders', 8 * COUNT(order_id) + 8 * COUNT(store_id) + 8 * COUNT(ordered_at) + SUM(2 + strlen(status)) FROM orders
+UNION ALL
+...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT 'orders' AS tbl, 8 * COUNT(order_id) + 8 * COUNT(store_id) + 8 * COUNT(ordered_at) + SUM(2 + strlen(status)) AS bytes FROM orders
+UNION ALL
+SELECT 'stores', 8 * COUNT(store_id) + SUM(2 + strlen(store_name)) FROM stores
+UNION ALL
+SELECT 'order_items', 8 * COUNT(order_id) + 8 * COUNT(product_id) + 8 * COUNT(quantity) + 8 * COUNT(discount_usd) FROM order_items
+UNION ALL
+SELECT 'products', 8 * COUNT(product_id) + 8 * COUNT(unit_price_usd) FROM products;
+```
+
+The four counts are 62,999, 50, 105,184 and 256 bytes.
+
+> **Cost line.** Reads about 168,489 bytes (estimate from types), billed at least 40 MB: 10 MB for each of 4 tables, about 0.00023 to 0.00024 dollars at \$6.25 per TiB (pricing page, read 2026-11-23). **Cheaper:** group by `o.store_id` and name the stores in the sheet: 3 tables, at least 30 MB, 25 percent less.
+
+The `WHERE` reads `ordered_at` and `status`, so both are counted in full.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-querying-a-cloud-warehouse-2">
+
+**How many runs fit in the free terabyte?** The sandbox gives 1 TiB of processed query data a month, and the category query of unit 2 is billed at least 30 MB. How many runs fit in a month at that floor? Write the query in the empty editor, and give the answer for 30 MB as 30 times 2^20 bytes and as 30 times 10^6 bytes. Expected: 1 row, 2 columns, both between 34,000 and 37,000.
+
+<RunSQL query={`-- Write your query here, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+A TiB is 2^40 bytes: `POWER(2, 40)`. Divide it by the bytes billed for one run.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two numbers, a little over 34,000 and a little over 36,000."*
+
+```sql
+SELECT POWER(2, 40) / (30 * POWER(2, 20)) AS runs_if_mib, ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT POWER(2, 40) / (30 * POWER(2, 20)) AS runs_if_mib,
+       POWER(2, 40) / (30 * 1000000) AS runs_if_mb;
+```
+
+It gives 34,952.53 and 36,650.39: about 35,000 runs at the floor. The monthly free terabyte is not what limits a learner here; the 60-day expiry of the tables is.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: what are the three parts of a cost line, and which one does `LIMIT` change?
+
+<details>
+<summary>answer</summary>
+
+The bytes read, the dated price and one cheaper rewrite. `LIMIT` changes none of them: the bytes read stay the same.
+
+</details>
+
+<Exercise id="data-analyst-querying-a-cloud-warehouse-3">
+
+**Spot the flaw.** A colleague writes the cost line of the revenue-by-store query for May alone: "May is 380 of the 1,800 orders, so the query reads about 21 percent of the bytes." She checks the share:
+
+<RunSQL query={`SELECT SUM(CASE WHEN ordered_at >= DATE '2026-05-01' AND ordered_at < DATE '2026-06-01' THEN 1 ELSE 0 END) AS may_orders,
+       COUNT(*) AS all_orders
+FROM orders;`} />
+
+Expected: 1 row, 2 columns. The share is right. What is wrong with the cost line, and what would lower the bytes?
+
+<Solution>
+
+The query returns `380 | 1800`, so the share is right, but the cost line counts the share of rows, and the price counts columns: the pricing page charges for the data processed in the columns a query reads. The ways it names to lower that data are partitioning and clustering a table; the partitioning page says a filter on the partitioning column prunes partitions and so lowers the bytes scanned. To get the saving, create `orders` partitioned by the date of `ordered_at` and filter on that column. A dry run with and without the `WHERE` shows whether the number moves.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can port a track query to BigQuery, estimate the bytes it reads from its column types, and write a cost line with a dated price and one cheaper rewrite.* Test: Exercise data-analyst-querying-a-cloud-warehouse-1, done without opening the hints.
+
+The pattern to remember: **name the columns, count the tables, and write the cost line before you run the query.**

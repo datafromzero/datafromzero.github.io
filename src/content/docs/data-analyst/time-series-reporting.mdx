@@ -1,0 +1,531 @@
+---
+id: data-analyst-time-series-reporting
+title: Period-over-period reporting without fooling yourself
+description: Report week-over-week, month-over-month and year-over-year changes with the right comparison and incomplete periods flagged.
+stage: data-analyst
+order: 40
+level: advanced
+duration: 30
+objectives:
+  - Compute period-over-period change in SQL and say when year-over-year is not possible
+  - Flag an incomplete first or last period
+  - Compare like with like across stores that opened at different times and across the weekday mix
+  - Smooth a noisy series with a rolling average without hiding a bad day
+  - Write the headline finding in one sentence
+prerequisites:
+  - data-analyst-the-analysts-loop
+  - sql-lag-lead-moving-windows
+  - sql-dates-and-time
+  - sql-ctes
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: Window functions (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/stable/sql/functions/window_functions
+  - title: 'DuckDB documentation: Date functions (accessed 2026-11-23)'
+    url: https://duckdb.org/docs/stable/sql/functions/date
+  - title: 'Google Cloud: GoogleSQL date functions (accessed 2026-11-23; page updated 2026-11-10)'
+    url: https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions
+  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-23)'
+    url: https://cloud.google.com/bigquery/pricing
+status: draft
+---
+
+TODO(owner): Team draft for your edits (D24). The stub's objectives named pandas, year-over-year and Tet or sale days; the dataset has six months, no holidays and no sales (so no year-over-year figure can be computed, and none is invented), and Tet is a Vietnam-only example that the no-Vietnamese rule rules out, so the calendar effect is the weekday mix and the length of the month; pandas was dropped (the track keeps SQL at working depth). The cost line was not run live (no Google login) and is an estimate from type sizes. "Usual swing" is the range of this data's five month-to-month changes, not a standard. `reviewed` is yours to set.
+
+## The question
+
+In the first lesson of the track you scoped Dana's request into one question: did revenue per day, across the three cafes, fall in June compared with May by more than the usual swing between months? This lesson answers it. The data is `cafe-sales`, completed orders. Order 2075, the 20-unit line, is kept as recorded until a sentence says it is corrected.
+
+| month | stores open | days |
+|---|---:|---:|
+| January | 2 | 31 |
+| February | 2 | 28 |
+| March | 2 | 31 |
+| April to June | 3 | 30, 31, 30 |
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Comparing to the previous row: LAG, LEAD and moving averages*](/sql/lag-lead-moving-windows/) (S16), what does `LAG(revenue)` return for the first row?
+
+   <details>
+   <summary>answer</summary>
+
+   `NULL`: there is no row before it.
+
+   </details>
+
+2. In *The analyst's loop* (DA1), which four slots turn a request into a question?
+
+   <details>
+   <summary>answer</summary>
+
+   The decision, the measure, the comparison and the window.
+
+   </details>
+
+## The big idea
+
+A change is only as good as its two periods: they must be complete, and they must be like each other.
+
+## Learn by doing
+
+About 30 minutes, 5 ideas: the percent change, the incomplete period, like with like, the rolling average, the headline and memo. The editors run DuckDB; BigQuery differences are noted.
+
+### 1. A percent change needs a base
+
+**Idea.** A *period-over-period change* is the new value minus the previous one, divided by the previous one. In SQL, `LAG` brings the previous row next to the current one, so order the rows by the period.
+
+**Try it:** revenue of each month with the month before and the change.
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', o.ordered_at) AS DATE) AS month,
+         ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY month
+)
+SELECT month, revenue,
+       LAG(revenue) OVER (ORDER BY month) AS previous,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY month)) / LAG(revenue) OVER (ORDER BY month), 1) AS change_pct
+FROM monthly
+ORDER BY month;`} />
+
+**Predict:** which month has the biggest change, up or down?
+
+Expected: 6 rows, 4 columns.
+
+*Why:* April, +46.6 percent: Harbor opened on April 1, so April has a store that March did not. The others are February −14.1 (28 days against 31), March +12.2, May +16.2 and June −12.2. Order 2075 is in May: corrected, May is +12.4 and June −9.3. A year-over-year change would divide by the same month a year earlier, but the data starts on January 1, 2026, so every month would be `NULL`. Report that, and do not invent a base.
+
+> **Cost line.** Reads about 154,039 bytes of 3 tables (estimate from types), billed at least 30 MB, about 0.00017 to 0.00018 dollars at \$6.25 per TiB (BigQuery pricing page, read 2026-11-23). In BigQuery write `DATE_TRUNC(DATE(o.ordered_at), MONTH)`. **Cheaper:** keep the six rows and compute the changes from them.
+
+### 2. Flag a period that is not complete
+
+**Idea.** The last row of a report is often a period still in progress. Count the days each period holds, and flag any that holds fewer than a full one. A week has 7 days.
+
+**Try it:** the last five weeks, with the days they hold and the change on the week before.
+
+<RunSQL query={`WITH weekly AS (
+  SELECT CAST(DATE_TRUNC('week', o.ordered_at) AS DATE) AS week_start,
+         COUNT(DISTINCT CAST(o.ordered_at AS DATE)) AS days,
+         ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY week_start
+)
+SELECT week_start, days, revenue,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY week_start)) / LAG(revenue) OVER (ORDER BY week_start), 1) AS change_pct,
+       CASE WHEN days = 7 THEN 'complete' ELSE 'partial' END AS period
+FROM weekly
+ORDER BY week_start DESC
+LIMIT 5;`} />
+
+**Predict:** what does the change of the newest week say, and should you report it?
+
+Expected: 5 rows, 5 columns.
+
+*Why:* the week of June 29 holds 2 days, Monday and Tuesday, because the data ends on June 30, and it shows −79.9 percent. The first week of the year is also partial: it starts on Monday, December 29, and holds 4 days. Report a partial week as partial, or compare it with the same days of the week before. Counting the days that have orders assumes every day has one; where a day can be empty, join a calendar of days instead. DuckDB's `date_trunc('week', …)` starts the week on Monday, the first column shows it. BigQuery's `WEEK` begins on Sunday; use `ISOWEEK` for Monday.
+
+<figure>
+<svg viewBox="0 0 360 226" width="360" role="img" aria-labelledby="da4-weekly-t da4-weekly-d">
+<title id="da4-weekly-t">Weekly revenue for the last eight weeks of the data; the last week has only two days</title>
+<desc id="da4-weekly-d">A bar chart of weekly revenue from 0 to 1,400 dollars for the eight weeks starting May 11 to June 29. The first seven bars are full weeks of seven days, between 956 and 1,184 dollars. The last bar, the week starting June 29, has 2 days of data and 218.00 dollars, and is drawn dashed. Revenue counts completed orders and includes order 2075 as recorded.</desc>
+<g fill="currentColor">
+<text x="25.6" y="22.4" font-size="10.5" font-weight="600">Weekly revenue, weeks starting Monday (US dollars)</text>
+<path d="M57.6 182.4 L279.6 182.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="51.6" y="185.9" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M57.6 142.4 L279.6 142.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="51.6" y="145.9" font-size="10" text-anchor="end" fill-opacity="0.8">400</text>
+<path d="M57.6 102.4 L279.6 102.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="51.6" y="105.9" font-size="10" text-anchor="end" fill-opacity="0.8">800</text>
+<path d="M57.6 62.4 L279.6 62.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="51.6" y="65.9" font-size="10" text-anchor="end" fill-opacity="0.8">1,200</text>
+<rect x="66.2" y="73.7" width="18" height="108.8" rx="3" fill="#0072b2" />
+<text x="75.2" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">May</text>
+<text x="75.2" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">11</text>
+<rect x="93.5" y="68.9" width="18" height="113.5" rx="3" fill="#0072b2" />
+<text x="102.5" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">May</text>
+<text x="102.5" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">18</text>
+<rect x="120.7" y="64.1" width="18" height="118.3" rx="3" fill="#0072b2" />
+<text x="129.7" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">May</text>
+<text x="129.7" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">25</text>
+<rect x="148" y="86.8" width="18" height="95.7" rx="3" fill="#0072b2" />
+<text x="157" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="157" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">1</text>
+<rect x="175.2" y="68.4" width="18" height="114" rx="3" fill="#0072b2" />
+<text x="184.2" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="184.2" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">8</text>
+<rect x="202.5" y="74.4" width="18" height="108" rx="3" fill="#0072b2" />
+<text x="211.5" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="211.5" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">15</text>
+<rect x="229.7" y="74" width="18" height="108.5" rx="3" fill="#0072b2" />
+<text x="238.7" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="238.7" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">22</text>
+<rect x="257" y="160.6" width="18" height="21.8" rx="3" fill="none" stroke="#ad9100" stroke-width="2" stroke-dasharray="4 3" />
+<text x="266" y="197.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="266" y="209.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">29</text>
+<text x="282" y="146.6" font-size="10" font-weight="600">2 of 7 days</text>
+<text x="282" y="159.6" font-size="10">&#36;218</text>
+</g>
+</svg>
+</figure>
+
+### 3. Compare like with like
+
+**Idea.** A total hides what changed under it. Divide by the *store-days*, one store open for one day, so a new store does not look like growth. Then compare with what the weekday mix predicts: a Saturday earns more than a Thursday, and months hold different mixes. Here order 2075 is corrected to a quantity of 2.
+
+**Try it:** for each month, the store-days, the revenue per store-day, its change, and an index where 100 means the month earned what its weekdays predict.
+
+<RunSQL query={`WITH store_days AS (
+  SELECT CAST(o.ordered_at AS DATE) AS day, o.store_id,
+         SUM((CASE WHEN o.order_id = 2075 AND oi.product_id = 15 THEN 2 ELSE oi.quantity END)
+             * p.unit_price_usd - oi.discount_usd) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY day, o.store_id
+),
+typical AS (
+  SELECT DAYOFWEEK(day) AS dow, AVG(revenue) AS typical_revenue
+  FROM store_days
+  GROUP BY dow
+),
+monthly AS (
+  SELECT CAST(DATE_TRUNC('month', s.day) AS DATE) AS month,
+         COUNT(*) AS store_days,
+         ROUND(SUM(s.revenue) / COUNT(*), 2) AS per_store_day,
+         ROUND(100.0 * SUM(s.revenue) / SUM(t.typical_revenue), 1) AS vs_weekday_mix
+  FROM store_days s
+  JOIN typical t ON t.dow = DAYOFWEEK(s.day)
+  GROUP BY month
+)
+SELECT month, store_days, per_store_day,
+       ROUND(100.0 * (per_store_day / LAG(per_store_day) OVER (ORDER BY month) - 1), 1) AS change_pct,
+       vs_weekday_mix
+FROM monthly
+ORDER BY month;`} />
+
+**Predict:** which month earned the most above what its weekdays predict?
+
+Expected: 6 rows, 5 columns.
+
+*Why:* May, at 104.8, with 93 store-days and 10 weekend days (June has 8). Per store-day, April is 48.79 against March's 48.31: the 46.6 percent of unit 1 was a third store. June's change is −6.2 percent and its index is 100.5, so June looks like a normal month and May like a good one. The index runs from 95.7 to 104.8 over the six months.
+
+<figure>
+<svg viewBox="0 0 360 223" width="360" role="img" aria-labelledby="da4-index-t da4-index-d">
+<title id="da4-index-t">Revenue per store-day against what the weekday mix predicts, by month, January to June</title>
+<desc id="da4-index-d">A chart of six monthly values on a scale from 90 to 110, where 100 means the month earned what its mix of weekdays predicts. Jan 100.6, Feb 95.7, Mar 96.7, Apr 98.9, May 104.8, Jun 100.5. Stems run from the line at 100 to each value. May is the highest, June is within half a point of 100. Order 2075 is corrected to a quantity of 2.</desc>
+<g fill="currentColor">
+<text x="26" y="22.4" font-size="10.5" font-weight="600">Revenue against the weekday expectation</text>
+<path d="M64 172.4 L334 172.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="58" y="175.9" font-size="10" text-anchor="end" fill-opacity="0.8">90</text>
+<path d="M64 141.4 L334 141.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="58" y="144.9" font-size="10" text-anchor="end" fill-opacity="0.8">95</text>
+<path d="M64 110.4 L334 110.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.55" />
+<text x="58" y="113.9" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M64 79.4 L334 79.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="58" y="82.9" font-size="10" text-anchor="end" fill-opacity="0.8">105</text>
+<path d="M64 48.4 L334 48.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.12" />
+<text x="58" y="51.9" font-size="10" text-anchor="end" fill-opacity="0.8">110</text>
+<path d="M84 110.4 L84 106.5" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="84" cy="106.5" r="5" fill="#0072b2" />
+<text x="84" y="96.5" font-size="10" text-anchor="middle">100.6</text>
+<text x="84" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Jan</text>
+<path d="M130 110.4 L130 137.2" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="130" cy="137.2" r="5" fill="#0072b2" />
+<text x="130" y="156.2" font-size="10" text-anchor="middle">95.7</text>
+<text x="130" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Feb</text>
+<path d="M176 110.4 L176 130.8" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="176" cy="130.8" r="5" fill="#0072b2" />
+<text x="176" y="149.8" font-size="10" text-anchor="middle">96.7</text>
+<text x="176" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Mar</text>
+<path d="M222 110.4 L222 117" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="222" cy="117" r="5" fill="#0072b2" />
+<text x="222" y="136" font-size="10" text-anchor="middle">98.9</text>
+<text x="222" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Apr</text>
+<path d="M268 110.4 L268 80.5" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="268" cy="80.5" r="5" fill="#0072b2" />
+<text x="268" y="70.5" font-size="10" text-anchor="middle">104.8</text>
+<text x="268" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">May</text>
+<path d="M314 110.4 L314 107.2" fill="none" stroke="#ad9100" stroke-width="2" stroke-opacity="1" stroke-linecap="round" />
+<circle cx="314" cy="107.2" r="5" fill="#ad9100" />
+<text x="314" y="97.2" font-size="10" font-weight="600" text-anchor="middle">100.5</text>
+<text x="314" y="190.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Jun</text>
+<text x="334" y="206.4" font-size="10" text-anchor="end" fill-opacity="0.8">100 = what the weekday mix predicts</text>
+</g>
+</svg>
+</figure>
+
+### 4. Smooth the noise, but not a mistake
+
+**Idea.** A *moving average* replaces each day with the average of the last seven, so the weekly rhythm and single odd days fade. Name the window once and reuse it.
+
+**Try it:** the 7-day average as recorded and with order 2075 corrected; count the days on which the two differ.
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(o.ordered_at AS DATE) AS day,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS recorded,
+         SUM((CASE WHEN o.order_id = 2075 AND oi.product_id = 15 THEN 2 ELSE oi.quantity END)
+             * p.unit_price_usd - oi.discount_usd) AS corrected
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY day
+),
+smooth AS (
+  SELECT day,
+         AVG(recorded) OVER w AS avg_recorded,
+         AVG(corrected) OVER w AS avg_corrected
+  FROM daily
+  WINDOW w AS (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
+)
+SELECT COUNT(CASE WHEN ABS(avg_recorded - avg_corrected) > 0.001 THEN 1 END) AS days_that_differ,
+       MIN(CASE WHEN ABS(avg_recorded - avg_corrected) > 0.001 THEN day END) AS first_day,
+       MAX(CASE WHEN ABS(avg_recorded - avg_corrected) > 0.001 THEN day END) AS last_day
+FROM smooth;`} />
+
+**Predict:** on how many days does the average differ?
+
+Expected: 1 row, 3 columns.
+
+*Why:* 7 days, May 1 to May 7: the day of order 2075 is in the window of that day and the six after it. On May 1 the day's revenue is \$305.50 recorded and \$139.00 corrected, and the 7-day average is \$162.39 against \$138.61. A moving average hides noise, not a typing error: fix the data first.
+
+<figure>
+<svg viewBox="0 0 360 264" width="360" role="img" aria-labelledby="da4-rolling-t da4-rolling-d">
+<title id="da4-rolling-t">Daily revenue and its 7-day moving average around May 1, with and without the extra zero of order 2075</title>
+<desc id="da4-rolling-d">A chart from April 22 to May 20 on a scale from 50 to 350 dollars. Gray dots are the daily revenue as recorded; May 1 is the highest of the first weeks at 305.50 dollars. A blue line is the 7-day moving average as recorded, which jumps on May 1 and stays above the green line for seven days, from May 1 to May 7. A green line is the same average with order 2075 corrected to a quantity of 2; it is drawn only for the days around the correction. The two averages differ on exactly seven days, May 1 to May 7, and agree before and after.</desc>
+<g fill="currentColor">
+<text x="19.3" y="22.4" font-size="10.5" font-weight="600">Daily revenue and 7-day moving average (US dollars)</text>
+<path d="M53.3 171.4 L327.3 171.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="47.3" y="174.9" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M53.3 121.4 L327.3 121.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="47.3" y="124.9" font-size="10" text-anchor="end" fill-opacity="0.8">200</text>
+<path d="M53.3 71.4 L327.3 71.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="47.3" y="74.9" font-size="10" text-anchor="end" fill-opacity="0.8">300</text>
+<path d="M53.3 196.4 L327.3 196.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="47.3" y="199.9" font-size="10" text-anchor="end" fill-opacity="0.8">50</text>
+<circle cx="57.3" cy="140.3" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="66.8" cy="165.4" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="76.3" cy="169.5" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="85.8" cy="103.7" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="95.3" cy="151" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="104.8" cy="184.2" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="114.3" cy="167.8" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="123.8" cy="141.9" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="133.3" cy="164.3" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="142.8" cy="68.7" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="152.3" cy="123.8" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="161.8" cy="128.7" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="171.3" cy="148.7" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="180.8" cy="189.3" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="190.3" cy="146.8" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="199.8" cy="168.5" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="209.3" cy="176.4" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="218.8" cy="127.5" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="228.3" cy="87" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="237.8" cy="153.2" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="247.3" cy="128.4" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="256.8" cy="156.2" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="266.3" cy="175" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="275.8" cy="135.5" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="285.3" cy="113.9" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="294.8" cy="143.9" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="304.3" cy="153.3" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="313.8" cy="171.4" r="3" fill="currentColor" fill-opacity="0.35" />
+<circle cx="323.3" cy="171" r="3" fill="currentColor" fill-opacity="0.35" />
+<path d="M57.3 148 L66.8 149.7 L76.3 149 L85.8 147 L95.3 151.7 L104.8 153.4 L114.3 154.5 L123.8 154.8 L133.3 154.6 L142.8 140.2 L152.3 143.1 L161.8 139.9 L171.3 134.8 L180.8 137.9 L190.3 138.6 L199.8 139.2 L209.3 154.6 L218.8 155.1 L228.3 149.2 L237.8 149.8 L247.3 141.1 L256.8 142.5 L266.3 143.4 L275.8 137.5 L285.3 135.6 L294.8 143.7 L304.3 143.7 L313.8 149.9 L323.3 152" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M123.8 154.8 L133.3 154.6 L142.8 152.1 L152.3 155 L161.8 151.8 L171.3 146.7 L180.8 149.8 L190.3 150.5 L199.8 151.1 L209.3 154.6 L218.8 155.1" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<text x="134.8" y="72.2" font-size="10" font-weight="600" text-anchor="end">May 1: order 2075</text>
+<text x="57.3" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">Apr 22</text>
+<text x="142.8" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">May 1</text>
+<text x="237.8" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">May 11</text>
+<text x="323.3" y="211.4" font-size="10" text-anchor="middle" fill-opacity="0.8">May 20</text>
+<text x="323.3" y="225.4" font-size="9.5" text-anchor="end" fill-opacity="0.7">axis starts at 50</text>
+<path d="M53.3 243.4 L67.3 243.4" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" />
+<text x="73.3" y="247.4" font-size="10">average as recorded</text>
+<path d="M191.3 243.4 L205.3 243.4" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" />
+<text x="211.3" y="247.4" font-size="10">corrected</text>
+<circle cx="275.3" cy="243.4" r="3" fill="currentColor" fill-opacity="0.35" />
+<text x="283.3" y="247.4" font-size="10">a day</text>
+</g>
+</svg>
+</figure>
+
+### 5. One sentence, then a memo
+
+**Idea.** The headline is one sentence with the change, its comparison and its caveat. For Dana: *Revenue per store-day fell 6.2 percent in June, from \$53.08 to \$49.78 (order 2075 corrected), but June matched what its weekdays predict, and May was the high month.* The memo follows the format of C15.
+
+> **Decision:** do not decide the July promotion on June's dip; decide it after the first four complete weeks of July.
+> **Context:** Dana asked whether sales are down before choosing a promotion; the data covers January 1 to June 30, three cafes since April.
+> **Tension:** June is the largest fall of the five month-to-month changes (−6.2 percent against −4.9 in February), but May was the largest rise (+8.8), and the months differ in length, weekdays and number of stores.
+> **Evidence:** revenue per store-day was \$49.78 in June and \$53.08 in May, order 2075 set aside. Against the weekday mix, June is 100.5 and May 104.8, and the six months range from 95.7 to 104.8. The total fell 12.2 percent as recorded, 9.3 corrected.
+> **Recommendation:** wait for July's first four complete weeks, compare them with the same weekdays, and promote if a complete month falls below February's \$47.68, the lowest so far.
+
+<Aside type="tip" title="Remember">
+
+- A change divides by the previous period; `LAG` brings it next to the current row, ordered by the period.
+- Count the days of each period and flag the partial ones: the first and last often are.
+- Divide by store-days so a new store is not growth, and compare with the weekday mix.
+- A moving average hides noise and spreads a mistake; fix the mistake first.
+- Say when a comparison cannot be made (no year-over-year with six months).
+
+**Common trap:** reading the newest row of a report as a trend.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-analyst-time-series-reporting-1">
+
+**Same-store sales.** Compare April with March for the two cafes that were open in both months, Old Town and Campus. The editor lists the monthly revenue of those two stores together; add the change on the month before. Expected: 6 rows, 3 columns; read the April row.
+
+<RunSQL query={`WITH monthly AS (
+  SELECT CAST(DATE_TRUNC('month', o.ordered_at) AS DATE) AS month,
+         ROUND(SUM(oi.quantity * p.unit_price_usd - oi.discount_usd), 2) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed' AND o.store_id IN (1, 2)
+  GROUP BY month
+)
+SELECT month, revenue
+FROM monthly
+ORDER BY month;`} />
+
+<details>
+<summary>Hint</summary>
+
+Add the change column of unit 1 to the last `SELECT`: `LAG(revenue) OVER (ORDER BY month)` is the month before.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT month, revenue,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY month)) / ..., 1) AS change_pct
+FROM monthly
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT month, revenue,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY month)) / LAG(revenue) OVER (ORDER BY month), 1) AS change_pct
+FROM monthly
+ORDER BY month;
+```
+
+April is \$2,794.25 against March's \$2,995.25: −6.7 percent. With Harbor included the same month was +46.6 percent. Order 2075 is in May, so it changes May and June of this table (May +27.3 and June −15.2 as recorded), not the April row.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-analyst-time-series-reporting-2">
+
+**The weekday pattern.** Dana asks: "Is a Saturday really worth opening two shifts for?" Report the revenue per store-day of each weekday, highest first, and say in one sentence how many times a Thursday a Saturday earns. Use completed orders, January to June, the three stores, and order 2075 as recorded. Before you start, write the shape of the answer in a comment. Expected: 7 rows, 3 columns.
+
+<RunSQL query={`-- Write the shape of the answer, then your query, then press Run.`} />
+
+<details>
+<summary>Hint</summary>
+
+Add up each store's revenue for each day in a CTE, then average those by weekday: `DAYNAME(day)` gives the name, and group by `DAYOFWEEK(day)` as well to keep the order, or order by the average.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A weekday, the number of store-days and an average, with Saturday at the top."*
+
+```sql
+WITH store_days AS (
+  SELECT CAST(o.ordered_at AS DATE) AS day, o.store_id, SUM(...) AS revenue
+  ...
+)
+```
+
+</details>
+
+<Solution>
+
+```sql
+WITH store_days AS (
+  SELECT CAST(o.ordered_at AS DATE) AS day, o.store_id,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY day, o.store_id
+)
+SELECT DAYNAME(day) AS weekday, COUNT(*) AS store_days, ROUND(AVG(revenue), 2) AS per_store_day
+FROM store_days
+GROUP BY weekday, DAYOFWEEK(day)
+ORDER BY per_store_day DESC;
+```
+
+Saturday earns \$66.20 for each of 65 store-days and Thursday \$38.14: Saturday earns 1.74 times a Thursday, and Sunday (\$62.88) is next. Friday shows \$47.97 as recorded and \$45.41 with order 2075 corrected (May 1 was a Friday), which moves it from third place to fifth: say which version you used.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+Without looking back: name three reasons that May and June are not like with like, and the one thing to do about each.
+
+<details>
+<summary>answer</summary>
+
+May has 31 days and June 30 (compare per day); May has 10 weekend days and June 8 (compare with what the weekday mix predicts); a line in May has a typing error (correct it, and say so). Harbor was open in both months, but not in March: for April against March, drop it or divide by store-days.
+
+</details>
+
+<Exercise id="data-analyst-time-series-reporting-3">
+
+**Spot the flaw.** A colleague looks for the quietest stretch of the half year with a 7-day moving average, and reports the lowest one.
+
+<RunSQL query={`WITH daily AS (
+  SELECT CAST(o.ordered_at AS DATE) AS day,
+         SUM(oi.quantity * p.unit_price_usd - oi.discount_usd) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.status = 'completed'
+  GROUP BY day
+)
+SELECT day, ROUND(AVG(revenue) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS avg_7_day
+FROM daily
+ORDER BY avg_7_day
+LIMIT 1;`} />
+
+Expected: 1 row, 2 columns. What does she report, and what is the fix?
+
+<Solution>
+
+She reports January 1 with \$45.50, but that "average" is one day: the window at the start of the series holds fewer than 7 rows, because the DuckDB documentation says frames are cropped to the edge of the partition. Keep only the days whose window is full, for example with `COUNT(*) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) = 7` in a CTE. The lowest full week then ends on February 12, at \$78.89.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can compute a period-over-period change with LAG, flag an incomplete period, compare like with like, smooth a series without hiding a mistake, and write the headline in one sentence.* Test: Exercise data-analyst-time-series-reporting-2, done without opening the hints.
+
+The pattern to remember: **complete periods, like with like, a flagged last row, and a headline with its caveat.**
