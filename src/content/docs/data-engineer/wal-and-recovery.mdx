@@ -6,7 +6,7 @@ description: Say what the write-ahead log guarantees, kill a database server mid
 stage: data-engineer
 order: 270
 level: advanced
-duration: 25
+duration: 30
 objectives:
   - Say what the write-ahead log guarantees after a crash, from the records one insert writes
   - Stop a local server without a clean shutdown and find the recovery in its log
@@ -32,7 +32,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15 on Linux, Ubuntu packages, whose programs live in `/usr/lib/postgresql/16/bin`). The `psql` transcripts come from real sessions driven one command at a time by a small script; the terminal transcripts come from the same commands run by a script as the `postgres` user in an empty folder, so a learner's own user name replaces `postgres` as the superuser. The tab at the start of two lines of `psql`'s lost-connection message is shown as eight spaces (markdownlint refuses tabs). Unit 1's list of WAL records was the same in three runs except that one run also showed a `Heap2 PRUNE` record first; the lesson says an extra record can appear. The log lines, their LSNs and the jump of the sequence to 34 (Exercise 2) are from one run each; the LSNs were the same in two runs on a new cluster. The 32-value jump is shown by the run and not explained by any opened page (the sequence page says only that crashes can leave gaps). Not run: Windows, macOS, the Docker route (the lab container of the first lesson has no `initdb` on the learner's computer, so unit 2 asks Docker learners to read the transcripts; a `docker kill` version was not tried). Stub changes: renamed to `.mdx` (interleaved shape); objective 1 adds the WAL records and objective 2 uses `pg_ctl stop -m immediate` rather than killing a process; sources move to `/docs/16/`, add the checkpoint, `pg_walinspect`, `pg_ctl`, sequence and `CREATE TABLE` pages, and drop the backup page, which the next lesson uses. The lab is the one built by `scripts/de-internals/lab.py`, which the first lesson fetches from the tag `de-internals-v1`: after merge, create tag de-internals-v1 on main (Releases → new tag) so that URL resolves. The owner writes `reviewed`.
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15 on Linux, Ubuntu packages, whose programs live in `/usr/lib/postgresql/16/bin`). The `psql` transcripts come from real sessions driven one command at a time by a small script; the terminal transcripts come from the same commands run by a script as the `postgres` user in an empty folder, so a learner's own user name replaces `postgres` as the superuser. The tab at the start of two lines of `psql`'s lost-connection message is shown as eight spaces (markdownlint refuses tabs). Unit 1's list of WAL records is not stable: fresh tables gave 2, 1 or 0 extra `Heap2 PRUNE` records ahead of the insert's three, and `pg_get_wal_records_info` reads the whole server's log, so other sessions or autovacuum can add more. The lesson therefore asks which records belong to the insert and shows `xid` (five more runs here: the insert's records shared one nonzero `xid` and measured 86, 64 and 34 bytes; `PRUNE` had `xid` 0 once); no opened page explains the `PRUNE` record, so none is explained. `pg_walinspect` is restricted by default to superusers and members of `pg_read_server_files` (the page says so); a plain role got `permission denied` here, and which role the Docker lab image gives the learner was not checked. The log lines, their LSNs and the jump of the sequence to 34 (Exercise 2) are from one run each; the LSNs were the same in two runs on a new cluster. The 32-value jump is shown by the run and not explained by any opened page (the sequence page says only that crashes can leave gaps). Not run: Windows, macOS, the Docker route (the lab container of the first lesson has no `initdb` on the learner's computer, so unit 2 asks Docker learners to read the transcripts; a `docker kill` version was not tried). Stub changes: renamed to `.mdx` (interleaved shape); objective 1 adds the WAL records and objective 2 uses `pg_ctl stop -m immediate` rather than killing a process; sources move to `/docs/16/`, add the checkpoint, `pg_walinspect`, `pg_ctl`, sequence and `CREATE TABLE` pages, and drop the backup page, which the next lesson uses. The lab is the one built by `scripts/de-internals/lab.py`, which the first lesson fetches from the tag `de-internals-v1`: after merge, create tag de-internals-v1 on main (Releases → new tag) so that URL resolves. The owner writes `reviewed`.
 
 ## The question
 
@@ -78,11 +78,11 @@ Before the database changes its data files, it writes what it is about to change
 
 ## Learn by doing
 
-About 25 minutes, 3 new ideas: the log comes first, recovery replays it, and numbers are not given back. Units 1 and 3 run in `psql -d lab` (type `\pset footer off`); unit 2 needs a second, throwaway server.
+About 30 minutes, 3 new ideas: the log comes first, recovery replays it, and numbers are not given back. Units 1 and 3 run in `psql -d lab` (type `\pset footer off`); unit 2 needs a second, throwaway server.
 
 ### 1. The log comes first
 
-**Idea.** The documentation states the central concept of **write-ahead logging** (WAL): changes to data files may be written only after the WAL records describing them have been flushed to permanent storage. Each record has a position in the log, its **LSN**. The extension `pg_walinspect` lists the records between two positions.
+**Idea.** The documentation states the central concept of **write-ahead logging** (WAL): changes to data files may be written only after the WAL records describing them have been flushed to permanent storage. Each record has a position in the log, its **LSN**. The extension `pg_walinspect` lists the records between two positions, with the id of the transaction that wrote each (`xid`). Its functions are restricted by default to superusers and members of the `pg_read_server_files` role; if you get `permission denied`, connect as a superuser.
 
 **Try it.** Make a fresh `orders_tx` (`DROP TABLE IF EXISTS orders_tx;` and the two statements of the previous lesson), then note the log position, insert one order and list the records:
 
@@ -90,13 +90,13 @@ About 25 minutes, 3 new ideas: the log comes first, recovery replays it, and num
 CREATE EXTENSION IF NOT EXISTS pg_walinspect;
 SELECT pg_current_wal_lsn() AS before \gset
 INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
-SELECT resource_manager, record_type, record_length
+SELECT xid, resource_manager, record_type, record_length
 FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn());
 ```
 
 `\gset` stores the result in the `psql` variable `before`, and `:'before'` reads it back.
 
-**Predict:** How many records does one inserted row write, and what is the last one?
+**Predict:** Which of the listed records belong to the insert, and which one is the last of them?
 
 <details>
 <summary>Reveal the result</summary>
@@ -105,20 +105,20 @@ FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn());
 A> SELECT pg_current_wal_lsn() AS before \gset
 A> INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
 INSERT 0 1
-A> SELECT resource_manager, record_type, record_length
+A> SELECT xid, resource_manager, record_type, record_length
 FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn());
- resource_manager | record_type | record_length
-------------------+-------------+---------------
- Heap             | INSERT      |            86
- Btree            | INSERT_LEAF |            64
- Transaction      | COMMIT      |            34
+ xid | resource_manager | record_type | record_length
+-----+------------------+-------------+---------------
+ 745 | Heap             | INSERT      |            86
+ 745 | Btree            | INSERT_LEAF |            64
+ 745 | Transaction      | COMMIT      |            34
 ```
 
-Your list may hold another record before these, such as `Heap2 PRUNE`, work the server did on the page at the same time.
+Your `xid` will differ, and your list may hold other records too. On fresh tables, one or two `Heap2 PRUNE` records with `xid` 0 sometimes came before these, and sometimes none did, and the function reads the whole server's log, so records of another session can appear. The insert's records are the ones that share one nonzero `xid`.
 
 </details>
 
-*Why:* one record for the new row in the table (`Heap`), one for its key in the primary-key index (`Btree`), and one that says the transaction committed, 184 bytes in all. The documentation draws the consequence: only the WAL has to be flushed to disk to guarantee that a transaction is committed, not every data file it changed, and the WAL is written sequentially, so syncing it costs much less than flushing the data pages. The table page with the new row can reach the disk later.
+*Why:* three records belong to the insert: one for the new row in the table (`Heap`), one for its key in the primary-key index (`Btree`), and one that says the transaction committed, 184 bytes in all in these runs. The documentation draws the consequence: only the WAL has to be flushed to disk to guarantee that a transaction is committed, not every data file it changed, and the WAL is written sequentially, so syncing it costs much less than flushing the data pages. The table page with the new row can reach the disk later.
 
 <figure>
 <svg viewBox="0 0 360 166" width="360" role="img" aria-labelledby="dd8-wal-t dd8-wal-d">
@@ -143,7 +143,7 @@ Your list may hold another record before these, such as `Heap2 PRUNE`, work the 
 <path d="M339 88.4 L339 94.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.7" />
 <text x="180" y="109.4" font-size="10" font-weight="600" text-anchor="middle">COMMIT returns once these 184 bytes are on disk</text>
 <rect x="21" y="122.4" width="318" height="30" rx="3" fill="currentColor" fill-opacity="0.1" />
-<text x="31" y="141.4" font-size="10">table page with order 2801: written to the data file later</text>
+<text x="31" y="141.4" font-size="10">table page, order 2801: written to the data file later</text>
 </g>
 </svg>
 </figure>
@@ -198,6 +198,8 @@ server closed the connection unexpectedly
         before or while processing the request.
 ```
 
+These terminal A lines come from a non-interactive `psql`. An interactive `psql` prints more: the next command you type gets `no connection to the server`, followed by `The connection to the server was lost. Attempting reset: Succeeded.` once the server is back.
+
 ```console
 $ pg_ctl -D crashlab stop -m immediate
 waiting for server to shut down.... done
@@ -218,7 +220,7 @@ $ grep -E 'not properly|redo (starts|done)' crashlab.log
 
 </details>
 
-*Why:* the log says the server was not properly shut down and ran automatic recovery: redo started at the checkpoint's position (`0/14EF3E0`) and replayed the log to its end. The committed note is back. The uncommitted one is gone, because its transaction never wrote a commit record, so after recovery no snapshot sees it. Terminal A lost its connection, and with it the open transaction. This is the contract: an acknowledged commit survives a crash, and work in progress is as if it had rolled back.
+*Why:* the log says the server was not properly shut down and ran automatic recovery: redo started at the redo point (`0/14EF3E0`), which the latest checkpoint record names (the documentation calls it the redo record), and replayed the log to its end. The committed note is back. The uncommitted one is gone, because its transaction never wrote a commit record, so after recovery no snapshot sees it. Terminal A lost its connection, and with it the open transaction. This is the contract: an acknowledged commit survives a crash, and work in progress is as if it had rolled back.
 
 ### 3. Numbers are not given back
 
@@ -321,7 +323,7 @@ GROUP BY resource_manager, record_type ORDER BY records DESC;
  Transaction      | COMMIT      |       1
 ```
 
-One `Heap DELETE` record for each deleted order (the 355 Harbor orders plus order 2801 of unit 1) and one commit for the whole statement. The index has no record: a delete marks the row version as deleted (its `xmax`, as in *MVCC: row versions and vacuum*) and leaves the index entry in place. The log grows with the number of rows a statement changes, which is why a large backfill writes a large amount of WAL.
+One `Heap DELETE` record for each deleted order (the 355 Harbor orders plus order 2801 of unit 1) and one commit for the whole statement. The index has no record: a delete marks the row version as deleted (its `xmax`, as in *MVCC: row versions and vacuum*) and leaves the index entry in place. The log grows with the number of rows a statement changes, which is why a large backfill writes a large amount of WAL. As in unit 1, your list can also hold records of other kinds that the server wrote in the same stretch of the log.
 
 </Solution>
 
@@ -343,7 +345,7 @@ One `Heap DELETE` record for each deleted order (the 355 Harbor orders plus orde
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"An id above 2: the crash leaves a gap, and possibly more than one number."*
+Expected output in words: *"An id probably above 2: the crash can leave a gap, and possibly more than one number."*
 
 ```bash
 psql -p 5433 -d postgres -c "INSERT INTO notes (body) VALUES ('after the crash') RETURNING note_id;"

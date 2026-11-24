@@ -61,24 +61,24 @@ def charts():
             + " ".join(f"{lvl}: A's COMMIT printed {a}, B's COMMIT printed {b}, and {sum(regs)} of Harbor's 2 registers stayed open."
                        for lvl, a, b, regs in SKEW))
     title_line(s, "Both baristas check, then close a different register", 8, 10)
-    s.text(96, 32, "A's COMMIT", opacity=0.85)
-    s.text(162, 32, "B's COMMIT", opacity=0.85)
-    s.text(248, 32, "open registers", opacity=0.85)
+    s.text(106, 32, "A's COMMIT", opacity=0.85)
+    s.text(172, 32, "B's COMMIT", opacity=0.85)
+    s.text(262, 32, "open registers", opacity=0.85)
     for i, (lvl, a, b, regs) in enumerate(SKEW):
         y = 42 + i * 34
         s.text(8, y + 17, lvl, weight=600)
-        for x, val in ((96, a), (162, b)):
+        for x, val in ((106, a), (172, b)):
             bad = val.startswith("ERROR")
-            s.rect(x, y + 4, 76 if bad else 56, 20, PURPLE if bad else "currentColor", opacity=0.9 if bad else 0.12, rx=3)
+            s.rect(x, y + 4, 82 if bad else 56, 20, PURPLE if bad else "currentColor", opacity=0.9 if bad else 0.12, rx=3)
             s.text(x + 6, y + 18, val, weight=600 if bad else None, fill="#ffffff" if bad else None)
         for k, is_open in enumerate(regs):
-            x = 248 + k * 22
+            x = 262 + k * 22
             s.rect(x, y + 5, 16, 16, GREEN if is_open else None, rx=3, stroke=None if is_open else "currentColor", sw=1.5)
-        s.text(296, y + 18, f"{sum(regs)} of 2", weight=600)
-    s.rect(96, 152, 10, 10, GREEN, rx=2)
-    s.text(110, 161, "open register", size=10)
-    s.rect(190, 152, 10, 10, None, rx=2, stroke="currentColor", sw=1.5)
-    s.text(204, 161, "closed register", size=10)
+        s.text(308, y + 18, f"{sum(regs)} of 2", weight=600)
+    s.rect(106, 152, 10, 10, GREEN, rx=2)
+    s.text(120, 161, "open register", size=10)
+    s.rect(200, 152, 10, 10, None, rx=2, stroke="currentColor", sw=1.5)
+    s.text(214, 161, "closed register", size=10)
     out["dd6-skew"] = s.render()
 
     # ---- dd7-versions: the two versions of order 1580 ----
@@ -123,7 +123,7 @@ def charts():
     s.line(326, 76, 326, 82, opacity=0.7)
     s.text(167, 97, f"COMMIT returns once these {total} bytes are on disk", anchor="middle", weight=600)
     s.rect(8, 110, 318, 30, "currentColor", opacity=0.1, rx=3)
-    s.text(18, 129, "table page with order 2801: written to the data file later")
+    s.text(18, 129, "table page, order 2801: written to the data file later")
     out["dd8-wal"] = s.render()
 
     # ---- dd9-pruning: the partitions each plan scans ----
