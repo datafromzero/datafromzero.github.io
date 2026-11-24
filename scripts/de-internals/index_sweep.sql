@@ -10,7 +10,7 @@ END $$;
 DO $$
 DECLARE n int; k int; seqc text; idxc text; chosen text; pages int;
 BEGIN
-  FOREACH n IN ARRAY ARRAY[10,30,100,300,1000,3000,10000,100000] LOOP
+  FOREACH n IN ARRAY ARRAY[10,30,100,300,310,320,330,340,350,1000,3000,10000,100000] LOOP
     EXECUTE 'DROP TABLE IF EXISTS sweep_t';
     EXECUTE format('CREATE TABLE sweep_t AS SELECT * FROM orders_big WHERE order_id <= %s', n);
     EXECUTE 'ALTER TABLE sweep_t ADD PRIMARY KEY (order_id)';

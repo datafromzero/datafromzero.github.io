@@ -33,13 +33,13 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15, DuckDB 2.0.0, Python 3.13.18 with SQLite 3.53.1, psycopg 3.3.9; Linux, 4 cores). The given script `scripts/de-internals/storage_shapes.py` is fetched from the `main` branch: pin a tag or move it into the starter repository before publishing. Times are medians of seven runs or means of 2,000 lookups on one machine; the lesson reads direction and says what each number includes (PostgreSQL's socket round trip, DuckDB's four cores with a one-thread control, each statement's fixed cost). The Parquet column sizes are DuckDB 2.0.0's writer and illustrate column storage, not DuckDB's own file. Two sentences rest on one run only: where SQLite places a new row (the last row inserted is first in the file) and what `PRAGMA page_size` does after a table exists. CMU 15-445 is cited for a lecture title only. Stub changes: SQLite added as a third engine, objective 1 gains the bytes a query needs, the stub's DuckDB `explain` source is dropped. The owner writes `reviewed`.
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15, DuckDB 2.0.0, Python 3.13.18 with SQLite 3.53.1, psycopg 3.3.9; Linux, 4 cores). The given script `scripts/de-internals/storage_shapes.py` is fetched from the tag `de-internals-v1` of the site repository. After merge, create tag de-internals-v1 on main (Releases → new tag) so these URLs resolve. Every command pins `duckdb==2.0.0` and `psycopg[binary]==3.3.9`, because the Parquet byte counts depend on the writer's version; the shares of unit 1 are of the summed compressed sizes of the column chunks (14,499,086 bytes), and the file itself has 14,512,102. Times are medians of seven runs or means of 2,000 lookups on one machine; the lesson reads direction and says what each number includes (PostgreSQL's socket round trip, DuckDB's four cores with a one-thread control, each statement's fixed cost). The Parquet column sizes are DuckDB 2.0.0's writer and illustrate column storage, not DuckDB's own file. Two sentences rest on one run only: where SQLite places a new row (the last row inserted is first in the file) and what `PRAGMA page_size` does after a table exists. CMU 15-445 is cited for a lecture title only. Stub changes: SQLite added as a third engine, objective 1 gains the bytes a query needs, the stub's DuckDB `explain` source is dropped. The owner writes `reviewed`.
 
 ## The question
 
 The owner of the three cafes asks:
 
-> The same sales are in the till database and in the analyst's laptop. Adding up a month of revenue takes a blink on the laptop and a long minute on the till. But looking up one order is instant on the till. Why do two databases disagree about what is fast?
+> The same sales are in the till database and in the analyst's laptop. Adding up a month of revenue takes a blink on the laptop and is slow on the till. But looking up one order is instant on the till. Why do two databases disagree about what is fast?
 
 The table is one row for each order line, 950,414 of them in the big copy, with twelve columns. The first three lines:
 
@@ -90,13 +90,13 @@ A table is stored one row at a time or one column at a time, and a row store mak
 About 30 minutes, 3 new ideas: the bytes a query needs, two questions with two winners, and a database file you can read. The lab of the first lesson of this module must exist, with `lab/` in the folder you are in (`ls lab` shows `big` and `cafe`). Fetch the script and keep it beside `lab/`; the three engines are DuckDB (a column store), PostgreSQL and SQLite (row stores):
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/main/scripts/de-internals/storage_shapes.py
-uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py bytes
+curl -fLO https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/de-internals-v1/scripts/de-internals/storage_shapes.py
+uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py bytes
 ```
 
 ### 1. The bytes a query needs
 
-**Idea.** The PostgreSQL documentation says every table is stored as an array of pages of a fixed size, usually 8 kB, and that in a table an item on a page is a row. A row store therefore reads whole pages of whole rows. Apache Parquet is a column-oriented file format, and the DuckDB documentation says it can push projections into Parquet file scans. The aggregation below needs five of the twelve columns: `store_id`, `status`, `quantity`, `unit_price_usd` and `discount_usd`.
+**Idea.** The PostgreSQL documentation says every table is stored as an array of pages of a fixed size, usually 8 kB, and that in a table an item on a page is a row. Apache Parquet is a column-oriented file format, and the DuckDB documentation says it can push projections into Parquet file scans. The aggregation below needs five of the twelve columns: `store_id`, `status`, `quantity`, `unit_price_usd` and `discount_usd`.
 
 ```sql
 SELECT store_id, sum(quantity * unit_price_usd - discount_usd) AS revenue
@@ -111,13 +111,13 @@ SELECT store_id, sum(quantity * unit_price_usd - discount_usd) AS revenue
 FROM lines_big WHERE status = 'completed' GROUP BY store_id ORDER BY store_id;
 ```
 
-**Predict:** What share of the Parquet file's bytes do the five columns take: about 7 percent, 40 percent or 80 percent? And does PostgreSQL touch about 1,000 pages, or the whole table?
+**Predict:** What share of the Parquet file's column bytes do the five columns take: about 7 percent, 40 percent or 80 percent? And does PostgreSQL touch about 1,000 pages, or the whole table?
 
 <details>
 <summary>Reveal the result</summary>
 
 ```console
-$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py bytes
+$ uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py bytes
 ordered_at       3,899,309 bytes   26.9%
 order_item_id    3,802,042 bytes   26.2%
 customer_id      2,555,014 bytes   17.6%
@@ -131,7 +131,7 @@ channel            124,668 bytes    0.9%
 discount_usd        76,353 bytes    0.5%   <- read by the aggregation
 status               6,168 bytes    0.0%   <- read by the aggregation
 all columns     14,499,086 bytes
-the 5 columns the aggregation reads: 1,042,799 bytes, 7.2% of the file
+the 5 columns the aggregation reads: 1,042,799 bytes, 7.2% of the column bytes
 ```
 
 ```console
@@ -151,14 +151,14 @@ the 5 columns the aggregation reads: 1,042,799 bytes, 7.2% of the file
 
 </details>
 
-*Why:* the five columns take 1,042,799 of the 14,499,086 bytes, 7.2 percent, although they are five of twelve columns: a column that holds a few repeated values (`status`, `store_id`, `discount_usd`) compresses to almost nothing. PostgreSQL's scan touched 3,860 + 7,684 = 11,544 pages, which is every page of the table (`SELECT relpages FROM pg_class WHERE relname = 'lines_big'` prints 11,544, about 90 MB), because each page holds whole rows of all twelve columns. The split between `hit` and `read` changes from run to run; their sum does not. DuckDB's own file format also stores row groups, which its documentation calls equivalent to Parquet's, and the Parquet sizes here are an illustration of column storage, not a measurement of DuckDB's own file. University database courses give whole lectures to these layouts: the schedule of CMU 15-445 lists one titled "Storage Models & Compression".
+*Why:* the five columns take 1,042,799 of the 14,499,086 bytes in the column chunks (the summed compressed sizes; the file itself has 14,512,102), 7.2 percent, although they are five of twelve columns: a column that holds a few repeated values (`status`, `store_id`, `discount_usd`) compresses to almost nothing. PostgreSQL's scan touched 3,860 + 7,684 = 11,544 pages, which is every page of the table (`SELECT relpages FROM pg_class WHERE relname = 'lines_big'` prints 11,544, about 90 MB), because each page holds whole rows of all twelve columns, and a row store therefore reads whole pages of whole rows. The split between `hit` and `read` changes from run to run; their sum does not. DuckDB's own file format also stores row groups, which its documentation calls equivalent to Parquet's, and the Parquet sizes here are an illustration of column storage, not a measurement of DuckDB's own file. University database courses give whole lectures to these layouts: the schedule of CMU 15-445 lists one titled "Storage Models & Compression".
 
 <figure>
 <svg viewBox="0 0 360 273" width="360" role="img" aria-labelledby="dd4-bytes-t dd4-bytes-d">
 <title id="dd4-bytes-t">Compressed bytes of each of the 12 columns of the order lines in a Parquet file, and the five columns the aggregation reads</title>
-<desc id="dd4-bytes-d">Twelve horizontal bars, longest first, for the share of the file's 14,499,086 bytes that each column takes: ordered&#95;at 26.9 percent, order&#95;item&#95;id 26.2 percent, customer&#95;id 17.6 percent, order&#95;id 16.2 percent, product&#95;id 3.3 percent, unit&#95;price&#95;usd 3.3 percent, store&#95;id 1.7 percent, payment&#95;method 1.7 percent, quantity 1.6 percent, channel 0.9 percent, discount&#95;usd 0.5 percent, status 0.0 percent. Five of them are marked as read by the aggregation: unit&#95;price&#95;usd, store&#95;id, quantity, discount&#95;usd and status. Together they take 1,042,799 bytes, 7.2 percent of the file.</desc>
+<desc id="dd4-bytes-d">Twelve horizontal bars, longest first, for the share of the 14,499,086 bytes in the file's column chunks that each column takes: ordered&#95;at 26.9 percent, order&#95;item&#95;id 26.2 percent, customer&#95;id 17.6 percent, order&#95;id 16.2 percent, product&#95;id 3.3 percent, unit&#95;price&#95;usd 3.3 percent, store&#95;id 1.7 percent, payment&#95;method 1.7 percent, quantity 1.6 percent, channel 0.9 percent, discount&#95;usd 0.5 percent, status 0.0 percent. Five of them are marked as read by the aggregation: unit&#95;price&#95;usd, store&#95;id, quantity, discount&#95;usd and status. Together they take 1,042,799 bytes, 7.2 percent of those bytes.</desc>
 <g fill="currentColor">
-<text x="19" y="22.4" font-size="10.5" font-weight="600">Share of the Parquet file's bytes, by column (%)</text>
+<text x="19" y="22.4" font-size="10.5" font-weight="600">Share of the Parquet column bytes, by column (%)</text>
 <text x="111" y="47.4" font-size="10" text-anchor="end" fill-opacity="0.9">ordered&#95;at</text>
 <rect x="119" y="36.4" width="138.1" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
 <text x="263" y="47.4" font-size="10" fill-opacity="0.9">26.9%</text>
@@ -209,8 +209,8 @@ the 5 columns the aggregation reads: 1,042,799 bytes, 7.2% of the file
 **Try it.** The aggregation first (median of seven runs after one warm-up), then 2,000 single-line lookups with keys drawn from seed 2026:
 
 ```bash
-uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py aggregation
-uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py lookup
+uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py aggregation
+uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py lookup
 ```
 
 The first call builds `lab/lines.duckdb` and `lab/lines.sqlite` from the CSV file, which takes a few seconds.
@@ -221,13 +221,13 @@ The first call builds `lab/lines.duckdb` and `lab/lines.sqlite` from the CSV fil
 <summary>Reveal the result</summary>
 
 ```console
-$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py aggregation
+$ uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py aggregation
 engine      median ms  range
 DuckDB            7.7  6.3 to 10.6
 SQLite          338.1  307.5 to 371.6
 PostgreSQL      332.9  329.8 to 360.1
 same answer from all three: [(1, 2229956.75), (2, 1938862.5), (3, 1396629.0)]
-$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py lookup
+$ uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py lookup
 engine      ms for one lookup
 DuckDB                  0.967
 SQLite                  0.017
@@ -350,7 +350,7 @@ print([m.group().decode() for m in re.finditer(rb"[ -~]{6,}", data)])
 - The same table answered a whole-column question fastest in the column store and a one-line lookup fastest in a row store here; read the direction, because the sizes carry the machine's fixed costs.
 - A SQLite database is a file of pages, and its first 100 bytes say how big they are and how many there are.
 
-**Common trap:** timing a layout with a number that includes something else. The ratio of two engines is the ratio of everything in the measurement.
+**Common trap:** a timing quoted without saying what it includes.
 
 </Aside>
 
@@ -358,7 +358,7 @@ print([m.group().decode() for m in re.finditer(rb"[ -~]{6,}", data)])
 
 <Exercise id="data-engineer-rows-columns-and-files-1">
 
-**Another query's columns.** A report counts orders for each payment method and channel, so it needs two columns: `payment_method` and `channel`. What share of the Parquet file's bytes do they take? Expected: one row with the bytes and the share in percent. Before you run it, say whether you expect more or less than the five columns of unit 1. Finish the query (the file `lab/lines.parquet` was written by the `bytes` command):
+**Another query's columns.** A report counts orders for each payment method and channel, so it needs two columns: `payment_method` and `channel`. What share of the Parquet file's column bytes do they take? Expected: one row with the bytes and the share in percent. Before you run it, say whether you expect more or less than the five columns of unit 1. Finish the query, save it as `share.py` and run it from the folder that holds `lab/` with `uv run --with duckdb==2.0.0 python share.py` (the file `lab/lines.parquet` was written by the `bytes` command):
 
 ```python
 import duckdb
@@ -402,7 +402,7 @@ print(duckdb.sql("""
 └────────┴───────────┘
 ```
 
-The two columns take 366,266 bytes, 2.5 percent of the file, against 7.2 percent for the five of unit 1. A row store would still read all 90 MB of pages for this report.
+The two columns take 366,266 bytes, 2.5 percent of the column bytes, against 7.2 percent for the five of unit 1. A row store would still read all 90 MB of pages for this report.
 
 </Solution>
 
@@ -522,13 +522,13 @@ duck.execute("CREATE TABLE lines_big AS SELECT * FROM read_csv('lab/big/lines_bi
 <Solution>
 
 ```console
-$ uv run --with duckdb --with "psycopg[binary]" python flawed_benchmark.py
+$ uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python flawed_benchmark.py
 DuckDB 175 ms, PostgreSQL 343 ms: DuckDB is 2.0 times faster
-$ uv run --with duckdb --with "psycopg[binary]" python flawed_benchmark.py
+$ uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python flawed_benchmark.py
 DuckDB 139 ms, PostgreSQL 324 ms: DuckDB is 2.3 times faster
 ```
 
-The DuckDB side reads and parses the CSV text on every run, while PostgreSQL reads a table that was loaded into its own pages once. The measurement times the text file, not the layout. Load the lines into a DuckDB table first (the line in the half-solution, run once before the timing) and query that table: `storage_shapes.py aggregation` did exactly that and measured 7.7 and 7.3 ms in two runs, 43 and 49 times faster than PostgreSQL's 332.9 and 355.2 ms in the same runs. The notes should say what was measured, with the load excluded and the same data in each engine's own storage.
+The DuckDB side reads and parses the CSV text on every run, while PostgreSQL reads a table that was loaded into its own pages once. The measurement times the text file, not the layout. Load the lines into a DuckDB table first (the line in the half-solution, run once before the timing) and query that table: `storage_shapes.py aggregation` did exactly that and measured 7.7 and 7.3 ms in two runs, 43 and 49 times faster than PostgreSQL's 332.9 and 355.2 ms in the same runs. The ratio of two engines is the ratio of everything each measurement includes. The notes should say what was measured, with the load excluded and the same data in each engine's own storage.
 
 </Solution>
 

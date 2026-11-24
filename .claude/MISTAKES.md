@@ -281,6 +281,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   fix that Exercise 3 asks for), and an Idea stated the answer of the Predict after it. → **A spot-the-flaw exercise must not
   restate a unit's Predict rule. After drafting, read every Remember and Common-trap line against the three exercise flaws,
   and every Idea against the Predict under it.**
+- 2026-11-24 — Review of the Data Engineer deep dive lessons 1 to 5: two sources supported no claim, Parquet byte counts were printed with an unpinned
+  `duckdb`, two lessons fetched a script from the `main` branch although they print its checksums, two business questions and a unit heading stated a
+  Predict answer, and ANALYZE-sampled figures were given as exact. → **An unused source, or an unpinned tool version behind printed byte counts, is a review finding;
+  a main-branch URL must not host a file whose checksum the lesson prints (use a tag). A business question and a unit heading never state what a Predict asks
+  for; a figure that ANALYZE or a random sample moves is written "about".**
 - 2026-11-18 — A section said ART indexes serve queries "under 0.1%" of the rows, but the lesson's own exercises showed
   Index Scans on 0.9% and 20% of the rows (the engine's rule is 2,048 rows or 0.1%, whichever is larger). → **Check any
   threshold or limit a section states against the row counts in the lesson's own exercises and steps.**

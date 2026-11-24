@@ -1,9 +1,9 @@
 """Compares one aggregation and one single-row lookup on the same 950,414 order lines in DuckDB (a column store), SQLite and PostgreSQL
 (row stores). Part of the Data Engineer deep dive, lesson "Storage shapes: rows, columns and files".
 
-    uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py bytes
-    uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py aggregation [--runs 7] [--duckdb-threads N] [--pg-workers N]
-    uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py lookup [--lookups 2000]
+    uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py bytes
+    uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py aggregation [--runs 7] [--duckdb-threads N] [--pg-workers N]
+    uv run --with duckdb==2.0.0 --with "psycopg[binary]==3.3.9" python storage_shapes.py lookup [--lookups 2000]
 
 Run it from the folder that holds lab/ (made by lab.py), after setup.sql was loaded into the PostgreSQL database `lab`. The PostgreSQL
 connection comes from the usual PG environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD); the database is `lab`.
@@ -86,7 +86,7 @@ def column_bytes():
         print(f"{col:<15} {b:>10,} bytes  {100 * b / total:>5.1f}%{'   <- read by the aggregation' if col in NEEDED else ''}")
     need = sum(b for c, b in rows if c in NEEDED)
     print(f"{'all columns':<15} {total:>10,} bytes")
-    print(f"the {len(NEEDED)} columns the aggregation reads: {need:,} bytes, {100 * need / total:.1f}% of the file")
+    print(f"the {len(NEEDED)} columns the aggregation reads: {need:,} bytes, {100 * need / total:.1f}% of the column bytes")
 
 
 def engines(duckdb_threads=None, pg_workers=None):

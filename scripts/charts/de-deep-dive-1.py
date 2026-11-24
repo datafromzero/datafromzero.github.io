@@ -43,8 +43,9 @@ JOIN_ORDER = [("orders first", "orders, order_items, then products", 645, 112.24
 LEAVES = [(1, "1001", "1366"), (2, "1367", "1732"), (4, "1733", "2098"), (5, "2099", "2464"), (6, "2465", "2800")]
 ROOT_KEYS = ["", "1367", "1733", "2099", "2465"]
 # dd2: scripts/de-internals/index_sweep.sql: tables cut from orders_big, a lookup of one primary key; cost of a sequential scan and of the forced index plan.
-SWEEP = [(10, 1.12, 8.15), (30, 1.38, 8.15), (100, 2.25, 8.16), (300, 7.75, 8.17), (1000, 28.50, 8.29), (3000, 69.50, 8.30),
-         (10000, 253.00, 8.30), (100000, 2146.00, 8.31)]
+SWEEP = [(10, 1.12, 8.15), (30, 1.38, 8.15), (100, 2.25, 8.16), (300, 7.75, 8.17), (310, 7.88, 8.17), (320, 8.00, 8.17), (330, 8.12, 8.17),
+         (340, 8.25, 8.17), (1000, 28.50, 8.29), (3000, 69.50, 8.30), (10000, 253.00, 8.30), (100000, 2146.00, 8.31)]
+SWEEP_DENSE = {310, 320, 330}  # drawn in the lines but without a dot: on the log axis these four sizes sit within 3 px of each other
 # dd3: scripts/de-internals/join_windows.py, median ms of seven runs; the join node the planner chose on its own for each window.
 WINDOWS = [("1 day", 2.6, 57.0, 31.8, "nested loop"), ("3 days", 9.4, 56.5, 36.2, "hash"), ("1 week", 19.4, 81.7, 42.3, "hash"),
            ("31 days", 103.3, 115.5, 72.5, "hash"), ("all orders", 426.1, 306.0, 216.1, "hash")]
@@ -122,8 +123,8 @@ def charts():
     # ---- dd2-sweep: the price of a scan and of an index lookup as the table grows ----
     s = Svg("dd2-sweep", "The planner's cost of a sequential scan and of an index lookup for one primary key, as the table grows from 10 to 100,000 rows",
             "A chart with both axes on a log scale: the table's rows from 10 to 100,000 across, the planner's estimated cost from 1 to 3,000 up. The cost of a sequential "
-            "scan climbs from 1.12 at 10 rows through 7.75 at 300 rows and 28.50 at 1,000 rows to 2,146 at 100,000 rows. The cost of the index lookup stays between 8.15 and "
-            "8.31 over the whole range. The two lines cross between 300 and 350 rows, where the planner's choice changes from the scan to the index.")
+            "scan climbs from 1.12 at 10 rows through 7.75 at 300 rows, 8.12 at 330 rows and 8.25 at 340 rows and 28.50 at 1,000 rows to 2,146 at 100,000 rows. The cost of the index lookup stays between 8.15 and "
+            "8.31 over the whole range. The two lines cross between 330 and 340 rows, where the planner's choice changes from the scan to the index.")
     X, Y = log_axis(10, 100000, 52, 306), log_axis(1, 3000, 176, 34)
     title_line(s, "Planner cost of one primary-key lookup, by table size", 8, 10)
     for v in (1, 10, 100, 1000):
@@ -136,11 +137,13 @@ def charts():
     for lx, (name, col) in zip((52, 130), (("table scan", BLUE), ("index lookup", GREEN))):
         s.rect(lx, 21, 8, 8, col, rx=2)
         s.text(lx + 12, 29, name, size=10)
-    s.line(X(325), 40, X(325), 176, opacity=0.45, dash="3 3")
-    s.text(X(325) - 4, 46, "switch near 300 to 350 rows", anchor="end", opacity=0.9)
+    s.line(X(335), 40, X(335), 176, opacity=0.45, dash="3 3")
+    s.text(X(335) - 4, 46, "switch at 330 to 340 rows", anchor="end", opacity=0.9)
     s.poly([(X(n), Y(c)) for n, c, _ in SWEEP], BLUE, w=2.2)
     s.poly([(X(n), Y(c)) for n, _, c in SWEEP], GREEN, w=2.2)
     for n, c1, c2 in SWEEP:
+        if n in SWEEP_DENSE:
+            continue
         s.circle(X(n), Y(c1), 3, BLUE)
         s.circle(X(n), Y(c2), 3, GREEN)
     out["dd2-sweep"] = s.render()
@@ -178,11 +181,11 @@ def charts():
     total = sum(v for _, v in COLUMN_BYTES)
     need = sum(v for c, v in COLUMN_BYTES if c in NEEDED)
     s = Svg("dd4-bytes", "Compressed bytes of each of the 12 columns of the order lines in a Parquet file, and the five columns the aggregation reads",
-            f"Twelve horizontal bars, longest first, for the share of the file's {total:,} bytes that each column takes: "
+            f"Twelve horizontal bars, longest first, for the share of the {total:,} bytes in the file's column chunks that each column takes: "
             + ", ".join(f"{c} {100 * v / total:.1f} percent" for c, v in COLUMN_BYTES)
-            + f". Five of them are marked as read by the aggregation: unit_price_usd, store_id, quantity, discount_usd and status. Together they take {need:,} bytes, {100 * need / total:.1f} percent of the file.")
+            + f". Five of them are marked as read by the aggregation: unit_price_usd, store_id, quantity, discount_usd and status. Together they take {need:,} bytes, {100 * need / total:.1f} percent of those bytes.")
     X = Axis(0, 30, 108, 262)
-    title_line(s, "Share of the Parquet file's bytes, by column (%)", 8, 10)
+    title_line(s, "Share of the Parquet column bytes, by column (%)", 8, 10)
     for i, (c, v) in enumerate(COLUMN_BYTES):
         y = 24 + i * 17
         hit = c in NEEDED
@@ -254,7 +257,7 @@ def facts_ok(name, text):
     need = {
         "dd1-join-order": ["645", "3,287", "112.24", "121.01"],
         "dd2-btree": ["1900", "block 7", "row 89"],
-        "dd2-sweep": ["300 and 350", "2,146", "8.29"],
+        "dd2-sweep": ["330 and 340", "2,146", "8.29"],
         "dd3-windows": ["2.6 ms", "57.0 ms", "31.8 ms"],
         "dd4-bytes": ["1,042,799", "14,499,086", "7.2 percent"],
         "dd4-ratio": ["7.7", "332.9", "338.1", "0.017", "0.153", "0.967"],

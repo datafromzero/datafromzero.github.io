@@ -32,18 +32,18 @@ sources:
     url: https://www.postgresql.org/docs/16/indexes-expressional.html
   - title: 'PostgreSQL 16 documentation: Write-ahead logging, introduction (accessed 2026-11-24)'
     url: https://www.postgresql.org/docs/16/wal-intro.html
-  - title: 'Winand, Use The Index, Luke: The search tree (accessed 2026-11-24)'
-    url: https://use-the-index-luke.com/sql/anatomy/the-tree
+  - title: 'PostgreSQL 16 documentation: Populating a Database (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/populate.html
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15; its TODO lists what to pin and what was not run). `CREATE EXTENSION pageinspect` and `CHECKPOINT` need a superuser, which the lab's `postgres` user is. The sweep behind the second picture is `scripts/de-internals/index_sweep.sql` (tables cut from `orders_big`); the chart script holds its numbers. Times are ranges over five or nine runs on one machine; the WAL bytes of unit 4 did not move between runs. The reason given for the larger cost of the `customer_id` index (random key order) was not tested, and the lesson says so. Stub changes: prerequisite `sql-indexes-and-explain` added; the objective on the small-table scan is C34's demonstration, so unit 2 explains it from the cost formula and finds where the choice flips; other objectives reworded; sources add the B-tree, page-layout, cost-constant and WAL pages, and Winand's page only for the tree. The owner writes `reviewed`.
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15; its TODO lists what to pin and what was not run). `CREATE EXTENSION pageinspect` and `CHECKPOINT` need a superuser, which the lab's `postgres` user is. The sweep behind the second picture is `scripts/de-internals/index_sweep.sql`. Times are ranges over five or nine runs on one machine; the WAL bytes of unit 4 did not move between runs. The reason given for the larger cost of the `customer_id` index (random key order) was not tested, and the lesson says so. Stub changes: prerequisite `sql-indexes-and-explain` added; unit 2 explains the small-table scan from the cost formula (C34 only demonstrates it); sources add the B-tree, page-layout, cost-constant, WAL and Populating a Database pages. The owner writes `reviewed`.
 
 ## The question
 
 The owner of the three cafes asks:
 
-> Customer service types a name into a search box and waits half a minute. Someone says "add an index". Another says indexes slow everything down. Who is right?
+> Customer service types a name into a search box and waits too long for the answer. Someone says "add an index". Another says indexes slow everything down. Who is right?
 
 The table in question has 200,000 customers. The first three, and the search that is slow:
 
@@ -134,7 +134,7 @@ FROM generate_series(1, 6) AS b(n), LATERAL bt_page_stats('orders_pkey', b.n) AS
 
 </details>
 
-*Why:* block 3 is the root (`r`) and the index has one level above the leaves, with five leaf pages next to it (block 0 is a page of bookkeeping). The root holds five entries. Walk down by hand to find order 1900: read the root, choose the entry whose first key is the largest one not above 1900, open that leaf, and read the row's location.
+*Why:* block 3 is the root (`r`) and the index has one level above the leaves, with five leaf pages next to it (block 0 is a page of bookkeeping). The root holds five entries. Walk down by hand to find order 1900: take the root entry with the largest first key not above 1900, open that leaf, and read the row's location.
 
 ```sql
 SELECT itemoffset, ctid, bt_key(data) AS first_key FROM bt_page_items('orders_pkey', 3);
@@ -160,7 +160,7 @@ SELECT ctid, order_id, ordered_at FROM orders WHERE order_id = 1900;
  (7,89) |     1900 | 2026-04-16 07:27:00
 ```
 
-In the root, `ctid` names the child block (the first entry has no key: it takes everything below 1367). Key 1900 lies between 1733 and 2099, so the walk goes to block 4. There the same column holds a table location: block 7, row 89 of `orders`, which is where the last query finds the order. Three pages (root, leaf, table block) found one row.
+In the root, `ctid` names the child block (the first entry has no key: it takes everything below 1367). Key 1900 lies between 1733 and 2099, so the walk goes to block 4. There the same column holds a table location: block 7, row 89 of `orders`. Three pages (root, leaf, table block) found one row.
 
 <figure>
 <svg viewBox="0 0 360 208" width="360" role="img" aria-labelledby="dd2-btree-t dd2-btree-d">
@@ -257,12 +257,12 @@ EXPLAIN SELECT * FROM orders_big WHERE order_id = 123456;
 
 </details>
 
-*Why:* only `customers` takes a scan, and the formula says why. A scan of `customers` costs 1 page + 150 rows × 0.01 + 150 × 0.0025 = 2.88, below the price of the index plan, which the planner puts at 8.16 for this table. A scan of `orders` would cost 16 + 18 + 4.5 = 38.5, above 8.29. The index price barely moves with size (8.29 for 1,800 rows, 8.44 for 500,000), and the scan price grows with the table: 38.5 for `orders`, 10,610 for `orders_big`. In a sweep of tables cut from `orders_big`, the switch came between 300 and 350 rows (4 pages), as the picture shows.
+*Why:* only `customers` takes a scan. A scan of `customers` costs 1 page + 150 rows × 0.01 + 150 × 0.0025 = 2.88, below the price of the index plan, which the planner puts at 8.16 for this table. A scan of `orders` would cost 16 + 18 + 4.5 = 38.5, above 8.29. The index price barely moves with size (8.29 for 1,800 rows, 8.44 for 500,000), and the scan price grows with the table: 38.5 for `orders`, 10,610 for `orders_big`. In a sweep of tables cut from `orders_big` (`index_sweep.sql`), the planner's choice switched from the scan to the index between 330 and 340 rows (4 pages), as the picture shows.
 
 <figure>
 <svg viewBox="0 0 360 237" width="360" role="img" aria-labelledby="dd2-sweep-t dd2-sweep-d">
 <title id="dd2-sweep-t">The planner's cost of a sequential scan and of an index lookup for one primary key, as the table grows from 10 to 100,000 rows</title>
-<desc id="dd2-sweep-d">A chart with both axes on a log scale: the table's rows from 10 to 100,000 across, the planner's estimated cost from 1 to 3,000 up. The cost of a sequential scan climbs from 1.12 at 10 rows through 7.75 at 300 rows and 28.50 at 1,000 rows to 2,146 at 100,000 rows. The cost of the index lookup stays between 8.15 and 8.31 over the whole range. The two lines cross between 300 and 350 rows, where the planner's choice changes from the scan to the index.</desc>
+<desc id="dd2-sweep-d">A chart with both axes on a log scale: the table's rows from 10 to 100,000 across, the planner's estimated cost from 1 to 3,000 up. The cost of a sequential scan climbs from 1.12 at 10 rows through 7.75 at 300 rows, 8.12 at 330 rows and 8.25 at 340 rows and 28.50 at 1,000 rows to 2,146 at 100,000 rows. The cost of the index lookup stays between 8.15 and 8.31 over the whole range. The two lines cross between 330 and 340 rows, where the planner's choice changes from the scan to the index.</desc>
 <g fill="currentColor">
 <text x="21.2" y="22.4" font-size="10.5" font-weight="600">Planner cost of one primary-key lookup, by table size</text>
 <path d="M65.2 188.4 L319.2 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
@@ -288,10 +288,10 @@ EXPLAIN SELECT * FROM orders_big WHERE order_id = 123456;
 <text x="77.2" y="41.4" font-size="10">table scan</text>
 <rect x="143.2" y="33.4" width="8" height="8" rx="2" fill="#00a07a" />
 <text x="155.2" y="41.4" font-size="10">index lookup</text>
-<path d="M161.3 52.4 L161.3 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" stroke-dasharray="3 3" />
-<text x="157.3" y="58.4" font-size="10" text-anchor="end" fill-opacity="0.9">switch near 300 to 350 rows</text>
-<path d="M65.2 186.4 L95.5 182.7 L128.8 174 L159 152.1 L192.2 129 L222.5 113.2 L255.8 90.3 L319.2 52.3" fill="none" stroke="#0072b2" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
-<path d="M65.2 151.2 L95.5 151.2 L128.8 151.2 L159 151.1 L192.2 150.9 L222.5 150.9 L255.8 150.9 L319.2 150.8" fill="none" stroke="#00a07a" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M162.1 52.4 L162.1 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" stroke-dasharray="3 3" />
+<text x="158.1" y="58.4" font-size="10" text-anchor="end" fill-opacity="0.9">switch at 330 to 340 rows</text>
+<path d="M65.2 186.4 L95.5 182.7 L128.8 174 L159 152.1 L160 151.8 L160.8 151.5 L161.7 151.3 L162.5 151 L192.2 129 L222.5 113.2 L255.8 90.3 L319.2 52.3" fill="none" stroke="#0072b2" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M65.2 151.2 L95.5 151.2 L128.8 151.2 L159 151.1 L160 151.1 L160.8 151.1 L161.7 151.1 L162.5 151.1 L192.2 150.9 L222.5 150.9 L255.8 150.9 L319.2 150.8" fill="none" stroke="#00a07a" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
 <circle cx="65.2" cy="186.4" r="3" fill="#0072b2" />
 <circle cx="65.2" cy="151.2" r="3" fill="#00a07a" />
 <circle cx="95.5" cy="182.7" r="3" fill="#0072b2" />
@@ -300,6 +300,8 @@ EXPLAIN SELECT * FROM orders_big WHERE order_id = 123456;
 <circle cx="128.8" cy="151.2" r="3" fill="#00a07a" />
 <circle cx="159" cy="152.1" r="3" fill="#0072b2" />
 <circle cx="159" cy="151.1" r="3" fill="#00a07a" />
+<circle cx="162.5" cy="151" r="3" fill="#0072b2" />
+<circle cx="162.5" cy="151.1" r="3" fill="#00a07a" />
 <circle cx="192.2" cy="129" r="3" fill="#0072b2" />
 <circle cx="192.2" cy="150.9" r="3" fill="#00a07a" />
 <circle cx="222.5" cy="113.2" r="3" fill="#0072b2" />
@@ -312,7 +314,7 @@ EXPLAIN SELECT * FROM orders_big WHERE order_id = 123456;
 </svg>
 </figure>
 
-The price is the planner's estimate; the pages tell the real story. Run the lookup on `orders_big` twice with `EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY OFF)` (the first run also prints a `Planning:` line), then once with `SET enable_indexscan = off; SET enable_bitmapscan = off;` to force the scan, and read the `Buffers` lines:
+The price is an estimate; the pages tell the real story. Run the lookup on `orders_big` twice with `EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY OFF)` (the first run also prints a `Planning:` line), then once with `SET enable_indexscan = off; SET enable_bitmapscan = off;` to force the scan, and read the `Buffers` lines:
 
 ```console
  Index Scan using orders_big_pkey on orders_big  (cost=0.42..8.44 rows=1 width=34) (actual rows=1 loops=1)
@@ -325,7 +327,7 @@ The price is the planner's estimate; the pages tell the real story. Run the look
    Buffers: shared hit=2113 read=2247
 ```
 
-The index lookup touched 4 pages: the root, one page of the middle level, one leaf (the index has two levels above its leaves, `SELECT level FROM bt_metap('orders_big_pkey')` prints 2) and one table page. The scan touched 4,360 (2,113 + 2,247, the table's page count; the split between `hit` and `read` changes from run to run). Reset with `RESET enable_indexscan; RESET enable_bitmapscan;`.
+The index lookup touched 4 pages: some in the index, from its root down to one leaf, and one in the table. The scan touched 4,360 (2,113 + 2,247, the table's page count; the split between `hit` and `read` changes from run to run). Reset with `RESET enable_indexscan; RESET enable_bitmapscan;`.
 
 ### 3. A function around a column hides it
 
@@ -380,7 +382,7 @@ ANALYZE
 
 </details>
 
-*Why:* the first plan ignores the index on `name`: it holds names as stored, in order, and the filter asks for the lower-cased value of each. Only the index on `lower(name)` can answer it, and it took the search from 36 ms to 0.3 ms here (over nine runs: 38 to 49 ms for the scan and 0.08 to 0.27 ms for the index). The estimate in the second plan, 1,000 rows, is the fixed guess of the previous lesson, 0.5 percent of the 200,000 rows: statistics for the expression did not exist until `ANALYZE` ran, which is why the third plan expects 220. The index on `name` does answer `name = 'Ana Lopez'`, but it finds 156 customers where `lower(name)` finds 220, because 36 are stored as `ANA LOPEZ` and 28 as `ana lopez`.
+*Why:* the first plan ignores the index on `name`: it holds names as stored, in order, and the filter asks for the lower-cased value of each. Only the index on `lower(name)` can answer it, and it took the search from 36 ms to 0.3 ms here (over nine runs: 38 to 49 ms for the scan and 0.08 to 0.27 ms for the index). The estimate in the second plan, 1,000 rows, is the fixed guess of the previous lesson, 0.5 percent of the 200,000 rows: statistics for the expression did not exist until `ANALYZE` ran, which is why the third plan expects about 220 (a random sample: another run can print 221). The index on `name` does answer `name = 'Ana Lopez'`, but finds 156 customers where `lower(name)` finds 220: 36 are stored as `ANA LOPEZ` and 28 as `ana lopez`.
 
 ### 4. Every index is written on every insert
 
@@ -415,7 +417,7 @@ SELECT round(pg_wal_lsn_diff(pg_current_wal_lsn(), :'before') / 1e6, 1) AS wal_m
 
 </details>
 
-*Why:* the WAL grew 3.2 times (60.9 against 19.2 MB) and the time about 5 times (medians 865 and 170 ms). Each index added about 13 to 15 MB of WAL, and the one on `customer_id` added the most time. A likely reason is that its keys arrive in random order, while `order_id` and `ordered_at` arrive in order and land at the right edge of their trees; this lesson did not test that. The times are medians of five runs on one machine; the WAL bytes were the same in every run. An index is a trade: a search that took 36 ms takes 0.3 ms, and every insert pays a little more.
+*Why:* the WAL grew 3.2 times (60.9 against 19.2 MB) and the time about 5 times (medians 865 and 170 ms). Each index added about 13 to 15 MB of WAL, and the one on `customer_id` added the most time. A likely reason is that its keys arrive in random order, while `order_id` and `ordered_at` arrive in order and land at the right edge of their trees; this lesson did not test that. The WAL bytes were the same in every run. An index is a trade: a search that took 36 ms takes 0.3 ms, and every insert pays a little more.
 
 <Aside type="tip" title="Remember">
 
@@ -518,7 +520,7 @@ CREATE INDEX ON ins_t (customer_id);
 SELECT round(pg_wal_lsn_diff(pg_current_wal_lsn(), :'before') / 1e6, 1) AS wal_mb;
 ```
 
-With the indexes first the job wrote 60.9 MB in 766 to 866 ms (five runs); with the indexes built after the load it wrote 31.1 MB in 316 to 366 ms. An index built over rows that are already there is written once, in order, instead of one entry at a time into a growing tree. The finished tables are the same.
+With the indexes first the job wrote 60.9 MB in 766 to 866 ms (five runs); with the indexes built after the load it wrote 31.1 MB in 316 to 366 ms. The PostgreSQL documentation says that creating an index on pre-existing data is quicker than updating it incrementally as each row is loaded; the numbers show it in WAL too. The finished tables are the same.
 
 </Solution>
 
@@ -576,7 +578,7 @@ Read the first plan before the new index exists, and the `Indexes:` list at the 
    Index Cond: (order_item_id = 123456)
 ```
 
-The lookup already used an index before the change, the one behind the primary key, and `\d lines_big` now lists two indexes on the same column (`lines_big_pkey` and `lines_big_item_idx`), each 20 MB. The second plan costs exactly what the first did, so nothing got faster, and the table now keeps two copies of the same tree. Inserting 200,000 order lines into a copy of the table with only the primary key wrote 38.6 MB of WAL in 303 to 413 ms (five runs); with the duplicate index it wrote 51.8 MB in 438 to 634 ms. Drop the extra index with `DROP INDEX lines_big_item_idx;`.
+The lookup already used an index before the change, the one behind the primary key, and `\d lines_big` now lists two indexes on the same column (`lines_big_pkey` and `lines_big_item_idx`), each 20 MB. The second plan costs exactly what the first did, so nothing got faster, and the table now keeps two copies of the same tree. Inserting 200,000 order lines into a copy with only the primary key wrote 38.6 MB of WAL in 303 to 413 ms (five runs); with the duplicate index, 51.8 MB in 438 to 634 ms. Drop the extra index with `DROP INDEX lines_big_item_idx;`.
 
 </Solution>
 

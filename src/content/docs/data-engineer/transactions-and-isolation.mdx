@@ -33,7 +33,7 @@ TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: pl
 
 The owner of the three cafes asks:
 
-> My report said Harbor had 355 orders when I started it. A few seconds later, in the same report, the Harbor total said 356. Nobody changed my report. Is the database lying to me?
+> My report counts the Harbor orders when it starts and again a few seconds later, in the same report. Nobody changed my report. Can the database give two answers to the same question?
 
 The table is `orders`, with one row for each order. The first three of 1,800:
 
@@ -81,7 +81,7 @@ A transaction promises that its steps happen all together or not at all, and the
 
 ## Learn by doing
 
-About 30 minutes, 3 new ideas: a transaction that fails, the isolation levels as a table, and two moments in one transaction. You need two terminals, each running `psql -d lab` against the lab of the first lesson of this module. In each one, type these two lines (type B instead of A in the second); they name the terminals and drop the row-count lines under each result, so what you see matches what is printed here:
+About 30 minutes, 3 new ideas: a transaction that fails, the isolation levels, and two moments in one transaction. You need two terminals, each running `psql -d lab` against the lab of the first lesson of this module. In each one, type these two lines (type B instead of A in the second); they name the terminals and drop the row-count lines under each result, so what you see matches what is printed here:
 
 ```sql
 \set PROMPT1 'A> '
@@ -132,7 +132,7 @@ A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
 
 </details>
 
-*Why:* the key refused the second step, the `UPDATE` that had already printed `UPDATE 1` was undone, and `COMMIT` printed `ROLLBACK`: after an error, the transaction could not be committed. The order is still `completed`. A step that fails takes the others with it, so you never find half a job. The rule that broke is one you declared, which is the part of consistency the database can check. A rule you only know, such as "an order's total matches its lines", is checked by nobody. The tutorial adds a third promise: once a transaction is acknowledged, the changes are recorded permanently, even if a crash follows.
+*Why:* the key refused the second step, the `UPDATE` that had already printed `UPDATE 1` was undone, and `COMMIT` printed `ROLLBACK`: after an error, the transaction could not be committed. The order is still `completed`. A step that fails takes the others with it, so you never find half a job. The rule that broke is one you declared, which is the part of consistency the database can check. A rule you only know, such as "an order's total matches its lines", is one the database was never told, so it cannot check it. The tutorial adds a third promise: once a transaction is acknowledged, the changes are recorded permanently, even if a crash follows.
 
 ### 2. Isolation is a dial
 
@@ -178,16 +178,7 @@ COMMIT
 
 </details>
 
-*Why:* A read `completed`, so the dirty read did not happen, although A asked for the level that allows it. The documentation says PostgreSQL implements three distinct levels internally and that its Read Uncommitted behaves like Read Committed. This is the table of the documentation, in our words (the standard's four levels in the rows, the four phenomena in the columns):
-
-| level | dirty read | nonrepeatable read | phantom read | serialization anomaly |
-|---|---|---|---|---|
-| Read uncommitted | allowed by the standard, not in PostgreSQL | possible | possible | possible |
-| Read committed | not possible | possible | possible | possible |
-| Repeatable read | not possible | not possible | allowed by the standard, not in PostgreSQL | possible |
-| Serializable | not possible | not possible | not possible | not possible |
-
-The table says PostgreSQL is stricter than the standard in two places, and unit 3 shows the second one. The last column belongs to the next lesson.
+*Why:* A read `completed`, so the dirty read did not happen, although A asked for the level that allows it. The documentation says PostgreSQL implements three distinct levels internally and that its Read Uncommitted behaves like Read Committed.
 
 ### 3. Two moments in one transaction
 
@@ -288,7 +279,18 @@ A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
 
 </details>
 
-*Why:* at Read Committed, A's second reads showed `canceled` and 356: the same row had changed (a nonrepeatable read) and a new row had joined the set (a phantom read), inside one transaction. At Repeatable Read, A saw `completed` and 355 both times and met the changes only after `COMMIT`. The documentation explains it: a Read Committed query sees only data committed before that query began, so two queries can see two moments, while a Repeatable Read query sees a snapshot as of the start of the first non-transaction-control statement of the transaction. The phantom did not appear at Repeatable Read, which is the second place where PostgreSQL goes beyond the standard's table; the documentation says that is acceptable, because the standard names only what must not occur. This is the owner's report: one report that asks twice at Read Committed can see two moments.
+*Why:* at Read Committed, A's second reads showed `canceled` and 356: the same row had changed (a nonrepeatable read) and a new row had joined the set (a phantom read), inside one transaction. At Repeatable Read, A saw `completed` and 355 both times and met the changes only after `COMMIT`. The documentation explains it: a Read Committed query sees only data committed before that query began, so two queries can see two moments, while a Repeatable Read query sees a snapshot as of the start of the first non-transaction-control statement of the transaction. The phantom did not appear at Repeatable Read, which goes beyond what the standard requires; the documentation says that is acceptable, because the standard names only what must not occur. This is the owner's report: one report that asks twice at Read Committed can see two moments.
+
+Now the whole picture, as the table of the documentation in our words (the standard's four levels in the rows, the four phenomena in the columns):
+
+| level | dirty read | nonrepeatable read | phantom read | serialization anomaly |
+|---|---|---|---|---|
+| Read uncommitted | allowed by the standard, not in PostgreSQL | possible | possible | possible |
+| Read committed | not possible | possible | possible | possible |
+| Repeatable read | not possible | not possible | allowed by the standard, not in PostgreSQL | possible |
+| Serializable | not possible | not possible | not possible | not possible |
+
+The table says PostgreSQL is stricter than the standard in two places: unit 2 showed the first (Read Uncommitted allows no dirty read) and this unit the second (Repeatable Read allows no phantom). The last column belongs to the next lesson.
 
 <figure>
 <svg viewBox="0 0 360 168" width="360" role="img" aria-labelledby="dd5-moments-t dd5-moments-d">
