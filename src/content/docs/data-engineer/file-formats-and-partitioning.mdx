@@ -1,0 +1,430 @@
+---
+id: data-engineer-file-formats-and-partitioning
+title: File formats and partitioning
+short_title: Formats, partitioning
+description: Stage the landed pages as typed tables, compare JSON, CSV and Parquet on size, types and speed, and see when splitting into files costs more.
+stage: data-engineer
+order: 30
+level: intermediate
+duration: 25
+objectives:
+  - Compare JSON, CSV and Parquet for the same lines on size, returned types and read time
+  - Say why a column format reads less for a query that needs few columns
+  - Partition a table by a column and count the files and bytes that result
+  - Recognize the small-files trap, a partition key with too many values
+prerequisites:
+  - data-engineer-ingest-apis-and-files
+  - core-data-beyond-tables
+  - core-warehouses-lakes-and-cost
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Apache Parquet documentation: Overview (accessed 2026-11-24)'
+    url: https://parquet.apache.org/docs/overview/
+  - title: 'Apache Parquet documentation: File format (accessed 2026-11-24)'
+    url: https://parquet.apache.org/docs/file-format/
+  - title: 'DuckDB documentation: Reading and writing Parquet files (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/parquet/overview.html
+  - title: 'DuckDB documentation: Partitioned writes (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/partitioning/partitioned_writes.html
+  - title: 'DuckDB documentation: Hive partitioning (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/partitioning/hive_partitioning.html
+  - title: 'DuckDB documentation: CSV auto detection (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/csv/auto_detection.html
+  - title: 'DuckDB documentation: Loading JSON (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/json/loading_json.html
+status: draft
+---
+
+TODO(owner): Team draft (D24), same run and versions as DE1; checkpoint tags `de-03-start` and `de-03-done`; needs the `de-pipeline-starter` repository. Every time is the median of 7 runs on one Linux machine and varies by machine; the lesson quotes ratios and three runs, not absolutes. Stub changes: dataset `app-events` is now `cafe-sales`; prerequisite `python-files-csv-json` is replaced by the three above; the pandas and Apache Iceberg sources are dropped (neither is used); objectives reworded. Shortened as the stub asks: literacy only (3 units). The line "types are kept" rests on the run below, not on a Parquet page, which does not say it. Not run: Windows, macOS, Codespaces.
+
+## The question
+
+The owner's friend, who keeps the books, asks:
+
+> The pipeline lands pages of JSON every night. Should we keep the lines in a nicer format, and should I split the files by day so each is small?
+
+The staged lines, the table in question (the first three of 3,287):
+
+| order_item_id | ordered_at | store_id | quantity | discount_usd |
+|---:|---|---:|---:|---:|
+| 5001 | 2026-01-01 08:02:00 | 2 | 1 | 0.00 |
+| 5002 | 2026-01-01 08:02:00 | 2 | 1 | 0.00 |
+| 5003 | 2026-01-01 08:02:00 | 2 | 2 | 0.00 |
+
+By the end you can measure the same lines in three formats, and say when splitting them into files helps and when it hurts.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Data beyond tables: nested JSON, events and formats*](/core/data-beyond-tables/) (C31) set row formats beside column formats, and [*Warehouses, data lakes and what things cost*](/core/warehouses-lakes-and-cost/) (C35) tied column storage to what a query reads.
+
+**Diverge.** There you chose a format by its description. Here you measure it on one table, and unit 3 shows a choice that the description does not warn you about.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C35, which kind of storage lets a query read only the columns it needs: row or column?
+
+   <details>
+   <summary>answer</summary>
+
+   Column storage: a query that needs two columns of twelve does not read the other ten.
+
+   </details>
+
+2. In the lesson *What a data engineer owns* (DE1), which layer holds one typed table for each source table?
+
+   <details>
+   <summary>answer</summary>
+
+   Staging.
+
+   </details>
+
+## The big idea
+
+A file format is a choice about what a table costs to store and to read, and a partition is a choice about how many files that table is.
+
+## Learn by doing
+
+About 25 minutes, 3 new ideas: three formats for one table, partitions, and the small-files trap. Work in `de-pipeline-starter` with the mock API running; the pages must be landed (if `data/raw/order_lines` is empty, run `uv run python -m pipeline.ingest`). To catch up, run `git checkout de-03-start`.
+
+### 1. One table in three formats
+
+**Idea.** JSON and CSV are text. Parquet is a column-oriented file format: the Apache Parquet page calls it a format designed for efficient data storage and retrieval, with compression and encoding schemes, and the DuckDB page says that when a query reads a Parquet file, only the columns the query needs are read. A CSV file has no types: DuckDB's reader guesses them by trying candidate types on a sample of the file, 20,480 rows by default.
+
+**Try it.** Staging comes first. Save this as `src/pipeline/stage.py` and read it once: it reads the landed pages with the columns spelled out (including `channel`, the field of DE2: pages without it give `NULL`), keeps the latest version of each key, and writes the lines, products and stores as Parquet.
+
+```python
+"""Turn the raw pages into typed, de-duplicated tables in the staging layer."""
+
+import duckdb
+
+from pipeline.config import RAW_DIR, SOURCE_FILES, STAGING_DIR
+from pipeline.ingest import window_name
+
+LINE_FIELDS = """STRUCT(
+    order_item_id BIGINT, order_id BIGINT, ordered_at TIMESTAMP, store_id BIGINT, customer_id BIGINT,
+    status VARCHAR, payment_method VARCHAR, product_id BIGINT, quantity BIGINT, discount_usd DECIMAL(8, 2),
+    updated_at TIMESTAMP, channel VARCHAR
+)"""
+
+
+def staged_lines(con, pages_glob):
+    """One row for each order line: typed columns, and the latest version when a key repeats."""
+    return con.sql(f"""
+        WITH pages AS (
+            SELECT unnest(data) AS line
+            FROM read_json('{pages_glob}', columns = {{data: '{LINE_FIELDS}[]'}})
+        ),
+        lines AS (SELECT line.* FROM pages)
+        SELECT * FROM lines
+        QUALIFY row_number() OVER (PARTITION BY order_item_id ORDER BY updated_at DESC) = 1
+        ORDER BY order_item_id
+    """)
+
+
+def write_staging(con, pages_glob=None, out_dir=STAGING_DIR):
+    """Write order_lines, products and stores as Parquet files in the staging folder."""
+    pages_glob = pages_glob or str(RAW_DIR / "order_lines" / window_name(None, None) / "page-*.json")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lines = staged_lines(con, pages_glob)
+    lines.write_parquet(str(out_dir / "order_lines.parquet"))
+    for name, types in {
+        "products": {"product_id": "INTEGER", "unit_price_usd": "DECIMAL(6, 2)"},
+        "stores": {"store_id": "INTEGER", "opened_on": "DATE"},
+    }.items():
+        csv_path = SOURCE_FILES / f"{name}.csv"
+        con.read_csv(str(csv_path), dtype=types).write_parquet(str(out_dir / f"{name}.parquet"))
+
+
+if __name__ == "__main__":
+    write_staging(duckdb.connect())
+```
+
+The measuring script is a given file: you read it and run it, and you do not write it. Fetch it from the checkpoint with `git show`, then run both:
+
+```bash
+git show de-03-done:src/pipeline/formats.py > src/pipeline/formats.py
+uv run python -m pipeline.stage
+uv run python -m pipeline.formats formats
+```
+
+It writes the staged lines as CSV in a temporary folder and, for each format, times the same query three ways. Its core is this function:
+
+```python
+def median_ms(con, sql):
+    times = []
+    for _ in range(RUNS):
+        start = time.perf_counter()
+        con.sql(sql).fetchall()
+        times.append((time.perf_counter() - start) * 1000)
+    return statistics.median(times)
+```
+
+**Predict:** (a) Which file is the smallest of the JSON pages, the CSV and the Parquet file, and the Parquet file is about how many times smaller than the CSV: 1.5, 4 or 15? (b) The table's `discount_usd` is `DECIMAL(8,2)`. Which type does DuckDB report for it when it reads the CSV back, and which for the Parquet file?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.formats formats
+format          bytes  read ms
+json pages    874,526     31.6
+csv           274,462     40.6
+parquet        62,362      1.4
+csv gives back: [('discount_usd', 'DOUBLE'), ('ordered_at', 'TIMESTAMP')]
+parquet gives back: [('discount_usd', 'DECIMAL(8,2)'), ('ordered_at', 'TIMESTAMP')]
+```
+
+Your times will differ.
+
+</details>
+
+*Why:* Parquet is the smallest: 62,362 bytes, 4.4 times smaller than the CSV and 14 times smaller than the JSON pages (which also hold the repeated record and every field name on every record). The CSV came back with `discount_usd` as `DOUBLE`, a type DuckDB guessed from the text and not the one you chose, and the Parquet file came back `DECIMAL(8,2)`. The query read in 1.4 ms from Parquet and 40.6 ms from CSV on this run, a ratio of 29; on three runs here it was 29, 29 and 32. The run cannot say how much of that is the column layout and how much is the CSV's type guessing and text parsing, so do not carry the ratio to other data: Exercise 3 shows why.
+
+### 2. Partitions: files split by the value of a column
+
+**Idea.** A **partition** is one slice of a table kept in its own folder, named after the value of a column, such as `part=2026-05-01/`. DuckDB writes this layout with `PARTITION_BY` in `COPY`, and its Hive-partitioning page says that a filter on the partition column is pushed down so that files that are not needed are not read. `PARTITION_BY` takes column names, not expressions, so the script first computes the month as a column called `part`.
+
+**Try it.** `uv run python -m pipeline.formats month` writes the lines unsplit and split by month, and runs a query for May only. The last column is the plan's line `Scanning Files: a/b`.
+
+**Predict:** For the May query, how many of the 6 monthly files does DuckDB open? And is the monthly layout faster for it than the single file?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.formats month
+partitioned by   files    bytes  all ms  May ms  May files
+nothing              1   62,362     1.7     2.1        n/a
+month                6   78,384     2.3     2.0        1/6
+```
+
+</details>
+
+*Why:* the plan opened 1 of 6 files, so the partitioning did its job, yet the May query took 2.0 ms against 2.1 ms on the single file: no gain, and the 6 files hold 78,384 bytes against 62,362, a quarter more. Partitioning saves work when a file is large. The DuckDB page recommends at least 100 MB of data per partition, and this whole table is 62 KB.
+
+### 3. The small-files trap
+
+**Idea.** Every file costs something to open, and each Parquet file has its own metadata at its end. A partition key with many values turns one table into many tiny files, and the costs add up faster than the savings.
+
+**Try it.** `uv run python -m pipeline.formats day` adds a third layout: one folder for each day, 181 days.
+
+**Predict:** With a file for each day, how many files are there, and are their bytes in total about the same as the single file's, about twice or about eight times as many?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.formats day
+partitioned by   files    bytes  all ms  May ms  May files
+nothing              1   62,362     1.9     2.1        n/a
+month                6   78,384     2.3     2.0        1/6
+day                181  485,976    14.9     8.9     31/181
+```
+
+</details>
+
+*Why:* 181 files hold 485,976 bytes, 7.8 times the single file, because each day holds only about 18 lines and each file carries its own metadata. Reading everything took 14.9 ms against 1.9, and the May query opened 31 of 181 files and took 8.9 ms, four times slower than the same question on the single file, although it read less of the data. The DuckDB page warns that it can be very expensive to write a larger number of partitions, as many files are created.
+
+<Aside type="tip" title="Remember">
+
+- JSON and CSV are text; CSV has no types, and the reader guesses them. Parquet is column-oriented, and a query reads only the columns it needs.
+- A partition is a folder for each value of a column; a filter on that column lets the reader skip folders.
+- Partition when files are large, and by a column with few values that queries filter on.
+- A measured ratio belongs to the size and the machine it was measured on.
+
+**Common trap:** partitioning small data. More files, more bytes and slower reads, for a saving that needs far more data.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-file-formats-and-partitioning-1">
+
+**Partition by store.** Write the staged lines partitioned by `store_id` into a temporary folder, and print the number of files and the number of bytes. Create `exercises/de03_ex1.py`, finish the `COPY` and run it with `uv run python exercises/de03_ex1.py`. Expected: a pair, files first.
+
+```python
+import tempfile
+from pathlib import Path
+
+import duckdb
+
+from pipeline.config import STAGING_DIR
+from pipeline.formats import folder_bytes
+
+con = duckdb.connect()
+with tempfile.TemporaryDirectory() as scratch:
+    target = Path(scratch) / "by_store"
+    ...  # a COPY of the staged lines, partitioned by store_id (a column, so no expression)
+    print(folder_bytes(target))
+```
+
+<details>
+<summary>Hint</summary>
+
+The `COPY` of unit 2 had `(FORMAT parquet, PARTITION_BY (part))` after the target. Here the column is already in the table.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    con.execute(f"COPY (SELECT * FROM '{STAGING_DIR / 'order_lines.parquet'}') TO '{target}' (FORMAT parquet, ...)")
+```
+
+</details>
+
+<Solution>
+
+```python
+    con.execute(f"COPY (SELECT * FROM '{STAGING_DIR / 'order_lines.parquet'}') TO '{target}' (FORMAT parquet, PARTITION_BY (store_id))")
+```
+
+```console
+$ uv run python exercises/de03_ex1.py
+(3, 68385)
+```
+
+One folder for each of the 3 stores, 68,385 bytes in all: 1.1 times the single file's 62,362, against 7.8 times for 181 daily files. Few partitions cost little extra.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-file-formats-and-partitioning-2">
+
+**Count the partitions before you write them.** A teammate lists five columns to partition the staged lines by: `store_id`, `payment_method`, `status`, `product_id` and `order_id`. Before you start, say in one sentence what the counts will look like. Then, from a blank file `exercises/de03_ex2.py`, write one query that counts the distinct values of each column in `data/staging/order_lines.parquet` and print it. Expected: one row of five counts. Then say which of the five you would not partition by, and whether any of them helps the owner's May question.
+
+<details>
+<summary>Hint</summary>
+
+One `SELECT` with a `count(DISTINCT column)` for each column, from the Parquet file. The number of distinct values is the number of folders.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One row: three stores, three payment methods, two statuses, fifteen products and eighteen hundred orders."*
+
+```python
+print(duckdb.sql(f"SELECT count(DISTINCT store_id) AS stores, ... FROM '{LINES}'"))
+```
+
+</details>
+
+<Solution>
+
+```python
+import duckdb
+
+from pipeline.config import STAGING_DIR
+
+LINES = STAGING_DIR / "order_lines.parquet"
+print(duckdb.sql(f"""
+    SELECT count(DISTINCT store_id) AS stores, count(DISTINCT payment_method) AS payment_methods,
+           count(DISTINCT status) AS statuses, count(DISTINCT product_id) AS products,
+           count(DISTINCT order_id) AS orders
+    FROM '{LINES}'
+"""))
+```
+
+```console
+$ uv run python exercises/de03_ex2.py
+┌────────┬─────────────────┬──────────┬──────────┬────────┐
+│ stores │ payment_methods │ statuses │ products │ orders │
+│ int64  │      int64      │  int64   │  int64   │ int64  │
+├────────┼─────────────────┼──────────┼──────────┼────────┤
+│      3 │               3 │        2 │       15 │   1800 │
+└────────┴─────────────────┴──────────┴──────────┴────────┘
+```
+
+`order_id` would give 1,800 folders for 3,287 lines, the trap of unit 3 at a worse size, and `product_id` gives 15 folders of about 220 lines. None helps the May question: it filters on the date, and none of the five is a date, so every one of them would have the reader open all the folders. The column to split by is the one the questions filter on, at a size where each folder is large.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does a query that needs two columns read less from a Parquet file than from a CSV file?
+
+   <details>
+   <summary>answer</summary>
+
+   The DuckDB documentation says that when it queries a Parquet file only the columns the query needs are read, and a CSV file is text that is read in full.
+
+   </details>
+
+<Exercise id="data-engineer-file-formats-and-partitioning-3">
+
+**Spot the flaw.** A colleague runs the benchmark below, sees `22 times`, and writes in the pipeline notes: "Parquet is 22 times faster than CSV, so the full-year file of 100 times more lines will also read 22 times faster." Save it as `exercises/de03_ex3.py`, run it with `COPIES = 1`, then change the constant to `100` and run it again. Expected: one line each time. What is wrong with the note?
+
+```python
+import tempfile
+from pathlib import Path
+
+import duckdb
+
+from pipeline.config import STAGING_DIR
+from pipeline.formats import median_ms
+
+COPIES = 1  # the lines repeated this many times; run it again with 100
+LINES = STAGING_DIR / "order_lines.parquet"
+QUERY = "SELECT store_id, sum(quantity) FROM {} GROUP BY store_id"
+con = duckdb.connect()
+with tempfile.TemporaryDirectory() as scratch:
+    csv, parquet = Path(scratch) / "lines.csv", Path(scratch) / "lines.parquet"
+    repeated = f"(SELECT l.* FROM '{LINES}' l, range({COPIES}))"
+    con.execute(f"COPY (SELECT * FROM {repeated}) TO '{csv}' (FORMAT csv, HEADER)")
+    con.execute(f"COPY (SELECT * FROM {repeated}) TO '{parquet}' (FORMAT parquet)")
+    csv_ms = median_ms(con, QUERY.format(f"read_csv('{csv}')"))
+    parquet_ms = median_ms(con, QUERY.format(f"read_parquet('{parquet}')"))
+    print(f"{COPIES} copies: csv {csv_ms:.1f} ms, parquet {parquet_ms:.1f} ms, {csv_ms / parquet_ms:.0f} times")
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare the two ratios you printed. What did the note assume about the ratio?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```text
+1 copies: ... times
+100 copies: ... times
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python exercises/de03_ex3.py
+1 copies: csv 44.3 ms, parquet 2.0 ms, 22 times
+$ uv run python exercises/de03_ex3.py
+100 copies: csv 117.1 ms, parquet 2.4 ms, 48 times
+```
+
+Over five runs here the ratio at one copy ran from 16 to 28, and over six runs at 100 copies from 43 to 48, so the ratio of one size was not the ratio of a size 100 times larger, and even one size moves from run to run. A ratio describes the table, the query and the machine it was measured on. State what you measured: the sizes, the query, the number of runs and the machine, and measure the size you care about.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can measure one table as JSON, CSV and Parquet and read the result, say why a column format reads less, partition a table and count the files, and say when partitions cost more than they save.*
+Test: Exercise data-engineer-file-formats-and-partitioning-2, done without opening the hints.
+
+The pattern to remember: **measure on your own data, keep the types in the file, and split into files only when each file is big.** Next comes *Incremental loads and idempotent reruns* (DE4), which loads these staged lines into a table without ever loading a line twice.

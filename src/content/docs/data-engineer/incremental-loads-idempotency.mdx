@@ -1,0 +1,479 @@
+---
+id: data-engineer-incremental-loads-idempotency
+title: Incremental loads and idempotent reruns
+short_title: Incremental loads
+description: Load only the lines that changed since the last run, merge them by key so a newer version wins, and prove with a fingerprint that a rerun changes nothing.
+stage: data-engineer
+order: 40
+level: advanced
+duration: 30
+objectives:
+  - Load only what changed since the last run, with a watermark on updated_at
+  - Merge lines by key, so that a newer version replaces an older one and a repeat changes nothing
+  - Prove that a rerun changes nothing, with a fingerprint of the table
+  - Say what the overlap before the watermark is for
+prerequisites:
+  - data-engineer-ingest-apis-and-files
+  - data-engineer-file-formats-and-partitioning
+  - sql-modify-data-transactions
+  - core-inside-the-database
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'DuckDB documentation: INSERT statement, ON CONFLICT (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/statements/insert.html
+  - title: 'DuckDB documentation: Transaction management (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/statements/transactions.html
+status: draft
+---
+
+TODO(owner): Team draft (D24), same run and versions as DE1; checkpoint tags `de-04-start` and `de-04-done`; needs the `de-pipeline-starter` repository. The corrected lines and the `until` parameter exist only in the mock API (README of the starter); no real source is claimed to behave so. Stub changes: dataset `app-events` is now `cafe-sales`; the stub's "inserts, updates and deletes between two snapshots" is now inserts, updates and unchanged lines, because the API has no deletes; prerequisites add the two above the stub's SQL lesson. The lesson counts an overlap of one hour; the right size depends on the source. Not run: Windows, macOS, Codespaces.
+
+## The question
+
+The owner asks:
+
+> Why does the pipeline fetch all of January again every night? And two days after a till rang up 20 coffees where it meant 2, the till fixed the line. Will my sheet ever show the fix?
+
+The line in question, as the API first sent it:
+
+| order_item_id | order_id | ordered_at | quantity | updated_at |
+|---:|---:|---|---:|---|
+| 6952 | 2075 | 2026-05-01 13:25:00 | 20 | 2026-05-01 13:30:00 |
+
+By the end you can load only what changed, apply a fix to a line you loaded before, and show that running the load again changes nothing.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Inserting, updating and deleting safely*](/sql/modify-data-transactions/) (S34) wrapped statements in a transaction so that all of them happen or none. The load below does the same for its last two statements.
+
+**Diverge.** In S34 you chose which rows to change. Here the source decides: it sends a line again with a new version, and the load must tell a new line from a changed one.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In S34, what happens to the changes of a transaction that you `ROLLBACK`?
+
+   <details>
+   <summary>answer</summary>
+
+   They are discarded: the database is as it was before `BEGIN`.
+
+   </details>
+
+2. In the lesson *Ingesting from APIs and files defensively* (DE2), what made landing the same request twice leave the same files?
+
+   <details>
+   <summary>answer</summary>
+
+   The path came from the request and the page number, so the second run wrote the same names with the same bytes.
+
+   </details>
+
+## The big idea
+
+A load is safe to repeat when running it again, on the same input or on an overlap, leaves the table exactly as it was.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: a watermark, a merge by key, and a fingerprint that proves a rerun. Work in `de-pipeline-starter` with the mock API running (`uv run python mock_api.py`) and the pages of DE2 landed. To catch up, run `git checkout de-04-start`.
+
+### 1. A watermark: ask only for what changed
+
+**Idea.** A **watermark** is the largest `updated_at` you have loaded. The next run asks the API only for versions updated after it (the `since` parameter of the starter's README) and ends by saving the new mark. The API can also answer as of a time (`until`), which lets one dataset play the source on an earlier day.
+
+**Try it.** Save this as `src/pipeline/load.py`; units 2 and 3 read parts of it.
+
+```python
+"""Load only the lines that changed since the last run, so that running it again changes nothing."""
+
+import argparse
+import logging
+from datetime import timedelta
+
+import duckdb
+
+from pipeline.config import RAW_DIR, SERVING_DIR
+from pipeline.ingest import land, window_name
+from pipeline.stage import staged_lines
+
+log = logging.getLogger("pipeline.load")
+DB_PATH = SERVING_DIR / "cafe.duckdb"
+LOOKBACK = timedelta(hours=1)  # ask again for the last hour before the watermark; the merge makes that safe
+COLUMNS = [
+    "order_item_id", "order_id", "ordered_at", "store_id", "customer_id", "status",
+    "payment_method", "product_id", "quantity", "discount_usd", "updated_at", "channel",
+]
+
+
+def connect(path=DB_PATH):
+    SERVING_DIR.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect(str(path))
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS order_lines (
+            order_item_id BIGINT PRIMARY KEY, order_id BIGINT, ordered_at TIMESTAMP, store_id BIGINT,
+            customer_id BIGINT, status VARCHAR, payment_method VARCHAR, product_id BIGINT,
+            quantity BIGINT, discount_usd DECIMAL(8, 2), updated_at TIMESTAMP, channel VARCHAR
+        )
+    """)
+    con.execute("CREATE TABLE IF NOT EXISTS load_state (source VARCHAR PRIMARY KEY, watermark TIMESTAMP)")
+    return con
+
+
+def fingerprint(con):
+    """Rows, the sum of quantity and a short code that changes when any value of any row changes."""
+    return con.execute("""
+        SELECT count(*), sum(quantity), left(md5(string_agg(l::VARCHAR, '|' ORDER BY order_item_id)), 8)
+        FROM order_lines l
+    """).fetchall()[0]
+
+
+def run(con, until=None, replay=False):
+    saved = con.execute("SELECT watermark FROM load_state WHERE source = 'order_lines'").fetchall()
+    watermark = None if replay or not saved else saved[0][0]
+    since = None if watermark is None else (watermark - LOOKBACK).strftime("%Y-%m-%d %H:%M:%S")
+    land(since, until)
+    pages = RAW_DIR / "order_lines" / window_name(since, until) / "page-*.json"
+    staged_lines(con, str(pages)).create_view("incoming", replace=True)
+    new, newer, same = con.execute("""
+        SELECT count(*) FILTER (WHERE t.order_item_id IS NULL),
+               count(*) FILTER (WHERE t.order_item_id IS NOT NULL AND i.updated_at > t.updated_at),
+               count(*) FILTER (WHERE t.order_item_id IS NOT NULL AND i.updated_at <= t.updated_at)
+        FROM incoming i LEFT JOIN order_lines t USING (order_item_id)
+    """).fetchall()[0]
+    assignments = ", ".join(f"{c} = excluded.{c}" for c in COLUMNS[1:])
+    con.execute("BEGIN")
+    con.execute(f"""
+        INSERT INTO order_lines SELECT * FROM incoming
+        ON CONFLICT (order_item_id) DO UPDATE SET {assignments}
+        WHERE excluded.updated_at > order_lines.updated_at
+    """)
+    con.execute("""
+        INSERT INTO load_state SELECT 'order_lines', max(updated_at) FROM order_lines
+        ON CONFLICT (source) DO UPDATE SET watermark = excluded.watermark
+    """)
+    con.execute("COMMIT")
+    log.info("window since=%s: %d inserted, %d updated, %d unchanged", since, new, newer, same)
+    rows, quantity, check = fingerprint(con)
+    log.info("order_lines now: %d rows, quantity %d, fingerprint %s", rows, quantity, check)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    parser = argparse.ArgumentParser(description="Load the order lines that changed since the last run.")
+    parser.add_argument("--until", help="ask for the world as of this time, for example '2026-05-02 23:59:59'")
+    parser.add_argument("--replay", action="store_true", help="ignore the saved watermark and pull everything again")
+    args = parser.parse_args()
+    run(connect(), until=args.until, replay=args.replay)
+```
+
+Run A plays the source on May 2. Run B then asks for what changed since. The last command lists every version of line 6952 that the pipeline has landed, from all the folders:
+
+```bash
+uv run python -m pipeline.load --until "2026-05-02 23:59:59"
+uv run python -m pipeline.load
+grep -rho '"order_item_id": 6952[^}]*' data/raw/order_lines --include="page-*.json" | sort -u
+```
+
+**Predict:** The table ends with 3,287 lines. Run B loads what changed since run A. How many lines does B update, that is, change in a row that A loaded: 0, 1 or about 12?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.load --until "2026-05-02 23:59:59"
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+INFO landed 20 pages in since=start_until=2026-05-02T23-59-59
+INFO window since=None: 1989 inserted, 0 updated, 0 unchanged
+INFO order_lines now: 1989 rows, quantity 3105, fingerprint baceae31
+$ uv run python -m pipeline.load
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+INFO landed 14 pages in since=2026-05-02T16-20-00_until=now
+INFO window since=2026-05-02 16:20:00: 1298 inserted, 1 updated, 6 unchanged
+INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
+$ grep -rho '"order_item_id": 6952[^}]*' data/raw/order_lines --include="page-*.json" | sort -u
+"order_item_id": 6952, "order_id": 2075, "ordered_at": "2026-05-01 13:25:00", "store_id": 1, "customer_id": 94, "status": "completed", "payment_method": "mobile", "product_id": 15, "quantity": 2, "discount_usd": "0.00", "updated_at": "2026-05-03 13:30:00", "channel": "counter"
+"order_item_id": 6952, "order_id": 2075, "ordered_at": "2026-05-01 13:25:00", "store_id": 1, "customer_id": 94, "status": "completed", "payment_method": "mobile", "product_id": 15, "quantity": 20, "discount_usd": "0.00", "updated_at": "2026-05-01 13:30:00", "channel": "counter"
+```
+
+</details>
+
+*Why:* run A asked as of May 2 and loaded 1,989 lines. Run B asked since A's watermark minus an hour and got 1,298 new lines, 6 it already had, and 1 line that had changed: 1,989 + 1,298 = 3,287. The grep shows that line: 6952, quantity 20 in the version A loaded and 2 in the version B loaded, two days later, with the same `ordered_at` and a later `updated_at`. That is why the mark is on `updated_at`, the time of the change: a mark on `ordered_at` would never ask for the fix again.
+
+### 2. A merge key: insert what is new, update what changed
+
+**Idea.** A **merge key** is a column that identifies a row of the target table; here `order_item_id`, declared `PRIMARY KEY`. An **upsert** inserts a row whose key is new and updates the row whose key exists, in one statement: `INSERT … ON CONFLICT (key) DO UPDATE SET …`. The DuckDB page says that `DO UPDATE` turns the insert into an update of the conflicting row, that the virtual table `EXCLUDED` holds the conflicting values, and that conflicting rows that do not meet the `WHERE` condition are left unchanged: in `load.py`, `excluded.updated_at > order_lines.updated_at` keeps an older version from replacing a newer one. The page also warns that when one `INSERT` holds several rows with the same key, DuckDB applies one update per key and the winner is not guaranteed to be the last, so staging keeps one row for each key before the merge.
+
+**Try it.** The starter has a script that does what the merge does not: a plain `INSERT` of lines that are already loaded. Fetch it from the checkpoint and run it:
+
+```bash
+git show de-04-done:scripts/naive_append.py > scripts/naive_append.py
+uv run python scripts/naive_append.py
+```
+
+It inserts the 3,287 staged lines of the full pull from DE2 into `order_lines`, which already holds them.
+
+**Predict:** Does the plain `INSERT` add rows, add nothing, or stop? How many rows does the table hold afterwards?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/naive_append.py
+refused: Constraint Error: Duplicate key "order_item_id: 5001" violates primary key constraint.
+rows before 3287, after 3287
+```
+
+</details>
+
+*Why:* the primary key made the database refuse the first key that it already held, and the whole statement was undone: 3,287 rows before and after. The key is what turns a rerun that would have loaded everything twice into an error you can see. The merge is the other answer: it does not refuse, it decides for each key, and an unchanged line stays unchanged.
+
+### 3. A fingerprint: prove that a rerun changes nothing
+
+**Idea.** A step is **idempotent** when running it again on the same input leaves the same result. Do not argue it: compute a **fingerprint** of the table before and after. `fingerprint` in `load.py` is the number of rows, the sum of `quantity` and the first 8 characters of an MD5 code of every row in key order, so a change in any value of any row changes the code.
+
+**Try it.** Run the load again, as it would run the next night, and then replay everything: `--replay` ignores the saved watermark and pulls all 33 pages again.
+
+```bash
+uv run python -m pipeline.load
+uv run python -m pipeline.load --replay
+```
+
+**Predict:** The saved watermark is the last update of June 30. What does the next night's run insert, update and leave unchanged? And does the replay of all 33 pages change the fingerprint of 8c3ca150 that run B left?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.load
+INFO landed 1 pages in since=2026-06-30T15-35-00_until=now
+INFO window since=2026-06-30 15:35:00: 0 inserted, 0 updated, 3 unchanged
+INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
+$ uv run python -m pipeline.load --replay
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 2 of 5)
+INFO landed 33 pages in since=start_until=now
+INFO window since=None: 0 inserted, 0 updated, 3287 unchanged
+INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
+```
+
+</details>
+
+*Why:* nothing is new, so the next night's run inserts and updates nothing, and its 3 unchanged lines are the overlap: the run asks since the watermark minus an hour (`LOOKBACK`) because a source can publish a line late with a time before the mark, and the merge makes that overlap harmless. The replay pulled all 3,287 lines, found every one unchanged, and left the fingerprint at 8c3ca150, so a run that crashes and starts again from scratch lands the same table. The merge and the new watermark sit between `BEGIN` and `COMMIT` in `load.py`; the DuckDB page says that to make a batch atomic you wrap it in an explicit transaction.
+
+<Aside type="tip" title="Remember">
+
+- A watermark on `updated_at` asks only for what changed; one on the event time misses a fix.
+- A merge key and `ON CONFLICT DO UPDATE` insert new rows, update changed ones and leave the rest; a `WHERE` on the version keeps an old version from winning.
+- Staging keeps one row for each key before the merge.
+- Prove idempotence with a fingerprint before and after a rerun and after a full replay.
+
+**Common trap:** a watermark on `ordered_at`, the time of the sale. A corrected line keeps its sale time, so no later run asks for it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-incremental-loads-idempotency-1">
+
+**Another route to the same table.** Load a fresh table in two other steps: the world as of March 31 first, then everything since. `DATA_DIR` puts the raw pages and the table in a folder of their own, so nothing you have built is touched. The first command is given; write the second. Expected: the last log line shows 3,287 rows. How many lines does your second run insert?
+
+```bash
+DATA_DIR=data_ex1 uv run python -m pipeline.load --until "2026-03-31 23:59:59"
+```
+
+When you are done, delete the folder with `rm -r data_ex1`.
+
+<details>
+<summary>Hint</summary>
+
+The second run has no flags: it reads the watermark that the first run saved in `data_ex1`, so it needs the same `DATA_DIR`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+DATA_DIR=data_ex1 uv run python -m pipeline.load
+```
+
+Read the `window` line: it counts the lines inserted, updated and unchanged.
+
+</details>
+
+<Solution>
+
+```console
+$ DATA_DIR=data_ex1 uv run python -m pipeline.load --until "2026-03-31 23:59:59"
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+INFO landed 14 pages in since=start_until=2026-03-31T23-59-59
+INFO window since=None: 1308 inserted, 0 updated, 0 unchanged
+INFO order_lines now: 1308 rows, quantity 2018, fingerprint 62d4f04d
+$ DATA_DIR=data_ex1 uv run python -m pipeline.load
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+INFO landed 20 pages in since=2026-03-31T15-09-00_until=now
+INFO window since=2026-03-31 15:09:00: 1979 inserted, 0 updated, 5 unchanged
+INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
+```
+
+The second run inserts 1,979 lines and updates none, and the table ends with the fingerprint of unit 3: the road that took two steps by March 31 ends where the road by May 2 did, because the last state of each line is the same.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-incremental-loads-idempotency-2">
+
+**Which months were corrected?** The table holds 12 lines that have a second version. Before you start, say in one sentence what the result will look like. Then, from a blank file `exercises/de04_ex2.py`, open `data/serving/cafe.duckdb` read only and write one query that gives, for each month of `ordered_at`, the number of lines and the number of corrected lines, those whose `updated_at` is more than 5 minutes after `ordered_at`. Expected: 6 rows and 3 columns, month, lines and corrected.
+
+<details>
+<summary>Hint</summary>
+
+`strftime(ordered_at, '%Y-%m')` gives the month. `count(*) FILTER (WHERE updated_at > ordered_at + INTERVAL 5 MINUTE)` counts the corrected lines. Open the file with `duckdb.connect(path, read_only=True)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Six months, with about 400 to 700 lines each, and the corrected column adding up to 12."*
+
+```python
+con = duckdb.connect("data/serving/cafe.duckdb", read_only=True)
+print(con.sql("""SELECT strftime(ordered_at, '%Y-%m') AS month, count(*) AS lines, ... AS corrected FROM order_lines GROUP BY month ORDER BY month"""))
+```
+
+</details>
+
+<Solution>
+
+```python
+import duckdb
+
+con = duckdb.connect("data/serving/cafe.duckdb", read_only=True)
+print(con.sql("""
+    SELECT strftime(ordered_at, '%Y-%m') AS month, count(*) AS lines,
+           count(*) FILTER (WHERE updated_at > ordered_at + INTERVAL 5 MINUTE) AS corrected
+    FROM order_lines
+    GROUP BY month
+    ORDER BY month
+"""))
+```
+
+```console
+$ uv run python exercises/de04_ex2.py
+┌─────────┬───────┬───────────┐
+│  month  │ lines │ corrected │
+│ varchar │ int64 │   int64   │
+├─────────┼───────┼───────────┤
+│ 2026-01 │   454 │         3 │
+│ 2026-02 │   395 │         1 │
+│ 2026-03 │   459 │         0 │
+│ 2026-04 │   632 │         1 │
+│ 2026-05 │   703 │         3 │
+│ 2026-06 │   644 │         4 │
+└─────────┴───────┴───────────┘
+```
+
+The lines add up to 3,287 and the corrected lines to 12. The corrected lines are spread over five months, so a pipeline that re-read only the lines of the latest month, by sale time, would have kept the old version of the 8 corrected lines of earlier months.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what two things does `ON CONFLICT (order_item_id) DO UPDATE` need in order to find the row to change?
+
+   <details>
+   <summary>answer</summary>
+
+   A unique or primary key constraint on the column it names, and the incoming row's value for that key.
+
+   </details>
+
+<Exercise id="data-engineer-incremental-loads-idempotency-3">
+
+**Spot the flaw.** A colleague writes the two statements of a load in the other order: first save the watermark, then load the lines. They say it is safe, because "if the second statement fails, the run fails, and we run it again". Save the script as `exercises/de04_ex3.py`, run it and read the four lines. Expected: four lines. What is wrong, and what is the fix?
+
+```python
+import duckdb
+
+con = duckdb.connect()
+con.execute("CREATE TABLE order_lines (order_item_id BIGINT PRIMARY KEY, updated_at TIMESTAMP)")
+con.execute("CREATE TABLE load_state (watermark TIMESTAMP)")
+con.execute("""
+    CREATE TABLE incoming AS
+    SELECT * FROM (VALUES (1, TIMESTAMP '2026-05-01 10:00:00'), (2, TIMESTAMP '2026-05-01 11:00:00')) AS t(order_item_id, updated_at)
+""")
+
+
+def flawed_load(crash):
+    con.execute("INSERT INTO load_state SELECT max(updated_at) FROM incoming")  # step 1: remember how far we got
+    if crash:
+        raise RuntimeError("the connection dropped")
+    con.execute("INSERT INTO order_lines SELECT * FROM incoming")  # step 2: load the lines
+
+
+try:
+    flawed_load(crash=True)
+except RuntimeError as error:
+    print("run 1 failed:", error)
+watermark = con.execute("SELECT max(watermark) FROM load_state").fetchall()[0][0]
+print("watermark:", watermark)
+print("lines to ask for next:", con.execute(f"SELECT count(*) FROM incoming WHERE updated_at > TIMESTAMP '{watermark}'").fetchall()[0][0])
+print("lines loaded:", con.execute("SELECT count(*) FROM order_lines").fetchall()[0][0])
+```
+
+<details>
+<summary>Hint</summary>
+
+After the failure, which lines does the next run ask for, and where are the two lines that the failed run was loading?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+con.execute("BEGIN")
+...  # the two statements, in the order of load.py
+con.execute("COMMIT")
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python exercises/de04_ex3.py
+run 1 failed: the connection dropped
+watermark: 2026-05-01 11:00:00
+lines to ask for next: 0
+lines loaded: 0
+```
+
+The watermark moved to 11:00 and the lines did not load, so the next run asks for lines updated after 11:00 and gets none: the two lines are lost, and nobody is told, because the next run succeeds. The statements are separate, and DuckDB commits each one as soon as it succeeds, so the watermark is saved before the load. The fix is the order and the transaction of `load.py`: `BEGIN`, load the lines, save the watermark, `COMMIT`. If anything fails in between, the rollback leaves the table and the watermark as they were, and the rerun asks for the same lines again.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can load only what changed with a watermark on `updated_at`, merge by key so that a newer version replaces an older one, prove with a fingerprint that a rerun and a replay change nothing, and say why the watermark and the lines move in one transaction.*
+Test: Exercise data-engineer-incremental-loads-idempotency-2, done without opening the hints.
+
+The pattern to remember: **ask for what changed, merge by key, and prove the rerun with a fingerprint.** Next comes *Pipelines as small, testable functions* (DE5), which puts tests under the steps you have built.
