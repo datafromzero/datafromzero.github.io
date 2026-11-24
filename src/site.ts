@@ -39,6 +39,6 @@ if (ANALYTICS_ENABLED && GA_RETENTION === '') {
  * Address of the feedback Worker (SPEC D58, workers/feedback/README.md), e.g. `https://datafromzero-feedback.NAME.workers.dev/`.
  * Empty = no form: lessons keep the plain "Report an issue" link to the GitHub issue form, so the site never ships a dead form.
  */
-export const FEEDBACK_URL: string = '';
+export const FEEDBACK_URL: string = 'https://datafromzero-feedback.johnha0912.workers.dev/';
 /** Pages that carry `noindex` and so stay out of the sitemap (checked by scripts/check-sitemap.mjs). */
 export const NOINDEX_PAGES = ['/feedback/sent/', '/feedback/not-sent/'];

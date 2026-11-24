@@ -153,7 +153,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## Open items and owner decisions still pending
 
-- **Feedback form (D58, built 2026-11-24, not live):** the lesson footer shows the form only when `FEEDBACK_URL` in `src/site.ts`
+- **Feedback form (D58, live 2026-11-24):** Worker `datafromzero-feedback` deployed by the owner with `GITHUB_TOKEN`; two test issues (#125, #126) filed and closed; `FEEDBACK_URL` set. Remaining owner check: Workers Logs off. Original notes: the lesson footer shows the form only when `FEEDBACK_URL` in `src/site.ts`
   is set; until then it is the old GitHub link. Owner steps: follow `workers/feedback/README.md` (Cloudflare account, create the
   Worker in the dashboard and paste `worker.js`, fine-grained GitHub token with Issues read/write on this repo only as the secret
   `GITHUB_TOKEN`, deploy, put the workers.dev URL in `FEEDBACK_URL`), then send one test message and check the issue. Create the
