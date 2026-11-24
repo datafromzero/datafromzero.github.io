@@ -416,6 +416,32 @@ Written 2026-11-24 by the first DS batch. The next batches (DS6 to DS16) read th
   compare `C`), the week-1 columns (DS9 feature engineering: encode, scale and impute inside the folds, with the folds of DS5), `region` as the column that adds nothing (DS11 fairness slices:
   platform and channel are the slices with a real gap), the cohort table of DS3 (DS12 forecasting uses daily counts of the events table instead).
 
+### Batch 2 (DS6 to DS10): additions
+
+Written 2026-11-24 by the second DS batch; the later batches keep these on top of the section above.
+
+- **The honest story, told plainly.** On this table no model beats the day-7 logistic model: five-fold CV 0.684 to 0.692 for logistic (0.692), ridge and lasso (0.692), tree (0.688), forest
+  (0.691), boosted (0.692 at best), and on the 4,454 test people 0.690 (logistic), 0.690 (ridge), 0.689 (lasso), 0.688 (forest, boosted), 0.684 (tuned tree). Every model lesson ends in a short
+  last unit that scores the new model once on the test part beside the day-7 model, each gain with the paired 95 percent interval of 2,000 resamples (`auc_gain`, a given cell, seed 2026).
+  Say "ties" when the interval includes 0, and keep the track's one story: the columns, not the algorithm, set the ceiling. A lesson never hides a null result.
+- **Test part.** Each tuning lesson scores the track's one test part once, after its own choices, and a later lesson does not tune on it. A real project would keep one final test part for the
+  last model only; the lesson TODO says so if a reviewer asks.
+- **Demos where the method shows.** On the full 13,362 people regularization, tree depth, learning rate and engineered columns change almost nothing. Show their effect on a pilot sized to it
+  (500 people with 60 random columns, DS6), on a column of random numbers (DS7), on a deliberately leaky or wrongly coded column (DS9), or on made-up data with real groups (DS10). When a
+  headline pilot or seed is used, check about 20 other seeds (100 to 119) and say where the headline sits (DS6's pilot is at the unfavorable end: medians 0.634, 0.653, 0.661 for no
+  penalty, ridge, lasso against 0.609, 0.642, 0.649).
+- **Version traps found.** `LogisticRegression` takes `l1_ratio=1` from scikit-learn 1.8 and `penalty="l1"` before (in 1.6 `l1_ratio=1` is silently ignored and gives a ridge); the notebook
+  helper `lasso_args` picks by version. `HistGradientBoostingClassifier` switches early stopping on by itself above 10,000 training rows (the 10,021 fitting people are just above it).
+  `TargetEncoder`'s unseeded internal split changed names in 1.9, so it is described and not run (a small `GroupShare` transformer stands in). Print `n_iter_` whenever a default matters.
+- **Charts read the notebooks.** `scripts/charts/ds-batch-2.py` runs each lesson's own notebook cells up to "Finish it" and draws from the variables they leave, then asserts the printed
+  numbers; it takes about ten minutes. Units that a chart draws keep the data in a named variable (`stages`, `cv_table`, `built_in_by`, `ruler_rows`).
+- **Answers already used by DS6 to DS10** (do not reuse): [0.03, 0.700] (lasso C on the validation part), [0.585, 0.636] (250-person pilot), 0.553 (platform alone), [0.687, 0.691, 0.690]
+  (`max_features` 1, 4, 19), [877, 0.835] (the purest depth-3 leaf), 0.077 against 0.020 (activity columns shuffled together, one at a time), [0.701, 0.694, 0.682] (2, 8, 31 leaves after 300
+  trees), [0.03, 0.691] (learning rate on folds), 0.681 (5,000-person pilot with early stopping), 3,336 (people with no ratio), [2,596, 0.579] (four segments), 0.175 (two segments' churn gap).
+  Exercise classes taken: choosing C on one validation part, more columns than people, "a lasso zero means no signal", `max_features`, reading a leaf, one-at-a-time against grouped
+  permutation, the silent early-stopping default, a flag made after the fill, the outcome among the clustering columns. Truth checks used: platform's signal travels through the channel
+  (DS6), a continuum has no groups (DS10), a random column beats real ones in built-in importance (DS7).
+
 ## Markup
 
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,

@@ -158,6 +158,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   people, not the core's "buys within 14 days". Choices the owner may reverse: the target; no derived dataset file (the table is a DuckDB query run in each notebook); a still fold
   diagram instead of a concept animation; charts drawn with the DA `Svg` class, not seaborn. Still open: edits and approval of every text, and a Colab run of the five notebooks
   (they ran here on pandas 3.0.5 and 2.2.3 with identical outputs).
+  **DS batch 2 (2026-11-24, branch `ds-batch-2`, drafts, `status: draft`):** DS6 `regularization`, DS7 `decision-trees-and-forests`, DS8 `gradient-boosting`, DS9 `feature-engineering`
+  and DS10 `clustering-and-segmentation` with notebooks and charts (`scripts/charts/ds-batch-2.py`, which runs the notebooks). The honest result, told plainly: no model beats the day-7
+  logistic model (test AUC 0.690; ridge 0.690, lasso 0.689, forest 0.688, boosted 0.688, tree 0.684; every interval but the tree's includes 0), and the new columns of DS9 add nothing; the
+  lessons show each method where it matters (a 500-person pilot with random columns, a random column in importances, a leaky target encoding, made-up data with real groups).
+  Conventions and the answers used are in LESSON-STANDARD, "Batch 2". Still open: the owner's edits, a Colab run, and the DS6 pilot check (20 other pilots) that sits outside the notebook.
 
 ## Open items and owner decisions still pending
 
