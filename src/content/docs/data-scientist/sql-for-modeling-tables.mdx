@@ -1,0 +1,508 @@
+---
+id: data-scientist-sql-for-modeling-tables
+title: Building a modeling table in SQL
+short_title: Modeling table in SQL
+description: Write point-in-time feature queries with windows and cohorts, and reconcile the modeling table to its source.
+stage: data-scientist
+order: 30
+level: intermediate
+duration: 30
+objectives:
+  - Build one row per person from event tables, with a cutoff timestamp for each
+  - Count only what the app knew at the cutoff, with two clocks and no retry copies
+  - Take the label from after the cutoff and keep it out of every feature
+  - Reconcile the table to its source with a second route and a cohort table
+prerequisites:
+  - data-scientist-exploring-before-modeling
+  - sql-window-functions
+  - sql-cohort-retention
+  - sql-deduplicate-latest-record
+  - sql-conditional-aggregation
+  - core-data-leakage
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-sql-for-modeling-tables.ipynb
+reviewed: 2026-11-23
+sources:
+  - title: 'DuckDB documentation: QUALIFY clause (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/qualify
+  - title: 'DuckDB documentation: FILTER clause (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/stable/sql/query_syntax/filter
+  - title: 'DuckDB documentation: Window functions, row_number and PARTITION BY (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/stable/sql/functions/window_functions
+  - title: 'scikit-learn documentation: Common pitfalls and recommended practices, data leakage (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/common_pitfalls.html
+status: draft
+---
+
+TODO(owner): Team draft (D24) for you to edit; `reviewed` is the stub's date, yours to set when you publish. Invented for the track (conventions in `.claude/agents/LESSON-STANDARD.md`): the 7-day cutoff, the 30-day horizon, the definition of activity and the seven features. It runs in Colab, not in the page: the in-page runner cannot load `app-events`. Numbers come from the notebook run on DuckDB 2.0.0 and pandas 3.0.5; a Colab run, Colab's DuckDB version and DuckDB 1.4 are unchecked.
+
+## The question
+
+The table that lesson DS2 modeled arrived ready. This lesson builds it, from the raw events, so that nothing in it comes from after the moment of prediction. The raw material is the event log: one row for each thing the app recorded, with the time it happened and the time the collector stored it. The first events of person 17471, as stored:
+
+| event_id | event_ts | received_at | event_name |
+|---:|---|---|---|
+| 1056762 | 2026-03-19 17:13:33 | 2026-03-19 17:13:36 | signup_complete |
+| 1056778 | 2026-03-19 17:30:13 | 2026-03-19 17:30:15 | add_expense |
+| 1056779 | 2026-03-19 17:30:13 | 2026-03-19 17:30:33 | add_expense |
+
+The question is how to turn a log like this into one row for each person, as of seven days after signup, with a label from days 8 to 30. By the end you can build the table in SQL, say for each column what the app knew when the row was cut, and reconcile the table to its source.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Deduplication and the latest record per entity*](/sql/deduplicate-latest-record/) (S17) `ROW_NUMBER()` numbered the rows of each entity and a filter kept number 1. Unit 2 does the same to retry copies of an event. In [*Data leakage*](/core/data-leakage/) (C20) a column was allowed only if its value settled before the moment of prediction.
+
+**Diverge.** In S17 one clock decided which row was latest. Here two clocks, when an event happened and when it arrived, decide what was known, and unit 2 shows what each one removes.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Window functions: keep the rows, add the context*](/sql/window-functions/) (S14), what does `PARTITION BY` do inside `OVER`?
+
+   <details>
+   <summary>answer</summary>
+
+   It splits the rows into independent groups, and the function is computed inside each group; every input row stays.
+
+   </details>
+
+2. Write the cutoff of a person who signed up on January 1 at 09:30, for a prediction made seven days after signup.
+
+   <details>
+   <summary>answer</summary>
+
+   January 8 at 09:30: the person's own signup time plus 7 days, not a calendar date.
+
+   </details>
+
+## The big idea
+
+A modeling table is a promise about time: every feature was known at the cutoff, and the label lies on the other side of it.
+
+<figure>
+<svg viewBox="0 0 360 191" width="360" role="img" aria-labelledby="ds3-timeline-t ds3-timeline-d">
+<title id="ds3-timeline-t">The first 30 days of person 17471, and what the table keeps</title>
+<desc id="ds3-timeline-d">A timeline from day 0, the signup, to day 30 with one row for each kind of event of person 17471. A cutoff line stands at day 7 and a horizon line at day 30. Up to the cutoff there are 8 events the app knew and counted, drawn in blue, and 1 retry copy of an event, drawn in purple and dropped. After the cutoff there are 10 events, drawn in green: they decide the label, which asks whether any visit or expense falls between day 7 and day 30, and no feature reads them.</desc>
+<g fill="currentColor">
+<text x="18.4" y="22.4" font-size="10.5" font-weight="600">Person 17471: days 0 to 30</text>
+<rect x="76.4" y="36.4" width="58.3" height="12" rx="2" fill="#0072b2" fill-opacity="0.2" />
+<rect x="134.7" y="36.4" width="191.7" height="12" rx="2" fill="#00a07a" fill-opacity="0.2" />
+<text x="105.5" y="45.9" font-size="9" font-weight="600" text-anchor="middle">features</text>
+<text x="230.5" y="45.9" font-size="9" font-weight="600" text-anchor="middle">label window</text>
+<text x="18.4" y="73.9" font-size="9.5">onboarding</text>
+<path d="M76.4 70.4 L326.4 70.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<circle cx="76.5" cy="70.4" r="3.5" fill="#0072b2" />
+<text x="18.4" y="93.9" font-size="9.5">visit</text>
+<path d="M76.4 90.4 L326.4 90.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<circle cx="107.7" cy="90.4" r="3.5" fill="#0072b2" />
+<circle cx="112.6" cy="90.4" r="3.5" fill="#0072b2" />
+<circle cx="165.8" cy="90.4" r="3.5" fill="#00a07a" />
+<circle cx="191.6" cy="90.4" r="3.5" fill="#00a07a" />
+<circle cx="237" cy="90.4" r="3.5" fill="#00a07a" />
+<text x="18.4" y="113.9" font-size="9.5">expense</text>
+<path d="M76.4 110.4 L326.4 110.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<circle cx="76.5" cy="110.4" r="3.5" fill="#0072b2" />
+<circle cx="76.5" cy="105.4" r="3.5" fill="#9a6be0" />
+<circle cx="112.6" cy="110.4" r="3.5" fill="#0072b2" />
+<circle cx="112.6" cy="110.4" r="3.5" fill="#0072b2" />
+<circle cx="112.7" cy="110.4" r="3.5" fill="#0072b2" />
+<circle cx="165.8" cy="110.4" r="3.5" fill="#00a07a" />
+<circle cx="165.9" cy="110.4" r="3.5" fill="#00a07a" />
+<circle cx="191.6" cy="110.4" r="3.5" fill="#00a07a" />
+<circle cx="191.7" cy="110.4" r="3.5" fill="#00a07a" />
+<path d="M134.7 52.4 L134.7 128.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.8" />
+<path d="M326.4 52.4 L326.4 128.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.8" stroke-dasharray="3 3" />
+<path d="M76.4 128.4 L326.4 128.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M76.4 128.4 L76.4 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="76.4" y="144.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">day 0</text>
+<path d="M134.7 128.4 L134.7 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="134.7" y="144.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">day 7</text>
+<path d="M193 128.4 L193 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="193" y="144.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">14</text>
+<path d="M251.4 128.4 L251.4 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="251.4" y="144.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">21</text>
+<path d="M326.4 128.4 L326.4 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="326.4" y="144.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">day 30</text>
+<text x="139.7" y="158.4" font-size="9.5" font-weight="600">cutoff</text>
+<text x="326.4" y="158.4" font-size="9.5" font-weight="600" text-anchor="end">horizon</text>
+<rect x="18.4" y="167.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="30.4" y="174.4" font-size="9">counted in a feature</text>
+<rect x="122.4" y="167.4" width="8" height="8" rx="2" fill="#9a6be0" />
+<text x="134.4" y="174.4" font-size="9">retry copy, dropped</text>
+<rect x="224.4" y="167.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="236.4" y="174.4" font-size="9">after cutoff: label</text>
+</g>
+</svg>
+</figure>
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a cutoff for each row, counting only what was known, features as filtered counts, a label from the other side. A last unit reconciles the table and teaches nothing new. The setup cell loaded `users` and `events` into DuckDB; the queries run through `show()`, which prints their rows.
+
+<OpenInColab />
+
+### 1. One row per person, and a cutoff for each
+
+**Idea.** A modeling table has one row for each *entity*, here a person, and a *cutoff* for each row: the moment of prediction. The cutoff is a timestamp, the person's own signup time plus 7 days, not a calendar date, so that everyone has had the same seven days to show what they do. Write the entity, the cutoff and the end of the label window first; every feature and the label are measured against them.
+
+**Try it:** build `people`, one row for each person who signed up from January 1 to May 31, and check that the join to the signup event keeps every user once.
+
+```python
+con.execute("""CREATE OR REPLACE VIEW people AS
+SELECT u.user_id, u.signup_date, u.channel, u.region, s.platform,
+       s.event_ts AS signup_ts,
+       s.event_ts + INTERVAL 7 DAY AS cutoff,       -- the prediction moment
+       s.event_ts + INTERVAL 30 DAY AS horizon      -- the end of the label window
+FROM users AS u
+JOIN events AS s ON s.user_id = u.user_id AND s.event_name = 'signup_complete'
+WHERE u.signup_date BETWEEN DATE '2026-01-01' AND DATE '2026-05-31'""")
+show("""SELECT COUNT(*) AS people, COUNT(DISTINCT user_id) AS distinct_people,
+       (SELECT COUNT(*) FROM users WHERE signup_date BETWEEN DATE '2026-01-01' AND DATE '2026-05-31') AS users_in_window
+FROM people""")
+```
+
+**Predict:** The query joins `users` to the signup event of each user. Will it return fewer rows than there are users in the window, the same number, or more?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+people | distinct_people | users_in_window
+17816 | 17816 | 17816
+```
+
+</details>
+
+*Why:* The same: 17,816 people, each once, as many as there are users in the window. Every user in the window has one signup event, so the join neither loses nor repeats anyone (the 10 users with no event signed up in June, outside the window). Each row carries its own cutoff, a column of `people`.
+
+### 2. Count only what the app knew
+
+**Idea.** An event counts at the cutoff only if the app could have known it. Three rules: it is not a retry copy; it had happened by the cutoff (`event_ts`); and it had arrived by the cutoff (`received_at`). The last two are two clocks, when it happened and when the collector stored it. `ROW_NUMBER() OVER (PARTITION BY …)` numbers the rows of each partition from 1, and `QUALIFY` filters on that number, so `= 1` keeps the first copy of each event.
+
+**Try it:** build `clean` (copies removed) and `known` (both clocks), then count what each rule leaves of the first week.
+
+```python
+con.execute("""CREATE OR REPLACE VIEW clean AS
+SELECT *
+FROM events
+QUALIFY ROW_NUMBER() OVER (PARTITION BY user_id, event_ts, event_name, platform ORDER BY received_at, event_id) = 1""")
+con.execute("""CREATE OR REPLACE VIEW known AS
+SELECT p.user_id, c.event_name, c.event_ts, p.cutoff
+FROM people AS p
+JOIN clean AS c ON c.user_id = p.user_id
+WHERE c.event_ts <= p.cutoff AND c.received_at <= p.cutoff""")
+show("""SELECT
+  (SELECT COUNT(*) FROM people AS p JOIN events AS e ON e.user_id = p.user_id WHERE e.event_ts <= p.cutoff) AS happened_by_cutoff,
+  (SELECT COUNT(*) FROM people AS p JOIN clean AS c ON c.user_id = p.user_id WHERE c.event_ts <= p.cutoff) AS without_copies,
+  (SELECT COUNT(*) FROM known) AS known_at_cutoff""")
+show("""SELECT (SELECT COUNT(*) FROM events) - (SELECT COUNT(*) FROM clean) AS copies_removed""")
+```
+
+**Predict:** Which rule takes more events out of the first week: removing the retry copies, or keeping only what had arrived by the cutoff? Roughly how many events does each take?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+happened_by_cutoff | without_copies | known_at_cutoff
+90391 | 90050 | 89999
+copies_removed
+835
+```
+
+</details>
+
+*Why:* Of the 90,391 events that had happened by the cutoff, the copy rule removes 341 and the arrival rule 51 more, leaving 89,999. Over the whole table the copy rule removes 835 rows, the number DS1 counted with pandas. The arrival rule changes little here (Exercise 2 counts the people it touches); a collector that runs late more often would show it.
+
+### 3. Features as counts of what was known
+
+**Idea.** A feature is a summary of `known`, one row for each person. `COUNT(*) FILTER (WHERE …)` counts only the rows that pass the test, so one pass gives several counts: the whole week, and the last 3 days before the cutoff, a window of time measured back from the cutoff and not forward from signup. `COUNT(DISTINCT …)` counts days.
+
+**Try it:** build `features` and look at its totals.
+
+```python
+con.execute("""CREATE OR REPLACE VIEW features AS
+SELECT user_id,
+       COUNT(*) FILTER (WHERE event_name = 'session_start') AS sessions_7d,
+       COUNT(*) FILTER (WHERE event_name = 'add_expense') AS expenses_7d,
+       COUNT(*) FILTER (WHERE event_name IN ('session_start', 'add_expense') AND event_ts > cutoff - INTERVAL 3 DAY) AS recent_3d,
+       COUNT(DISTINCT CAST(event_ts AS DATE)) FILTER (WHERE event_name IN ('session_start', 'add_expense')) AS active_days_7d,
+       CAST(COUNT(*) FILTER (WHERE event_name = 'onboarding_complete') > 0 AS INTEGER) AS onboarded,
+       CAST(COUNT(*) FILTER (WHERE event_name IN ('view_paywall', 'paywall_viewed')) > 0 AS INTEGER) AS saw_paywall,
+       CAST(COUNT(*) FILTER (WHERE event_name = 'purchase') > 0 AS INTEGER) AS bought_plus
+FROM known
+GROUP BY user_id""")
+show("""SELECT COUNT(*) AS people, COUNT(*) FILTER (WHERE active_days_7d = 0) AS with_no_activity,
+       SUM(recent_3d) AS recent_events, SUM(sessions_7d + expenses_7d) AS week_events
+FROM features""")
+```
+
+**Predict:** How many of the 17,816 people have no visit and no expense in their first 7 days: about 5 percent, about a quarter, or about half?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+people | with_no_activity | recent_events | week_events
+17816 | 4531 | 10965 | 45648
+```
+
+</details>
+
+*Why:* 4,531 people, 25.4 percent, have no activity in the week: about a quarter. They keep a row, because the signup event itself is in `known`; a person with nothing known would vanish from `features`, and the row check of unit 5 would show it. The last 3 days hold 10,965 of the 45,648 visits and expenses of the week.
+
+### 4. The label comes from the other side
+
+**Idea.** The label reads the events after the cutoff, up to the horizon, straight from `events`, and it is never joined into a feature. What counts as activity is part of the definition, so it is written in the query.
+
+**Try it:** build `label`, then count the churn share under three definitions of activity.
+
+```python
+con.execute("""CREATE OR REPLACE VIEW label AS
+SELECT p.user_id,
+       CAST(NOT EXISTS (SELECT 1 FROM events AS e
+                        WHERE e.user_id = p.user_id AND e.event_name IN ('session_start', 'add_expense')
+                          AND e.event_ts > p.cutoff AND e.event_ts <= p.horizon) AS INTEGER) AS churned
+FROM people AS p""")
+show("""SELECT ROUND(100.0 * AVG(churned), 1) AS churn_both_events FROM label""")
+for names in ("('session_start', 'add_expense')", "('session_start')", "('add_expense')"):
+    print(names, rows(f"""SELECT ROUND(100.0 * AVG(CAST(NOT EXISTS (SELECT 1 FROM events AS e
+        WHERE e.user_id = p.user_id AND e.event_name IN {names} AND e.event_ts > p.cutoff AND e.event_ts <= p.horizon) AS INTEGER)), 1) FROM people AS p""")[0][0])
+```
+
+**Predict:** Count only `add_expense` as activity instead of both events. Will the share of people who churned go up, stay about the same, or go down?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+churn_both_events
+54.4
+('session_start', 'add_expense') 54.4
+('session_start') 54.4
+('add_expense') 66.3
+```
+
+</details>
+
+*Why:* With a visit or an expense as activity, 54.4 percent churned. With expenses alone it is 66.3, 11.8 points more, because a visit can add no expense. With visits alone it is 54.4, the same to one decimal: only 4 people have an expense after day 7 and no visit, because a visit is where expenses are added (the dataset README), so expenses add almost nothing to visits. The definition moves the target, so it is written in the query.
+
+### 5. Reconcile before anyone fits it
+
+**Idea.** Reconcile the table before it is used: the rows against the source, a total against a second route, and a table by cohort, the people who signed up in the same month, against what you know. A check that cannot fail is not a check, so the second route is written another way.
+
+**Try it:** assemble `modeling_table`, then run the checks and hand the table to pandas.
+
+```python
+con.execute("""CREATE OR REPLACE VIEW modeling_table AS
+SELECT p.user_id, p.signup_date, p.channel, p.platform, p.region,
+       f.sessions_7d, f.expenses_7d, f.recent_3d, f.active_days_7d, f.onboarded, f.saw_paywall, f.bought_plus,
+       l.churned
+FROM people AS p
+JOIN features AS f ON f.user_id = p.user_id
+JOIN label AS l ON l.user_id = p.user_id""")
+# check 1: one row per person, none lost
+show("""SELECT COUNT(*) AS table_rows, COUNT(DISTINCT user_id) AS distinct_people, (SELECT COUNT(*) FROM people) AS people FROM modeling_table""")
+# check 2: the same totals from a second route, in pandas, straight from the raw events
+ev = con.sql("SELECT user_id, event_ts, event_name, platform, received_at FROM events").df()
+pe = con.sql("SELECT user_id, cutoff FROM people").df()
+ev = ev.drop_duplicates(["user_id", "event_ts", "event_name", "platform"]).merge(pe, on="user_id", validate="many_to_one")
+ev = ev[(ev["event_ts"] <= ev["cutoff"]) & (ev["received_at"] <= ev["cutoff"])]
+print(int((ev["event_name"] == "session_start").sum()), int((ev["event_name"] == "add_expense").sum()))
+show("""SELECT SUM(sessions_7d) AS sessions, SUM(expenses_7d) AS expenses FROM modeling_table""")
+# check 3: each signup month, with its share of the table
+show("""SELECT month(signup_date) AS month, COUNT(*) AS people, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct_of_table,
+       ROUND(100.0 * AVG(churned), 1) AS pct_churned
+FROM modeling_table GROUP BY month ORDER BY month""")
+# check 4: hand the table to pandas; the next lessons build the same table with one statement
+table = con.sql("SELECT * FROM modeling_table ORDER BY user_id").df()
+print(table.shape, table.equals(con.sql(ONE_STATEMENT).df()))
+```
+
+**Predict:** The second route removes the copies in pandas and applies the same two clocks. Will its totals of visits and expenses equal the SQL totals exactly?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+table_rows | distinct_people | people
+17816 | 17816 | 17816
+12913 32735
+sessions | expenses
+12913 | 32735
+month | people | pct_of_table | pct_churned
+1 | 2825 | 15.9 | 49.9
+2 | 2686 | 15.1 | 50.6
+3 | 3142 | 17.6 | 49.2
+4 | 4086 | 22.9 | 56.2
+5 | 5077 | 28.5 | 60.7
+(17816, 13) True
+```
+
+</details>
+
+*Why:* They do: 12,913 visits and 32,735 expenses on both routes, and one row for each of the 17,816 people. The cohort table shows what the first rows could not: 49.9 percent of the January signups churned and 60.7 percent of the May signups, and May is 28.5 percent of the table, so the table is not one stable population (lesson DS5 cuts by time). The last line shows that the pieces build the same table as the one-statement query of the other lessons.
+
+<Aside type="tip" title="Remember">
+
+- One row for each entity, with a cutoff timestamp for each row.
+- An event counts only if it is not a retry copy, had happened by the cutoff and had arrived by it.
+- `COUNT(*) FILTER (WHERE …)` gives several counts in one pass, including a window measured back from the cutoff.
+- The label reads after the cutoff and never feeds a feature; the definition of activity is in the query.
+- Reconcile: the rows against the source, a total by a second route, a table by cohort.
+
+**Common trap:** trusting a table that was not reconciled. A join can lose or repeat people without an error.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-sql-for-modeling-tables-1">
+
+**How fast do people start?** The starter holds a query, `first_expense`, with the time of each person's first known expense (NULL when there is none). Write a query over it and put the list [people whose first expense came within an hour of signup, people with an expense in the first week] in `answer_1`. Expected: `answer_1` is a list of two whole numbers.
+
+```python
+first_expense = """SELECT p.user_id, p.signup_ts, MIN(k.event_ts) FILTER (WHERE k.event_name = 'add_expense') AS first_expense
+FROM people AS p JOIN known AS k ON k.user_id = p.user_id GROUP BY p.user_id, p.signup_ts"""      # given: the time of each person's first known expense, NULL when there is none
+answer_1 = None  # replace None with [people whose first expense came within an hour of signup, people with an expense in the week]: rows(...)[0] of a query over first_expense
+```
+
+<details>
+<summary>Hint</summary>
+
+Wrap the query in parentheses after `FROM`. `COUNT(*) FILTER (WHERE first_expense <= signup_ts + INTERVAL 1 HOUR)` counts the people within the hour; for the second number use a count that skips `NULL`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = rows(f"""SELECT COUNT(*) FILTER (WHERE ...), COUNT(...)
+FROM ({first_expense})""")[0]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_1 = rows(f"""SELECT COUNT(*) FILTER (WHERE first_expense <= signup_ts + INTERVAL 1 HOUR), COUNT(first_expense)
+FROM ({first_expense})""")[0]
+```
+
+10,466 people started within an hour, out of 12,386 with an expense in the week. `COUNT(*)` would have said 17,816, every person, because it counts rows and a person with no expense is still a row; `COUNT(first_expense)` skips the `NULL`s. A feature built on a wrong denominator would call everyone without an expense slow.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-sql-for-modeling-tables-2">
+
+**How many people does the arrival rule touch?** Before you start, say in one sentence what the result looks like: one whole number, much smaller than 17,816. For each person, count the visits and expenses that had happened by the cutoff in `clean` (copies removed, arrival ignored), and compare with `sessions_7d + expenses_7d` in `features`. Put the number of people whose two counts differ in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a whole number.
+
+<details>
+<summary>Hint</summary>
+
+Join `people` to `clean` on `user_id`, keep the rows with `event_ts <= cutoff` and the two event names, count them for each person, then join to `features` and compare.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One whole number, a few dozen at most."*
+
+```python
+answer_2 = rows("""WITH raw_week AS (SELECT p.user_id, COUNT(*) AS n FROM people AS p JOIN clean AS c ON ... GROUP BY p.user_id)
+SELECT COUNT(*) FROM raw_week AS r JOIN features AS f ON ... WHERE ...""")[0][0]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_2 = rows("""WITH raw_week AS (
+  SELECT p.user_id, COUNT(*) AS n
+  FROM people AS p JOIN clean AS c ON c.user_id = p.user_id
+  WHERE c.event_ts <= p.cutoff AND c.event_name IN ('session_start', 'add_expense')
+  GROUP BY p.user_id)
+SELECT COUNT(*) FROM raw_week AS r JOIN features AS f ON f.user_id = r.user_id
+WHERE r.n <> f.sessions_7d + f.expenses_7d""")[0][0]
+```
+
+46 people have a different count when the arrival rule is dropped, 0.26 percent of the table: a late event matters for a few people only. Against the raw events, with the copies in, the count is 318: a different question.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the three rules an event must pass to count as a feature at the cutoff.
+
+   <details>
+   <summary>answer</summary>
+
+   It is not a retry copy of another event, it had happened by the cutoff (`event_ts`), and it had arrived by the cutoff (`received_at`).
+
+   </details>
+
+<Exercise id="data-scientist-sql-for-modeling-tables-3">
+
+**Spot the flaw.** A colleague builds the label for the people who signed up from May 15 to May 31, but measures the end of the window from the cutoff: `e.event_ts <= p.cutoff + INTERVAL 30 DAY`. Change the end of the window to the horizon of `people` and put the number of churned people among these signups in `answer_3`. Expected: `answer_3` is a whole number.
+
+```python
+flawed = rows("""SELECT COUNT(*) FILTER (WHERE churned = 1)
+FROM (SELECT p.user_id,
+             CAST(NOT EXISTS (SELECT 1 FROM events AS e
+                              WHERE e.user_id = p.user_id AND e.event_name IN ('session_start', 'add_expense')
+                                AND e.event_ts > p.cutoff AND e.event_ts <= p.cutoff + INTERVAL 30 DAY) AS INTEGER) AS churned
+      FROM people AS p WHERE p.signup_date >= DATE '2026-05-15')""")[0][0]        # colleague: churned people among the May 15 to May 31 signups
+answer_3 = flawed
+```
+
+<details>
+<summary>Hint</summary>
+
+The label is defined as no activity in days 8 to 30 after signup. Which column of `people` already holds the end of day 30?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+... AND e.event_ts <= p.horizon) AS INTEGER) AS churned
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = rows("""SELECT COUNT(*) FILTER (WHERE churned = 1)
+FROM (SELECT p.user_id,
+             CAST(NOT EXISTS (SELECT 1 FROM events AS e
+                              WHERE e.user_id = p.user_id AND e.event_name IN ('session_start', 'add_expense')
+                                AND e.event_ts > p.cutoff AND e.event_ts <= p.horizon) AS INTEGER) AS churned
+      FROM people AS p WHERE p.signup_date >= DATE '2026-05-15')""")[0][0]
+```
+
+With the horizon, 1,665 of these 2,758 people churned. The window of the colleague runs to day 37, past the end of the data for anyone who signed up after May 24, and it counts a week of activity that the definition leaves out, so it finds 1,613: fewer churners, because a longer window finds more people active. The error is silent: the query runs and the numbers look plausible.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a modeling table in SQL with one row for each person, features counted as of a cutoff, a label from after it, and checks that tie the table back to its source.*
+Test: Exercise data-scientist-sql-for-modeling-tables-2, done from the notebook without opening the hints.
+
+The pattern to remember: **cut the row at the cutoff, count only what was known, take the label from the other side, and reconcile before anyone fits.** The next lesson, *Logistic regression: predicting yes or no* (DS4), reads the coefficients of a model on this table.
