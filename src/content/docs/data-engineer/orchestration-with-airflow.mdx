@@ -1,0 +1,571 @@
+---
+id: data-engineer-orchestration-with-airflow
+title: Scheduling a pipeline with Airflow
+short_title: Airflow scheduling
+description: Run the pipeline as an Airflow DAG with three tasks, a daily schedule and retries, say which day a run covers, and read what a failed run tells you.
+stage: data-engineer
+order: 70
+level: advanced
+duration: 30
+objectives:
+  - Define a DAG with tasks and dependencies, and keep the work in the pipeline's own functions
+  - Set a daily schedule and say which day a run covers
+  - Configure retries and an alert, and read a failed run to find its cause
+  - Say how Dagster describes the same job as assets
+prerequisites:
+  - data-engineer-pipeline-as-testable-code
+  - data-engineer-incremental-loads-idempotency
+  - data-engineer-data-quality-checks
+  - core-environments-and-dependencies
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'Apache Airflow 3.3.2 documentation: Dags (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/core-concepts/dags.html
+  - title: 'Apache Airflow 3.3.2 documentation: Timetables (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/authoring-and-scheduling/timetable.html
+  - title: 'Apache Airflow 3.3.2 documentation: Tasks, retries and task states (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/core-concepts/tasks.html
+  - title: 'Apache Airflow 3.3.2 documentation: Callbacks (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/administration-and-deployment/logging-monitoring/callbacks.html
+  - title: 'Apache Airflow 3.3.2 documentation: Best practices (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/best-practices.html
+  - title: 'Apache Airflow 3.3.2 documentation: Prerequisites (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/installation/prerequisites.html
+  - title: 'Apache Airflow 3.3.2 documentation: Command line interface reference, dags test (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/cli-and-env-variables-ref.html
+  - title: 'Dagster documentation: Concepts, assets (accessed 2026-11-24)'
+    url: https://dagster.io/docs/getting-started/concepts
+status: draft
+---
+
+TODO(owner): Team draft (D24), same run as DE1; checkpoint tags `de-07-start` and `de-07-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). Run with Airflow 3.3.2 (exact pins in `airflow/uv.lock`, Python 3.13) on Linux, in the clean clone that `make_history.py` builds; 3.4.0 was released on 2026-11-06 and is not used. The setup is the lightest that is honest: `airflow dags test` runs one DAG run in one process with a SQLite metadata database, so no scheduler and no web server are started (DE8 starts `airflow standalone`). Not run: Windows, WSL2, macOS, Codespaces, Dagster, the Airflow web interface. The alert printing only after the last try is what the run showed; the Callbacks page does not say it. A manual run through `dags test` takes the interval that ends at the date you give, while a backfill takes the interval that starts there (DE8); the Dag Runs page only says not to assume the two are equal. Stub changes: dataset `app-events` is now `cafe-sales`; the Tutorials source is dropped (its pages are not used); objectives rewritten (alerts are a callback, not e-mail, which needs an SMTP server); Dagster is a paragraph and not a run; prerequisites add the lessons the page uses.
+
+## The question
+
+The owner writes:
+
+> Every morning someone runs the pipeline by hand, and last Tuesday nobody did. Can it run itself, and tell us when it cannot?
+
+The pipeline you have is a set of functions. A schedule needs three more things: which steps run in which order, which day a run is about, and what happens when a step fails. By the end you can say all three in one Airflow file and read the result.
+
+<Aside type="note" title="You already know this">
+
+**Match.** *Data quality checks that fail loudly* (DE6) decided what a bad line does to a run. Airflow decides what a failed step does to the day.
+
+**Diverge.** Until now you started every run and watched it. A scheduler starts it when you are not there, so everything you would have seen must be in a log you can read later.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE6, what makes the run stop and not just hold a line back?
+
+   <details>
+   <summary>answer</summary>
+
+   A failed rule that protects the merge (a missing or repeated key), or too many held lines in one batch.
+
+   </details>
+
+2. In DE4, what made it safe to load the same lines twice?
+
+   <details>
+   <summary>answer</summary>
+
+   The merge by key with a version guard: a repeat inserts nothing and changes nothing.
+
+   </details>
+
+## The big idea
+
+An orchestrator runs your functions in order, on a schedule, retries the ones that fail, and keeps a log of each try; the work stays in your code.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: a DAG of tasks, retries with an alert, and the day a run covers. Work in `de-pipeline-starter` with the mock API running. Airflow does not run natively on Windows: its documentation says it runs on POSIX-compliant systems and, on Windows, through WSL2 or Linux containers, so Windows learners use a codespace or WSL2 here. To catch up, run `git checkout de-07-start`.
+
+The lightest setup that is honest is one command: `airflow dags test` executes one run of a DAG in your terminal, with a SQLite file for its records. No scheduler and no web server start; DE8 starts them. Airflow has its own folder and environment, because its install is large and Windows cannot take it. Fetch the folder's files, which are given, and set it up:
+
+```bash
+mkdir -p airflow/dags
+git show de-07-done:airflow/pyproject.toml > airflow/pyproject.toml
+git show de-07-done:airflow/uv.lock > airflow/uv.lock
+git show de-07-done:airflow/env.sh > airflow/env.sh
+git show de-07-done:airflow/.gitignore > airflow/.gitignore
+cd airflow
+uv sync
+source env.sh
+uv run airflow db migrate 2>&1 | tail -1
+```
+
+```console
+$ uv run airflow db migrate 2>&1 | tail -1
+2026-11-24T13:55:17.719807Z [info     ] Database migration done!       [airflow.cli.commands.db_command] loc=db_command.py:152
+```
+
+`uv sync` installs Airflow 3.3.2, pinned in `pyproject.toml`; `env.sh` points Airflow at this folder, puts the starter's `src` on the Python path and defines `short`, which keeps only the lines you need from Airflow's long output. Run `source env.sh` in every new terminal before an `airflow` command.
+
+### 1. A DAG: tasks and arrows
+
+**Idea.** A **DAG** (directed acyclic graph) is a Python file that names tasks and the arrows between them. Airflow reads the file; it runs each task when the tasks before it have succeeded. Keep the work out of the file: the Airflow best-practices page says top-level code should not do database access, heavy computation or networking. The work is in `src/pipeline/daily.py`, three steps that take one day, each of which you can test and run without Airflow.
+
+**Try it.** `daily.py` and the new `merge` of `load.py` are given files; the DAG is yours to save. Fetch the two, and read the heart of the first:
+
+```bash
+git show de-07-done:src/pipeline/daily.py > src/pipeline/daily.py
+git show de-07-done:src/pipeline/load.py > src/pipeline/load.py
+git show de-07-done:tests/test_daily.py > tests/test_daily.py
+```
+
+```python
+def window(day):
+    """The API's since and until for the lines updated during one day. since is exclusive and until is inclusive, so both stop one second early."""
+    start = datetime.combine(day, datetime.min.time())
+    return [(moment - timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S") for moment in (start, start + timedelta(days=1))]
+```
+
+```python
+def run_step(step, day):
+    """Run one step for one day. This is the only place the DAG file has to know about."""
+    if step == "extract":
+        return extract(day)
+    con = load.connect()
+    try:
+        {"check": check, "publish": publish}[step](day, con)
+    finally:
+        con.close()
+```
+
+`extract` lands the day's pages, `check` stages them and passes them through DE6's gate, and `publish` merges the clean lines. `load.py` now keeps the merge in a function of its own, `merge`, which both the incremental load and `publish` call. Save the DAG as `airflow/dags/cafe_pipeline.py`:
+
+```python
+"""The nightly job as a DAG. The order of the steps and the schedule live here; the work lives in pipeline.daily."""
+
+from datetime import datetime, timedelta
+
+from airflow.sdk import CronDataIntervalTimetable, dag, task
+
+
+def alert(context):
+    """Runs when a task has failed for good. A real one would send a message; this one prints the line the message would carry."""
+    ti = context["task_instance"]
+    print(f"ALERT: {ti.dag_id}.{ti.task_id} failed on try {ti.try_number}, day {context['data_interval_start']:%Y-%m-%d}")
+
+
+@dag(
+    schedule=CronDataIntervalTimetable("0 0 * * *", timezone="UTC"),
+    start_date=datetime(2026, 4, 30),
+    catchup=False,
+    default_args={"retries": 2, "retry_delay": timedelta(seconds=5), "on_failure_callback": alert},
+)
+def cafe_pipeline():
+    @task
+    def extract(data_interval_start=None):
+        from pipeline import daily
+
+        daily.run_step("extract", data_interval_start.date())
+
+    @task
+    def check(data_interval_start=None):
+        from pipeline import daily
+
+        daily.run_step("check", data_interval_start.date())
+
+    @task
+    def publish(data_interval_start=None):
+        from pipeline import daily
+
+        daily.run_step("publish", data_interval_start.date())
+
+    extract() >> check() >> publish()
+
+
+cafe_pipeline()
+```
+
+Run the DAG once for the date May 2, with the mock API running in terminal 1:
+
+```bash
+uv run airflow dags test cafe_pipeline 2026-05-02 2>&1 | short
+```
+
+**Predict:** `check` reads the lines of one day, and `publish` inserts them. Will `publish` insert as many lines as `check` read?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run airflow dags test cafe_pipeline 2026-05-02 2>&1 | short
+running cafe_pipeline.extract
+pipeline.ingest: landed 1 pages in since=2026-04-30T23-59-59_until=2026-05-01T23-59-59
+pipeline.daily: 2026-05-01: 1 pages landed
+   task state: success
+running cafe_pipeline.check
+pipeline.stage: 19 records read, 19 lines kept
+pipeline.gate: 19 lines read, 18 clean, 1 quarantined
+   task state: success
+running cafe_pipeline.publish
+pipeline.daily: 2026-05-01: 18 inserted, 0 updated, 0 unchanged
+   task state: success
+run state: success
+```
+
+</details>
+
+*Why:* `publish` inserts one line fewer: the gate of DE6 held the line with the quantity of 20 in quarantine, and the rest of the day loaded. The tasks ran in the order of the arrows `extract() >> check() >> publish()`, each only after the one before succeeded, and the log of each step is the log lines of your own modules. The DAG file imports `pipeline` inside each task, not at the top, so that Airflow can read the file without running anything. The file gives every task the same two settings through `default_args`, which the next unit uses.
+
+### 2. Retries and an alert
+
+**Idea.** A task that raises an error is tried again: `retries` says how many more times and `retry_delay` how long to wait. The Airflow task page names the states: a task that failed but has tries left is `up_for_retry`, and one that has none left is `failed`. An **alert** is a function Airflow calls with the run's context; `on_failure_callback` is called when the task fails. A real alert would send a message, and here it prints the line a message would carry.
+
+**Try it.** Make the API unreachable for one run, by pointing the pipeline at a port where nothing listens (the mock API stays up), and ask for the day after:
+
+```bash
+API_URL=http://127.0.0.1:9 uv run airflow dags test cafe_pipeline 2026-05-03 2>&1 | short
+```
+
+**Predict:** How many tries does `extract` get, how many times does the alert print, and do `check` and `publish` run?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ API_URL=http://127.0.0.1:9 uv run airflow dags test cafe_pipeline 2026-05-03 2>&1 | short
+running cafe_pipeline.extract
+ConnectionRefusedError: [Errno 111] Connection refused
+requests.exceptions.ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=9): Max retries exceeded with url: /order-lines?since=2026-05-01+23%3A5
+   task state: up_for_retry
+running cafe_pipeline.extract
+ConnectionRefusedError: [Errno 111] Connection refused
+requests.exceptions.ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=9): Max retries exceeded with url: /order-lines?since=2026-05-01+23%3A5
+   task state: up_for_retry
+running cafe_pipeline.extract
+ConnectionRefusedError: [Errno 111] Connection refused
+requests.exceptions.ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=9): Max retries exceeded with url: /order-lines?since=2026-05-01+23%3A5
+ALERT: cafe_pipeline.extract failed on try 3, day 2026-05-02
+   task state: failed
+run state: failed
+```
+
+</details>
+
+*Why:* three tries (the first and the two `retries`), five seconds apart, and one alert after the last, in the run here. `check` and `publish` never started, because they wait for `extract`. The last line of each traceback is what to read first: a refused connection says the source or the network is the cause, not a bug in your code, and retrying is the right answer to that. The alert names the task and the day, which is what the person who receives it needs. Run the same day with the API reachable and it succeeds; the steps are idempotent, so a run that started again from the first task changes nothing it should not:
+
+```console
+$ uv run airflow dags test cafe_pipeline 2026-05-03 2>&1 | short
+running cafe_pipeline.extract
+pipeline.ingest: landed 1 pages in since=2026-05-01T23-59-59_until=2026-05-02T23-59-59
+pipeline.daily: 2026-05-02: 1 pages landed
+   task state: success
+running cafe_pipeline.check
+pipeline.stage: 30 records read, 30 lines kept
+pipeline.gate: 30 lines read, 30 clean, 0 quarantined
+   task state: success
+running cafe_pipeline.publish
+pipeline.daily: 2026-05-02: 30 inserted, 0 updated, 0 unchanged
+   task state: success
+run state: success
+```
+
+### 3. The schedule, and the day a run covers
+
+**Idea.** `schedule` says when a run starts, and also what the run is about. In Airflow 3, a bare cron string such as `"0 0 * * *"` makes a timetable with no data interval: the Timetables page says `data_interval_start` and `data_interval_end` are the same moment, the time the run is triggered. `CronDataIntervalTimetable("0 0 * * *")`, which the DAG uses, makes an interval between two triggers and starts the run at its end. The tasks read `data_interval_start` and never the clock; the best-practices page says to read and write a specific partition and not to use `now()` inside a task.
+
+**Try it.** `airflow/examples/de07_bare.py` is the same DAG with the bare cron string and another name. Copy it into the DAGs folder, see how it differs, run it for May 4, and delete it:
+
+```bash
+git show de-07-done:airflow/examples/de07_bare.py > dags/de07_bare.py
+diff dags/cafe_pipeline.py dags/de07_bare.py
+uv run airflow dags test bare_cron 2026-05-04 2>&1 | short
+rm dags/de07_bare.py
+```
+
+**Predict:** The run has the date May 4 and the bare cron string. Which day's lines does `check` stage?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ diff dags/cafe_pipeline.py dags/de07_bare.py
+5c5
+< from airflow.sdk import CronDataIntervalTimetable, dag, task
+---
+> from airflow.sdk import dag, task
+15c15
+<     schedule=CronDataIntervalTimetable("0 0 * * *", timezone="UTC"),
+---
+>     schedule="0 0 * * *",
+20c20
+< def cafe_pipeline():
+---
+> def bare_cron():
+42c42
+< cafe_pipeline()
+---
+> bare_cron()
+$ uv run airflow dags test bare_cron 2026-05-04 2>&1 | short
+running bare_cron.extract
+pipeline.ingest: landed 1 pages in since=2026-05-03T23-59-59_until=2026-05-04T23-59-59
+pipeline.daily: 2026-05-04: 1 pages landed
+   task state: success
+running bare_cron.check
+pipeline.stage: 21 records read, 21 lines kept
+pipeline.gate: 21 lines read, 21 clean, 0 quarantined
+   task state: success
+running bare_cron.publish
+pipeline.daily: 2026-05-04: 21 inserted, 0 updated, 0 unchanged
+   task state: success
+run state: success
+```
+
+</details>
+
+*Why:* the bare string loaded May 4, the day of the trigger, which is a day that has only just begun when a run starts at midnight: a nightly job on that schedule would always load a day that is empty. The first DAG, run for May 2 in unit 1, loaded May 1, the day that had just ended. The date you give `dags test` stands for the moment the run is triggered, and the interval is the one that ends there. A scheduler running the interval timetable starts the run for May 1 just after midnight on May 2. DE8 runs it through the scheduler, and shows that a backfill names its runs the other way.
+
+How Dagster says the same thing: its documentation defines an asset as a logical unit of data such as a table, and says assets can depend on other assets, forming the data lineage. In Dagster you would declare `order_lines` and the marts built from it as assets, and the arrows run between data, not between tasks. Airflow here names the steps; Dagster names what they make. Dagster was not run for this lesson.
+
+<Aside type="tip" title="Remember">
+
+- A DAG file names tasks, arrows, a schedule and retries; the work stays in functions you can test without Airflow.
+- A task that fails is tried again `retries` times; the alert runs when it has failed for good.
+- A run is about an interval: tasks read `data_interval_start`, never the clock.
+- A run for a past day must leave the same table as a run on the day: that is why the steps are idempotent.
+
+**Common trap:** a schedule written as a bare cron string, with a pipeline that assumes the day of the trigger is the day to load.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-orchestration-with-airflow-1">
+
+**A task that tells the owner.** Add a task `tell_the_owner` that runs only after `publish`, in a DAG of its own so that your pipeline's DAG is untouched. Save this as `airflow/dags/de07_ex1.py`, add the arrow that makes it run last, run it and read the order of the four lines. Expected: the four task names, one on each line, with `tell_the_owner` last. When you are done, delete the file.
+
+```python
+from datetime import datetime
+
+from airflow.sdk import dag, task
+
+
+@dag(schedule=None, start_date=datetime(2026, 5, 1), catchup=False)
+def de07_ex1():
+    @task
+    def extract():
+        print("extract")
+
+    @task
+    def check():
+        print("check")
+
+    @task
+    def publish():
+        print("publish")
+
+    @task
+    def tell_the_owner():
+        print("tell_the_owner")
+
+    extract() >> check() >> publish()
+    # add the task that tells the owner, after publish
+
+
+de07_ex1()
+```
+
+```bash
+uv run airflow dags test de07_ex1 2026-05-02 2>&1 | grep -E "^(extract|check|publish|tell_the_owner)$"
+```
+
+<details>
+<summary>Hint</summary>
+
+A task function is only a task in the graph when you call it. `a() >> b()` puts an arrow from `a` to `b`, and the arrows chain.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    extract() >> check() >> publish() >> ...
+```
+
+</details>
+
+<Solution>
+
+```python
+    extract() >> check() >> publish() >> tell_the_owner()
+```
+
+```console
+$ uv run airflow dags test de07_ex1 2026-05-02 2>&1 | grep -E "^(extract|check|publish|tell_the_owner)$"
+extract
+check
+publish
+tell_the_owner
+```
+
+Before the arrow is added, the starter prints only the first three: `tell_the_owner` is defined but never called, so it is not in the graph and never runs.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-orchestration-with-airflow-2">
+
+**A source that is down twice.** Before you start, say in one sentence what the log will look like. Then, from a blank file `airflow/dags/de07_ex2.py`, write a DAG `de07_ex2` with one task that raises an error on its first two tries and succeeds on the third, with `retries=2` and a `retry_delay` of 2 seconds. Run it with `short`. Expected: two failures, each followed by `up_for_retry`, then a success and a run state of success. When you are done, delete the file.
+
+<details>
+<summary>Hint</summary>
+
+The number of the try is in the task's context: `get_current_context()["ti"].try_number`, with `get_current_context` imported from `airflow.sdk`. The settings of a task go in `default_args` of the `@dag`, as in the pipeline's DAG.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two tries fail with the error I raise, each followed by up_for_retry, the third succeeds, and the run succeeds."*
+
+```python
+try_number = get_current_context()["ti"].try_number
+if try_number < ...:
+    raise RuntimeError(...)
+```
+
+</details>
+
+<Solution>
+
+```python
+from datetime import datetime, timedelta
+
+from airflow.sdk import dag, get_current_context, task
+
+
+@dag(
+    schedule=None,
+    start_date=datetime(2026, 5, 1),
+    catchup=False,
+    default_args={"retries": 2, "retry_delay": timedelta(seconds=2)},
+)
+def de07_ex2():
+    @task
+    def flaky():
+        try_number = get_current_context()["ti"].try_number
+        if try_number < 3:
+            raise RuntimeError(f"the source was down on try {try_number}")
+        print(f"the source answered on try {try_number}")
+
+    flaky()
+
+
+de07_ex2()
+```
+
+```console
+$ uv run airflow dags test de07_ex2 2026-05-02 2>&1 | short
+RuntimeError: the source was down on try 1
+   task state: up_for_retry
+RuntimeError: the source was down on try 2
+   task state: up_for_retry
+   task state: success
+run state: success
+```
+
+`retries=2` means two more tries after the first, three in all. A retry heals a fault that goes away, such as a source that was down; it does nothing for a fault in the code, which fails the same way each time and only delays the alert.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which date inside a task tells it which day to load, and which call must it never use?
+
+   <details>
+   <summary>answer</summary>
+
+   `data_interval_start`, from the run's context. Never the current time, such as `now()`: a rerun of an old day would load the wrong one.
+
+   </details>
+
+<Exercise id="data-engineer-orchestration-with-airflow-3">
+
+**Spot the flaw.** A colleague says the alert covers every failure of the pipeline: "if anything breaks, `on_failure_callback` tells us." Save this as `airflow/dags/de07_ex3.py`, a DAG with an alert and one typing slip. Run it, then ask Airflow for its import errors, then run the tests in the `airflow` folder. Expected: the run fails without printing the alert, one line names a `SyntaxError`, and two tests fail. What does the alert not cover, and what does? When you are done, delete the file.
+
+```python
+from datetime import datetime
+
+from airflow.sdk import dag, task
+
+
+def alert(context):
+    print("ALERT: a task failed")
+
+
+@dag(schedule=None, start_date=datetime(2026, 5, 1), catchup=False, default_args={"on_failure_callback": alert})
+def de07_ex3():
+    @task
+    def extract(:
+        print("extract")
+
+    extract()
+
+
+de07_ex3()
+```
+
+```bash
+uv run airflow dags test de07_ex3 2026-05-02 2>&1 | short
+uv run airflow dags list-import-errors 2>&1 | grep SyntaxError
+uv run pytest -q --tb=no
+```
+
+<details>
+<summary>Hint</summary>
+
+When does the callback run, and what has to happen before a task can fail? Read the first lines of the output of `dags test`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The run ends at the first line, and the callback is a function of a task: a task that never started cannot call it.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run airflow dags test de07_ex3 2026-05-02 2>&1 | short
+SyntaxError: invalid syntax
+airflow.sdk.exceptions.AirflowException: Dag 'de07_ex3' could not be found; either it does not exist or it failed to parse.
+$ uv run airflow dags list-import-errors 2>&1 | grep SyntaxError
+            |             | SyntaxError: invalid syntax
+$ uv run pytest -q --tb=no
+FF                                                                       [100%]
+=========================== short test summary info ============================
+FAILED tests/test_dag.py::test_the_dag_loads_and_the_steps_run_in_order - Ass...
+FAILED tests/test_dag.py::test_every_task_retries_twice_and_raises_the_alert_when_it_gives_up
+2 failed in 1.57s
+```
+
+The Callbacks page says callbacks run when the state of a task or DAG changes through execution by a worker. A file that does not import has no tasks, so nothing runs and nothing is called: the pipeline stops without a sound, and the one alert of the DAG is part of what never loaded. Two things cover it: Airflow's list of import errors, which someone has to look at, and a test that loads every file of the DAGs folder, which fails in CI before the file is deployed. The second is `tests/test_dag.py`, a given file of the checkpoint, and it fails here for the file that broke it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a DAG with tasks, arrows, a schedule, retries and an alert, keep the work in functions that run without Airflow, say which day a run covers, and read a failed run from its last line.*
+Test: Exercise data-engineer-orchestration-with-airflow-2, done without opening the hints.
+
+The pattern to remember: **the scheduler decides when and in what order, the code decides what, and a run is about an interval, never about the moment it happens to start.** The next lesson runs the DAG for a range of past days, and recovers when some of them fail.

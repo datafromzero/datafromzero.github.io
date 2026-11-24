@@ -1,0 +1,564 @@
+---
+id: data-engineer-dbt-project-and-first-model
+title: A dbt project, from source to mart
+short_title: A dbt project
+description: Build a dbt project over the staged Parquet files, with a source, staging, intermediate and mart models, the grain of each stated, and a build you can read.
+stage: data-engineer
+order: 90
+level: intermediate
+duration: 35
+objectives:
+  - Explain transformation as code, with SQL models in version control that can be reviewed and tested
+  - Declare a source and select from it, and let ref set the order of the models
+  - Write a staging model that renames, casts and cleans one source
+  - Build an intermediate model and a mart, and state the grain of each in a comment
+  - Run the build and read its log
+prerequisites:
+  - data-engineer-role-and-lifecycle
+  - data-engineer-file-formats-and-partitioning
+  - sql-ctes
+  - core-designing-a-star-schema
+  - core-grain-facts-and-dimensions
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'dbt documentation: SQL models (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/sql-models
+  - title: 'dbt documentation: Sources (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/sources
+  - title: 'dbt documentation: How we structure our dbt projects, overview (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/best-practices/how-we-structure/1-guide-overview
+  - title: 'dbt-duckdb README: sources with external_location and the profile path (accessed 2026-11-24)'
+    url: https://github.com/duckdb/dbt-duckdb
+  - title: 'Kimball Group: Dimensional modeling techniques, Grain (accessed 2026-11-24)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/grain/
+status: draft
+---
+
+TODO(owner): Team draft (D24), same run as DE1; checkpoint tags `de-09-start` and `de-09-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). Run with dbt-core 1.12.6, dbt-duckdb 1.11.1 and DuckDB 2.0.0, exact pins in `pyproject.toml` and `uv.lock` (dbt-core 1.12.7 and dbt 2 release candidates were on PyPI; the track stays on 1.12.6, and dbt's first runs may print a notice that dbt v2 exists; the upgrade is not taught). Some pages of the dbt documentation describe dbt v2 first; this lesson uses only statements that hold for the pinned version. The dbt-duckdb README says the `path` of the profile is relative to `profiles.yml`; for the `external_location` of a source it says nothing, and the lesson runs dbt from the `dbt` folder, as the run did. Colors and anonymous usage statistics are switched off in `dbt_project.yml` (`flags`). The sales total comes from the API's lines, 12 of which the API corrects (README of the starter), so it is not the total of the cafe-sales files. Not run: Windows, macOS, Codespaces. Stub changes: dataset stays `cafe-sales`; objectives reworded around the starter's data; prerequisites add the file-format and grain lessons the page uses; the Kimball source is now the Grain page, opened, in place of the index page, which holds no text on grain.
+
+## The question
+
+The owner writes:
+
+> Two of us asked for sales by store and day, and got different totals. Can the logic live in one place, where someone can read it and check it?
+
+The staged files the pipeline lands are the source. The store file is three lines:
+
+| store_id | store_name | city | opened_on |
+|---:|---|---|---|
+| 1 | Old Town | Oakland | 2023-05-12 |
+| 2 | Campus | Berkeley | 2024-09-03 |
+| 3 | Harbor | Alameda | 2026-04-01 |
+
+By the end you can build, from the staged Parquet files, a table of sales for each store and each day in a dbt project, and say what one row of every model stands for.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Readable queries with CTEs*](/sql/ctes/) (S24) split a long query into named steps. A dbt model is one such step, saved as a file that other models can build on.
+
+**Diverge.** A CTE lives inside one query. A model is a file of its own, in Git, with a name that other files call.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE1, which three layers does the starter keep, and which one do you build now?
+
+   <details>
+   <summary>answer</summary>
+
+   Raw, staging and serving. Now you build the models that read staging and make the tables people query.
+
+   </details>
+
+2. Write the SQL that counts the lines of a table `lines` for each `store_id`.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   SELECT store_id, count(*) AS lines FROM lines GROUP BY store_id
+   ```
+
+   </details>
+
+## The big idea
+
+A dbt project is SQL written as files, each one a `select` that names what it reads, so that the order, the history and the review are all in plain text.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: a project of files, a source and a staging model, `ref` and the order of the models, and the grain of each model. Work in `de-pipeline-starter` with the full pull staged, as DE2 and DE3 left it (`data/staging/` holds three Parquet files; if not, run `uv run python -m pipeline.ingest` and then `uv run python -m pipeline.stage` with the mock API running). To catch up, run `git checkout de-09-start`.
+
+### 1. A project of files
+
+**Idea.** **Transformation as code** means each table is made by a SQL file in version control, so a change is a diff that someone reviews, and tests (DE10) can run on every change. dbt is the program that turns the files into tables. It needs two settings files in the project folder: `dbt_project.yml` names the project, and `profiles.yml` says where to build, here a DuckDB file. dbt-duckdb, the adapter that lets dbt work on DuckDB, takes the `path` of the file relative to `profiles.yml`.
+
+**Try it.** dbt goes into the starter's main environment, pinned: `pyproject.toml` and `uv.lock` are given files. Fetch them, install, make the project folder and save the two settings files:
+
+```bash
+git show de-09-done:pyproject.toml > pyproject.toml
+git show de-09-done:uv.lock > uv.lock
+uv sync
+mkdir -p dbt/models/staging dbt/models/intermediate dbt/models/marts
+```
+
+The two lines the first file adds, in `dependencies`:
+
+```toml
+    "dbt-core==1.12.6",
+    "dbt-duckdb==1.11.1",
+```
+
+Save `dbt/dbt_project.yml`:
+
+```yaml
+name: cafe
+version: "0.1.0"
+profile: cafe
+
+flags:
+  send_anonymous_usage_stats: false
+  use_colors: false
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+models:
+  cafe:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+```
+
+Save `dbt/profiles.yml`:
+
+```yaml
+cafe:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/serving/analytics.duckdb
+      threads: 1
+```
+
+Also fetch `dbt/.gitignore`, which keeps dbt's `target/` and `logs/` out of Git, and ask dbt to check the project, from the `dbt` folder. Every dbt command of this lesson runs from there:
+
+```bash
+git show de-09-done:dbt/.gitignore > dbt/.gitignore
+cd dbt
+uv run dbt debug 2>&1 | grep -E "OK|ERROR|All checks|FAIL"
+```
+
+**Predict:** `dbt debug` checks the files, a tool and a connection. Which four checks print OK, and what is the last line?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt debug 2>&1 | grep -E "OK|ERROR|All checks|FAIL"
+13:48:30    profiles.yml file [OK found and valid]
+13:48:30    dbt_project.yml file [OK found and valid]
+13:48:30   - git [OK found]
+13:48:30    Connection test: [OK connection ok]
+13:48:30  All checks passed!
+```
+
+</details>
+
+*Why:* dbt found both settings files, found Git (it records which commit a build came from), and opened the DuckDB file named in the profile; the connection test would fail on a wrong path. The `models` block says how each folder is built: staging and intermediate models as views, which are saved queries, and marts as tables, which are stored results. The names `staging`, `intermediate` and `marts` are the layers the dbt guide recommends: building blocks from source data, then logic that prepares them to join, then the tables the organization cares about.
+
+### 2. A source and a staging model
+
+**Idea.** A **source** is a table dbt did not build, declared once in YAML and read with `source()`. Here the sources are the three Parquet files of the staging layer: the dbt-duckdb README says an `external_location` under `meta` gives a pattern for the location of every table of the source, with `{name}` replaced by the table's name. A **staging model** takes one source and does only light work: it renames, casts and cleans, and it keeps every row.
+
+**Try it.** Save `dbt/models/staging/sources.yml`:
+
+```yaml
+version: 2
+
+sources:
+  - name: pipeline
+    meta:
+      external_location: "../data/staging/{name}.parquet"
+    tables:
+      - name: order_lines
+      - name: products
+      - name: stores
+```
+
+Save `dbt/models/staging/stg_order_lines.sql`. It renames the key and the quantity, takes the day out of the timestamp and lowercases the status:
+
+```sql
+-- Grain: one row for each order line, the latest version of it that the pipeline staged.
+select
+    order_item_id as order_line_id,
+    order_id,
+    ordered_at,
+    cast(ordered_at as date) as order_date,
+    store_id,
+    customer_id,
+    lower(status) as status,
+    payment_method,
+    product_id,
+    quantity as units,
+    discount_usd,
+    updated_at
+from {{ source('pipeline', 'order_lines') }}
+```
+
+The staging models of the other two files have the same shape and are given:
+
+```bash
+git show de-09-done:dbt/models/staging/stg_products.sql > models/staging/stg_products.sql
+git show de-09-done:dbt/models/staging/stg_stores.sql > models/staging/stg_stores.sql
+uv run dbt run --select staging 2>&1 | grep -E "Found|OK created|Done"
+cat target/compiled/cafe/models/staging/stg_stores.sql
+```
+
+**Predict:** How many models and sources does dbt find, and what does the `source()` in `stg_stores` turn into in the compiled file?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt run --select staging 2>&1 | grep -E "Found|OK created|Done"
+13:45:23  Found 3 models, 3 sources, 512 macros
+13:45:23  1 of 3 OK created sql view model main.stg_order_lines .......................... [OK in 0.09s]
+13:45:23  2 of 3 OK created sql view model main.stg_products ............................. [OK in 0.04s]
+13:45:23  3 of 3 OK created sql view model main.stg_stores ............................... [OK in 0.02s]
+13:45:23  Done. PASS=3 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=3
+$ cat target/compiled/cafe/models/staging/stg_stores.sql
+-- Grain: one row for each store.
+select
+    store_id,
+    store_name,
+    city,
+    opened_on
+from '../data/staging/stores.parquet'
+```
+
+</details>
+
+*Why:* three models and three sources, each built as a view. dbt wrote the compiled file by replacing `{{ source('pipeline', 'stores') }}` with the path of the Parquet file, so a model is a template and the compiled SQL is what DuckDB ran. The times are those of one run here. The staging model keeps all 3,287 lines: it renames `order_item_id` to `order_line_id` so that later models speak of lines, and it cleans nothing away.
+
+### 3. `ref` and the order of the models
+
+**Idea.** A model that reads another model writes `ref('name')` in place of a table name. The dbt documentation says dbt uses `ref` to determine the order to run the models, by building a directed acyclic graph, the same shape as the DAG of DE7. You never write the order down; the calls give it.
+
+**Try it.** Save the intermediate model `dbt/models/intermediate/int_order_lines_priced.sql`. It joins each line to its product and computes the amount of the line:
+
+```sql
+-- Grain: one row for each order line, with its product and the amount of the line.
+select
+    l.order_line_id,
+    l.order_date,
+    l.store_id,
+    l.status,
+    l.units,
+    p.product_name,
+    p.category,
+    l.units * p.unit_price_usd - l.discount_usd as line_amount_usd
+from {{ ref('stg_order_lines') }} as l
+join {{ ref('stg_products') }} as p using (product_id)
+```
+
+Save the mart `dbt/models/marts/fct_store_daily_sales.sql`. It counts completed lines and adds their units and amounts for each store and each day:
+
+```sql
+-- Grain: one row for each store and each day on which it sold something. Completed lines only.
+select
+    l.store_id,
+    s.store_name,
+    l.order_date,
+    count(*) as lines,
+    sum(l.units) as units,
+    sum(l.line_amount_usd) as sales_usd
+from {{ ref('int_order_lines_priced') }} as l
+join {{ ref('stg_stores') }} as s using (store_id)
+where l.status = 'completed'
+group by l.store_id, s.store_name, l.order_date
+```
+
+Build everything, and ask dbt which models and sources the mart rests on:
+
+```bash
+uv run dbt build 2>&1 | grep -E "Found|OK created|Done"
+uv run dbt ls --quiet --select +fct_store_daily_sales
+```
+
+**Predict:** In which order does `dbt build` make the five models, and which one is a table? What does the `+` in front of the mart's name select?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "Found|OK created|Done"
+13:45:26  Found 5 models, 3 sources, 512 macros
+13:45:26  1 of 5 OK created sql view model main.stg_order_lines .......................... [OK in 0.13s]
+13:45:26  2 of 5 OK created sql view model main.stg_products ............................. [OK in 0.04s]
+13:45:26  3 of 5 OK created sql view model main.stg_stores ............................... [OK in 0.04s]
+13:45:26  4 of 5 OK created sql view model main.int_order_lines_priced ................... [OK in 0.03s]
+13:45:27  5 of 5 OK created sql table model main.fct_store_daily_sales ................... [OK in 0.09s]
+13:45:27  Done. PASS=5 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=5
+$ uv run dbt ls --quiet --select +fct_store_daily_sales
+cafe.marts.fct_store_daily_sales
+cafe.intermediate.int_order_lines_priced
+cafe.staging.stg_order_lines
+cafe.staging.stg_products
+cafe.staging.stg_stores
+source:cafe.pipeline.order_lines
+source:cafe.pipeline.products
+source:cafe.pipeline.stores
+```
+
+</details>
+
+*Why:* the three staging models first, then the intermediate one that reads two of them, then the mart, which is the only table. The `+` before a name selects the model and everything it depends on, back to the sources: the mart rests on four models and three sources. `build` also runs tests, and DE10 adds some; here there are none.
+
+### 4. The grain of each model
+
+**Idea.** The **grain** of a table says what one row stands for. The Kimball Group calls declaring it the pivotal step in a dimensional design, because it establishes exactly what a single fact table row represents. Every model of the project states its grain in the comment on its first line, and the check is that rows equal different grains: a model whose grain is broken counts something twice.
+
+**Try it.** `dbt_counts.py` counts the rows of three models and the different values of each one's grain. It is a given file, and it runs from the `dbt` folder, because the staging views read the Parquet files by a path relative to it:
+
+```bash
+git show de-09-done:scripts/dbt_counts.py > ../scripts/dbt_counts.py
+uv run python ../scripts/dbt_counts.py
+```
+
+**Predict:** How many rows does each of the three models have? Harbor opened on April 1 and the other two stores sold on all 181 days of January to June.
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python ../scripts/dbt_counts.py
+stg_order_lines: 3287 rows, 3287 different grains
+int_order_lines_priced: 3287 rows, 3287 different grains
+fct_store_daily_sales: 453 rows, 453 different grains
+```
+
+</details>
+
+*Why:* 3,287 order lines in the first two models, and 453 store-days in the mart: 181 days for each of two stores and the 91 days that Harbor was open. One of the 3,287 lines is canceled, so the mart counts 3,286 lines in its `lines` column. The mart's grain is coarser than the line's, and each mart row is the sum of its lines. The sales in the mart come to $22,625.75; this is the API's total, with its 12 corrected lines, and not the total of the cafe-sales files.
+
+<Aside type="tip" title="Remember">
+
+- A dbt model is a `select` in a file; `source()` reads what dbt did not build and `ref()` reads another model.
+- `ref` gives the build order, so the order is never written down.
+- A staging model renames, casts and cleans one source and keeps every row.
+- Every model states its grain in its first comment, and rows equal different grains.
+
+**Common trap:** a mart that reads staging through a join on the wrong key, which counts a line more than once and still builds without an error.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-dbt-project-and-first-model-1">
+
+**Sales by category and month.** Add a mart `dbt/models/marts/fct_category_monthly_sales.sql` that gives the sales of completed lines for each product category and each month, from the intermediate model. The start is given; finish the `select`. Expected: the build makes 1 model, and the table has 24 rows, whose sales add up to the same total as `fct_store_daily_sales`. When you are done, delete the file.
+
+```sql
+-- Grain: one row for each product category and each month. Completed lines only.
+select
+    category,
+    date_trunc('month', order_date) as month,
+    ...
+from {{ ref('int_order_lines_priced') }}
+where ...
+group by ...
+```
+
+```bash
+uv run dbt build --select fct_category_monthly_sales 2>&1 | grep -E "OK created|Done"
+uv run dbt show --inline "select count(*) as rows, sum(sales_usd) as sales from {{ ref('fct_category_monthly_sales') }}" 2>&1 | tail -6
+uv run dbt show --inline "select sum(sales_usd) as sales from {{ ref('fct_store_daily_sales') }}" 2>&1 | tail -6
+```
+
+<details>
+<summary>Hint</summary>
+
+The amount of a line is already a column of the intermediate model, `line_amount_usd`. The `group by` repeats the two grain columns as they are written in the `select`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+    sum(line_amount_usd) as sales_usd
+from {{ ref('int_order_lines_priced') }}
+where status = ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- Grain: one row for each product category and each month. Completed lines only.
+select
+    category,
+    date_trunc('month', order_date) as month,
+    sum(line_amount_usd) as sales_usd
+from {{ ref('int_order_lines_priced') }}
+where status = 'completed'
+group by category, date_trunc('month', order_date)
+```
+
+```console
+$ uv run dbt build --select fct_category_monthly_sales 2>&1 | grep -E "OK created|Done"
+13:46:13  1 of 1 OK created sql table model main.fct_category_monthly_sales .............. [OK in 0.10s]
+13:46:13  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+$ uv run dbt show --inline "select count(*) as rows, sum(sales_usd) as sales from {{ ref('fct_category_monthly_sales') }}" 2>&1 | tail -6
+13:46:16  
+Previewing inline node:
+| rows |     sales |
+| ---- | --------- |
+|   24 | 22,625.75 |
+
+$ uv run dbt show --inline "select sum(sales_usd) as sales from {{ ref('fct_store_daily_sales') }}" 2>&1 | tail -6
+13:46:19  
+Previewing inline node:
+|     sales |
+| --------- |
+| 22,625.75 |
+```
+
+Four categories in six months give 24 rows, and the two marts add up to the same $22,625.75 because both start from the same completed lines: a different grain of the same facts.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-dbt-project-and-first-model-2">
+
+**The payment mix.** Before you start, say in one sentence what the table will look like. Then, from a blank file `dbt/models/marts/fct_payment_mix.sql`, write a mart with one row for each store and each payment method: the store's name, the method and the number of completed lines, read from `stg_order_lines` and `stg_stores` (the intermediate model has no payment method, and you do not change it). State the grain in the first comment. Build it and count. Expected: the build makes 1 model; the table has as many rows as stores times methods, and its lines add up to the completed lines of the mart. When you are done, delete the file.
+
+<details>
+<summary>Hint</summary>
+
+Join the two staging models with `ref` and `using (store_id)`, filter `status = 'completed'`, and group by the store name and the method. `payment_method` takes three values.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Nine rows, three stores with three methods each, and the lines of all nine rows add up to the 3,286 completed lines."*
+
+```sql
+-- Grain: ...
+select s.store_name, l.payment_method, count(*) as lines
+from ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- Grain: one row for each store and each payment method. Completed lines only.
+select
+    s.store_name,
+    l.payment_method,
+    count(*) as lines
+from {{ ref('stg_order_lines') }} as l
+join {{ ref('stg_stores') }} as s using (store_id)
+where l.status = 'completed'
+group by s.store_name, l.payment_method
+```
+
+```console
+$ uv run dbt build --select fct_payment_mix 2>&1 | grep -E "OK created|Done"
+13:46:22  1 of 1 OK created sql table model main.fct_payment_mix ......................... [OK in 0.11s]
+13:46:22  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+$ uv run dbt show --inline "select count(*) as rows, sum(lines) as lines from {{ ref('fct_payment_mix') }}" 2>&1 | tail -6
+13:46:25  
+Previewing inline node:
+| rows | lines |
+| ---- | ----- |
+|    9 |  3286 |
+```
+
+Three stores and three methods give nine rows, and the 3,286 lines are the completed lines of unit 4. A mart can read staging directly when it needs nothing the intermediate model adds.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `ref('stg_stores')` do that writing the table's name would not?
+
+   <details>
+   <summary>answer</summary>
+
+   It tells dbt that the model depends on `stg_stores`, so dbt builds `stg_stores` first and can show the dependency.
+
+   </details>
+
+<Exercise id="data-engineer-dbt-project-and-first-model-3">
+
+**Spot the flaw.** A colleague shortens `stg_stores.sql`: the last line becomes `from read_parquet('../data/staging/stores.parquet')`, with no `source()`. "It builds and the counts are the same, so the shortcut is fine." Make the change, build, run the counts, and then ask dbt which models rest on the source `stores`. Expected: a passing build, the same three counts, and a difference in the last command. What was lost? Put the `source()` line back when you are done.
+
+```bash
+uv run dbt ls --quiet --select source:pipeline.stores+ --resource-type model
+sed -i "s#from {{ source('pipeline', 'stores') }}#from read_parquet('../data/staging/stores.parquet')#" models/staging/stg_stores.sql
+uv run dbt build 2>&1 | grep -E "Found|Done"
+uv run python ../scripts/dbt_counts.py
+uv run dbt ls --quiet --select source:pipeline.stores+ --resource-type model
+```
+
+<details>
+<summary>Hint</summary>
+
+Run the first `dbt ls` before the edit and the last one after it, and compare the two lists. On macOS, `sed -i` needs an empty argument after it (`sed -i ''`), or make the edit in your editor.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Compare the two lists: the models that rest on the source `stores` before and after the edit. A model that dbt cannot see depending on a source is one that no selection of the source reaches.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt ls --quiet --select source:pipeline.stores+ --resource-type model
+cafe.marts.fct_store_daily_sales
+cafe.staging.stg_stores
+$ uv run dbt build 2>&1 | grep -E "Found|Done"
+13:46:31  Found 5 models, 3 sources, 512 macros
+13:46:31  Done. PASS=5 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=5
+$ uv run python ../scripts/dbt_counts.py
+stg_order_lines: 3287 rows, 3287 different grains
+int_order_lines_priced: 3287 rows, 3287 different grains
+fct_store_daily_sales: 453 rows, 453 different grains
+$ uv run dbt ls --quiet --select source:pipeline.stores+ --resource-type model
+```
+
+The build passes and the counts do not change, because the SQL does the same work. What changed is what dbt knows: with a path written into the model, no model depends on the source `stores` any more, so a selection from the source finds nothing and the last command prints nothing, a change to that source cannot be traced to the models it affects, and the source stays declared and unused. Reading through `source()` costs nothing and keeps the lineage that DE10 reads.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can build a dbt project over staged files, with a source, staging, intermediate and mart models, let `ref` set the order, state the grain of each model and check it with a count.*
+Test: Exercise data-engineer-dbt-project-and-first-model-2, done without opening the hints.
+
+The pattern to remember: **a model is a select with a stated grain, every input comes through `source()` or `ref()`, and the build order falls out of the calls.** The next lesson adds tests and documentation to these models.

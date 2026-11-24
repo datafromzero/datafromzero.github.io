@@ -2,16 +2,17 @@
 
     python3 starters/de-pipeline-checkpoints/check_lessons.py
 
-It covers three things, for each of the five lessons:
+It covers three things, for each of the ten lessons:
 
-1. Every fenced `python` or `markdown` block outside an `<Exercise>` must equal a file of the checkpoints (or the
-   starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that matches nothing is an
-   error and the script exits with 1.
+1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json` or `toml` block outside an `<Exercise>` must equal a file of
+   the checkpoints (or the starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that
+   matches nothing is an error and the script exits with 1. A `bash` block that equals a file or a piece of one (the
+   `env.sh` of the Airflow lesson) counts as a file too; any other `bash` block is read as commands, below.
 2. Blocks inside an `<Exercise>` (the task's code, half-solutions, solutions, flawed code) are matched when they can be
    and listed when they cannot: that list is for a person to read, and it holds exercise code only.
 3. Every `bash` block is read for the files it names: `git show de-NN-done:PATH` needs PATH in that checkpoint,
    `uv run python -m pipeline.NAME` needs `src/pipeline/NAME.py` in the starter or in a checkpoint up to the lesson's,
-   and `uv run python scripts/NAME.py` needs that script.
+   and `uv run python scripts/NAME.py` (or `NAME.py` inside `airflow/`) needs that script.
 
 Shown output (`console` blocks) is not checked here: run the commands in a clean clone built by `make_history.py`.
 """
@@ -28,12 +29,20 @@ NAMES = {
     3: "file-formats-and-partitioning",
     4: "incremental-loads-idempotency",
     5: "pipeline-as-testable-code",
+    6: "data-quality-checks",
+    7: "orchestration-with-airflow",
+    8: "backfills-and-failure-recovery",
+    9: "dbt-project-and-first-model",
+    10: "dbt-tests-and-documentation",
 }
+FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
+FILE_NAMES = {".gitignore"}
+CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml"}
 FENCE = re.compile(r"^```(\w+)\n(.*?)^```$", re.S | re.M)
 EXERCISE = re.compile(r"<Exercise\b.*?</Exercise>", re.S)
 GIT_SHOW = re.compile(r"git show (de-\d\d-done):(\S+)")
 MODULE = re.compile(r"uv run python -m pipeline\.(\w+)")
-SCRIPT = re.compile(r"uv run python (scripts/\w+\.py)")
+SCRIPT = re.compile(r"uv run python ([\w/]+\.py)")
 
 
 def checkpoint_files(number):
@@ -42,7 +51,7 @@ def checkpoint_files(number):
     files = {}
     for folder in folders:
         for path in folder.rglob("*"):
-            if path.is_file() and "__pycache__" not in path.parts and ".venv" not in path.parts and path.suffix in {".py", ".md"}:
+            if path.is_file() and "__pycache__" not in path.parts and ".venv" not in path.parts and (path.suffix in FILE_SUFFIXES or path.name in FILE_NAMES):
                 files[path.relative_to(folder).as_posix() + " (" + folder.name + ")"] = path.read_text()
     return files
 
@@ -63,7 +72,9 @@ def check_bash(number, block, files):
         if f"src/pipeline/{module}.py" not in paths:
             problems.append(f"python -m pipeline.{module}: no src/pipeline/{module}.py in the starter or a checkpoint")
     for script in SCRIPT.findall(block):
-        if script not in paths:
+        if script.startswith("exercises/"):
+            continue  # a file the learner writes in an exercise
+        if script not in paths and f"airflow/{script}" not in paths:
             problems.append(f"{script}: no such script in the starter or a checkpoint")
     return problems
 
@@ -79,12 +90,15 @@ def main():
             language, block = fence.group(1), fence.group(2).rstrip("\n")
             inside = any(start <= fence.start() < end for start, end in spans)
             if language == "bash":
+                if any(block == body.rstrip("\n") or block in body for body in files.values()):
+                    matched += 1
+                    continue
                 bash += 1
                 for problem in check_bash(number, block, files):
                     errors += 1
                     print(f"DE{number}: ERROR {problem}")
                 continue
-            if language not in {"python", "markdown"}:
+            if language not in CHECKED_LANGUAGES:
                 continue
             if any(block == body.rstrip("\n") or block in body for body in files.values()):
                 matched += 1
