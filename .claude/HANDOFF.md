@@ -153,6 +153,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## Open items and owner decisions still pending
 
+- **Feedback form (D58, live 2026-11-24):** Worker `datafromzero-feedback` deployed by the owner with `GITHUB_TOKEN`; two test issues (#125, #126) filed and closed; `FEEDBACK_URL` set. Remaining owner check: Workers Logs off. Original notes: the lesson footer shows the form only when `FEEDBACK_URL` in `src/site.ts`
+  is set; until then it is the old GitHub link. Owner steps: follow `workers/feedback/README.md` (Cloudflare account, create the
+  Worker in the dashboard and paste `worker.js`, fine-grained GitHub token with Issues read/write on this repo only as the secret
+  `GITHUB_TOKEN`, deploy, put the workers.dev URL in `FEEDBACK_URL`), then send one test message and check the issue. Create the
+  `feedback` label first. Also turn Workers Logs off for the Worker (README step 5); the taskbar's "Report a problem" (D37) keeps the GitHub link.
 - **Google Analytics:** on since 2026-11-17 (`G-0TNDBK1ZJX`, retention 2 months, consent first). If the owner changes
   the retention in GA4, update `GA_RETENTION` in `src/site.ts` so `/privacy/` stays true.
 - **Vietnamese:** paused (D30). `src/content/i18n/vi.json` is kept; `/vi/` URLs redirect to English.
@@ -195,4 +200,4 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   `duckdb.org`. Package registries work by default.
 - Scratchpad files, mockup pages and chat history do not carry over. Everything needed is in this repository.
 
-- **Tag v0.3.0 (owner, 2026-11-23):** the owner created release v0.3.0 (pre-release) on main 1bb959b, before the DA track merged, so it lacks `datasets/cafe-sales/v1/extras/`. Owner chose: after the DA track PR merges, move the tag to the merge commit (delete and recreate tag v0.3.0, keep the release as pre-release), then check the three raw links return CSV.
+- **Tag v0.3.0 (done, 2026-11-24):** pre-release v0.3.0 now points at 8dfe873 (DA track merge); the three cafe-sales extras resolve at that tag (checked: 200, full row counts).

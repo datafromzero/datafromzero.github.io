@@ -12,6 +12,7 @@ const steps = [
 	['lesson rules from the mistakes log', 'npm', ['run', '--silent', 'check:lessons']],
 	['lesson figures match their generators and are centered in their viewBox', 'npm', ['run', '--silent', 'check:figures']],
 	['build + schema + internal links', 'npm', ['run', '--silent', 'build']],
+	['noindex pages are not in the sitemap', 'npm', ['run', '--silent', 'check:sitemap']],
 	['no owner placeholders on deployed pages', 'npm', ['run', '--silent', 'check:placeholders']],
 	['prerequisite graph', 'npm', ['run', '--silent', 'check:graph']],
 	['every changelog bullet has a bold summary', 'npm', ['run', '--silent', 'check:changelog']],

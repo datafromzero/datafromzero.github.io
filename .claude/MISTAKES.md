@@ -45,6 +45,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-24 — The feedback Worker quoted the message with `> ` and escaped a few characters; review found that `\[x](url)` and `!\[` still render links and images and that a github.com issue URL makes a cross-reference on another repository. → **Any text the site sends on to GitHub goes in a code block (fence longer than any backtick run in it), or is escaped and tested against `\`, mentions, `#n` and full github.com issue URLs: a quote alone still renders links and cross-references.**
+- 2026-11-24 — The rate limiter kept raw IPs in memory while `/privacy/` said they were not stored, and invocation logs were left on by default. → **Before writing "we do not store X", trace every place X can be held (memory, logs, the platform's defaults) and test or switch each one off.**
+- 2026-11-24 — A page marked `noindex` was still in the sitemap. → **Every `noindex` page is excluded from the sitemap; `npm run check:sitemap` fails otherwise.**
+- 2026-11-24 — A `<form>` placed inside the footer's `<p class="links">` made the browser close the paragraph, so the link row broke into stacked lines. → **Never nest a form, `<details>` panel or other block content in a `<p>`; use a `<div>` for rows that can hold a panel, and screenshot the row at 360 px.**
+- 2026-11-24 — Typing `\uXXXX` escapes into a file written through a shell heredoc stored the raw invisible characters (a regex literal broke on U+2028). → **Build invisible or special characters in code with `String.fromCharCode` and check the file with `grep -nP '[^\x00-\x7f]'`.**
 - 2026-11-20 — KaTeX shipped a red `span.katex-error` for bad TeX and only warned. → **A build-time renderer that falls back on error (KaTeX, a highlighter, an image tool) must be made to fail the build, with an invalid fixture, because a fallback that only warns ships broken output to readers.** (`src/lib/rehype-math-errors.ts`, fixture `math-tex-error`.)
 - 2026-11-19 — The step buttons 1 2 3 4 of every concept animation lost their bottom edge (owner, on a phone): the shared
   `.sa-sb` rule draws `border-bottom: 4px solid var(--c)`, and concept buttons carry no clause class, so `--c` was unset
@@ -589,3 +594,5 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 - **2026-11-23 (owner report): a breakout layout must be measured against its neighbors.** The SQL runner's 5rem breakout ran under the right-hand page list and out of exercise cards. Rule: any element wider than its column is checked in a browser at 1440, 1536 and 1920 px against the right sidebar and every card it can sit in; play/next glyphs are drawn in CSS, never as U+25B6/U+25C0 characters, which render as color emoji.
 
 - **2026-11-23 (spec review, PR #121): hiding a site-wide control on one page type.** Removing the footer links from lessons also removed Cookie settings, which SPEC §11 requires on every page, and phones have no sidebar to reach Privacy. Rule: before hiding a site-wide control, check at phone width that every page still reaches what SPEC requires on every page.
+
+- **2026-11-24 (owner report): a Worker that passed its tests failed to deploy.** `crypto.getRandomValues` ran at module scope in `workers/feedback/worker.js`; Cloudflare does not allow random values, I/O or timers in a Worker's global scope, and Node tests do not catch it. Rule: create random values inside the request handler (lazily, on first use) and keep module scope to constants.
