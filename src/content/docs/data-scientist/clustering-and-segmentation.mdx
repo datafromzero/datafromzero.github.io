@@ -1,0 +1,419 @@
+---
+id: data-scientist-clustering-and-segmentation
+title: 'Clustering: finding groups without labels'
+short_title: Clustering
+description: Group people by week-1 behavior with k-means, choose the number of groups with evidence, describe each in plain words, and say what clusters cannot prove.
+stage: data-scientist
+order: 100
+level: intermediate
+duration: 25
+objectives:
+  - Explain how k-means assigns people to centers and moves the centers
+  - Scale and log the counts before clustering and say why
+  - Choose the number of clusters with inertia, silhouette and stability, and justify it
+  - Describe each cluster in business language
+  - Say what clustering cannot prove
+prerequisites:
+  - data-scientist-first-honest-model
+  - data-scientist-cross-validation-and-overfitting
+  - core-distributions-and-outliers
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-clustering-and-segmentation.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Clustering, k-means, silhouette and adjusted Rand index (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/clustering.html
+  - title: 'scikit-learn documentation: Selecting the number of clusters with silhouette analysis on KMeans clustering (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html
+status: draft
+---
+
+TODO(owner): Team draft (D24) for you to edit, kept small as the stub asked (mapped Could in #118); `reviewed` is the stub's date, yours to set when you publish. Invented for the lesson: the week-1 behavior profile (the four counts of the DS3 table, after a log and scaling), the made-up data with three real groups and the cloud with no groups (both built in the notebook with seed 2026). The truth line comes from the app-events README: each person's activity is one log-normal draw times a factor for the channel (and 1.10 for iOS), so the rules contain no groups. The clustering uses the whole table and scores nothing; Exercise 2 puts k-means inside the folds. Numbers come from the notebook run on pandas 3.0.5, NumPy 2.5.3, scikit-learn 1.9.1 and DuckDB 2.0.0, and match pandas 2.2.3, NumPy 2.1.3, scikit-learn 1.6.1 and DuckDB 1.4.3 where the notebook was run on both; a Colab run is unchecked. Silhouettes use a random sample of 5,000 people (seed 2026).
+
+## The question
+
+The growth team wants segments of new people by how they behaved in week 1, so that each segment gets a different message. No column says which segment a person belongs to, so a model has to find groups by itself. The team asks three things: *how many segments, what to call them, and what a cluster can and cannot tell us.* The table is the one of lesson DS3, with the four counts that describe behavior:
+
+| user_id | sessions_7d | expenses_7d | recent_3d | active_days_7d |
+|---:|---:|---:|---:|---:|
+| 10001 | 0 | 1 | 0 | 1 |
+| 10002 | 1 | 2 | 0 | 2 |
+| 10003 | 1 | 0 | 1 | 1 |
+| 10004 | 0 | 0 | 0 | 0 |
+
+By the end you can run k-means on scaled counts, give evidence for the number of groups, describe each group in words, and say what the groups do not prove.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Distributions, z-scores and outliers*](/core/distributions-and-outliers/) (C3) a z-score compared one value with the mean and spread of its column. `StandardScaler` computes it for every column, and unit 1 needs it before any distance is measured.
+
+**Diverge.** Since lesson DS2 a label has scored every model. Clusters have no label: units 2 and 4 show what stands in for one, and where it stops.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C3, what does a z-score of 2 say about a value?
+
+   <details>
+   <summary>answer</summary>
+
+   It lies two standard deviations above the mean of its column.
+
+   </details>
+
+2. The weekly counts have a long right tail: a few people add 17 expenses. Which transform of lesson DS9, *Feature engineering*, pulls the tail in?
+
+   <details>
+   <summary>answer</summary>
+
+   The log, `np.log1p`, which is also safe for a count of 0.
+
+   </details>
+
+## The big idea
+
+k-means cuts people into k groups around k centers, and it will cut any cloud, so the work is in checking what the cuts are worth.
+
+## Learn by doing
+
+About 25 minutes, 4 new ideas: how k-means works and why to scale first, three rulers for k, describing a segment, and what a cluster cannot prove. The setup cell holds the 13,285 people with at least one active day (`active`), their log counts on one scale (`Z`) and a function `stability`. There is no test part: nothing here is scored.
+
+<OpenInColab />
+
+### 1. Assign, move, and scale first
+
+**Idea.** k-means picks k centers and repeats two steps: it assigns every person to the nearest center, then moves each center to the mean of its people (the two steps of the scikit-learn guide), until the centers stop moving. Distance adds up differences across columns, so a column in big numbers decides the cut. Put the columns on one scale first: a log for the long tail of a count, then each column with mean 0 and standard deviation 1. To compare two sets of groups use the *adjusted Rand index*: 1 for the same grouping and close to 0 for groups drawn at random.
+
+**Try it:** cluster the people into four groups on the raw counts and on the scaled log counts, and compare the two groupings.
+
+```python
+raw = KMeans(4, n_init=10, random_state=SEED).fit(active[COUNTS])               # the counts as they are
+scaled = KMeans(4, n_init=10, random_state=SEED).fit(Z)                         # the counts on a log scale, each with mean 0 and standard deviation 1
+print(sorted(int(n) for n in np.bincount(raw.labels_)), sorted(int(n) for n in np.bincount(scaled.labels_)))
+print(round(float(adjusted_rand_score(raw.labels_, scaled.labels_)), 3))
+print(pd.DataFrame(raw.cluster_centers_, columns=COUNTS).round(1).to_string(index=False))
+```
+
+**Predict:** Will k-means on the raw counts find about the same four groups as on the scaled log counts (an adjusted Rand index near 1), partly the same (about 0.5) or unrelated (near 0)?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[107, 946, 3684, 8548] [2596, 2728, 2778, 5183]
+0.358
+ sessions_7d  expenses_7d  recent_3d  active_days_7d
+         1.5          3.5        1.3             2.3
+         0.5          1.3        0.2             1.2
+         5.8         17.0        9.6             4.8
+         2.9          7.3        4.1             3.3
+```
+
+</details>
+
+*Why:* Partly, and less than half: the index is 0.358. On the raw counts the groups hold 107, 946, 3,684, 8,548 people, and the smallest, 107 people, averages 17.0 expenses in a week: the column with the biggest numbers, `expenses_7d`, pulls the cuts. On the scaled log counts the groups hold 2,596, 2,728, 2,778, 5,183 people and every column has a say. Neither grouping is the truth; the scaled one answers a question about the pattern of a week and not about who adds the most expenses.
+
+### 2. Three rulers for k
+
+**Idea.** Nothing in the data says what k is. *Inertia*, the sum of squared distances from each person to their center, falls every time k grows, and the guide says only that "lower values are better and zero is optimal", so it cannot choose k alone. The *silhouette* compares, for each person, the distance to their own group with the distance to the next nearest one; it has a range of -1 to 1, and values near +1 mean the person is far from the neighboring groups. *Stability* is the median adjusted Rand index between two fits made on random halves of the people (ten pairs, seeds 100 to 109). To learn what good values look like, run the rulers on made-up data with three real groups.
+
+**Try it:** print the rulers for k from 2 to 6, and the silhouette of made-up data with three real groups beside them.
+
+```python
+made_up, _ = make_blobs(len(Z), n_features=4, centers=3, cluster_std=1.0, random_state=SEED)       # made-up data with three real groups, as many rows as people
+ruler_rows = []
+for k in range(2, 7):
+    km = KMeans(k, n_init=10, random_state=SEED).fit(Z)
+    km_made = KMeans(k, n_init=10, random_state=SEED).fit(made_up)
+    ruler_rows.append((k, round(float(km.inertia_)), round(float(silhouette_score(Z, km.labels_, sample_size=5000, random_state=SEED)), 3),
+                 round(stability(Z, k), 3), round(float(silhouette_score(made_up, km_made.labels_, sample_size=5000, random_state=SEED)), 3)))
+print(pd.DataFrame(ruler_rows, columns=["k", "inertia", "silhouette", "stability", "silhouette, made-up 3 groups"]).to_string(index=False))
+```
+
+**Predict:** On the made-up data the silhouette peaks sharply at k = 3. Will the people's silhouette peak as sharply at one value of k, or stay in a narrow band?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ k  inertia  silhouette  stability  silhouette, made-up 3 groups
+ 2    26921       0.464      0.808                         0.734
+ 3    19079       0.448      0.969                         0.797
+ 4    14765       0.495      0.872                         0.589
+ 5    11655       0.522      0.912                         0.391
+ 6    10150       0.495      0.866                         0.163
+```
+
+</details>
+
+*Why:* It stays in a narrow band. The made-up data go from 0.734 at k = 2 to 0.797 at k = 3 and down to 0.163 at k = 6. The people stay between 0.448 and 0.522 for every k, with no peak; inertia falls from 26,921 to 10,150 without a bend, and stability is highest at k = 3, 0.969, against 0.808 to 0.912 elsewhere. The data do not choose k. When the rulers are flat, k is a choice of use: the team can write three messages, so the lesson uses k = 3 and says that this is why.
+
+<figure>
+<svg viewBox="0 0 360 207" width="360" role="img" aria-labelledby="ds10-silhouette-t ds10-silhouette-d">
+<title id="ds10-silhouette-t">Silhouette by number of groups, for the people and for made-up data with three real groups</title>
+<desc id="ds10-silhouette-d">A line chart of the silhouette from 0 to 0.9 for k from 2 to 6 groups. For the made-up data with three real groups it is 0.734, 0.797, 0.589, 0.391, 0.163, a sharp peak at k = 3 and a fall after it. For the people it is 0.464, 0.448, 0.495, 0.522, 0.495, a narrow band between 0.448 and 0.522 with no peak: the data do not choose k.</desc>
+<g fill="currentColor">
+<text x="36.1" y="22.4" font-size="10.5" font-weight="600">Silhouette by number of groups (k-means)</text>
+<path d="M76.1 162.4 L248.1 162.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="70.1" y="165.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.0</text>
+<path d="M76.1 125.7 L248.1 125.7" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="70.1" y="129.2" font-size="10" text-anchor="end" fill-opacity="0.8">0.3</text>
+<path d="M76.1 89.1 L248.1 89.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="70.1" y="92.6" font-size="10" text-anchor="end" fill-opacity="0.8">0.6</text>
+<path d="M76.1 52.4 L248.1 52.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="70.1" y="55.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.9</text>
+<path d="M76.1 72.7 L119.1 65 L162.1 90.4 L205.1 114.6 L248.1 142.5" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M76.1 105.7 L119.1 107.6 L162.1 101.9 L205.1 98.6 L248.1 101.9" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.1" cy="105.7" r="3.5" fill="#0072b2" />
+<circle cx="76.1" cy="72.7" r="3.5" fill="#00a07a" />
+<circle cx="119.1" cy="107.6" r="3.5" fill="#0072b2" />
+<circle cx="119.1" cy="65" r="3.5" fill="#00a07a" />
+<circle cx="162.1" cy="101.9" r="3.5" fill="#0072b2" />
+<circle cx="162.1" cy="90.4" r="3.5" fill="#00a07a" />
+<circle cx="205.1" cy="98.6" r="3.5" fill="#0072b2" />
+<circle cx="205.1" cy="114.6" r="3.5" fill="#00a07a" />
+<circle cx="248.1" cy="101.9" r="3.5" fill="#0072b2" />
+<circle cx="248.1" cy="142.5" r="3.5" fill="#00a07a" />
+<text x="119.1" y="56" font-size="9.5" font-weight="600" text-anchor="middle">0.797</text>
+<text x="256.1" y="146" font-size="9.5" font-weight="600">made-up 0.163</text>
+<text x="256.1" y="105.4" font-size="9.5" font-weight="600">people 0.495</text>
+<text x="76.1" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">2</text>
+<text x="119.1" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">3</text>
+<text x="162.1" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">4</text>
+<text x="205.1" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">5</text>
+<text x="248.1" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">6</text>
+<text x="288.1" y="190.4" font-size="10" text-anchor="end" fill-opacity="0.8">k, the number of groups</text>
+</g>
+</svg>
+</figure>
+
+### 3. Describe a segment in words
+
+**Idea.** Describe each segment by what its people do and how many they are, in words a teammate can use, and name it by something you can check, here how active it is. A table of sizes, means and the churn rate does it. The churn rate is not used to make the segments: it is read afterwards.
+
+**Try it:** cluster the people into three segments, name them by activity, and print a profile of each, with the people who had no active day and a plain rule beside it.
+
+```python
+km3 = KMeans(3, n_init=10, random_state=SEED).fit(Z)
+segments = active.assign(segment=km3.labels_)
+order = segments.groupby("segment")["active_days_7d"].mean().sort_values().index                 # name the segments by activity, light to heavy
+segments["segment"] = segments["segment"].map(dict(zip(order, ["light", "steady", "heavy"])))
+profile = segments.groupby("segment").agg(people=("churned", "size"), sessions=("sessions_7d", "mean"), expenses=("expenses_7d", "mean"), active_days=("active_days_7d", "mean"),
+                                           churned=("churned", "mean"), paid_social=("channel", lambda s: (s == "paid_social").mean())).loc[["light", "steady", "heavy"]].round(2)
+print(profile.to_string())
+quiet = table[table["active_days_7d"] == 0]
+print("no active day:", len(quiet), "people, churned", round(float(quiet["churned"].mean()), 2))
+print(active.groupby(active["active_days_7d"].clip(upper=3))["churned"].mean().round(2).to_dict())          # a plain rule: 1, 2 or 3 or more active days
+```
+
+**Predict:** How far apart will the churn rates of the light and heavy segments be: under 5 points, 5 to 15 points, or over 15 points?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+         people  sessions  expenses  active_days  churned  paid_social
+segment                                                               
+light      6599      0.22      1.30         1.00     0.58         0.24
+steady     4566      1.32      2.60         2.02     0.46         0.10
+heavy      2120      2.58      5.81         3.08     0.31         0.02
+no active day: 4531 people, churned 0.69
+{1: 0.57, 2: 0.45, 3: 0.32}
+```
+
+</details>
+
+*Why:* More than 15: the light segment (6,599 people) churns at 0.58 and the heavy one (2,120 people) at 0.31, 27 points apart, with the steady segment between them. A plain rule on the number of active days, 1, 2 or 3 or more, gives 0.57, 0.45 and 0.32: nearly the same split. The segments are bands of one thing, how active a person was, and they found no fact that the rule had missed. The 4,531 people with no active day churn at 0.69; they are the rule's fourth group. Paid social is 24 percent of the light segment and 2 percent of the heavy one.
+
+### 4. What a cluster cannot prove
+
+**Idea.** A clustering will cut any cloud into k pieces, so a clean result is no proof that groups exist. Stability is the check that k-means offers, so test it where the answer is known: on a random cloud with no groups by construction, with the same spread and correlations as the people.
+
+**Try it:** print the stability of the people and of the cloud with no groups, for k from 2 to 4.
+
+```python
+cloud = np.random.default_rng(SEED).multivariate_normal(Z.mean(axis=0), np.cov(Z.T), size=len(Z))          # one cloud with no groups by construction, with the spread and correlations of the people
+stab_rows = [(k, round(stability(Z, k), 3), round(stability(cloud, k), 3)) for k in (2, 3, 4)]
+print(pd.DataFrame(stab_rows, columns=["k", "stability, people", "stability, cloud with no groups"]).to_string(index=False))
+```
+
+**Predict:** Will two fits on halves of a cloud with no groups at all agree (an adjusted Rand index above 0.9), agree partly or disagree?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ k  stability, people  stability, cloud with no groups
+ 2              0.808                            0.964
+ 3              0.969                            0.933
+ 4              0.872                            0.810
+```
+
+</details>
+
+*Why:* They agree: 0.933 at k = 3 and 0.964 at k = 2, and the people's 0.969 at k = 3 is not clearly more. Stability says that the cuts can be repeated, not that groups exist: halves of a smooth cloud get cut at nearly the same places. The dataset's rules say the same about the people: each person's activity is one log-normal draw times a factor for the channel (the README's "true parameters"), and nothing in the rules is a group. The three segments are cut points on a continuum, and the paid-social share of 24 percent against 2 percent is the channel factor moving everyone's level. A cluster cannot prove that groups exist, why people differ, or that a message will work: nobody was given a message.
+
+<Aside type="tip" title="Remember">
+
+- k-means assigns each person to the nearest center, then moves each center to the mean of its people; scale the columns, and take a log of long-tailed counts, before any distance is measured.
+- Inertia always falls as k grows; silhouette and stability are rulers, and you read them against made-up data that has real groups.
+- When the rulers are flat, k is a choice of use: say how many messages the team can write.
+- Describe a segment by its size and behavior, name it by something checkable, and read the outcome afterwards.
+- A stable clustering is repeatable, not real: it cannot prove that groups exist, why people differ, or that a message will work.
+
+**Common trap:** taking a high silhouette or a repeatable clustering as proof that the groups are real.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-clustering-and-segmentation-1">
+
+**Four segments.** Group the people into four segments with k-means on the scaled log counts (`four` and `seg4` are given), and put the list [the number of people in the smallest segment, the churn rate of the segment with the highest churn rate rounded to 3 decimals] in `answer_1`. Expected: `answer_1` is a list of two numbers.
+
+```python
+four = KMeans(4, n_init=10, random_state=SEED).fit(Z)          # given: k = 4 on the scaled log counts
+seg4 = active.assign(segment=four.labels_)
+# find the number of people in the smallest segment, and the churn rate of the segment with the highest churn rate
+answer_1 = None  # replace None with [that number of people, that churn rate rounded to 3 decimals]
+```
+
+<details>
+<summary>Hint</summary>
+
+`seg4["segment"].value_counts()` gives the size of every segment; `seg4.groupby("segment")["churned"].mean()` gives its churn rate.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+sizes = seg4["segment"].value_counts()
+rates = seg4.groupby("segment")["churned"].mean()
+answer_1 = [int(sizes.min()), round(float(rates.max()), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+sizes = seg4["segment"].value_counts()
+rates = seg4.groupby("segment")["churned"].mean()
+answer_1 = [int(sizes.min()), round(float(rates.max()), 3)]
+```
+
+The smallest segment has 2,596 people and the highest churn rate is 0.579. The segment with the highest churn rate is not the smallest one: it is the largest, the light people, and the four segments are cuts of the same activity scale as in unit 3.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-clustering-and-segmentation-2">
+
+**Does a segment help predict churn?** Before you start, say in one sentence what the result looks like: three numbers close to 0, the range including it. Put the day-7 model's columns plus three distances to the centers of a k-means (k = 3, `n_init=10`, `random_state=SEED`) in one pipeline: a `ColumnTransformer` with the usual one-hot `STATIC` columns, the scaled `WEEK1` columns, and `COUNTS` going through `FunctionTransformer(np.log1p)`, `StandardScaler()` and `KMeans`, then `LogisticRegression(max_iter=1000)`. Score it and `logit()` on the five `folds` of the training part, and put [mean, lowest, highest] of the five fold-by-fold differences (segment model minus `logit()`) in `answer_2`, each rounded to 4 decimals. Write the code in the empty cell of the notebook. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of three numbers.
+
+<details>
+<summary>Hint</summary>
+
+`KMeans` used as a step of a pipeline turns each person into the distances to the k centers. Give the pipeline the five `folds` through `cross_val_score(..., X_train, y_train, cv=folds, scoring="roc_auc")` for both models and subtract the two arrays.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three numbers within two thousandths of 0, the lowest below it and the highest above it."*
+
+```python
+segment_part = make_pipeline(FunctionTransformer(np.log1p), StandardScaler(), KMeans(3, n_init=10, random_state=SEED))
+# ColumnTransformer([("cat", ...), ("num", ...), ("segment", segment_part, COUNTS)])
+```
+
+</details>
+
+<Solution>
+
+```python
+with_segment = make_pipeline(
+    ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC), ("num", StandardScaler(), WEEK1),
+                       ("segment", make_pipeline(FunctionTransformer(np.log1p), StandardScaler(), KMeans(3, n_init=10, random_state=SEED)), COUNTS)]),
+    LogisticRegression(max_iter=1000))
+s_seg = cross_val_score(with_segment, X_train, y_train, cv=folds, scoring="roc_auc")
+s_day7 = cross_val_score(logit(), X_train, y_train, cv=folds, scoring="roc_auc")
+d_seg = s_seg - s_day7
+answer_2 = [round(float(d_seg.mean()), 4) + 0.0, round(float(d_seg.min()), 4) + 0.0, round(float(d_seg.max()), 4) + 0.0]
+```
+
+The segment model gains 0.0002 over the day-7 model, with fold differences from -0.0015 to 0.0016: nothing. A segment is a function of the same four counts the model already holds, and the k-means inside each fold can only re-cut them. This is the track's usual result: the segments describe, and do not add information about who leaves.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does the lesson cluster only the people with an active day?
+
+   <details>
+   <summary>answer</summary>
+
+   The 4,531 people with no active day have four counts of 0: a rule finds them, and they would be one cluster of identical points.
+
+   </details>
+
+<Exercise id="data-scientist-clustering-and-segmentation-3">
+
+**Spot the flaw.** A colleague scales the four log counts together with the outcome `churned` and runs k-means with two groups, then reports the two groups' churn rates as proof that the segments predict churn (the code gives the gap). Change the code so that the two segments come from the four counts alone (`Z`), and put the gap between the highest and the lowest churn rate in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 1.
+
+```python
+with_label = StandardScaler().fit_transform(np.log1p(active[COUNTS]).assign(churned=active["churned"]))          # colleague: the four counts and the outcome
+two = KMeans(2, n_init=10, random_state=SEED).fit(with_label)
+rates2 = active.assign(segment=two.labels_).groupby("segment")["churned"].mean()
+answer_3 = round(float(rates2.max() - rates2.min()), 3)         # colleague: "two segments whose churn rates are this far apart: the segments predict churn"
+# change the code so that the segments come from the four counts alone, and give the gap between the highest and the lowest churn rate, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+A segment that was made from the outcome will separate the outcome, whatever the counts say. Which columns should k-means see?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+two = KMeans(2, n_init=10, random_state=SEED).fit(Z)
+rates2 = active.assign(segment=two.labels_).groupby("segment")["churned"].mean()
+answer_3 = round(float(rates2.max() - rates2.min()), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+two = KMeans(2, n_init=10, random_state=SEED).fit(Z)
+rates2 = active.assign(segment=two.labels_).groupby("segment")["churned"].mean()
+answer_3 = round(float(rates2.max() - rates2.min()), 3)
+```
+
+With the outcome as a column the two groups are 0.269 apart in churn rate, because the outcome helped to draw them. From the counts alone the gap is 0.175 (0.40 and 0.57). A segment is read against the outcome only after it is made.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can run k-means on scaled log counts, give the evidence for k with a made-up reference beside it, describe each segment in words, and say what the segments do not prove.*
+Test: Exercise data-scientist-clustering-and-segmentation-2, done from the notebook without opening the hints.
+
+The pattern to remember: **scale, cluster, read the rulers against a made-up reference, describe in words, and claim no more than the clusters show.** The next lesson, *Explaining a model and checking where it fails* (DS11), goes back to labels and asks where a model is wrong.
