@@ -6,7 +6,7 @@ description: Turn a data contract into types, constraints and keys that a databa
 stage: data-engineer
 order: 120
 level: advanced
-duration: 36
+duration: 37
 objectives:
   - Turn the rules of a data contract into column types, NOT NULL, CHECK and a primary key, and watch a table refuse a row that breaks one
   - Declare an alternate key with UNIQUE, a foreign key between tables and a composite key at the grain of a table
@@ -39,7 +39,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24) of a stub with no text (research issue #107, D53); tags `de-12-start` and `de-12-done`; needs the tags pushed to `de-pipeline-starter`. Run with DuckDB 2.0.0, no dbt. Given files: `scripts/sql.py` (runs SQL against `data/serving/design.duckdb`, printing the result or the first line of the error), `scripts/row_groups.py` (prints the "Row Groups Scanned" line of `EXPLAIN ANALYZE`), `sql/physical_design.sql` and `sql/layout.sql`. The table of unit 3 is invented (the 3,287 real lines copied 300 times, copy k dated k days later: 986,100 lines, nine row groups of 122,880 on the run shown); the DuckDB page says only that zonemaps skip row groups and that ordered data makes them more useful, so the counts are the run's. A double sum of the real amounts equals the decimal sum on this data (every price is a multiple of 25 cents, which binary floating point holds exactly), so the lesson shows `0.1 + 0.2` and does not claim that doubles fail here. The Snowflake page also says CHECK constraints are enforced; the lesson cites NOT NULL only. Nothing was run on BigQuery or Snowflake, and no price is used. Not run: Windows, macOS, Codespaces. Found, not taught: DuckDB refuses a foreign key that points at a view; dbt-duckdb 1.11.1 enforced `not_null`, `primary_key` and `check` constraints of a model contract in a test model, material for a later lesson. Stub changes: duration 35 became 36 (the text runs 110 words a minute); the objectives about generalization storage, a weak entity with a composite key, superkeys and candidate keys, and UML aggregation and composition with a cascading delete are not taught (the cafe data has no subtype or weak entity; the batch brief asked for keys, types, constraints and partition and cluster choices) and are replaced by the four above; prerequisites add S33 and DE6; the UML and PostgreSQL sources are dropped, not opened.
+TODO(owner): Team draft (D24) of a stub with no text (research issue #107, D53); tags `de-12-start` and `de-12-done` need pushing to `de-pipeline-starter`. Run with DuckDB 2.0.0, no dbt. Given files: `scripts/sql.py`, `scripts/row_groups.py`, `sql/physical_design.sql`, `sql/layout.sql`. The table of unit 3 is invented (the 3,287 real lines copied 300 times, copy k dated k days later: 986,100 lines, nine row groups of 122,880 on the run shown); the DuckDB page says only that zonemaps skip row groups and that ordered data makes them more useful, so the counts are the run's. A double sum of the real amounts equals the decimal sum on this data (every price is a multiple of 25 cents), so the lesson shows `0.1 + 0.2` and claims nothing about the real data. The Snowflake page also says CHECK constraints are enforced; the lesson cites NOT NULL only. Nothing was run on BigQuery or Snowflake, and no price is used. Not run: Windows, macOS, Codespaces. Found, not taught: DuckDB refuses a foreign key that points at a view; dbt-duckdb enforced the constraints of a model contract in a test model. Stub changes: duration 35 became 37 (the text runs about 108 words a minute); the objectives about generalization storage, weak entities, superkeys and candidate keys, and UML aggregation and composition are not taught and are replaced by the four above; prerequisites add S33 and DE6; the UML and PostgreSQL sources are dropped, not opened.
 
 ## The question
 
@@ -85,7 +85,7 @@ A logical model says what must hold; the physical model is the table that holds 
 
 ## Learn by doing
 
-About 36 minutes, 3 new ideas: a contract as a table, keys between tables and who enforces them, and the order of a big table. Work in `de-pipeline-starter` with the full pull staged (`data/staging/` holds three Parquet files) and the broken copies of DE10 made (`data/broken_staging/`; if not, run `uv run python scripts/break_staging.py`). To catch up, run `git checkout de-12-start`. Everything here runs from the repository root, in DuckDB 2.0.0, and no dbt is needed.
+About 37 minutes, 3 new ideas: a contract as a table, keys between tables and who enforces them, and the order of a big table. Work in `de-pipeline-starter` with the full pull staged (`data/staging/` holds three Parquet files) and the broken copies of DE10 made (`data/broken_staging/`; if not, run `uv run python scripts/break_staging.py`). To catch up, run `git checkout de-12-start`. Everything here runs from the repository root, in DuckDB 2.0.0, and no dbt is needed.
 
 ### 1. The contract as a table
 
@@ -145,18 +145,20 @@ done
 ```console
 $ for fault in null_key repeated_key odd_status unknown_product extra_zero; do
   echo "$fault"
-  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM data/broken_staging//order_lines.parquet; SELECT count(*) AS lines FROM order_lines"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/broken_staging/$fault/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
 done
 null_key
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: NOT NULL constraint failed: order_lines.order_item_id
 repeated_key
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: PRIMARY KEY or UNIQUE constraint violation: duplicate key "5500"
 odd_status
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: CHECK constraint failed on table "order_lines" with expression CHECK((status IN ('completed', 'canceled')))
 unknown_product
-ParserException: Parser Error: syntax error at or near "/"
+lines
+-----
+3287
 extra_zero
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: CHECK constraint failed on table "order_lines" with expression CHECK((quantity BETWEEN 1 AND 10))
 ```
 
 </details>
@@ -236,12 +238,12 @@ uv run python scripts/sql.py "INSERT INTO products VALUES (17, 'Latte', 'coffee'
 ```console
 $ for fault in unknown_product null_key; do
   echo "$fault"
-  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM data/broken_staging//order_lines.parquet; SELECT count(*) AS lines FROM order_lines"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/broken_staging/$fault/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
 done
 unknown_product
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: Violates foreign key constraint because key "product_id: 99" does not exist in the referenced table
 null_key
-ParserException: Parser Error: syntax error at or near "/"
+ConstraintException: Constraint Error: NOT NULL constraint failed: order_lines.order_item_id
 ```
 
 ```console
@@ -256,7 +258,7 @@ ConstraintException: Constraint Error: Duplicate key "product_name: Latte" viola
 
 </details>
 
-*Why:* the foreign key refuses product 99 because the menu has no such product; the table of store-days refuses a second row for store 1 on January 2 because its key is that pair; and the name `Latte` is taken, so the alternate key on `product_name` refuses it, even with a new `product_id`. Put the real lines back before the next unit:
+*Why:* the foreign key refuses product 99 because the menu has no such product; the table of store-days refuses a second row for store 1 on January 2 because its key is that pair; the line with no key is refused by `NOT NULL` again; and the name `Latte` is taken, so the alternate key on `product_name` refuses it, even with a new `product_id`. Put the real lines back before the next unit:
 
 ```bash
 uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
@@ -408,7 +410,7 @@ The check runs on an update as well as on an insert. A rule across two tables, s
 
 <Exercise id="data-engineer-logical-to-physical-design-2">
 
-**A sort order for another question.** The owner's next question is about one store: "how did Harbor (store 3) do in a week?". Before you start, write which of the three filters of unit 3 you expect to need the fewest row groups on a table sorted by store first and date second. Then, from a blank edit, create that table from `lines_arrival` as `lines_by_store`, and compare it with `lines_by_date` on the three filters. Expected: your sentence, and three pairs of counts.
+**A sort order for another question.** The owner's next question is about one store: "how did Harbor (store 3) do in a week?". Before you start, write which of the three filters of unit 3 you expect to gain most on a table sorted by store first and date second, compared with `lines_by_date`. Then, from a blank edit, create that table from `lines_arrival` as `lines_by_store`, and compare it with `lines_by_date` on the three filters. Expected: your sentence, and three pairs of counts.
 
 <details>
 <summary>Hint</summary>
@@ -454,7 +456,7 @@ lines_by_date    4,515 rows matched, 2 of 9 row groups scanned
 lines_by_store   4,515 rows matched, 2 of 9 row groups scanned
 ```
 
-The table sorted by store serves the store filter (3 of 9 against 9 of 9) and loses on the week (5 of 9 against 2 of 9), because each store has its own stretch of dates inside the file. For one store in one week both read 2 of 9. Which order is right depends on which filters are most common, and no order serves them all. In BigQuery's terms, the choices are which column to partition on and in which order to cluster, and the answer again comes from the filters of your queries.
+The filter that gains most is the store filter: the table sorted by store reads 3 of 9 against 9 of 9. It loses on the week (5 of 9 against 2 of 9), because each store has its own stretch of dates inside the file. For one store in one week both read 2 of 9. Which order is right depends on which filters are most common, and no order serves them all. In BigQuery's terms, the choices are which column to partition on and in which order to cluster, and the answer again comes from the filters of your queries.
 
 </Solution>
 

@@ -14,7 +14,9 @@ It covers three things, for each of the lessons DE1 to DE14 (DE6b and DE11b are 
    `uv run python -m pipeline.NAME` needs `src/pipeline/NAME.py` in the starter or in a checkpoint up to the lesson's,
    and `uv run python scripts/NAME.py` (or `NAME.py` inside `airflow/`) needs that script.
 
-Shown output (`console` blocks) is not checked here: run the commands in a clean clone built by `make_history.py`.
+Shown output (`console` blocks) is compared with a run only by hand, in a clean clone built by `make_history.py`; this script
+only refuses the signs of a capture that went wrong (see `check_console`): a parse error, or a path with `//` in it (a shell
+variable that expanded to nothing, as `data/broken_staging//order_lines.parquet` did in DE12 on 2026-11-24).
 """
 
 import re
@@ -45,6 +47,10 @@ FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
 FILE_NAMES = {".gitignore"}
 CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml"}
 FENCE = re.compile(r"^```(\w+)\n(.*?)^```$", re.S | re.M)
+BAD_CONSOLE = re.compile(r"Parser Error|ParserException|(?<![:/\s])//(?![/\s])")
+# Signs that a lesson teaches on purpose, by lesson: DE11b leaves an argument out of a macro call so that the database
+# reports a parse error on the compiled file. A new entry needs a unit or an exercise that is about that error.
+TAUGHT = {"DE11b": {"Parser Error", "ParserException"}}
 EXERCISE = re.compile(r"<Exercise\b.*?</Exercise>", re.S)
 GIT_SHOW = re.compile(r"git show (de-\d\d-done):(\S+)")
 MODULE = re.compile(r"uv run python -m pipeline\.(\w+)")
@@ -85,6 +91,16 @@ def check_bash(number, block, files):
     return problems
 
 
+def check_console(label, block):
+    """Problems of one console block: a parse error, or `a//b` (an unexpanded variable), neither of which a lesson teaches."""
+    problems = []
+    for line in block.splitlines():
+        match = BAD_CONSOLE.search(line)
+        if match and match.group(0) not in TAUGHT.get(label, set()):
+            problems.append(f"{label}: ERROR console block shows {match.group(0)!r} (a capture that went wrong?): {line[:90]!r}")
+    return problems
+
+
 def main():
     errors = 0
     for label, number, name in NAMES:
@@ -95,6 +111,11 @@ def main():
         for fence in FENCE.finditer(text):
             language, block = fence.group(1), fence.group(2).rstrip("\n")
             inside = any(start <= fence.start() < end for start, end in spans)
+            if language == "console":
+                for problem in check_console(label, block):
+                    errors += 1
+                    print(problem)
+                continue
             if language == "bash":
                 if any(block == body.rstrip("\n") or block in body for body in files.values()):
                     matched += 1
