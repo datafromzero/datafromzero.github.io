@@ -387,7 +387,7 @@ Notebooks are cleared of outputs before commit (CI check).
 - Tokens, typography and logo rules: see `design/README.md` §2–3. Dark is default; every page, the homepage included, has a light theme behind the switch in the bottom taskbar (D9, D31); `@media print` forces black-on-white, hides nav/buttons, prints link URLs.
 - Every page has the bottom taskbar (D31, D35: on phones it is the only navigation). Off the homepage it is the only script beyond Starlight's own (under 1 KB gzipped, CSS transitions only), except the career quiz's one scoring script on `/career-quiz/` (D33: under 4 KB gzipped, no GSAP, no storage).
 - **GSAP is allowed on the homepage `/` only**, any plugin, each effect loaded on demand (D28). Project pages
-  (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`), stories, lessons, reference and datasets
+  (`/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/translate/`), stories, lessons, reference and datasets
   load no motion script.
 - Every animation respects `prefers-reduced-motion`; all content is visible with JS disabled.
 - Page-to-page navigation uses CSS-only cross-document View Transitions (D26) and Speculation Rules prefetch (D27); neither adds executable JS to lesson pages.

@@ -25,6 +25,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: 
 	const e = document.createElement(tag);
 	if (text !== undefined) e.textContent = text;
 	if (cls) e.className = cls;
+	// The result box is translate="no"; our own sentences in it (summary, tip, notes) can be translated.
+	if (cls && /dfz-sql-(sum|more|err-tip)/.test(cls)) e.translate = true;
 	return e;
 };
 const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`;
@@ -133,7 +135,7 @@ export function wire(box: HTMLElement): Block {
 		runBtn.disabled = on;
 		out.setAttribute('aria-busy', String(on));
 	};
-	const say = (text: string, cls = 'dfz-sql-sum') => out.replaceChildren(el('p', text, cls));
+	const say = (text: string, cls = 'dfz-sql-sum') => out.replaceChildren(Object.assign(el('p', text, cls), { translate: true }));
 	// One database, one connection: runs from every block wait their turn.
 	const go = (job: () => Promise<void>) => {
 		busy(true);

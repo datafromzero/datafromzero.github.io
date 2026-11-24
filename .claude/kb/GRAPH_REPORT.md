@@ -18,13 +18,13 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `D41` Lesson step-by-step figures | decision | 100 | SPEC.md:68 |
 | 4 | `src/components/content/RunSQL.astro` | component | 71 | src/components/content/RunSQL.astro:1 |
 | 5 | `src/components/content/OpenInColab.astro` | component | 65 | src/components/content/OpenInColab.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 60 | .claude/HANDOFF.md:1 |
-| 7 | `astro.config.mjs` | config | 46 | astro.config.mjs:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 59 | .claude/HANDOFF.md:1 |
+| 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
 | 8 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 9 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
 | 10 | `S6` Authoring components | spec-section | 31 | SPEC.md:280 |
 | 11 | `agent:LESSON-STANDARD` | agent | 31 | .claude/agents/LESSON-STANDARD.md:1 |
-| 12 | `.claude/MISTAKES.md` | doc | 29 | .claude/MISTAKES.md:1 |
+| 12 | `.claude/MISTAKES.md` | doc | 30 | .claude/MISTAKES.md:1 |
 | 13 | `scripts/sync-research-issues.mjs` | script | 26 | scripts/sync-research-issues.mjs:1 |
 | 14 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
 | 15 | `D44` Stage cheatsheets; a math blo… | decision | 24 | SPEC.md:71 |

@@ -55,7 +55,7 @@ export interface SiteUi {
 }
 
 const en: SiteUi = {
-	nav: { label: 'About this site', about: 'About', cite: 'Cite', changelog: "What's new", license: 'License', privacy: 'Privacy', translate: 'Translate', cookies: 'Cookie settings' },
+	nav: { label: 'About this site', about: 'About', cite: 'Cite', changelog: "What's new", license: 'License', privacy: 'Privacy', translate: 'Read in your language', cookies: 'Cookie settings' },
 	consent: {
 		title: 'Your privacy choices',
 		text: 'We use Google Analytics cookies to see which pages are read and improve the lessons. No ads. The site works the same either way, and you can change your choice any time.',
