@@ -157,7 +157,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   is set; until then it is the old GitHub link. Owner steps: follow `workers/feedback/README.md` (Cloudflare account, create the
   Worker in the dashboard and paste `worker.js`, fine-grained GitHub token with Issues read/write on this repo only as the secret
   `GITHUB_TOKEN`, deploy, put the workers.dev URL in `FEEDBACK_URL`), then send one test message and check the issue. Create the
-  `feedback` label first (the Worker needs it to exist or GitHub creates it only with write access, which the token has).
+  `feedback` label first. Also turn Workers Logs off for the Worker (README step 5); the taskbar's "Report a problem" (D37) keeps the GitHub link.
 - **Google Analytics:** on since 2026-11-17 (`G-0TNDBK1ZJX`, retention 2 months, consent first). If the owner changes
   the retention in GA4, update `GA_RETENTION` in `src/site.ts` so `/privacy/` stays true.
 - **Vietnamese:** paused (D30). `src/content/i18n/vi.json` is kept; `/vi/` URLs redirect to English.

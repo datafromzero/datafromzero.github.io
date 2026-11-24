@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../workers/feedback/worker.js';
 
-const { buildIssue, clean, fromSite, makeLimiter, neutralize, parseForm, quote, safePath } = worker.logic;
+const { buildIssue, clean, fence, fromSite, hashIp, makeLimiter, neutralizeTitle, parseForm, safePath } = worker.logic;
 const ZW = String.fromCharCode(0x200b);
 const U = (...c: number[]) => String.fromCharCode(...c);
 
@@ -39,30 +39,55 @@ describe('clean', () => {
 	});
 });
 
-describe('neutralize and quote', () => {
-	test('mentions and issue references cannot link', () => {
-		const out = neutralize('ping @someone and @org/team, see #12 and GH-7 and ' + U(0xff20) + 'x');
-		assert.ok(!new RegExp('@(?!' + ZW + ')').test(out) && !new RegExp(U(0xff20) + '(?!' + ZW + ')').test(out));
-		assert.ok(!/#\d/.test(out) && !/GH-\d/i.test(out));
+const issueFor = (message: string, lesson_title = 'Joins') => {
+	const r = parseForm(form({ message, lesson_title }));
+	assert.ok(r.ok);
+	return buildIssue(r.value);
+};
+/** The body without the fenced message: what GitHub would render as Markdown. */
+const outsideFence = (body: string) => body.replace(/^(`{3,})text\n[\s\S]*?\n\1$/m, '');
+
+describe('the message is a code block', () => {
+	test('a backslash link, an image, a mention, #123 and a github.com issue URL sit only inside the fence', () => {
+		const msg = '\\[x](https://evil.example) !\\[i](https://evil.example/a.png) @someone #123 https://github.com/o/r/issues/1';
+		const body = issueFor(msg).body;
+		assert.ok(body.includes(msg));
+		const rest = outsideFence(body);
+		for (const bad of ['evil.example', '@someone', '#123', 'github.com/o/r']) assert.ok(!rest.includes(bad), bad);
+		assert.match(body, /^```text\n/);
 	});
-	test('HTML and link syntax is escaped', () => {
-		assert.equal(neutralize('<img src=x> [a](http://x)'), '&lt;img src=x&gt; \\[a\\](http://x)');
+	test('the fence is longer than the longest run of backticks in the message', () => {
+		assert.equal(fence('plain').split('\n')[0], '```text');
+		const f = fence('a ``` b ````` c\n```');
+		assert.equal(f.split('\n')[0], '``````text');
+		assert.equal(f.split('\n').at(-1), '``````');
 	});
-	test('every line is quoted, so a heading, list or fence cannot start', () => {
-		assert.equal(quote('# big\n\n- item\n```js'), '> # big\n>\n> - item\n> \\`\\`\\`js');
+	test('a message that tries to close the fence and add a heading and a link cannot', () => {
+		const msg = 'ok\n```\n# Heading\n[click](https://evil.example)\n```';
+		const body = issueFor(msg).body;
+		const lines = body.split('\n');
+		const close = lines.lastIndexOf('````', lines.length);
+		assert.ok(lines[0].startsWith('````text'));
+		assert.ok(close > lines.indexOf('# Heading'));
+		assert.ok(!outsideFence(body).includes('evil.example'));
+	});
+});
+
+describe('the title', () => {
+	test('mentions, issue references, backslashes and github.com addresses are neutralized', () => {
+		const t = issueFor('A mistake here.', '@a #4 \\[x] https://github.com/o/r/issues/1').title;
+		assert.ok(!new RegExp('@(?!' + ZW + ')').test(t) && !/#\d/.test(t) && !t.includes('\\') && !/github\.com/i.test(t));
+		assert.equal(neutralizeTitle('github.com'), 'github' + ZW + '.com');
 	});
 });
 
 describe('buildIssue', () => {
-	test('title, label, page and reviewed date; no sender data fields exist', () => {
-		const r = parseForm(form({ message: 'Hi @bob see #3', lesson_title: 'Joins @x #4' }));
-		assert.ok(r.ok);
-		const issue = buildIssue(r.value);
+	test('title, label, page and reviewed date', () => {
+		const issue = issueFor('Hi @bob see #3', 'Joins @x #4');
 		assert.equal(issue.title, '[feedback] mistake: Joins @' + ZW + 'x #' + ZW + '4');
 		assert.deepEqual(issue.labels, ['feedback']);
 		assert.match(issue.body, /Page: https:\/\/datafromzero\.github\.io\/sql\/joins\//);
 		assert.match(issue.body, /Lesson reviewed: 2026-11-15/);
-		assert.ok(!new RegExp('@(?!' + ZW + ')').test(issue.body));
 	});
 });
 
@@ -77,13 +102,31 @@ describe('fromSite', () => {
 	});
 });
 
-describe('makeLimiter', () => {
+describe('makeLimiter and hashIp', () => {
 	test('allows `max` per window per key, then again after the window', () => {
 		const ok = makeLimiter(2, 1000);
 		assert.ok(ok('a', 0) && ok('a', 10));
 		assert.ok(!ok('a', 20));
 		assert.ok(ok('b', 20));
 		assert.ok(ok('a', 1100));
+	});
+	test('expired keys are removed on every call, so nothing is held longer than the window', () => {
+		const ok = makeLimiter(2, 1000);
+		ok('a', 0);
+		ok('b', 5);
+		assert.equal(ok.size(), 2);
+		ok('c', 2000);
+		assert.equal(ok.size(), 1);
+	});
+	test('the key is a salted SHA-256: stable per salt, different per salt, never the address', async () => {
+		const s1 = new Uint8Array(16).fill(1);
+		const s2 = new Uint8Array(16).fill(2);
+		const a = await hashIp('203.0.113.7', s1);
+		assert.match(a, /^[0-9a-f]{64}$/);
+		assert.ok(!a.includes('203'));
+		assert.equal(a, await hashIp('203.0.113.7', s1));
+		assert.notEqual(a, await hashIp('203.0.113.7', s2));
+		assert.notEqual(a, await hashIp('203.0.113.8', s1));
 	});
 });
 

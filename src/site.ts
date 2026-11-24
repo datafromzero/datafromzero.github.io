@@ -40,3 +40,5 @@ if (ANALYTICS_ENABLED && GA_RETENTION === '') {
  * Empty = no form: lessons keep the plain "Report an issue" link to the GitHub issue form, so the site never ships a dead form.
  */
 export const FEEDBACK_URL: string = '';
+/** Pages that carry `noindex` and so stay out of the sitemap (checked by scripts/check-sitemap.mjs). */
+export const NOINDEX_PAGES = ['/feedback/sent/', '/feedback/not-sent/'];

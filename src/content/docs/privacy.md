@@ -5,7 +5,7 @@ tableOfContents: false
 ---
 
 datafromzero is a static website. It has no accounts, no comments and no saved progress, and it does not
-track individual learners. The one form on the site is the feedback form at the end of each lesson, described
+track individual learners. The one form that sends anything is the feedback form at the end of each lesson, described
 below.
 
 ## Hosting
@@ -32,8 +32,9 @@ else is asked for or kept: no name, no email, no account.
   where anyone can read it, and GitHub's own privacy statement applies to it. Do not write your name, email or
   other personal details in it. We cannot make it private once it is posted.
 - **A small service in between.** The form is sent to a Cloudflare Worker that creates the issue for us. Cloudflare
-  processes the request and sees your IP address; the service uses it only for a moment, to stop one sender from
-  flooding the form, and does not store it or put it in the issue. See the
+  processes the request and sees your IP address. The service turns the address into a one-way scrambled value
+  (a hash) and keeps only that in memory for at most 10 minutes, to stop one sender from flooding the form. The
+  address is never logged, stored, or put in the issue, and the stored logs of the service are switched off. See the
   [Cloudflare privacy policy](https://www.cloudflare.com/privacypolicy/).
 - **No cookies.** The form sets no cookies and stores nothing in your browser. It works without JavaScript.
 

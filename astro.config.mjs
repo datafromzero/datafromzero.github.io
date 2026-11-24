@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import mdx from '@astrojs/mdx';
+import sitemap from '@astrojs/sitemap';
 import starlightLinksValidator from 'starlight-links-validator';
 import AutoImport from 'astro-auto-import';
 import remarkMath from 'remark-math';
@@ -10,7 +11,7 @@ import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { rehypeMathErrors } from './src/lib/rehype-math-errors.ts';
 import { redirects } from './src/redirects.ts';
-import { OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
+import { NOINDEX_PAGES, OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
 import { buildSidebar } from './src/lib/sidebar.ts';
 
@@ -39,6 +40,8 @@ export default defineConfig({
 		}),
 	},
 	integrations: [
+		// Starlight adds this integration itself; it is listed here only to leave noindex pages out of the sitemap.
+		sitemap({ filter: (page) => !NOINDEX_PAGES.some((path) => page === SITE_URL + path) }),
 		starlight({
 			title: SITE_NAME,
 			// Get started, then the lessons by stage with their codes, then the project pages (src/lib/sidebar.ts).
