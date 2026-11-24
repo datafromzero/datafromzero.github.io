@@ -23,5 +23,9 @@ Create the public repository, then publish it before any Data Engineer lesson go
    The commits carry a placeholder author; rewrite them or set your own `git config` first if you want your name on them.
 3. Turn on GitHub Codespaces for the repository if it is not on, and open one to confirm that `uv run pytest -q` passes.
 
-Before the final push, run `python3 starters/de-pipeline-checkpoints/check_lessons.py`: it looks up every code block of
-the five lessons in the checkpoint files and lists the blocks that match none (exercise code and half-solutions).
+Before the final push, run `python3 starters/de-pipeline-checkpoints/check_lessons.py`. It covers every `python` and
+`markdown` block of the five lessons: a block outside an exercise must equal a checkpoint file or be a piece of one, or the
+script fails; blocks inside an exercise (task code, half-solutions, solutions, flawed code) are matched when they can be and
+listed when they cannot. It also reads every `bash` block: a `git show de-NN-done:PATH`, a `python -m pipeline.NAME` and a
+`scripts/NAME.py` must name a file that exists. It does not check `console` output or the exercise solutions: run those in a
+clean clone built by `make_history.py`.

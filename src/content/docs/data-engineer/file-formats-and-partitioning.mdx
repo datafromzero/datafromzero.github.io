@@ -185,11 +185,11 @@ Your times will differ.
 
 </details>
 
-*Why:* Parquet is the smallest: 62,362 bytes, 4.4 times smaller than the CSV and 14 times smaller than the JSON pages (which also hold the repeated record and every field name on every record). The CSV came back with `discount_usd` as `DOUBLE`, a type DuckDB guessed from the text and not the one you chose, and the Parquet file came back `DECIMAL(8,2)`. The query read in 1.4 ms from Parquet and 40.6 ms from CSV on this run, a ratio of 29; on three runs here it was 29, 29 and 32. The run cannot say how much of that is the column layout and how much is the CSV's type guessing and text parsing, so do not carry the ratio to other data: Exercise 3 shows why.
+*Why:* Parquet is the smallest: 62,362 bytes, 4.4 times smaller than the CSV and 14 times smaller than the JSON pages (which also hold the repeated record and every field name on every record). The CSV came back with `discount_usd` as `DOUBLE`, a type DuckDB guessed from the text and not the one you chose, and the Parquet file came back `DECIMAL(8,2)`. The query read in 1.4 ms from Parquet and 40.6 ms from CSV on this run, a ratio of 29; on three runs here it was 29, 29 and 32. The run cannot say how much of that is the column layout and how much is the CSV's type guessing and text parsing.
 
 ### 2. Partitions: files split by the value of a column
 
-**Idea.** A **partition** is one slice of a table kept in its own folder, named after the value of a column, such as `part=2026-05-01/`. DuckDB writes this layout with `PARTITION_BY` in `COPY`, and its Hive-partitioning page says that a filter on the partition column is pushed down so that files that are not needed are not read. `PARTITION_BY` takes column names, not expressions, so the script first computes the month as a column called `part`.
+**Idea.** A **partition** is one slice of a table kept in its own folder, named after the value of a column, such as `part=2026-05-01/`. DuckDB writes this layout with `PARTITION_BY` in `COPY`. The Hive-partitioning page says that the `PARTITION_BY` options cannot use expressions, so the script first computes the month as a column called `part`.
 
 **Try it.** `uv run python -m pipeline.formats month` writes the lines unsplit and split by month, and runs a query for May only. The last column is the plan's line `Scanning Files: a/b`.
 
@@ -207,11 +207,11 @@ month                6   78,384     2.3     2.0        1/6
 
 </details>
 
-*Why:* the plan opened 1 of 6 files, so the partitioning did its job, yet the May query took 2.0 ms against 2.1 ms on the single file: no gain, and the 6 files hold 78,384 bytes against 62,362, a quarter more. Partitioning saves work when a file is large. The DuckDB page recommends at least 100 MB of data per partition, and this whole table is 62 KB.
+*Why:* the Hive-partitioning page says that filters on the partition keys are pushed down into the files, so that files that are not necessary to answer a query are not read. The plan opened 1 of 6 files, so the partitioning did its job, yet the May query took 2.0 ms against 2.1 ms on the single file: no gain, and the 6 files hold 78,384 bytes against 62,362, a quarter more. Partitioning saves work when a file is large. The DuckDB page recommends at least 100 MB of data per partition, and this whole table is 62 KB.
 
 ### 3. The small-files trap
 
-**Idea.** Every file costs something to open, and each Parquet file has its own metadata at its end. A partition key with many values turns one table into many tiny files, and the costs add up faster than the savings.
+**Idea.** Every file costs something to open, and each Parquet file has its own metadata at its end. A partition key with many values turns one table into many tiny files.
 
 **Try it.** `uv run python -m pipeline.formats day` adds a third layout: one folder for each day, 181 days.
 
@@ -230,14 +230,13 @@ day                181  485,976    14.9     8.9     31/181
 
 </details>
 
-*Why:* 181 files hold 485,976 bytes, 7.8 times the single file, because each day holds only about 18 lines and each file carries its own metadata. Reading everything took 14.9 ms against 1.9, and the May query opened 31 of 181 files and took 8.9 ms, four times slower than the same question on the single file, although it read less of the data. The DuckDB page warns that it can be very expensive to write a larger number of partitions, as many files are created.
+*Why:* the costs of many files add up faster than the savings. 181 files hold 485,976 bytes, 7.8 times the single file, because each day holds only about 18 lines and each file carries its own metadata. Reading everything took 14.9 ms against 1.9, and the May query opened 31 of 181 files and took 8.9 ms, four times slower than the same question on the single file, although it read less of the data. The DuckDB page warns that it can be very expensive to write a larger number of partitions, as many files are created.
 
 <Aside type="tip" title="Remember">
 
 - JSON and CSV are text; CSV has no types, and the reader guesses them. Parquet is column-oriented, and a query reads only the columns it needs.
 - A partition is a folder for each value of a column; a filter on that column lets the reader skip folders.
 - Partition when files are large, and by a column with few values that queries filter on.
-- A measured ratio belongs to the size and the machine it was measured on.
 
 **Common trap:** partitioning small data. More files, more bytes and slower reads, for a saving that needs far more data.
 

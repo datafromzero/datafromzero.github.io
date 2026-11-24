@@ -276,6 +276,11 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   every page already in `sources` for it, following the `/stable/` to `/docs/2.0/` redirect.**
 - 2026-11-18 — A self-explanation answer restated a "How it works" bullet and the misconception. → **A self-explanation
   prompt asks something the section does not answer; its answer must not restate a How it works bullet.**
+- 2026-11-24 — Review of the Data Engineer batch 1: spot-the-flaw exercises repeated a rule that the unit already taught (a
+  Remember "Common trap" was Exercise 3's flaw, a Why said "do not carry the ratio: Exercise 3 shows why", an Idea gave the
+  fix that Exercise 3 asks for), and an Idea stated the answer of the Predict after it. → **A spot-the-flaw exercise must not
+  restate a unit's Predict rule. After drafting, read every Remember and Common-trap line against the three exercise flaws,
+  and every Idea against the Predict under it.**
 - 2026-11-18 — A section said ART indexes serve queries "under 0.1%" of the rows, but the lesson's own exercises showed
   Index Scans on 0.9% and 20% of the rows (the engine's rule is 2,048 rows or 0.1%, whichever is larger). → **Check any
   threshold or limit a section states against the row counts in the lesson's own exercises and steps.**

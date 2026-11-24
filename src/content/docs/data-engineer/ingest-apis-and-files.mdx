@@ -90,7 +90,7 @@ About 30 minutes, 4 new ideas: a retry that listens to the server, landing that 
 
 ### 1. A retry that listens to the server
 
-**Idea.** An API fails in two ways. A request that is wrong (a bad parameter) fails again if you repeat it. A request that is right but met a busy server may pass on the next try. A `429` means too many requests in a given amount of time, and RFC 6585 says the answer may carry a `Retry-After` header that says how long to wait; RFC 9110 says its value is a number of seconds or a date. This loop retries a `429` and any `5xx`, waits what the server asked or else 0.5 seconds doubling at each try, gives up after 5 tries, and fails at once on any other status.
+**Idea.** An API fails in two ways. A request that is wrong (a bad parameter) fails again if you repeat it. A request that is right but met a busy server may pass on the next try. A `429` means too many requests in a given amount of time, and RFC 6585 says the answer may carry a `Retry-After` header that says how long to wait; RFC 9110 says its value is a number of seconds or a date. This loop retries a `429` and any `5xx`, waits as `wait_time` decides, gives up after 5 tries, and fails at once on any other status. It passes `timeout=10` to every request, because the Requests documentation says that without a timeout requests do not time out and a program can hang indefinitely, and it calls `raise_for_status()`, which the same page says raises an error for a 4xx or 5xx answer.
 
 **Try it.** Save the whole module as `src/pipeline/ingest.py`, then run it:
 
@@ -193,11 +193,11 @@ INFO landed 33 pages in since=start_until=now
 
 </details>
 
-*Why:* the `429` carried `Retry-After: 1`, so the wait is 1.0 seconds; a `500` carries none, so the first wait is 0.5 and the second 1.0. Seed 2026 makes 5 requests fail on 3 pages (page 4, page 15 and page 21), the waits add up to 4.5 seconds, and all 33 pages land. This `wait_time` reads only the seconds form of `Retry-After`; a date falls back to the doubling wait, and the testing lesson of this track (DE5) adds the date form with a test first. The fault is a property of the seed, not of the API: another seed fails on other pages.
+*Why:* `wait_time` returns the `Retry-After` seconds when the answer has them and otherwise 0.5 seconds doubling at each try. The `429` carried `Retry-After: 1`, so the wait is 1.0 seconds; a `500` carries none, so the first wait is 0.5 and the second 1.0. Seed 2026 makes 5 requests fail on 3 pages (page 4, page 15 and page 21), the waits add up to 4.5 seconds, and all 33 pages land. This `wait_time` reads only the seconds form of `Retry-After`; a date falls back to the doubling wait, and the testing lesson of this track (DE5) adds the date form with a test first. The fault is a property of the seed, not of the API: another seed fails on other pages.
 
 ### 2. Land the bytes as they arrived, in a place named by the request
 
-**Idea.** Landing is safe to repeat (the word is *idempotent*) when running it twice leaves the same files. `land` writes each page's bytes unchanged, to a path made from the request (`since=start_until=now`) and the page number, so a second run writes the same names again and not new ones. It writes to a `.tmp` file first and then renames it; the Python documentation says a successful `os.replace` is an atomic operation (a POSIX requirement), so a crash leaves a whole page or none. The manifest holds a SHA-256 code of each page and the time it landed. Save the reader of the landing as `src/pipeline/inspect_raw.py`; it prints a different report for each word you give it, and this unit uses `fingerprint`, one short code for the bytes of all pages:
+**Idea.** Landing is safe to repeat (the word is *idempotent*) when running it twice leaves the same files. `land` writes each page's bytes unchanged, to a path made from the request (`since=start_until=now`) and the page number. It writes to a `.tmp` file first and then renames it; the Python documentation says a successful `os.replace` is an atomic operation (a POSIX requirement), so a crash leaves a whole page or none. The manifest holds a SHA-256 code of each page and the time it landed. Save the reader of the landing as `src/pipeline/inspect_raw.py`; it prints a different report for each word you give it, and this unit uses `fingerprint`, one short code for the bytes of all pages:
 
 ```python
 """Read the landed pages and say what is in them, without changing anything.
@@ -276,7 +276,7 @@ grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
 ```console
 $ uv run python -m pipeline.inspect_raw fingerprint
 33 pages, fingerprint 423af966d628
-$ grep -m1 landed_at data/raw/order_lines/since=start_until=now/_manifest.json
+$ grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
   "landed_at": "2026-11-24T09:13:00+00:00"
 $ uv run python -m pipeline.ingest
 WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
@@ -287,7 +287,7 @@ WARNING HTTP 429, waiting 1.0 s (attempt 2 of 5)
 INFO landed 33 pages in since=start_until=now
 $ uv run python -m pipeline.inspect_raw fingerprint
 33 pages, fingerprint 423af966d628
-$ grep -m1 landed_at data/raw/order_lines/since=start_until=now/_manifest.json
+$ grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
   "landed_at": "2026-11-24T09:13:05+00:00"
 ```
 
@@ -295,7 +295,7 @@ Your `landed_at` times will differ; the fingerprint will not.
 
 </details>
 
-*Why:* the same five requests failed again, because every fault is a function of the seed and a success resets the count for its page. The second run overwrote the same 33 files with the same bytes, so the fingerprint is unchanged, and only the manifest, which records when you landed, moved. A rerun that adds nothing and changes nothing is what makes a pipeline safe to run again after a crash. The path matters: a landing that appended to one growing file would have doubled it.
+*Why:* the same five requests failed again, because every fault is a function of the seed and a success resets the count for its page. The path holds only the request and the page number, so the second run wrote the same names again and not new ones: it overwrote the same 33 files with the same bytes, so the fingerprint is unchanged, and only the manifest, which records when you landed, moved. A rerun that adds nothing and changes nothing is what makes a pipeline safe to run again after a crash. The path matters: a landing that appended to one growing file would have doubled it.
 
 ### 3. Count what came
 
@@ -346,7 +346,7 @@ field outside the contract: channel (first seen in page-0020.json)
 - Count records and distinct keys after every landing.
 - Check each page for fields outside the contract; raw keeps the new field.
 
-**Common trap:** treating an error as the end of the data. Only the last page, a `null` cursor, ends the loop.
+**Common trap:** a count with no expectation beside it. Write down the number you expect (here 3,287 lines) before you count.
 
 </Aside>
 
@@ -544,7 +544,7 @@ $ uv run python exercises/de02_ex3.py
 landed 3 pages and 300 records
 ```
 
-The loop has two exits, but only one means the data is finished: a `null` cursor. A `429` on page 4 raised an exception, `except` caught it and `break` left the loop, so the function reports a finished landing of 300 records, 9 percent of the 3,288 that a full pull gives, with no warning and no error. Counting the records against an expectation is how you would see it. The fix is not to catch the error here: retry what is worth retrying, as `fetch_page` does, and let anything else raise, so that a run that cannot land every page fails loudly.
+The trap is to treat an error as the end of the data. The loop has two exits, but only one means the data is finished: a `null` cursor. A `429` on page 4 raised an exception, `except` caught it and `break` left the loop, so the function reports a finished landing of 300 records, 9 percent of the 3,288 that a full pull gives, with no warning and no error. Counting the records against an expectation is how you would see it. The fix is not to catch the error here: retry what is worth retrying, as `fetch_page` does, and let anything else raise, so that a run that cannot land every page fails loudly.
 
 </Solution>
 

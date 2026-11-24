@@ -2,13 +2,22 @@
 
     python3 starters/de-pipeline-checkpoints/check_lessons.py
 
-Every fenced `python`, `markdown` or `bash` block of the five lessons is looked up in the files of the checkpoints:
-it must equal a file or be a contiguous piece of one (a replacement the lesson asks for). Blocks that match no file
-are listed for a person to read: they should be exercise code, half-solutions and flawed code, never a block that
-saves a file or replaces a piece of one. Shown output and exercise code are not checked here: run them.
+It covers three things, for each of the five lessons:
+
+1. Every fenced `python` or `markdown` block outside an `<Exercise>` must equal a file of the checkpoints (or the
+   starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that matches nothing is an
+   error and the script exits with 1.
+2. Blocks inside an `<Exercise>` (the task's code, half-solutions, solutions, flawed code) are matched when they can be
+   and listed when they cannot: that list is for a person to read, and it holds exercise code only.
+3. Every `bash` block is read for the files it names: `git show de-NN-done:PATH` needs PATH in that checkpoint,
+   `uv run python -m pipeline.NAME` needs `src/pipeline/NAME.py` in the starter or in a checkpoint up to the lesson's,
+   and `uv run python scripts/NAME.py` needs that script.
+
+Shown output (`console` blocks) is not checked here: run the commands in a clean clone built by `make_history.py`.
 """
 
 import re
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -21,6 +30,10 @@ NAMES = {
     5: "pipeline-as-testable-code",
 }
 FENCE = re.compile(r"^```(\w+)\n(.*?)^```$", re.S | re.M)
+EXERCISE = re.compile(r"<Exercise\b.*?</Exercise>", re.S)
+GIT_SHOW = re.compile(r"git show (de-\d\d-done):(\S+)")
+MODULE = re.compile(r"uv run python -m pipeline\.(\w+)")
+SCRIPT = re.compile(r"uv run python (scripts/\w+\.py)")
 
 
 def checkpoint_files(number):
@@ -34,21 +47,56 @@ def checkpoint_files(number):
     return files
 
 
+def exercise_spans(text):
+    return [match.span() for match in EXERCISE.finditer(text)]
+
+
+def check_bash(number, block, files):
+    """Problems of one bash block: a file or module it names that no checkpoint up to this lesson has."""
+    paths = {key.split(" (")[0] for key in files}
+    problems = []
+    for tag, path in GIT_SHOW.findall(block):
+        wanted = f"{path} ({tag})"
+        if wanted not in files:
+            problems.append(f"git show {tag}:{path} names a file that the checkpoint does not have")
+    for module in MODULE.findall(block):
+        if f"src/pipeline/{module}.py" not in paths:
+            problems.append(f"python -m pipeline.{module}: no src/pipeline/{module}.py in the starter or a checkpoint")
+    for script in SCRIPT.findall(block):
+        if script not in paths:
+            problems.append(f"{script}: no such script in the starter or a checkpoint")
+    return problems
+
+
 def main():
+    errors = 0
     for number, name in NAMES.items():
         text = (LESSONS / f"{name}.mdx").read_text()
         files = checkpoint_files(number)
-        matched = unmatched = 0
-        for language, block in FENCE.findall(text):
+        spans = exercise_spans(text)
+        matched = in_exercise = bash = 0
+        for fence in FENCE.finditer(text):
+            language, block = fence.group(1), fence.group(2).rstrip("\n")
+            inside = any(start <= fence.start() < end for start, end in spans)
+            if language == "bash":
+                bash += 1
+                for problem in check_bash(number, block, files):
+                    errors += 1
+                    print(f"DE{number}: ERROR {problem}")
+                continue
             if language not in {"python", "markdown"}:
                 continue
-            block = block.rstrip("\n")
             if any(block == body.rstrip("\n") or block in body for body in files.values()):
                 matched += 1
+            elif inside:
+                in_exercise += 1
+                print(f"DE{number}: exercise code, not a checkpoint file: {block.splitlines()[0][:70]!r}")
             else:
-                unmatched += 1
-                print(f"DE{number}: not a checkpoint file or piece: {block.splitlines()[0][:70]!r}")
-        print(f"DE{number}: {matched} blocks match a checkpoint, {unmatched} do not (exercise code, starters, flawed code)")
+                errors += 1
+                print(f"DE{number}: ERROR outside an exercise and in no checkpoint file or piece: {block.splitlines()[0][:70]!r}")
+        print(f"DE{number}: {matched} blocks match a checkpoint, {in_exercise} exercise blocks do not, {bash} bash blocks read")
+    if errors:
+        sys.exit(f"{errors} problem(s) found")
 
 
 if __name__ == "__main__":

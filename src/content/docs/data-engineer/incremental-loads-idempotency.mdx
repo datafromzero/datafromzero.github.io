@@ -34,19 +34,19 @@ TODO(owner): Team draft (D24), same run and versions as DE1; checkpoint tags `de
 
 The owner asks:
 
-> Why does the pipeline fetch all of January again every night? And two days after a till rang up 20 coffees where it meant 2, the till fixed the line. Will my sheet ever show the fix?
+> Why does the pipeline fetch all of January again every night? And when a till corrects a line it has already sent, will my sheet ever show the fix?
 
-The line in question, as the API first sent it:
+A line, as the API sends it (the first line of the first page):
 
 | order_item_id | order_id | ordered_at | quantity | updated_at |
 |---:|---:|---|---:|---|
-| 6952 | 2075 | 2026-05-01 13:25:00 | 20 | 2026-05-01 13:30:00 |
+| 5001 | 1001 | 2026-01-01 08:02:00 | 1 | 2026-01-01 08:07:00 |
 
 By the end you can load only what changed, apply a fix to a line you loaded before, and show that running the load again changes nothing.
 
 <Aside type="note" title="You already know this">
 
-**Match.** [*Inserting, updating and deleting safely*](/sql/modify-data-transactions/) (S34) wrapped statements in a transaction so that all of them happen or none. The load below does the same for its last two statements.
+**Match.** [*Inserting, updating and deleting safely*](/sql/modify-data-transactions/) (S34) wrapped statements in a transaction so that all of them happen or none.
 
 **Diverge.** In S34 you chose which rows to change. Here the source decides: it sends a line again with a new version, and the load must tell a new line from a changed one.
 
@@ -268,7 +268,7 @@ INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
 
 </details>
 
-*Why:* nothing is new, so the next night's run inserts and updates nothing, and its 3 unchanged lines are the overlap: the run asks since the watermark minus an hour (`LOOKBACK`) because a source can publish a line late with a time before the mark, and the merge makes that overlap harmless. The replay pulled all 3,287 lines, found every one unchanged, and left the fingerprint at 8c3ca150, so a run that crashes and starts again from scratch lands the same table. The merge and the new watermark sit between `BEGIN` and `COMMIT` in `load.py`; the DuckDB page says that to make a batch atomic you wrap it in an explicit transaction.
+*Why:* nothing is new, so the next night's run inserts and updates nothing, and its 3 unchanged lines are the overlap: the run asks since the watermark minus an hour (`LOOKBACK`) because a source can publish a line late with a time before the mark, and the merge makes that overlap harmless. The replay pulled all 3,287 lines, found every one unchanged, and left the fingerprint at 8c3ca150, so a run that crashes and starts again from scratch lands the same table.
 
 <Aside type="tip" title="Remember">
 
@@ -467,13 +467,13 @@ lines to ask for next: 0
 lines loaded: 0
 ```
 
-The watermark moved to 11:00 and the lines did not load, so the next run asks for lines updated after 11:00 and gets none: the two lines are lost, and nobody is told, because the next run succeeds. The statements are separate, and DuckDB commits each one as soon as it succeeds, so the watermark is saved before the load. The fix is the order and the transaction of `load.py`: `BEGIN`, load the lines, save the watermark, `COMMIT`. If anything fails in between, the rollback leaves the table and the watermark as they were, and the rerun asks for the same lines again.
+The watermark moved to 11:00 and the lines did not load, so the next run asks for lines updated after 11:00 and gets none: the two lines are lost, and nobody is told, because the next run succeeds. The statements are separate, and DuckDB commits each one as soon as it succeeds, so the watermark is saved before the load. The fix is the order and the transaction of `load.py`, where the merge and the new watermark sit between `BEGIN` and `COMMIT`: load the lines, save the watermark, and make the two one unit. The DuckDB transactions page says that to make a batch atomic you wrap it in an explicit transaction. If anything fails in between, the rollback leaves the table and the watermark as they were, and the rerun asks for the same lines again.
 
 </Solution>
 
 </Exercise>
 
-**Can you do it?** *I can load only what changed with a watermark on `updated_at`, merge by key so that a newer version replaces an older one, prove with a fingerprint that a rerun and a replay change nothing, and say why the watermark and the lines move in one transaction.*
+**Can you do it?** *I can load only what changed with a watermark on `updated_at`, merge by key so that a newer version replaces an older one, prove with a fingerprint that a rerun and a replay change nothing, and say what state a load that fails halfway can leave behind.*
 Test: Exercise data-engineer-incremental-loads-idempotency-2, done without opening the hints.
 
 The pattern to remember: **ask for what changed, merge by key, and prove the rerun with a fingerprint.** Next comes *Pipelines as small, testable functions* (DE5), which puts tests under the steps you have built.
