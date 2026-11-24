@@ -1,0 +1,462 @@
+---
+id: data-scientist-feature-engineering
+title: Feature engineering
+short_title: Feature engineering
+description: Fill, encode and transform columns inside the folds, judge each change by its paired gain, and see how a column made from the labels can fake one.
+stage: data-scientist
+order: 90
+level: intermediate
+duration: 30
+objectives:
+  - Fill missing values inside the folds and keep a missing-value flag when it can carry signal
+  - Encode text columns to match the model that reads them
+  - Apply log, ratio and date-part transforms and judge each by its paired gain
+  - Fit every step that learns, including a target encoding, inside the training fold
+prerequisites:
+  - data-scientist-cross-validation-and-overfitting
+  - data-scientist-logistic-regression-in-practice
+  - python-pandas-missing-data-and-types
+  - python-pandas-dates-and-resample
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-feature-engineering.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: Preprocessing data, encoding categorical features and FunctionTransformer (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/preprocessing.html
+  - title: 'scikit-learn documentation: Imputation of missing values (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/impute.html
+status: published
+---
+
+## The question
+
+The team has a model that no better algorithm has beaten (the models of lessons DS6 to DS8 tie it), so a teammate proposes better columns: a ratio, a log, a weekday, a target encoding of the signup cohort. *Which of them helps, and how would we know?* The table is the one of lesson DS3:
+
+| user_id | signup_date | channel | active_days_7d | churned |
+|---:|---|---|---:|---:|
+| 10001 | 2026-01-01 | organic_search | 1 | 1 |
+| 10002 | 2026-01-01 | app_store | 2 | 1 |
+| 10003 | 2026-01-01 | paid_search | 1 | 1 |
+| 10004 | 2026-01-01 | organic_search | 0 | 0 |
+
+By the end you can fill, encode and transform a column inside the folds, judge each change against the base on the same folds, and spot a column that only looks like it helps.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In lesson DS5 a feature selector that read the labels had to sit inside the folds, and a pipeline did that for you. Every step here that learns, the fill, the scaler and the target encoding, goes inside the folds too.
+
+**Diverge.** In DS5 the leak was a selector on random columns. Unit 4 shows a column built from the labels that fakes a gain on a real one.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS5, what happened to the AUC reported for 300 random columns when the 20 best were picked before the folds, and what when the pick was inside them?
+
+   <details>
+   <summary>answer</summary>
+
+   It reported 0.718 with the pick outside the folds and 0.489, near the truth of 0.5, with the pick inside them.
+
+   </details>
+
+2. In lesson DS6 the best C changed the cross-validated AUC by less than 0.001. What did you check before calling a gain real?
+
+   <details>
+   <summary>answer</summary>
+
+   How far the five fold scores moved: a gain smaller than the spread of the folds is no evidence.
+
+   </details>
+
+## The big idea
+
+A column is only as good as the folds say it is: every step that learns from the rows goes inside the folds, and every change is judged by its paired gain over the base.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: fill and flag a gap, encode to match the model, transforms judged by paired gains, and a column made from the labels; a short last unit gives the verdict. The setup cell built four new columns in the table `T` and the function `recipe(...)`, the day-7 model with an option for each unit. Everything runs on the 13,362 training people.
+
+<OpenInColab />
+
+### 1. Fill a gap, and flag it
+
+**Idea.** A *missing* value is a gap the model cannot read. The ratio `expenses_per_day` (expenses divided by active days) is undefined for a person with no active day. Fill the gap with a number the model can use, here the median of the people it learns from. `SimpleImputer` learns that median in `fit`, so inside a pipeline it learns it from the fitting rows of each fold only. The scikit-learn guide notes that, with imputation, "preserving the information about which values had been missing can be informative"; `add_indicator=True` stacks a 0/1 column for it.
+
+**Try it:** count the people with no value and compare their churn rate, then score the ratio with a median fill, with and without the flag, against the day-7 model on the five folds.
+
+```python
+missing = Xt["expenses_per_day"].isna()
+print(round(float(missing.mean()), 3), y_train.groupby(missing).mean().round(3).to_dict())          # the share without a value, and the churn rate of those with and without
+COLS_R = BASE_COLS + ["expenses_per_day"]
+for tag, options in [("median fill", dict(fill=True)), ("median fill and flag", dict(fill=True, flag=True))]:
+    s = folds_auc(recipe(num=WEEK1 + ["expenses_per_day"], **options), COLS_R)
+    print(f"{tag:22s} mean {s.mean():.4f}   gain over the day-7 model {gain(s, base_scores)}")
+print("the day-7 model:", round(float(base_scores.mean()), 4))
+```
+
+**Predict:** How many of the training people will have no value, and will they churn at a different rate? And will filling the gap, with or without the flag, lift the mean AUC by more than 0.005?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.25 {False: 0.491, True: 0.704}
+median fill            mean 0.6920   gain over the day-7 model [0.0004, -0.0003, 0.0009]
+median fill and flag   mean 0.6923   gain over the day-7 model [0.0007, -0.0011, 0.0012]
+the day-7 model: 0.6916
+```
+
+</details>
+
+*Why:* A quarter of the training people, 0.250, have no value, and they churn at 0.704 against 0.491 for the rest, so the gap carries information. The day-7 model holds it already, because `active_days_7d` is 0 for exactly those people. The fill gains 0.0004 and the fill with the flag 0.0007, and the five fold differences of each cross zero (from -0.0011 to 0.0012 for the flag). A column that restates what the model already has adds nothing.
+
+### 2. Encode to match the model
+
+**Idea.** A model reads numbers, so a text column needs an encoding. *One-hot* makes one 0/1 column for each value, which the recipe has used so far. *Ordinal* codes write the values as 0, 1, 2 and so on, in alphabetical order here. The scikit-learn guide warns that such integers "would interpret the categories as being ordered, which is often not desired". Which encoding is safe depends on the model that reads it.
+
+**Try it:** write `channel`, `platform` and `region` as one-hot columns and as ordinal codes, and score a logistic regression and a random forest on the five folds.
+
+```python
+def forest_scores(ordinal):
+    encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1) if ordinal else OneHotEncoder(handle_unknown="ignore")
+    m = make_pipeline(ColumnTransformer([("cat", encoder, STATIC), ("num", "passthrough", WEEK1)]), RandomForestClassifier(200, min_samples_leaf=100, n_jobs=-1, random_state=SEED))
+    return folds_auc(m, BASE_COLS)
+
+
+enc_rows = []
+for tag, ordinal in [("one-hot columns", False), ("codes 0, 1, 2, ...", True)]:
+    enc_rows.append((tag, round(float(folds_auc(recipe(ordinal=ordinal), BASE_COLS).mean()), 3), round(float(forest_scores(ordinal).mean()), 3)))
+print(pd.DataFrame(enc_rows, columns=["the text columns as", "logistic regression", "random forest"]).to_string(index=False))
+```
+
+**Predict:** With the three text columns written as codes, will a logistic regression lose about 0.001, about 0.03 or about 0.1 AUC? And a random forest?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+the text columns as  logistic regression  random forest
+    one-hot columns                0.692          0.691
+ codes 0, 1, 2, ...                0.662          0.688
+```
+
+</details>
+
+*Why:* The logistic regression falls from 0.692 to 0.662; paired fold by fold, the loss is 0.029. Alphabetically the channels are app store 0, organic search 1, paid search 2, paid social 3 and referral 4, so the code puts the channel that churns most (paid social) next to the one that churns least (referral), and a line in the code cannot give two neighbors opposite effects. The forest asks yes/no questions of the code, so it can cut out any one channel with two questions: it loses only 0.003 (0.691 to 0.688).
+
+### 3. Transforms, judged by paired gains
+
+**Idea.** A transform changes how a column is written, not what it knows. A log, `np.log1p`, pulls in the long tail of a count; a *date part* turns a date into something a model can use, such as the weekday or the days since the data began; a flag writes a rule down. Whether any of them helps is a question for the folds: score each recipe on the same five folds as the base, take the five differences, and read their mean and their lowest and highest. A gain smaller than the spread of its differences is no evidence.
+
+**Try it:** score four changes against the day-7 model on the same five folds and print each paired gain.
+
+```python
+menu = {"counts on a log scale": (recipe(log=COUNTS), BASE_COLS),
+        "weekday of signup, one-hot": (recipe(cat=STATIC + ["weekday"]), BASE_COLS + ["weekday"]),
+        "days since January 1": (recipe(num=WEEK1 + ["days_since_jan1"]), BASE_COLS + ["days_since_jan1"]),
+        "flag: no active day": (recipe(num=WEEK1 + ["no_active_day"]), BASE_COLS + ["no_active_day"])}
+menu_gains = {}
+for tag, (model, cols) in menu.items():
+    menu_gains[tag] = gain(folds_auc(model, cols), base_scores)
+    print(f"{tag:30s} gain {menu_gains[tag][0]:+.4f}   fold differences from {menu_gains[tag][1]:+.4f} to {menu_gains[tag][2]:+.4f}")
+```
+
+**Predict:** Four changes: the four counts on a log scale, the weekday of signup, the days since January 1, and a flag for no active day. Will any of them gain more than the spread of its own fold differences?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+counts on a log scale          gain +0.0004   fold differences from -0.0008 to +0.0018
+weekday of signup, one-hot     gain +0.0003   fold differences from -0.0011 to +0.0012
+days since January 1           gain -0.0003   fold differences from -0.0020 to +0.0002
+flag: no active day            gain +0.0005   fold differences from -0.0013 to +0.0013
+```
+
+</details>
+
+*Why:* None does. The gains are +0.0004, +0.0003, -0.0003, +0.0005, and the five differences of every change run from below zero to above it. The log reshapes the counts and the model, a line in the log-odds, hardly moves; the signup date and the flag add nothing the columns did not hold. A column you can build is not a column that helps. The folds decide, and here they say that none of these four earns its place.
+
+### 4. A column made from the labels
+
+**Idea.** Some columns have too many values to one-hot. Here a `cohort` is the day and the channel of the signup, 755 groups (the middle group has 16 people). *Target encoding* replaces each group by the share of churners in it. That share is computed from the labels, so it is a learning step and belongs inside the folds (lesson DS5). Try two routes: the share computed from all training people before the folds are cut, and the same share learned in each fold by a small transformer, `GroupShare`, that sits in the pipeline.
+
+**Try it:** score the two routes on the five folds and print the day-7 model beside them.
+
+```python
+T["cohort"] = T["signup_date"].dt.strftime("%m-%d") + "_" + T["channel"]       # the day and the channel of the signup
+Xt = T.loc[X_train.index]
+print(Xt["cohort"].nunique(), "groups, the middle one with", int(Xt["cohort"].value_counts().median()), "people")
+shares = y_train.groupby(Xt["cohort"]).mean()                                  # the share of churners in each group, from every training person
+outside = Xt[BASE_COLS].assign(cohort_share=Xt["cohort"].map(shares))
+leaky = cross_val_score(recipe(num=WEEK1 + ["cohort_share"]), outside, y_train, cv=folds, scoring="roc_auc")
+
+
+class GroupShare(BaseEstimator, TransformerMixin):
+    """The share of churners in each group, learned in fit() from the fitting people only; a group it has not seen gets the overall share."""
+
+    def fit(self, X, y):
+        self.shares_ = pd.Series(np.asarray(y)).groupby(np.asarray(X).ravel()).mean()
+        self.overall_ = float(np.mean(y))
+        return self
+
+    def transform(self, X):
+        return pd.Series(np.asarray(X).ravel()).map(self.shares_).fillna(self.overall_).to_numpy().reshape(-1, 1)
+
+
+inside_model = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC), ("num", StandardScaler(), WEEK1),
+                                                ("share", make_pipeline(GroupShare(), StandardScaler()), ["cohort"])]), LogisticRegression(max_iter=2000))
+honest = folds_auc(inside_model, BASE_COLS + ["cohort"])
+print("outside the folds", round(float(leaky.mean()), 3), "inside the folds", round(float(honest.mean()), 3), "the day-7 model", round(float(base_scores.mean()), 3))
+```
+
+**Predict:** What will the two routes report on the folds: near the day-7 model's 0.692, above 0.70, or below 0.67?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+755 groups, the middle one with 16 people
+outside the folds 0.726 inside the folds 0.647 the day-7 model 0.692
+```
+
+</details>
+
+*Why:* Computed before the folds the share scores 0.726, a paired gain of 0.0345 from a column of groups of about 16 people. Learned inside the folds it scores 0.647, a paired loss of 0.0441 against the day-7 model. In the first route every person's own label is in their group's share, so the column seems to know the answer. In the second the model learns to trust the share on its fitting people, where it holds their own labels, and the people it is scored on have groups that tell it little. The honest number says that this encoder harms: `GroupShare` has no cross fitting, so the model learns on shares that hold the fitting people's own labels, and no shrinkage, so a group of 16 people gets its raw share. scikit-learn's `TargetEncoder` differs on both counts. The guide says its `fit_transform` "internally relies on a cross fitting scheme to prevent target information from leaking into the train-time representation" (and that `fit(X, y).transform(X)` does not equal `fit_transform(X, y)`), and its formula pulls each group's share toward the global mean with a smoothing factor, where a group of few people gets a small weight. It is not run here.
+
+<figure>
+<svg viewBox="0 0 360 250" width="360" role="img" aria-labelledby="ds9-gains-t ds9-gains-d">
+<title id="ds9-gains-t">Paired gain in ROC AUC over the day-7 model, by change, on the same five folds</title>
+<desc id="ds9-gains-d">A dot chart on a scale from -0.06 to +0.04 of the mean of the five fold-by-fold differences in ROC AUC from the day-7 model, with a line from the lowest to the highest difference. counts on a log scale +0.0004 (folds -0.0008 to +0.0018); weekday of signup +0.0003 (folds -0.0011 to +0.0012); days since January 1 -0.0003 (folds -0.0020 to +0.0002); flag: no active day +0.0005 (folds -0.0013 to +0.0013); ratio, median fill, flag +0.0007 (folds -0.0011 to +0.0012); ordinal codes, not one-hot -0.0294 (folds -0.0374 to -0.0223); computed before the folds +0.0345 (folds +0.0285 to +0.0394); learned inside the folds -0.0441 (folds -0.0531 to -0.0354). The five simple changes sit at zero with ranges that cross it; the ordinal codes fall by about 0.03; the cohort share looks like a gain of 0.03 when it is computed before the folds and is a loss of 0.04 when it is learned inside them.</desc>
+<g fill="currentColor">
+<text x="18" y="21.6" font-size="9.5" font-weight="600">Gain in ROC AUC over the day-7 model, on five folds</text>
+<text x="18" y="48.6" font-size="9.5" font-weight="600">Changes judged on the same folds</text>
+<text x="24" y="62.1" font-size="9">counts on a log scale</text>
+<path d="M254.7 58.6 L257.7 58.6" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="256.1" cy="58.6" r="3.5" fill="#0072b2" />
+<text x="342" y="62.1" font-size="9" font-weight="600" text-anchor="end">+0.0004</text>
+<text x="24" y="76.1" font-size="9">weekday of signup</text>
+<path d="M254.3 72.6 L257 72.6" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="255.9" cy="72.6" r="3.5" fill="#0072b2" />
+<text x="342" y="76.1" font-size="9" font-weight="600" text-anchor="end">+0.0003</text>
+<text x="24" y="90.1" font-size="9">days since January 1</text>
+<path d="M253.3 86.6 L255.8 86.6" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="255.3" cy="86.6" r="3.5" fill="#0072b2" />
+<text x="342" y="90.1" font-size="9" font-weight="600" text-anchor="end">-0.0003</text>
+<text x="24" y="104.1" font-size="9">flag: no active day</text>
+<path d="M254.1 100.6 L257.1 100.6" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="256.2" cy="100.6" r="3.5" fill="#0072b2" />
+<text x="342" y="104.1" font-size="9" font-weight="600" text-anchor="end">+0.0005</text>
+<text x="24" y="118.1" font-size="9">ratio, median fill, flag</text>
+<path d="M254.3 114.6 L257 114.6" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="256.4" cy="114.6" r="3.5" fill="#0072b2" />
+<text x="342" y="118.1" font-size="9" font-weight="600" text-anchor="end">+0.0007</text>
+<text x="18" y="140.6" font-size="9.5" font-weight="600">Encoding of the text columns</text>
+<text x="24" y="154.1" font-size="9">ordinal codes, not one-hot</text>
+<path d="M212.2 150.6 L229.7 150.6" fill="none" stroke="#00a07a" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="221.5" cy="150.6" r="3.5" fill="#00a07a" />
+<text x="342" y="154.1" font-size="9" font-weight="600" text-anchor="end">-0.0294</text>
+<text x="18" y="176.6" font-size="9.5" font-weight="600">Cohort share (755 groups)</text>
+<text x="24" y="190.1" font-size="9">computed before the folds</text>
+<path d="M288.7 186.6 L301.3 186.6" fill="none" stroke="#9a6be0" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="295.6" cy="186.6" r="3.5" fill="#9a6be0" />
+<text x="342" y="190.1" font-size="9" font-weight="600" text-anchor="end">+0.0345</text>
+<text x="24" y="204.1" font-size="9">learned inside the folds</text>
+<path d="M194 200.6 L214.5 200.6" fill="none" stroke="#9a6be0" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="204.4" cy="200.6" r="3.5" fill="#9a6be0" />
+<text x="342" y="204.1" font-size="9" font-weight="600" text-anchor="end">-0.0441</text>
+<path d="M255.6 51.6 L255.6 214.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="3 3" />
+<path d="M186 217.6 L302 217.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M209.2 217.6 L209.2 221.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="209.2" y="233.6" font-size="10" text-anchor="middle" fill-opacity="0.8">-0.04</text>
+<path d="M255.6 217.6 L255.6 221.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="255.6" y="233.6" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M302 217.6 L302 221.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="302" y="233.6" font-size="10" text-anchor="middle" fill-opacity="0.8">+0.04</text>
+</g>
+</svg>
+</figure>
+
+### 5. The verdict on the test part
+
+**Idea.** Fit the recipe with the ratio, the median fill and the flag (the best of the changes by mean) on the training part, and score it on the 4,454 test people once, beside the day-7 model, with a 95 percent interval on the gain from 2,000 resamples (seed 2026) on which both models are scored.
+
+**Try it:** score the day-7 model and the recipe with the ratio on the test part.
+
+```python
+p_day7 = recipe().fit(Xt[BASE_COLS], y_train).predict_proba(Xs[BASE_COLS])[:, 1]                       # the test part is used once, here
+final = recipe(num=WEEK1 + ["expenses_per_day"], fill=True, flag=True).fit(Xt[COLS_R], y_train)
+p_final = final.predict_proba(Xs[COLS_R])[:, 1]
+print("day-7 model", round(float(roc_auc_score(y_test, p_day7)), 3), "with the ratio, fill and flag", round(float(roc_auc_score(y_test, p_final)), 3))
+print(auc_gain(p_final, p_day7, y_test))
+```
+
+**Predict:** Will the recipe with the new column beat the day-7 model by more than 0.005 AUC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+day-7 model 0.69 with the ratio, fill and flag 0.688
+[-0.001, -0.003, 0.0]
+```
+
+</details>
+
+*Why:* No. The day-7 model scores 0.690 and the new recipe 0.688, a gain of -0.001 with a 95 percent interval of -0.003 to 0.000. On the folds it had gained 0.0007; both numbers are the size of the noise. This is the plain result of the lesson: the new columns add nothing on this table, the one wrong encoding costs 0.029, and the leaky route would have shown a gain of 0.0345 that is not there.
+
+<Aside type="tip" title="Remember">
+
+- A gap can carry information, so fill it from the fitting rows (a pipeline does) and consider a flag; if the model already holds the same information, the fill adds nothing.
+- Encode to match the model: one-hot for a line, codes only where a split can isolate a value.
+- Judge a change by the five paired differences from the base, not by one mean.
+- A column made from the labels is a learning step: build it inside the folds, or the score is a fake.
+- Most new columns add nothing. Say so, with the spread beside it.
+
+**Common trap:** a cross-validated gain from a column that was built with the labels before the folds were cut.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-feature-engineering-1">
+
+**Do the changes add up?** Build `recipe` with `num=WEEK1 + ["expenses_per_day"]`, the four `COUNTS` on a log scale (`log=COUNTS`) and the median fill with a flag, score it with `folds_auc(model, cols_stack)`, and put the list that `gain(scores, base_scores)` returns in `answer_1`. Expected: `answer_1` is a list of three numbers.
+
+```python
+cols_stack = BASE_COLS + ["expenses_per_day"]          # given: the day-7 columns and the ratio
+# build recipe(...) with num=WEEK1 + ["expenses_per_day"], the four COUNTS on a log scale (log=COUNTS) and the median fill with a flag,
+# score it on the five folds with folds_auc(model, cols_stack), and take gain(scores, base_scores)
+answer_1 = None  # replace None with the list that gain(...) returns
+```
+
+<details>
+<summary>Hint</summary>
+
+`recipe(num=WEEK1 + ["expenses_per_day"], log=COUNTS, fill=True, flag=True)` is the model; `folds_auc(model, cols_stack)` gives its five fold scores.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+stack = folds_auc(recipe(num=WEEK1 + ["expenses_per_day"], log=..., fill=True, flag=True), cols_stack)
+answer_1 = gain(stack, base_scores)
+```
+
+</details>
+
+<Solution>
+
+```python
+stack = folds_auc(recipe(num=WEEK1 + ["expenses_per_day"], log=COUNTS, fill=True, flag=True), cols_stack)
+answer_1 = gain(stack, base_scores)
+```
+
+The two changes together gain 0.0003, with five differences from -0.0014 to 0.0016. Two changes that add nothing alone add nothing together, and the spread is as wide as for either one.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-feature-engineering-2">
+
+**Another ratio.** Before you start, say in one sentence what the result looks like: a mean gain near zero and a range of fold differences that includes it. Add `visit_share`, the sessions divided by the sessions plus the expenses, which is undefined when both are 0, to `Xt` (the training people with every column). Score the day-7 columns plus `visit_share` with the median fill and the flag on the five folds, and put the list that `gain(scores, base_scores)` returns in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of three numbers.
+
+<details>
+<summary>Hint</summary>
+
+Make the column with `Xt["sessions_7d"] / (Xt["sessions_7d"] + Xt["expenses_7d"]).where(Xt["sessions_7d"] + Xt["expenses_7d"] > 0)`, then call `recipe(num=WEEK1 + ["visit_share"], fill=True, flag=True)` on the columns `BASE_COLS + ["visit_share"]`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three numbers, the first within a thousandth of zero, the other two on either side of it."*
+
+```python
+Xt["visit_share"] = Xt["sessions_7d"] / (Xt["sessions_7d"] + Xt["expenses_7d"]).where(Xt["sessions_7d"] + Xt["expenses_7d"] > 0)
+s_visit = folds_auc(recipe(num=WEEK1 + ["visit_share"], ...), BASE_COLS + ["visit_share"])
+```
+
+</details>
+
+<Solution>
+
+```python
+Xt["visit_share"] = (Xt["sessions_7d"] / (Xt["sessions_7d"] + Xt["expenses_7d"]).where(Xt["sessions_7d"] + Xt["expenses_7d"] > 0))
+s_visit = folds_auc(recipe(num=WEEK1 + ["visit_share"], fill=True, flag=True), BASE_COLS + ["visit_share"])
+answer_2 = gain(s_visit, base_scores)
+```
+
+The gain is 0.0004, with differences from -0.0012 to 0.0011. People with no session and no expense have no value, the same 0.250 as in unit 1, so the new column is a second view of the same information.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why did codes 0 to 4 for `channel` cost a logistic regression far more than a forest?
+
+   <details>
+   <summary>answer</summary>
+
+   A line in the code cannot give the two ends of the channel list, which sit next to each other, opposite effects. A tree asks yes/no questions of the code and isolates any value with two of them.
+
+   </details>
+
+<Exercise id="data-scientist-feature-engineering-3">
+
+**Spot the flaw.** A colleague fills the ratio with its median in pandas, then makes the flag for "had no value" from the filled column, and says the flag sums to a count of people (the code is given). Look at what `answer_3` holds, then change the line that makes the flag so that `answer_3` counts the training people who had no value. Expected: `answer_3` is a whole number above 1,000.
+
+```python
+ratio = Xt["expenses_per_day"]
+filled = ratio.fillna(ratio.median())            # the fill, done in pandas
+flagged = filled.isna().astype(int)              # the flag for "had no value"
+answer_3 = int(flagged.sum())                    # colleague: "the flag marks the people who had no value; it sums to this many"
+# change the line that makes the flag, so that answer_3 counts the training people who had no value
+```
+
+<details>
+<summary>Hint</summary>
+
+After `fillna` the column has no missing value left. Which column should `isna()` read?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+flagged = ratio.isna().astype(int)
+answer_3 = int(flagged.sum())
+```
+
+</details>
+
+<Solution>
+
+```python
+flagged = ratio.isna().astype(int)
+answer_3 = int(flagged.sum())
+```
+
+The flag made from the filled column sums to 0: the fill had already replaced every gap, so the model would get a column of zeros, and nothing raises an error. Made from the original column it counts 3,336 training people, the 25.0 percent of unit 1. Inside a pipeline `add_indicator=True` makes the flag before it fills, which is why a pipeline is safer than two pandas lines.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can fill, encode and transform a column inside the folds, give the paired gain of a change with the range of its fold differences, and tell a real gain from a leak.*
+Test: Exercise data-scientist-feature-engineering-2, done from the notebook without opening the hints.
+
+The pattern to remember: **fit inside the folds, encode for the model, and report each change as a paired gain with its spread.** The next lesson, *Clustering* (DS10), looks for groups without labels at all.

@@ -4,7 +4,7 @@
 export type UiLang = 'en' | 'vi';
 
 export interface SiteUi {
-	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; cookies: string };
+	nav: { label: string; about: string; cite: string; changelog: string; license: string; privacy: string; translate: string; cookies: string };
 	/** The consent card (SPEC §11), laid out like the owner's johnha.info. */
 	consent: {
 		title: string;
@@ -55,7 +55,7 @@ export interface SiteUi {
 }
 
 const en: SiteUi = {
-	nav: { label: 'About this site', about: 'About', cite: 'Cite', changelog: "What's new", license: 'License', privacy: 'Privacy', cookies: 'Cookie settings' },
+	nav: { label: 'About this site', about: 'About', cite: 'Cite', changelog: "What's new", license: 'License', privacy: 'Privacy', translate: 'Read in your language', cookies: 'Cookie settings' },
 	consent: {
 		title: 'Your privacy choices',
 		text: 'We use Google Analytics cookies to see which pages are read and improve the lessons. No ads. The site works the same either way, and you can change your choice any time.',
@@ -102,7 +102,7 @@ const en: SiteUi = {
 };
 
 const vi: SiteUi = {
-	nav: { label: 'Dự án', about: 'Giới thiệu', cite: 'Trích dẫn', changelog: 'Nhật ký thay đổi', license: 'Giấy phép', privacy: 'Quyền riêng tư', cookies: 'Cài đặt cookie' },
+	nav: { label: 'Dự án', about: 'Giới thiệu', cite: 'Trích dẫn', changelog: 'Nhật ký thay đổi', license: 'Giấy phép', privacy: 'Quyền riêng tư', translate: 'Dịch trang', cookies: 'Cài đặt cookie' },
 	consent: {
 		title: 'Lựa chọn quyền riêng tư',
 		text: 'Chúng tôi dùng cookie của Google Analytics để biết trang nào được đọc và cải thiện bài học. Không quảng cáo. Trang hoạt động như nhau trong cả hai trường hợp, và bạn có thể đổi lựa chọn bất cứ lúc nào.',

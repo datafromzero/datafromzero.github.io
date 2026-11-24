@@ -7,6 +7,8 @@ datafromzero is a free, open roadmap for people who only know Microsoft Office. 
 Excel and Google Sheets to SQL, then Python, then an advanced core, and finally four data careers.
 The site is still being written, so lessons appear stage by stage.
 
+Not an English reader yet? [Read in your language](/translate/) shows how to translate the pages with Chrome.
+
 ## Follow the order
 
 Study the stages in this order:
@@ -50,9 +52,9 @@ it down yourself.
 
 ## Report a problem
 
-Every lesson ends with **Suggest an edit** and **Report an issue** links. You can also open an issue in
-the [project repository](https://github.com/datafromzero/datafromzero.github.io/issues). Small fixes
-such as typos are welcome as pull requests.
+Every lesson ends with a **Report an issue** form: write what is wrong or unclear and send it, no account
+needed. If you use GitHub, you can also open an issue in the
+[project repository](https://github.com/datafromzero/datafromzero.github.io/issues).
 
 ## The roadmap map
 

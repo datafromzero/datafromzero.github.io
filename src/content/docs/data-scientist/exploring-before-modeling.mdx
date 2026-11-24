@@ -1,0 +1,465 @@
+---
+id: data-scientist-exploring-before-modeling
+title: Exploring before you model
+short_title: Explore before modeling
+description: Profile a dirty extract and write the problem list before fitting anything, so the model starts from a known table.
+stage: data-scientist
+order: 10
+level: intermediate
+duration: 30
+objectives:
+  - 'Profile a dirty extract: grain, keys, empty cells, copies and impossible values'
+  - Read two clocks and a renamed value from profiles over time
+  - Write the problem list, with a decision of fix, flag or leave for each problem
+  - Split before any decision that uses the target
+prerequisites:
+  - core-distributions-and-outliers
+  - core-framing-split-and-baseline
+  - python-pandas-missing-data-and-types
+  - python-pandas-merge-and-validate
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-exploring-before-modeling.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'pandas documentation: DataFrame.duplicated (accessed 2026-11-24)'
+    url: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.duplicated.html
+  - title: 'pandas documentation: Working with missing data (accessed 2026-11-24)'
+    url: https://pandas.pydata.org/docs/user_guide/missing_data.html
+  - title: 'scikit-learn documentation: Common pitfalls and recommended practices, data leakage (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/common_pitfalls.html
+status: published
+---
+
+## The question
+
+Priya's team wants to know, a week after each signup, who will go quiet, so that a win-back message can reach them. An engineer sends the extract the model will learn from: the two tables `users` (21,841 rows) and `events`. Before any model, someone must say what is wrong with it. The first events of the extract:
+
+| event_id | user_id | event_ts | event_name | platform | received_at |
+|---:|---:|---|---|---|---|
+| 1000001 | 10001 | 2026-01-01 00:11:13 | signup_complete | web | 2026-01-01 00:11:15 |
+| 1000002 | 10002 | 2026-01-01 00:24:13 | signup_complete | android | 2026-01-01 00:24:15 |
+| 1000003 | 10001 | 2026-01-01 00:25:11 | onboarding_complete | web | 2026-01-01 00:25:23 |
+| 1000004 | 10001 | 2026-01-01 00:35:58 | add_expense | web | 2026-01-01 00:35:59 |
+| 1000005 | 10003 | 2026-01-01 01:05:12 | signup_complete | android | 2026-01-01 01:05:13 |
+
+By the end you can profile a table like this one, write the problem list with a decision for each problem, and say which decisions must wait until the data is split.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Missing values, types and duplicates*](/python/pandas-missing-data-and-types/) (P16) `isna()` found empty cells and `duplicated()` found repeated rows. Both run here, on tables of real size.
+
+**Diverge.** In P16 a repeated row repeated every column. Unit 2 shows what `duplicated()` finds in a log where each row has a number of its own.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. Write one line of pandas that counts the rows of `df` that repeat an earlier row in columns `a` and `b`.
+
+   <details>
+   <summary>answer</summary>
+
+   `df.duplicated(subset=["a", "b"]).sum()`: it marks every row after the first of its kind.
+
+   </details>
+
+2. In [*Framing a prediction problem, splitting and a baseline*](/core/framing-split-and-baseline/) (C19), why is a split made before anything is fitted?
+
+   <details>
+   <summary>answer</summary>
+
+   The held-out part has to stay unseen, so that its score says how the model does on people it did not learn from.
+
+   </details>
+
+## The big idea
+
+Profile first, write the problem list with a decision for each problem, and keep the held-out rows out of every decision that uses the target.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: grain, keys and gaps; copies and impossible values; two clocks; a name that changed. A last unit writes the problem list and teaches no new tool. The setup cell loaded `users`, `events` and `subs` (the subscriptions table, used in Exercise 2) into pandas.
+
+<OpenInColab />
+
+### 1. Grain, keys and gaps
+
+**Idea.** Profile a table before you use it: its *grain* (what one row is), its *key* (the column that should be unique), its empty cells and its gaps between tables. `isna()` finds empty cells. A missing row has no cell to be empty, so find it by asking whether every key of one table exists in the other, with `isin`.
+
+**Try it:** check the shape, the keys and the empty cells of `users` and `events`, then look for keys that have no match in the other table.
+
+```python
+print(users.shape, events.shape)
+print(bool(users["user_id"].is_unique), bool(events["event_id"].is_unique))
+print(int(users.isna().sum().sum()), int(events.isna().sum().sum()))
+no_user = ~events["user_id"].isin(users["user_id"])
+no_event = ~users["user_id"].isin(events["user_id"])
+orphan_events, orphan_people, idle_users = int(no_user.sum()), events.loc[no_user, "user_id"].nunique(), int(no_event.sum())
+print(orphan_events, orphan_people, idle_users)
+print(users.loc[no_event, "signup_date"].min().date(), users.loc[no_event, "signup_date"].max().date())
+```
+
+**Predict:** How many empty cells are there in `users` and `events` together? How many events belong to a person with no row in `users`, and how many users have no event at all?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(21841, 5) (177379, 6)
+True True
+0 0
+393 40 10
+2026-06-12 2026-06-28
+```
+
+</details>
+
+*Why:* No empty cell anywhere: 0. Yet 393 events belong to 40 people who have no row in `users`, and 10 users have no event; they signed up between June 12 and June 28. `isna()` cannot see either group. The dataset README gives the cause of the first: accounts that signed up from January 1 to 11 and never subscribed were deleted from `users` while their events stayed, so any table built from `users` never meets them. The second group falls outside the window of this track's table (lesson DS3).
+
+### 2. Copies and impossible values
+
+**Idea.** Two kinds of rows should not count as they stand. A *copy* is one event written twice. Define it by the columns that say what happened: who, when, what and where. An *impossible value* breaks a rule of the data, such as an event that arrives before it happened. `duplicated(subset=...)` marks every row after the first of its kind.
+
+**Try it:** mark the copies, look at one pair, and look for events dated after they arrived.
+
+```python
+print(int(events.duplicated().sum()), int(events.duplicated(subset=KEY).sum()))
+pair = events[events.duplicated(subset=KEY, keep=False)].sort_values(KEY + ["event_id"]).head(2)
+print(pair[["event_id", "event_ts", "event_name", "received_at"]].to_string(index=False))
+copies = int(events.duplicated(subset=KEY).sum())
+print(sorted(set(events["event_name"]) - set(events.loc[events.duplicated(subset=KEY), "event_name"])))
+future = int((events["event_ts"] > events["received_at"]).sum())
+print(future)
+```
+
+**Predict:** `events.duplicated()` with no arguments, and `events.duplicated(subset=KEY)`: how many rows does each mark?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0 835
+ event_id            event_ts    event_name         received_at
+  1002025 2026-01-06 06:02:19 session_start 2026-01-06 06:02:24
+  1002026 2026-01-06 06:02:19 session_start 2026-01-06 06:02:26
+['cancel_subscription', 'onboarding_complete', 'purchase', 'signup_complete']
+30
+```
+
+</details>
+
+*Why:* None, and 835. With no arguments pandas compares every column, including `event_id`, which is different on each row, so nothing can repeat; the key `KEY` (person, time, name, platform) finds 835 extra rows. The pair shows the pattern: one person, one second, one name, and a `received_at` a few seconds apart, as if the app retried the send. Four names never have a copy: `cancel_subscription`, `onboarding_complete`, `purchase` and `signup_complete`, the events that count people and money. Another 30 events carry an `event_ts` later than their `received_at`, which is impossible: a phone clock ran ahead.
+
+### 3. Two clocks
+
+**Idea.** A log has two clocks: when an event happened (`event_ts`) and when the collector stored it (`received_at`). Profile both, by hour or by day, because the totals of one clock hide what the other shows. What an app knew at a moment is what had arrived by then, not what had happened.
+
+**Try it:** count the events of March 17 by the hour they happened and by the hour they arrived.
+
+```python
+day = pd.Timestamp("2026-03-17")
+by_hour = pd.DataFrame({
+    "happened": events[events["event_ts"].dt.normalize() == day].groupby(events["event_ts"].dt.hour).size(),
+    "arrived": events[events["received_at"].dt.normalize() == day].groupby(events["received_at"].dt.hour).size(),
+}).fillna(0).astype(int)
+print(by_hour.loc[13:21].T.to_string())
+wait = events["received_at"] - events["event_ts"]
+late = int((wait >= pd.Timedelta(hours=1)).sum())
+print(late, int((wait >= pd.Timedelta(days=1)).sum()))
+```
+
+**Predict:** On March 17 the collector was down for part of the afternoon. For the hours 14 to 19, what will the row "arrived" show, and what will it show for hour 20?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+          13  14  15  16  17  18  19   20  21
+happened  43  39  43  29  47  54  28   46  42
+arrived   43   0   0   1   0   0   0  286  42
+1135 608
+```
+
+</details>
+
+*Why:* The events that happened in hours 14 to 19 (240 of them) arrived at 20:00 and just after: the row "arrived" is empty from hour 14 to hour 19 apart from one stray event, and 286 events arrive in hour 20, against 46 that happened then. Nothing is lost; a count by `received_at` shows a hole and then a spike. Over the whole log 1,135 events arrived an hour or more after they happened, and 608 of those a day or more. The dataset README gives the two sources of the 1,135: 912 usage events from phones that were held on the device and sent later, and 223 events of the outage.
+
+<figure>
+<svg viewBox="0 0 360 207" width="360" role="img" aria-labelledby="ds1-outage-t ds1-outage-d">
+<title id="ds1-outage-t">Events of March 17 by the hour they happened and the hour they arrived</title>
+<desc id="ds1-outage-d">A bar chart for the hours 13 to 21 of March 17, with two bars for each hour, from 0 to 300 events. Events that happened: 43 at 13, 39 at 14, 43 at 15, 29 at 16, 47 at 17, 54 at 18, 28 at 19, 46 at 20, 42 at 21. Events that arrived: 43 at 13, 0 at 14, 0 at 15, 1 at 16, 0 at 17, 0 at 18, 0 at 19, 286 at 20, 42 at 21. No events arrive in hours 14 to 19 apart from one in hour 16, and 286 arrive in hour 20: the events of the six empty hours arrived together at 20:00 and just after. Times are UTC.</desc>
+<g fill="currentColor">
+<text x="15" y="22.4" font-size="10.5" font-weight="600">Events of March 17, by hour (UTC)</text>
+<rect x="137" y="34.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="149" y="41.9" font-size="9.5">happened</text>
+<rect x="213" y="34.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="225" y="41.9" font-size="9.5">arrived</text>
+<path d="M51 162.4 L345 162.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="45" y="165.9" font-size="10" text-anchor="end" fill-opacity="0.8">0</text>
+<path d="M51 125.7 L345 125.7" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="45" y="129.2" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M51 89.1 L345 89.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="45" y="92.6" font-size="10" text-anchor="end" fill-opacity="0.8">200</text>
+<path d="M51 52.4 L345 52.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="45" y="55.9" font-size="10" text-anchor="end" fill-opacity="0.8">300</text>
+<rect x="60.8" y="146.6" width="6" height="15.8" rx="1.5" fill="#0072b2" />
+<rect x="67.8" y="146.6" width="6" height="15.8" rx="1.5" fill="#00a07a" />
+<text x="67.3" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">13</text>
+<rect x="93.5" y="148.1" width="6" height="14.3" rx="1.5" fill="#0072b2" />
+<text x="100" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">14</text>
+<rect x="126.2" y="146.6" width="6" height="15.8" rx="1.5" fill="#0072b2" />
+<text x="132.7" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">15</text>
+<rect x="158.8" y="151.8" width="6" height="10.6" rx="1.5" fill="#0072b2" />
+<rect x="165.8" y="162" width="6" height="0.4" rx="1.5" fill="#00a07a" />
+<text x="165.3" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">16</text>
+<rect x="191.5" y="145.2" width="6" height="17.2" rx="1.5" fill="#0072b2" />
+<text x="198" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">17</text>
+<rect x="224.2" y="142.6" width="6" height="19.8" rx="1.5" fill="#0072b2" />
+<text x="230.7" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">18</text>
+<rect x="256.8" y="152.1" width="6" height="10.3" rx="1.5" fill="#0072b2" />
+<text x="263.3" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">19</text>
+<rect x="289.5" y="145.5" width="6" height="16.9" rx="1.5" fill="#0072b2" />
+<rect x="296.5" y="57.5" width="6" height="104.9" rx="1.5" fill="#00a07a" />
+<text x="296" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">20</text>
+<rect x="322.2" y="147" width="6" height="15.4" rx="1.5" fill="#0072b2" />
+<rect x="329.2" y="147" width="6" height="15.4" rx="1.5" fill="#00a07a" />
+<text x="328.7" y="176.4" font-size="10" text-anchor="middle" fill-opacity="0.8">21</text>
+<text x="288" y="51.5" font-size="10" font-weight="600" text-anchor="end">286</text>
+<path d="M86.7 136.4 L276.7 136.4" fill="none" stroke="#00a07a" stroke-width="1.5" stroke-opacity="0.9" />
+<text x="181.7" y="130.4" font-size="9.5" text-anchor="middle">nothing arrives, 14 to 19</text>
+<text x="345" y="190.4" font-size="10" text-anchor="end" fill-opacity="0.8">hour of the day</text>
+</g>
+</svg>
+</figure>
+
+### 4. A name that changed
+
+**Idea.** A category can change meaning over time. Count the values of an event or category column by time and by platform, not only in total, before you build a definition on a name.
+
+**Try it:** count the two paywall event names before and from May 18, by platform.
+
+```python
+paywall = events[events["event_name"].isin(["view_paywall", "paywall_viewed"])]
+from_may_18 = paywall["event_ts"] >= pd.Timestamp("2026-05-18")
+print(pd.crosstab([from_may_18.rename("from May 18"), paywall["platform"]], paywall["event_name"]).to_string())
+renamed = int((events["event_name"] == "paywall_viewed").sum())
+print(renamed)
+```
+
+**Predict:** From May 18 the iOS app sends `paywall_viewed` for the paywall. Which platforms still send `view_paywall` from May 18, and does any platform send both names?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+event_name            paywall_viewed  view_paywall
+from May 18 platform                              
+False       android                0          2696
+            ios                    0          2804
+            web                    0          3159
+True        android                0          1107
+            ios                 1303             0
+            web                    0          1376
+1303
+```
+
+</details>
+
+*Why:* Android and web keep `view_paywall`; iOS sends only `paywall_viewed`, 1,303 rows, and no platform sends both. Nothing about behavior changed, only a name. A feature that counted `view_paywall` alone would show every iOS person who signed up after May 18 as never having seen the paywall, a drop that no one caused. The fix is to treat the two names as one event before any count.
+
+### 5. The problem list, and the split
+
+**Idea.** A problem list has three columns: the problem, the rows it touches, and a decision. *Fix* a problem that changes a number the model will read and that you can correct. *Flag* one you cannot correct but a reader must know. *Leave* one that falls outside the table or changes nothing. Write the list from profiles that never use the target. A decision that does use the target, such as which rows are noise, is made on the training part only, after the split. scikit-learn's page on common pitfalls says that test data "should never be used to make choices about the model" and gives the general rule "to never call fit on the test data". Keeping the target out of the problem list, and looking at it on the training part only, is this lesson's own reading of that rule, not the page's wording.
+
+**Try it:** collect the evidence of units 1 to 4 and of the signups with a short follow-up, then split the people with the seed of the track and look at the target on the training part only.
+
+```python
+incomplete = int((users["signup_date"] >= pd.Timestamp("2026-06-01")).sum())     # signed up from June 1 on: fewer than 30 days of follow-up before the export
+problems = pd.DataFrame([
+    ("events of people with no user row", orphan_events, "flag"),
+    ("users with no event", idle_users, "leave"),
+    ("retry copies of events", copies, "fix"),
+    ("events dated after they arrived", future, "flag"),
+    ("events that arrived an hour or more late", late, "fix"),
+    ("paywall_viewed, the renamed event", renamed, "fix"),
+    ("signups with under 30 days of follow-up", incomplete, "fix"),
+], columns=["problem", "rows", "decision"])
+print(problems.to_string(index=False))
+train, test = train_test_split(table, test_size=0.25, random_state=SEED, stratify=table["churned"])      # the split of the track, made before the target is used
+print(len(train), len(test))
+print(train.groupby("region")["churned"].mean().round(3).to_dict())
+gone = events[~events["user_id"].isin(users["user_id"])]                  # the 40 deleted accounts left events but no user row
+start = gone[gone["event_name"] == "signup_complete"].set_index("user_id")["event_ts"]
+act = gone[gone["event_name"].isin(["session_start", "add_expense"])]
+days = (act["event_ts"] - act["user_id"].map(start)).dt.total_seconds() / 86400
+churned_gone = len(start) - act.loc[(days > 7) & (days <= 30), "user_id"].nunique()     # same label: no visit and no expense in days 8 to 30
+january = train.loc[train["signup_date"] < pd.Timestamp("2026-02-01"), "churned"]      # the target, on the training part only
+print(len(start), churned_gone, round(100 * january.mean(), 2), round(100 * (january.sum() + churned_gone) / (len(january) + len(start)), 2))
+```
+
+**Predict:** Seven problems stand in the list. Before you run the cell, write fix, flag or leave beside each one: events of people with no user row, users with no event, retry copies, events dated after they arrived, events that arrived late, the renamed event, and signups with under 30 days of follow-up.
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+                                 problem  rows decision
+       events of people with no user row   393     flag
+                     users with no event    10    leave
+                  retry copies of events   835      fix
+         events dated after they arrived    30     flag
+events that arrived an hour or more late  1135      fix
+       paywall_viewed, the renamed event  1303      fix
+ signups with under 30 days of follow-up  4025      fix
+13362 4454
+{'asia_pacific': 0.528, 'europe': 0.551, 'latin_america': 0.547, 'north_america': 0.546}
+40 22 49.88 49.98
+```
+
+</details>
+
+*Why:* The list says what the next lessons do. **Fix:** the retry copies (keep the first copy), the late arrivals (count an event only once it has arrived), the renamed event (one event, two names) and the short follow-ups (the table keeps signups to May 31). **Flag:** the 393 events of deleted accounts, which stay out because the table starts from `users` (none of the 40 people ever subscribed, so January's churn rate counts survivors only; their own events give 22 of 40 churned, and with them January's rate on the training part would move from 49.88 to 49.98 percent, too little to act on), and the 30 future-dated events, 0.017 percent of the log, which cannot be corrected without knowing each phone's clock. **Leave:** the 10 users with no event, who signed up after the window. The split puts 13,362 people in the training part and 4,454 in the test part; the churn rate by region is looked at on the training part only (52.8 to 55.1 percent), and what to do with `region` is left to the model of lesson DS2.
+
+<Aside type="tip" title="Remember">
+
+- Profile the grain, the key and the gaps; `isna()` finds empty cells, `isin` finds missing rows.
+- A copy is defined by the columns that say what happened, never by the row id.
+- A log has two clocks; what the app knew is what had arrived.
+- Count a category by time and by platform before you build a definition on its name.
+- Write the problem list from profiles that never use the target; decide with the target on the training part only.
+
+**Common trap:** a clean-looking check. `isna()` found no empty cell and the table still had two kinds of gaps.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-exploring-before-modeling-1">
+
+**Which events have copies?** The starter marks the extra copies of events, one row for each copy after the first. Put in `answer_1` the number of extra copies for each event name, as a dictionary `{name: count}`. Expected: `answer_1` is a dictionary with 6 event names as keys and whole numbers as values.
+
+```python
+extra = events[events.duplicated(subset=KEY)]          # given: the extra copies, one row for each copy after the first
+answer_1 = None  # replace None with the number of extra copies for each event name, as a dictionary {name: count}
+```
+
+<details>
+<summary>Hint</summary>
+
+Count the rows of `extra` for each event name: `value_counts()` on one column does it, and `.items()` gives the pairs.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = {name: int(n) for name, n in extra["..."].value_counts().items()}
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_1 = {name: int(n) for name, n in extra["event_name"].value_counts().items()}
+```
+
+The extra copies are add_expense 406, session_start 202, plus_feature_used 133, view_paywall 64, start_checkout 21, paywall_viewed 9, 835 in all. Marking every row of every pair (`keep=False`) would count 1,669, both rows of each pair; the extra copies are the rows to remove.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-exploring-before-modeling-2">
+
+**How dirty is the subscriptions table?** Before you start, say in one sentence what the result looks like: two whole numbers, the second much smaller than 3,840. `subs` holds the 3,840 rows of `subscriptions`: one row for each saved version of a subscription. Put the list [rows that are exact copies of an earlier row, subscriptions that have more than one row] in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two whole numbers.
+
+<details>
+<summary>Hint</summary>
+
+`subs.duplicated()` with no arguments marks rows that repeat an earlier row in every column. For the second number, count the rows of each `subscription_id` with `groupby(...).size()` and count the ids above 1.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two whole numbers: about a hundred exact copies, and several hundred subscriptions with more than one row."*
+
+```python
+answer_2 = [int(subs.duplicated().sum()), int((subs.groupby(...).size() > 1).sum())]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_2 = [int(subs.duplicated().sum()), int((subs.groupby("subscription_id").size() > 1).sum())]
+```
+
+97 rows repeat an earlier row in every column, and 874 of the 2,905 subscriptions have more than one row. Most of those extra rows are not copies: a subscription is saved again when it changes, such as a cancel, so its latest row (by `updated_at`) is the truth. Counting `subscription_id` as a key that must be unique would flag 874 false problems.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what are the three decisions of a problem list, and what is each for?
+
+   <details>
+   <summary>answer</summary>
+
+   Fix: it changes a number the model reads and you can correct it. Flag: you cannot correct it but a reader must know. Leave: it falls outside the table or changes nothing.
+
+   </details>
+
+<Exercise id="data-scientist-exploring-before-modeling-3">
+
+**Spot the flaw.** A colleague's problem list says: "fix: drop the people with no activity in week 1; zero looks like broken tracking." The starter drops them and checks that the churn rate of the rest hardly moves. Change the last line to report what the drop deletes: the share of all churners in the training part who had no activity in week 1, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 1.
+
+```python
+kept = train[train["active_days_7d"] > 0]       # colleague: "no activity in week 1 is broken tracking, so I dropped those rows. The churn rate hardly moves"
+answer_3 = round(float(kept["churned"].mean()), 3)      # colleague's check: the churn rate after the drop
+# change the last line to report what the drop deletes: the share of all churners in the training part who had no activity in week 1
+```
+
+<details>
+<summary>Hint</summary>
+
+The churners in `kept` are the churners that survive the drop. What share of the training part's churners is that, and what is left over?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float(1 - kept["churned"].sum() / train["..."].sum()), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = round(float(1 - kept["churned"].sum() / train["churned"].sum()), 3)
+```
+
+The drop deletes 32.3 percent of the churners, while it removes 25.0 percent of the people. The churn rate of the rest, 0.491 against 0.544 before, looks like a small move and hides this. The people with no activity are not missing data: zero is a value, not a gap (unit 1 found no empty cell), and 70.4 percent of them churned. They are the very rows the model must learn from.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can profile an extract for its grain, keys, gaps, copies, impossible values and clocks, write the problem list with a decision for each problem, and say which decisions need the training part.*
+Test: Exercise data-scientist-exploring-before-modeling-2, done from the notebook without opening the hints.
+
+The pattern to remember: **profile, list, decide, then split.** The next lesson, [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2), fits the first model on the table that this list led to.

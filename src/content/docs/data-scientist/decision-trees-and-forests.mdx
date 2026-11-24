@@ -1,0 +1,551 @@
+---
+id: data-scientist-decision-trees-and-forests
+title: Decision trees and random forests
+short_title: Trees and forests
+description: See how a tree picks its questions, hold it back with leaf size and depth, average many trees in a forest, and read importances with caution.
+stage: data-scientist
+order: 70
+level: intermediate
+duration: 30
+objectives:
+  - Describe how a tree chooses a split
+  - Limit a tree's depth and leaf size to control overfitting
+  - Explain why averaging many trees helps
+  - Read feature importances with caution
+prerequisites:
+  - data-scientist-cross-validation-and-overfitting
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-decision-trees-and-forests.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: Decision trees (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/tree.html
+  - title: 'scikit-learn documentation: Ensembles, random forests (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/ensemble.html
+  - title: 'scikit-learn documentation: Permutation feature importance (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/permutation_importance.html
+  - title: 'Strobl, Boulesteix, Zeileis and Hothorn (2007), Bias in random forest variable importance measures: illustrations, sources and a solution, BMC Bioinformatics 8, article 25 (record opened 2026-11-24)'
+    url: https://doi.org/10.1186/1471-2105-8-25
+status: published
+---
+
+## The question
+
+In lesson DS5 a decision tree stood in as a model with one knob. The team now asks the three questions a reviewer asks of any tree: *what is it asking, can a forest of them beat the day-7 logistic model, and which columns does it lean on?* The table is the one of lesson DS3:
+
+| user_id | channel | expenses_7d | active_days_7d | churned |
+|---:|---|---:|---:|---:|
+| 10001 | organic_search | 1 | 1 | 1 |
+| 10002 | app_store | 2 | 2 | 1 |
+| 10003 | paid_search | 0 | 1 | 1 |
+| 10004 | organic_search | 0 | 0 | 0 |
+
+By the end you can read a tree, hold it back, average many of them, and say how far to trust the importances.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In lesson DS5 a tree with no limit scored 0.906 on its fitting rows and 0.570 on others, and the folds picked a depth. Unit 2 picks depth and a second setting the same way.
+
+**Diverge.** In DS5 depth was the only knob. Unit 2 shows what the second one does at a depth where the first has stopped helping.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. Which two ROC AUC scores must a new model beat on the held-out people, and which model gave the second?
+
+   <details>
+   <summary>answer</summary>
+
+   The signup columns only, 0.668, and the day-7 logistic model, 0.690 (lesson DS2). The flat guess scores 0.5.
+
+   </details>
+
+2. In lesson DS5, how did the AUC of a tree change on unseen people as its depth went from 4 to "no limit"?
+
+   <details>
+   <summary>answer</summary>
+
+   It fell, from 0.688 to 0.570, while the AUC on the fitting rows rose to 0.906.
+
+   </details>
+
+## The big idea
+
+A tree asks a chain of yes/no questions about single columns; a forest averages many such trees, so that the luck of one tree does not decide.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: how a tree picks a question, leaf size as a brake, many trees averaged, and importances with caution; a short last unit gives the verdict on the test part. The setup cell holds `tree(depth, leaf)` and `forest(trees, leaf)`. Everything runs on the 13,362 training people.
+
+<OpenInColab />
+
+### 1. How a tree picks its questions
+
+**Idea.** A tree asks one yes/no question about one column, sends each person left or right, and asks again inside each group. It picks the question that makes the two groups purest. For two outcomes, the *Gini impurity* of a group with a share $$p$$ of churners is $$2p(1-p)$$: 0 when everyone in the group has the same outcome, 0.5 when the group is split evenly. This is the form $$\sum_k p_k(1-p_k)$$ of the scikit-learn guide, for two classes. The impurity after a question is the average of the two groups' impurities, each weighted by its number of people.
+
+**Try it:** score one question for every column, a stump of depth 1, and print a tree of depth 2.
+
+```python
+names = list(prep().fit(X_fit).get_feature_names_out())
+Xf = pd.DataFrame(prep().fit_transform(X_fit), columns=names)         # the fitting people as 0/1 and number columns
+p = y_fit.mean()
+print("impurity of all the fitting people:", round(float(2 * p * (1 - p)), 3))
+rows = []
+for col in names:
+    stump = DecisionTreeClassifier(max_depth=1, random_state=SEED).fit(Xf[[col]], y_fit)       # one question about one column
+    t = stump.tree_
+    after = (t.n_node_samples[1] * t.impurity[1] + t.n_node_samples[2] * t.impurity[2]) / t.n_node_samples[0]
+    rows.append((col, round(float(t.threshold[0]), 1), round(float(after), 3)))
+print(pd.DataFrame(rows, columns=["column", "split at", "impurity after"]).sort_values("impurity after").head(4).to_string(index=False))
+two = DecisionTreeClassifier(max_depth=2, min_samples_leaf=50, random_state=SEED).fit(Xf, y_fit)
+print(export_text(two, feature_names=names))
+```
+
+**Predict:** The fitting people start at an impurity of 0.496. Which single question will lower it most: one about `channel_paid_social`, `expenses_7d` or `active_days_7d`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+impurity of all the fitting people: 0.496
+             column  split at  impurity after
+channel_paid_social       0.5           0.462
+        expenses_7d       2.5           0.474
+     active_days_7d       1.5           0.476
+        sessions_7d       0.5           0.479
+|--- channel_paid_social <= 0.50
+|   |--- expenses_7d <= 2.50
+|   |   |--- class: 1
+|   |--- expenses_7d >  2.50
+|   |   |--- class: 0
+|--- channel_paid_social >  0.50
+|   |--- expenses_7d <= 0.50
+|   |   |--- class: 1
+|   |--- expenses_7d >  0.50
+|   |   |--- class: 1
+```
+
+</details>
+
+*Why:* The best first question is `channel_paid_social` at 0.5, which means "is the signup from paid social?", and it brings the impurity down to 0.462; `expenses_7d` at 2.5 comes second (0.474) and `active_days_7d` at 1.5 third (0.476). The tree of depth 2 asks the paid-social question first and then `expenses_7d` in each group, with a different cut on each side. Paid social is the lowest-activity channel in the dataset's rules (an activity factor of 0.35 against 0.85 to 1.80 for the others), which is why one question about it separates so many leavers. A split is chosen for the group in front of it alone, so the tree is built question by question and never plans ahead.
+
+### 2. Leaf size is the stronger brake
+
+**Idea.** With no limit a tree keeps asking until each leaf is pure, and memorizes, as in lesson DS5. Two settings hold it back: `max_depth`, the most questions in a row, and `min_samples_leaf`, the fewest people a leaf may hold. The scikit-learn guide says that a very small leaf size "will usually mean the tree will overfit". Try both on the five folds, with `GridSearchCV` as in lesson DS6.
+
+**Try it:** score 42 combinations of depth and leaf size on the five folds, and print three depths against three leaf sizes.
+
+```python
+grid = {"decisiontreeclassifier__max_depth": [2, 3, 4, 5, 6, 8, 10], "decisiontreeclassifier__min_samples_leaf": [1, 10, 50, 100, 200, 400]}
+tree_search = GridSearchCV(tree(), grid, cv=folds, scoring="roc_auc").fit(X_train, y_train)
+cv_table = pd.DataFrame(tree_search.cv_results_)
+cv_table = cv_table.pivot(index="param_decisiontreeclassifier__max_depth", columns="param_decisiontreeclassifier__min_samples_leaf", values="mean_test_score")
+cv_table.index.name, cv_table.columns.name = "depth", "leaf"
+print(cv_table.loc[[3, 6, 10], [1, 50, 400]].round(3).to_string())
+print(tree_search.best_params_, round(float(tree_search.best_score_), 3), round(float(cross_val_score(logit(), X_train, y_train, cv=folds, scoring="roc_auc").mean()), 3))
+```
+
+**Predict:** A tree of depth 10 can have leaves of one person or leaves of at least 400 people. Will the two score about the same on the folds?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+leaf     1      50     400
+depth                     
+3      0.676  0.676  0.675
+6      0.682  0.684  0.688
+10     0.645  0.675  0.688
+{'decisiontreeclassifier__max_depth': 6, 'decisiontreeclassifier__min_samples_leaf': 400} 0.688 0.692
+```
+
+</details>
+
+*Why:* No. At depth 10 the leaves of one person score 0.645 and the leaves of at least 400 score 0.688, a gap of 0.043. With big leaves the depth hardly matters (0.688 at depth 6, 0.688 at depth 10), because a tree whose leaves must hold 400 of a fold's 10,689 fitting people has at most 26 leaves, and extra depth has nowhere to go. The best of the 42 is depth 6 with leaves of at least 400 people, 0.688 on the folds, below the 0.692 of the day-7 model on the same folds. A leaf size of 400 is the edge of the grid, so a larger one might score a little higher; the lesson does not try.
+
+<figure>
+<svg viewBox="0 0 360 217" width="360" role="img" aria-labelledby="ds7-leaf-t ds7-leaf-d">
+<title id="ds7-leaf-t">Mean ROC AUC of a decision tree on the five folds, by depth, for three leaf sizes</title>
+<desc id="ds7-leaf-d">A line chart of the mean ROC AUC on the five folds, from 0.64 to 0.70, for trees of depth 2, 3, 4, 5, 6, 8, 10 (the depth axis is to scale). With leaves of one person the AUC rises to 0.684 at depth 4 and falls to 0.645 at depth 10. With at least 50 people in each leaf it peaks near 0.686 and ends at 0.675. With at least 400 people in each leaf it rises to 0.688 at depth 6 and stays there to depth 10, 0.688.</desc>
+<g fill="currentColor">
+<text x="43.4" y="22.4" font-size="10.5" font-weight="600">Mean ROC AUC on the five folds, by depth</text>
+<path d="M81.4 172.4 L221.4 172.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="75.4" y="175.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.64</text>
+<path d="M81.4 132.4 L221.4 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="75.4" y="135.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.66</text>
+<path d="M81.4 92.4 L221.4 92.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="75.4" y="95.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.68</text>
+<path d="M81.4 52.4 L221.4 52.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="75.4" y="55.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.70</text>
+<path d="M81.4 131.4 L98.9 101.1 L116.4 83.5 L133.9 83.9 L151.4 87.6 L186.4 117.3 L221.4 161.7" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="81.4" cy="131.4" r="3" fill="#0072b2" />
+<circle cx="98.9" cy="101.1" r="3" fill="#0072b2" />
+<circle cx="116.4" cy="83.5" r="3" fill="#0072b2" />
+<circle cx="133.9" cy="83.9" r="3" fill="#0072b2" />
+<circle cx="151.4" cy="87.6" r="3" fill="#0072b2" />
+<circle cx="186.4" cy="117.3" r="3" fill="#0072b2" />
+<circle cx="221.4" cy="161.7" r="3" fill="#0072b2" />
+<text x="229.4" y="165.2" font-size="9.5" font-weight="600">min leaf 1 0.645</text>
+<path d="M81.4 131.4 L98.9 101 L116.4 82.7 L133.9 80.9 L151.4 83.4 L186.4 93.5 L221.4 102" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="81.4" cy="131.4" r="3" fill="#00a07a" />
+<circle cx="98.9" cy="101" r="3" fill="#00a07a" />
+<circle cx="116.4" cy="82.7" r="3" fill="#00a07a" />
+<circle cx="133.9" cy="80.9" r="3" fill="#00a07a" />
+<circle cx="151.4" cy="83.4" r="3" fill="#00a07a" />
+<circle cx="186.4" cy="93.5" r="3" fill="#00a07a" />
+<circle cx="221.4" cy="102" r="3" fill="#00a07a" />
+<text x="229.4" y="105.5" font-size="9.5" font-weight="600">min leaf 50 0.675</text>
+<path d="M81.4 129.7 L98.9 102 L116.4 82.9 L133.9 78.6 L151.4 75.9 L186.4 76.6 L221.4 76.6" fill="none" stroke="#9a6be0" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="81.4" cy="129.7" r="3" fill="#9a6be0" />
+<circle cx="98.9" cy="102" r="3" fill="#9a6be0" />
+<circle cx="116.4" cy="82.9" r="3" fill="#9a6be0" />
+<circle cx="133.9" cy="78.6" r="3" fill="#9a6be0" />
+<circle cx="151.4" cy="75.9" r="3" fill="#9a6be0" />
+<circle cx="186.4" cy="76.6" r="3" fill="#9a6be0" />
+<circle cx="221.4" cy="76.6" r="3" fill="#9a6be0" />
+<text x="229.4" y="80.1" font-size="9.5" font-weight="600">min leaf 400 0.688</text>
+<text x="81.4" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">2</text>
+<text x="98.9" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">3</text>
+<text x="116.4" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">4</text>
+<text x="133.9" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">5</text>
+<text x="151.4" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">6</text>
+<text x="186.4" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">8</text>
+<text x="221.4" y="186.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">10</text>
+<text x="261.4" y="200.4" font-size="10" text-anchor="end" fill-opacity="0.8">max depth of the tree</text>
+</g>
+</svg>
+</figure>
+
+### 3. Many trees, averaged
+
+**Idea.** A *random forest* grows many trees. Each is built from a bootstrap sample of the people, drawn with replacement, and each split looks at a random subset of the columns (`max_features` sets how many). The forest's chance for a person is the average of its trees' chances; the scikit-learn guide describes the same three steps. Averaging calms the luck of any one tree. `forest(trees, leaf)` in the setup cell builds one.
+
+**Try it:** score forests of 1 to 300 trees on the validation part, then forests with three leaf sizes on the folds.
+
+```python
+forest_curve = []
+for trees in [1, 5, 25, 100, 300]:
+    m = forest(trees).fit(X_fit, y_fit)
+    forest_curve.append((trees, round(float(roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])), 3)))
+print(forest_curve)
+leaf_rows = []
+for leaf in [1, 20, 100]:
+    s = cross_val_score(forest(200, leaf), X_train, y_train, cv=folds, scoring="roc_auc")
+    leaf_rows.append((leaf, round(float(s.mean()), 3), round(float(s.min()), 3), round(float(s.max()), 3)))
+    print(*leaf_rows[-1])
+```
+
+**Predict:** How many trees until the validation AUC stops improving: about 5, about 25 or about 300? And will a forest with leaves of one person score the same as one with leaves of 100?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[(1, 0.661), (5, 0.695), (25, 0.698), (100, 0.699), (300, 0.698)]
+1 0.626 0.622 0.635
+20 0.687 0.677 0.694
+100 0.691 0.68 0.698
+```
+
+</details>
+
+*Why:* One tree scores 0.661, five 0.695, 25 0.698, 100 0.699 and 300 0.698: after about 25 trees the validation part sees no more gain. The leaf size still matters: leaves of one person score 0.626 on the folds, 20 people 0.687 and 100 people 0.691 (folds from 0.680 to 0.698). Averaging does not cure a tree that memorizes: each tree of the first forest still memorizes the rows of its own sample.
+
+### 4. Importances with caution
+
+**Idea.** A fitted forest reports an importance for every column: the share of the impurity drop that the column's questions produced, over all trees, with the shares adding up to 1. *Permutation importance* asks another question: shuffle one column of held-out people, score the fitted model again, and read the drop in score. To test both, add a column of random numbers, which cannot predict churn.
+
+**Try it:** add a random column, fit forests with two leaf sizes, and compare the built-in importance with the permutation importance on the validation people.
+
+```python
+Xn = X_fit.assign(noise=np.random.default_rng(SEED).normal(size=len(X_fit)))                # a column of random numbers: nothing in it predicts churn
+Xnv = X_val.assign(noise=np.random.default_rng(SEED + 1).normal(size=len(X_val)))
+imp_rank, built_in_by = {}, {}
+for leaf in (1, 100):
+    m = make_pipeline(prep(WEEK1 + ["noise"]), RandomForestClassifier(n_estimators=200, min_samples_leaf=leaf, n_jobs=-1, random_state=SEED)).fit(Xn, y_fit)
+    built_in = pd.Series(m[-1].feature_importances_, index=m[0].get_feature_names_out()).sort_values(ascending=False)       # the importance that comes with the fitted forest
+    built_in_by[leaf] = built_in
+    imp_rank[leaf] = (list(built_in.index).index("noise") + 1, round(float(built_in["noise"]), 3))
+    print(f"leaf {leaf}: random column ranks {list(built_in.index).index('noise') + 1} of {len(built_in)} with share {built_in['noise']:.3f}; first is {built_in.index[0]} with {built_in.iloc[0]:.3f}")
+held = permutation_importance(m, Xnv, y_val, scoring="roc_auc", n_repeats=10, random_state=SEED, n_jobs=-1)      # m is the forest with leaves of 100: shuffle one column of the validation people at a time
+perm = pd.Series(held.importances_mean, index=Xnv.columns).sort_values(ascending=False)
+print(perm.round(4).to_string())
+```
+
+**Predict:** In a forest with leaves of one person (the setting scikit-learn starts from), where will the built-in importance rank the random column among the 20 columns: last, in the middle, or first? And what will shuffling it do to the score of held-out people?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+leaf 1: random column ranks 1 of 20 with share 0.487; first is noise with 0.487
+leaf 100: random column ranks 8 of 20 with share 0.031; first is channel_paid_social with 0.301
+channel           0.0742
+expenses_7d       0.0201
+active_days_7d    0.0036
+sessions_7d       0.0023
+recent_3d         0.0009
+bought_plus       0.0001
+noise            -0.0003
+saw_paywall      -0.0003
+region           -0.0003
+platform         -0.0005
+onboarded        -0.0008
+```
+
+</details>
+
+*Why:* The random column ranks first, with 0.487 of all the importance, nearly half. With leaves of 100 it falls to rank 8 of 20 (share 0.031), and the paid-social column leads. Shuffling the random column on the validation people changes the AUC by -0.0003, which is nothing; shuffling `channel` costs 0.074 and `expenses_7d` 0.020. The scikit-learn guide says that impurity-based importance for trees is "strongly biased" and favors "high cardinality features" such as numbers, and an abstract of Strobl and colleagues reports that such measures can be misleading because "suboptimal predictor variables may be artificially preferred". A random number has a different value for nearly every person, so a tree can always find a cut that happens to fit some of them, and that luck is counted as importance.
+
+<figure>
+<svg viewBox="0 0 360 294" width="360" role="img" aria-labelledby="ds7-importance-t ds7-importance-d">
+<title id="ds7-importance-t">Two importances of a random forest with a column of random numbers added</title>
+<desc id="ds7-importance-d">Two bar charts. First, the importance that comes with a forest whose leaves hold one person: random numbers 0.487, expenses&#95;7d 0.095, recent&#95;3d 0.045, active&#95;days&#95;7d 0.044, sessions&#95;7d 0.043, paid social 0.040. The column of random numbers is first, with nearly half of all the importance. Second, the drop in ROC AUC on the validation people when one column is shuffled, for a forest whose leaves hold at least 100 people: channel 0.0742, expenses&#95;7d 0.0201, active&#95;days&#95;7d 0.0036, sessions&#95;7d 0.0023, recent&#95;3d 0.0009, random numbers -0.0003. Shuffling the random numbers changes nothing.</desc>
+<g fill="currentColor">
+<text x="25" y="22" font-size="10" font-weight="600">Built-in importance, leaves of 1 person (share of all)</text>
+<text x="119" y="46" font-size="9.5" font-weight="600" text-anchor="end">random numbers</text>
+<rect x="125" y="38" width="179.1" height="12" rx="2" fill="#ad9100" />
+<text x="309" y="47.5" font-size="9.5" font-weight="600">0.487</text>
+<text x="119" y="63" font-size="9.5" text-anchor="end">expenses&#95;7d</text>
+<rect x="125" y="55" width="34.9" height="12" rx="2" fill="#0072b2" />
+<text x="164.9" y="64.5" font-size="9.5" font-weight="600">0.095</text>
+<text x="119" y="80" font-size="9.5" text-anchor="end">recent&#95;3d</text>
+<rect x="125" y="72" width="16.4" height="12" rx="2" fill="#0072b2" />
+<text x="146.4" y="81.5" font-size="9.5" font-weight="600">0.045</text>
+<text x="119" y="97" font-size="9.5" text-anchor="end">active&#95;days&#95;7d</text>
+<rect x="125" y="89" width="16.1" height="12" rx="2" fill="#0072b2" />
+<text x="146.1" y="98.5" font-size="9.5" font-weight="600">0.044</text>
+<text x="119" y="114" font-size="9.5" text-anchor="end">sessions&#95;7d</text>
+<rect x="125" y="106" width="15.7" height="12" rx="2" fill="#0072b2" />
+<text x="145.7" y="115.5" font-size="9.5" font-weight="600">0.043</text>
+<text x="119" y="131" font-size="9.5" text-anchor="end">paid social</text>
+<rect x="125" y="123" width="14.8" height="12" rx="2" fill="#0072b2" />
+<text x="144.8" y="132.5" font-size="9.5" font-weight="600">0.040</text>
+<path d="M125 36 L125 146" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="25" y="166" font-size="10" font-weight="600">Shuffle one column of held-out people: drop in AUC</text>
+<text x="119" y="190" font-size="9.5" text-anchor="end">channel</text>
+<rect x="125" y="182" width="170.6" height="12" rx="1.5" fill="#0072b2" />
+<text x="300.6" y="191.5" font-size="9.5" font-weight="600">0.0742</text>
+<text x="119" y="207" font-size="9.5" text-anchor="end">expenses&#95;7d</text>
+<rect x="125" y="199" width="46.2" height="12" rx="1.5" fill="#0072b2" />
+<text x="176.2" y="208.5" font-size="9.5" font-weight="600">0.0201</text>
+<text x="119" y="224" font-size="9.5" text-anchor="end">active&#95;days&#95;7d</text>
+<rect x="125" y="216" width="8.3" height="12" rx="1.5" fill="#0072b2" />
+<text x="138.3" y="225.5" font-size="9.5" font-weight="600">0.0036</text>
+<text x="119" y="241" font-size="9.5" text-anchor="end">sessions&#95;7d</text>
+<rect x="125" y="233" width="5.2" height="12" rx="1.5" fill="#0072b2" />
+<text x="135.2" y="242.5" font-size="9.5" font-weight="600">0.0023</text>
+<text x="119" y="258" font-size="9.5" text-anchor="end">recent&#95;3d</text>
+<rect x="125" y="250" width="2.1" height="12" rx="1.5" fill="#0072b2" />
+<text x="132.1" y="259.5" font-size="9.5" font-weight="600">0.0009</text>
+<text x="119" y="275" font-size="9.5" font-weight="600" text-anchor="end">random numbers</text>
+<rect x="125" y="267" width="1.5" height="12" rx="1.5" fill="#ad9100" />
+<text x="131.5" y="276.5" font-size="9.5" font-weight="600">-0.0003</text>
+<path d="M125 178 L125 280" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+</g>
+</svg>
+</figure>
+
+### 5. The verdict on the test part
+
+**Idea.** Score the tuned tree of unit 2 and a forest of 300 trees with leaves of 100 on the 4,454 test people, once, beside the day-7 model, each gain with a 95 percent interval from 2,000 resamples (seed 2026) on which both models of a pair are scored.
+
+**Try it:** score the day-7 model, the tuned tree and the forest on the test part.
+
+```python
+p_day7 = logit().fit(X_train, y_train).predict_proba(X_test)[:, 1]              # the test part is used once, here
+p_tree = tree_search.best_estimator_.predict_proba(X_test)[:, 1]
+p_forest = forest(300, 100).fit(X_train, y_train).predict_proba(X_test)[:, 1]
+print("day-7 model", round(float(roc_auc_score(y_test, p_day7)), 3), "tuned tree", round(float(roc_auc_score(y_test, p_tree)), 3), "forest", round(float(roc_auc_score(y_test, p_forest)), 3))
+print("tree", auc_gain(p_tree, p_day7, y_test), "forest", auc_gain(p_forest, p_day7, y_test))
+```
+
+**Predict:** Will the forest beat the day-7 model by more than 0.005 AUC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+day-7 model 0.69 tuned tree 0.684 forest 0.688
+tree [-0.006, -0.01, -0.001] forest [-0.001, -0.004, 0.002]
+```
+
+</details>
+
+*Why:* No. The day-7 model scores 0.690, the forest 0.688 and the tuned tree 0.684. The forest's gain is -0.001, with a 95 percent interval of -0.004 to 0.002: it includes 0, so the forest ties. The tree's gain is -0.006, -0.010 to -0.001: the single tree is worse. A tree can bend where a straight line cannot, and on this table the trees found no bend. The ladder reads 0.5 for the flat guess, 0.668 for the signup columns, and 0.690, 0.688 and 0.684 for three kinds of model.
+
+<Aside type="tip" title="Remember">
+
+- A tree asks one yes/no question about one column at a time, and picks the question that makes the two groups purest.
+- Limit a tree with leaf size and depth, chosen on folds; leaves of one person memorize.
+- A forest averages trees grown on bootstrap samples with random columns; after a few dozen trees, more add little, and leaf size still matters.
+- The importance that comes with a forest is computed on the fitting rows and can reward random numbers; shuffle columns of held-out people instead.
+- Put every model beside the simpler one, on the same people, with an interval.
+
+**Common trap:** reading the built-in importance list of a forest as the columns worth keeping.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-decision-trees-and-forests-1">
+
+**How many columns may each split see?** Score a forest of 200 trees with leaves of at least 100 people on the five folds of the training part for each value of `max_features` in the list (given), with ROC AUC, and put the three mean scores in `answer_1`, in the order of the list, each rounded to 3 decimals. Expected: `answer_1` is a list of three numbers.
+
+```python
+scores_mf = []
+for mf in [1, 4, 19]:                       # given: one column, four columns, all 19 columns considered at each split
+    # score forest(200, 100, max_features=mf) on the five folds of the training part with ROC AUC and keep the mean in scores_mf
+    pass
+answer_1 = None  # replace None with the three mean AUCs in the order of the list, each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`forest(200, 100, max_features=mf)` builds the forest; `cross_val_score(..., X_train, y_train, cv=folds, scoring="roc_auc")` scores it on the five folds.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+s = cross_val_score(forest(200, 100, max_features=...), X_train, y_train, cv=folds, scoring="roc_auc")
+scores_mf.append(round(float(s.mean()), 3))
+```
+
+</details>
+
+<Solution>
+
+```python
+scores_mf = []
+for mf in [1, 4, 19]:
+    s = cross_val_score(forest(200, 100, max_features=mf), X_train, y_train, cv=folds, scoring="roc_auc")
+    scores_mf.append(round(float(s.mean()), 3))
+answer_1 = scores_mf
+```
+
+The scores are 0.687, 0.691, 0.690 for one, four and all 19 columns. They differ by 0.004, less than the range of the folds: on this table the forest does not care how many columns each split sees.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-decision-trees-and-forests-2">
+
+**Read a leaf.** Before you start, say in one sentence what the result looks like: a count of some hundreds of people and a churn share above 0.8. Use `Xf` (the fitting people as numbers, from unit 1). Fit a tree with `max_depth=3` and `min_samples_leaf=50` on `Xf` and `y_fit`, find the leaf where the share of churners is highest, and put the list [the number of fitting people in that leaf, their churn share rounded to 3 decimals] in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+`tree.apply(Xf)` gives the number of the leaf that each person ends in. Group the outcome by that number and take the size and the mean of each group.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One leaf of a few hundred people, a little over four in five of them churners."*
+
+```python
+leaf_of = small_tree.apply(Xf)
+leaf_table = pd.DataFrame({"leaf": leaf_of, "churned": y_fit.to_numpy()}).groupby("leaf")["churned"].agg(["size", "mean"])
+```
+
+</details>
+
+<Solution>
+
+```python
+small_tree = DecisionTreeClassifier(max_depth=3, min_samples_leaf=50, random_state=SEED).fit(Xf, y_fit)
+leaf_of = small_tree.apply(Xf)                                       # the leaf each fitting person ends in
+leaf_table = pd.DataFrame({"leaf": leaf_of, "churned": y_fit.to_numpy()}).groupby("leaf")["churned"].agg(["size", "mean"])
+top = leaf_table["mean"].idxmax()
+answer_2 = [int(leaf_table.loc[top, "size"]), round(float(leaf_table.loc[top, "mean"]), 3)]
+```
+
+The leaf holds 877 fitting people and 0.835 of them churned. Printed as questions, it is the people from paid social who added no expense and did not see the paywall. The tree has 8 leaves of at least 50 people; the leaf with the highest share is not the largest one, which holds 3535 people.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the two settings that limit the size of a tree.
+
+   <details>
+   <summary>answer</summary>
+
+   `max_depth`, the most questions in a row, and `min_samples_leaf`, the fewest people in a leaf.
+
+   </details>
+
+<Exercise id="data-scientist-decision-trees-and-forests-3">
+
+**Spot the flaw.** A colleague shuffles the four activity columns of the validation people one at a time, as in unit 4, takes the biggest drop in AUC (the code gives it), and writes that the first week's activity cannot matter by more than that. Change the last line: shuffle the four columns together, with one new order for all four, ten times, and put the mean drop in AUC in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0 and 0.2.
+
+```python
+ACTIVITY = ["sessions_7d", "expenses_7d", "recent_3d", "active_days_7d"]       # given: the four columns that count the first week's activity
+rf = forest(200, 100).fit(X_fit, y_fit)
+base_auc = roc_auc_score(y_val, rf.predict_proba(X_val)[:, 1])
+rng = np.random.default_rng(5)
+single = {}
+for col in ACTIVITY:                          # shuffle one column of the validation people at a time, ten times
+    drops = []
+    for _ in range(10):
+        shuffled = X_val.copy()
+        shuffled[col] = rng.permutation(shuffled[col].to_numpy())
+        drops.append(base_auc - roc_auc_score(y_val, rf.predict_proba(shuffled)[:, 1]))
+    single[col] = float(np.mean(drops))
+answer_3 = round(max(single.values()), 3)     # colleague: "no activity column costs more than this, so together they cannot matter more"
+# change the last line: shuffle the four columns together (the same new order for all four, ten times) and give the mean drop in AUC, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+When two columns say nearly the same thing, the model still reads it from the other when one is shuffled. What happens if the whole group is shuffled?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+order = rng.permutation(len(X_val))
+shuffled[ACTIVITY] = X_val[ACTIVITY].to_numpy()[order]
+```
+
+</details>
+
+<Solution>
+
+```python
+drops = []
+for _ in range(10):
+    order = rng.permutation(len(X_val))
+    shuffled = X_val.copy()
+    shuffled[ACTIVITY] = X_val[ACTIVITY].to_numpy()[order]            # the four columns move together
+    drops.append(base_auc - roc_auc_score(y_val, rf.predict_proba(shuffled)[:, 1]))
+answer_3 = round(float(np.mean(drops)), 3)
+```
+
+The biggest single drop is 0.020 and the four columns shuffled together cost 0.077, about 4 times as much. The four columns count the same week of activity in different ways, so when one is shuffled the forest reads the rest from the other three. The scikit-learn guide says this about correlated features: the model "still has access to the latter through its correlated feature". Shuffle a group of correlated columns together to see what the group is worth.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read the questions of a small tree, tune its depth and leaf size on folds, fit a forest, and check an importance against shuffled held-out columns.*
+Test: Exercise data-scientist-decision-trees-and-forests-2, done from the notebook without opening the hints.
+
+The pattern to remember: **limit the leaves, average the trees, check importances on held-out people, and compare with the simple model before you pick.** The next lesson, [*Gradient boosting*](/data-scientist/gradient-boosting/) (DS8), grows trees one after another instead of side by side.

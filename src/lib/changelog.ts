@@ -101,7 +101,7 @@ export function summaryHtml(summary: string, lessons: LessonRef[]): string {
 	return summary
 		.split(/(`[^`]+`)/)
 		.map((part) => {
-			if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
+			if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return `<code translate="no">${escapeHtml(part.slice(1, -1))}</code>`;
 			let html = '';
 			let rest = part;
 			while (rest) {

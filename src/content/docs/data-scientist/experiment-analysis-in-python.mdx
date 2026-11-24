@@ -1,0 +1,461 @@
+---
+id: data-scientist-experiment-analysis-in-python
+title: Analyzing experiments in Python
+short_title: Experiments in Python
+description: Size a test on revenue, bootstrap a mean, a ratio and a median, run the checks that need no outcome, and read a causal claim critically.
+stage: data-scientist
+order: 130
+level: advanced
+duration: 35
+objectives:
+  - Size a test on a metric that is not a share, by a formula and by simulation
+  - Put a bootstrap interval on a mean, a ratio and a median, and say which one fits the decision
+  - Run the checks that need no outcome, and an A/A test of the readout
+  - Read a causal claim critically, and say what randomizing buys
+prerequisites:
+  - core-experiments-ab-testing
+  - core-comparing-groups
+  - core-correlation-and-causation
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-experiment-analysis-in-python.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'Microsoft Research, Diagnosing sample ratio mismatch in A/B testing (published 2020-09-14, accessed 2026-11-24)'
+    url: https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/
+  - title: 'SciPy documentation: scipy.stats.bootstrap (version 1.18.0, accessed 2026-11-24)'
+    url: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html
+status: published
+---
+
+## The question
+
+The product manager of the budgeting app asks the data scientist for three things before the next test: *how long must it run, how sure are we of the answer, and can we trust the numbers at all?* The people of the three tests of the app-events data, one row each:
+
+| user_id | experiment | variant | platform | converted | revenue_14d |
+|---:|---|---|---|---:|---:|
+| 10989 | paywall_v2 | control | android | false | 0.00 |
+| 10990 | paywall_v2 | control | ios | true | 7.99 |
+| 11030 | paywall_v2 | variant | web | true | 59.99 |
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Designing an A/B test*](/core/experiments-ab-testing/) (C14) sized a test on a share, checked the sample ratio and read the lift by week, and [*Reading an A/B test result end to end*](/data-analyst/ab-test-readout/) (DA6) read a readout in SQL. Here the same three tests are read with a metric that is not a share.
+
+**Diverge.** C14 had a formula for every step. Revenue has none that fits, so units 1 and 2 add a simulation and a bootstrap, and unit 3 adds checks that need no outcome.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C14, which p-value did the sample ratio check use as its alarm, and what did the lesson do with a test that set it off?
+
+   <details>
+   <summary>answer</summary>
+
+   The bar was p below 0.0005. A test that sets it off is void: do not read its result, find the cause.
+
+   </details>
+
+2. In C14, about how many people did each group need to catch a true lift of 2 points on a baseline of 12.4 percent?
+
+   <details>
+   <summary>answer</summary>
+
+   4,555 in each group, at power 0.80 and the bar 0.05.
+
+   </details>
+
+## The big idea
+
+Before a test says anything, ask three things of the numbers: is the size enough, is the interval honest, and is the split clean.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: sizing a mean, a bootstrap for any statistic, checks that need no outcome, and reading a causal claim. The setup cell built `exp`, one row for each person in an experiment with the signup columns, the arm, `converted`, `revenue_14d` (what the person paid in the 14 days after being put in the test) and `hours_to_buy`, and the churn table `table` of lesson DS3.
+
+<OpenInColab />
+
+### 1. Size a test on revenue
+
+**Idea.** For a mean, the people needed in each arm grow with the *square* of the spread over the lift you want to catch: 2 times (spread times (z for the bar plus z for the power) divided by the lift) squared. The spread comes from a pilot, here the `welcome_tips` control (2,449 people). The formula assumes both arms have the pilot's spread; a simulation does not need to. Draw people from the pilot, scale the variant up to the lift, and count how often the test finds p below 0.05.
+
+**Try it:** the pilot's mean and spread, the people the formula asks for to catch +$0.50 a person at power 0.80, and the simulated power at that size and at 2,700 people per arm.
+
+```python
+pilot = wt.loc[wt["variant"] == "control", "revenue_14d"].to_numpy()      # the control arm of welcome_tips: a pilot for the next test
+print(len(pilot), round(float(pilot.mean()), 3), round(float(pilot.std(ddof=1)), 3), round(float((pilot > 0).mean()), 3))
+
+
+def n_per_arm(sd, delta, alpha=0.05, power=0.80):
+    """People needed in each arm to catch a true difference of `delta` in a mean whose spread is `sd`."""
+    z = stats.norm.ppf(1 - alpha / 2) + stats.norm.ppf(power)
+    return int(np.ceil(2 * (sd * z / delta) ** 2))
+
+
+rng = np.random.default_rng(SEED)
+
+
+def power_at(n, delta, runs=2000):
+    """Share of simulated tests with p < 0.05: draw n people per arm from the pilot; the variant's revenue is scaled up so its mean is `delta` higher."""
+    scale = 1 + delta / pilot.mean()
+    hits = 0
+    for _ in range(runs):
+        a, b = rng.choice(pilot, n), rng.choice(pilot, n) * scale
+        hits += stats.ttest_ind(b, a, equal_var=False).pvalue < 0.05
+    return hits / runs
+
+
+n = n_per_arm(pilot.std(ddof=1), 0.50)
+print(n, round(power_at(n, 0.50), 2), round(power_at(2700, 0.50), 2))        # the planned size, its simulated power, and the power of 2,700 per arm
+```
+
+**Predict:** Revenue per person in 14 days is $0 for most people, $7.99 or $59.99 for a buyer. To catch a lift of $0.50 a person, about how many people does each arm need: about 700, about 7,000 or about 70,000?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+2449 2.627 10.593 0.124
+7047 0.72 0.34
+```
+
+</details>
+
+*Why:* About 7,000: 7,047 per arm. The pilot's mean is $2.63 and its spread $10.59, four times the mean, because only 12.4 percent of people pay anything and what they pay is large. The simulation says that 7,047 per arm reaches p below 0.05 in 0.72 of the tests, not 0.80: scaling the variant up also widens its spread, which the formula ignored (2,000 runs, so the second decimal can move). And 2,700 per arm, about the size of `paywall_v2`, catches +$0.50 in 0.34 of the tests. A formula is a start; when the metric has a heavy tail, simulate.
+
+<figure>
+<svg viewBox="0 0 360 218" width="360" role="img" aria-labelledby="ds13-power-t ds13-power-d">
+<title id="ds13-power-t">Simulated power to catch +&#36;0.50 of revenue per person, by people in each arm</title>
+<desc id="ds13-power-d">A line chart of the share of 2,000 simulated tests that reach p below 0.05 when the variant's mean revenue per person is 50 cents higher, from 0 to 1, against the people in each arm from 0 to 12,000. 1,000 people: 0.16; 2,000 people: 0.27; 2,700 people: 0.34; 4,000 people: 0.49; 7,047 people: 0.72; 10,000 people: 0.87; 12,000 people: 0.92. A dashed line marks the target power of 0.80. At 2,700 people per arm, about the size of paywall&#95;v2, power is 0.34; at the 7,047 people per arm that the formula asks for, power is 0.72, below the target.</desc>
+<g fill="currentColor">
+<text x="18" y="22.4" font-size="10.5" font-weight="600">Simulated power to catch +&#36;0.50 a person</text>
+<rect x="54" y="34.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="66" y="41.9" font-size="9.5">tests with p below 0.05, of 2,000</text>
+<path d="M54 172.4 L326 172.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="48" y="175.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.0</text>
+<path d="M54 114.4 L326 114.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="48" y="117.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.5</text>
+<path d="M54 56.4 L326 56.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="48" y="59.9" font-size="10" text-anchor="end" fill-opacity="0.8">1.0</text>
+<path d="M54 79.6 L326 79.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="58" y="75.6" font-size="9.5">target 0.80</text>
+<path d="M76.7 154.4 L99.4 141.3 L115.2 132.8 L144.7 115.1 L213.7 89 L280.7 71.9 L326 66.3" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.7" cy="154.4" r="3" fill="#00a07a" />
+<circle cx="99.4" cy="141.3" r="3" fill="#00a07a" />
+<circle cx="115.2" cy="132.8" r="3" fill="#00a07a" />
+<circle cx="144.7" cy="115.1" r="3" fill="#00a07a" />
+<circle cx="213.7" cy="89" r="3" fill="#00a07a" />
+<circle cx="280.7" cy="71.9" r="3" fill="#00a07a" />
+<circle cx="326" cy="66.3" r="3" fill="#00a07a" />
+<text x="121.2" y="144.8" font-size="9.5" font-weight="600">2,700: 0.34</text>
+<text x="209.7" y="105" font-size="9.5" font-weight="600" text-anchor="end">7,047: 0.72</text>
+<path d="M54 172.4 L54 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="54" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M144.7 172.4 L144.7 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="144.7" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">4,000</text>
+<path d="M235.4 172.4 L235.4 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="235.4" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">8,000</text>
+<path d="M326 172.4 L326 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="326" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">12,000</text>
+<text x="326" y="201.4" font-size="10" text-anchor="end" fill-opacity="0.8">people in each arm</text>
+</g>
+</svg>
+</figure>
+
+### 2. A bootstrap interval for any statistic
+
+**Idea.** The *bootstrap* resamples the people of each arm with replacement, recomputes the statistic on every resample, and reads the interval from the middle 95 percent of the results. It works for any statistic you can compute: a mean, a ratio, a median. Resample the unit that the coin was tossed for, the person. SciPy has a ready-made `bootstrap`, whose default is the BCa method; this loop uses the plain percentile interval. The statistic must match the decision.
+
+**Try it:** four statistics for `paywall_v2`, each with its interval, and the textbook interval for the mean beside them.
+
+```python
+ctrl, var = pw[pw["variant"] == "control"], pw[pw["variant"] == "variant"]
+rng = np.random.default_rng(SEED)
+
+
+def bootstrap(stat, variant, control, reps=2000):
+    """95% percentile interval of stat(variant rows, control rows): resample the people of each arm, then recompute the statistic."""
+    draws = [stat(variant.iloc[rng.integers(0, len(variant), len(variant))], control.iloc[rng.integers(0, len(control), len(control))]) for _ in range(reps)]
+    return np.percentile(draws, [2.5, 97.5])
+
+
+stats_ = {
+    "mean revenue, difference": lambda v, c: v["revenue_14d"].mean() - c["revenue_14d"].mean(),
+    "conversion, relative lift": lambda v, c: v["converted"].mean() / c["converted"].mean() - 1,
+    "median revenue, difference": lambda v, c: v["revenue_14d"].median() - c["revenue_14d"].median(),
+    "median hours to buy, difference": lambda v, c: v["hours_to_buy"].median() - c["hours_to_buy"].median(),
+}
+print(round(float(ctrl["revenue_14d"].median()), 2), round(float(var["revenue_14d"].median()), 2))
+for name, stat in stats_.items():
+    low, high = bootstrap(stat, var, ctrl)
+    print(f"{name}: {stat(var, ctrl):.3f} ({low:.3f} to {high:.3f})")
+t = stats.ttest_ind(var["revenue_14d"], ctrl["revenue_14d"], equal_var=False).confidence_interval()
+print(round(float(t.low), 3), round(float(t.high), 3))                          # the textbook interval for the mean difference
+```
+
+**Predict:** What is the median revenue per person in each arm of `paywall_v2`: about $2.6, the average, $7.99, or $0?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.0 0.0
+mean revenue, difference: 0.627 (0.054 to 1.189)
+conversion, relative lift: 0.207 (0.051 to 0.386)
+median revenue, difference: 0.000 (0.000 to 0.000)
+median hours to buy, difference: 0.407 (-1.325 to 6.677)
+0.042 1.212
+```
+
+</details>
+
+*Why:* $0 in both: 87.3 percent of the control and 84.7 percent of the variant pay nothing, so the median sits on the zeros and ignores the lift; its interval is 0 to 0. The mean difference is +$0.627 per person (0.054 to 1.189), close to the textbook interval (0.042 to 1.212). The relative lift in conversion is +20.7 percent (5.1 to 38.6 percent), a ratio, whose interval is less direct than a mean's. The median hours from assignment to purchase, among buyers, moved by 0.4 hours with an interval from -1.3 to 6.7: the paywall lifts whether people buy, with no sign that it changes when. Pick the statistic from the decision, then bootstrap it.
+
+### 3. Checks that need no outcome
+
+**Idea.** Some checks look only at who is in the arms, before any outcome is read. The split against 50/50 is one. Another is *balance*: a coin cannot know a person's channel, platform or region, so each signup column should be spread evenly across the arms (a chi-square test of the column against the arm). Microsoft Research advises analyzing segments to see whether a mismatch is localized to some of them. An *A/A test* then checks the readout itself: split one arm at random, run the analysis, and count how often it finds a difference that cannot be there.
+
+**Try it:** the checks for the three experiments, then 1,000 A/A splits of the control arm of `paywall_v2`.
+
+```python
+def two_prop_p(k0, n0, k1, n1):
+    """Two-sided p of a z test for two shares, with the pooled standard error (as in lesson C14)."""
+    p = (k0 + k1) / (n0 + n1)
+    z = (k1 / n1 - k0 / n0) / np.sqrt(p * (1 - p) * (1 / n0 + 1 / n1))
+    return 2 * stats.norm.sf(abs(z))
+
+
+def sanity(g):
+    """Checks that need no outcome: the split against 50/50, and each signup column against the arm."""
+    n = g["variant"].value_counts()
+    row = {"control": int(n["control"]), "variant": int(n["variant"]), "ratio": stats.chisquare([n["control"], n["variant"]]).pvalue}
+    for col in ["channel", "platform", "region"]:
+        row[col] = stats.chi2_contingency(pd.crosstab(g[col], g["variant"]))[1]
+    return row
+
+
+checks = pd.DataFrame({name: sanity(g) for name, g in exp.groupby("experiment")}).T
+shown = checks.assign(**{c: checks[c].map(lambda v: f"{v:.4f}") for c in ["ratio", "channel", "platform", "region"]}, control=checks["control"].astype(int), variant=checks["variant"].astype(int))
+print(shown.to_string())
+rng = np.random.default_rng(SEED)
+c = pw.loc[pw["variant"] == "control", "converted"].to_numpy()                   # 2,706 people who all got the same paywall
+hits = 0
+for _ in range(1000):                                                            # an A/A test: split them at random and run the readout
+    i = rng.permutation(len(c))
+    a, b = c[i[: len(c) // 2]], c[i[len(c) // 2:]]
+    hits += two_prop_p(a.sum(), len(a), b.sum(), len(b)) < 0.05
+print(round(hits / 1000, 2))
+```
+
+**Predict:** Which experiment fails which check? And in 1,000 random A/A splits of one arm, will about 1, about 5 or about 20 percent come out with p below 0.05?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+                control  variant   ratio channel platform  region
+paywall_v2         2706     2713  0.9242  0.6189   0.5186  0.6966
+signup_flow_v2     2878     2603  0.0002  0.3390   0.0000  0.6051
+welcome_tips       2449     2519  0.3206  0.6965   0.5058  0.8963
+0.05
+```
+
+</details>
+
+*Why:* Only `signup_flow_v2` fails: its split (2,878 and 2,603, p = 0.0002) and its platform column (p below 0.00005); channel and region pass, so the problem is localized to platform before any outcome is read, as C14 later traced it to Android. The other two experiments pass every check (every p is 0.32 or more). The A/A share is 0.05, as a bar of 0.05 promises, so the readout does not invent differences (1,000 splits, so the second decimal can move). A share far above 0.05 would mean that the code, the data or the randomization is broken.
+
+### 4. Reading a causal claim
+
+**Idea.** A claim that something *causes* a change compares two groups, so ask four questions. How did people get into the groups? What else differs between them? Does the gap survive when that is held fixed? How big and how sure is it? A coin balances every column in expectation, measured or not. Holding a column fixed balances only that column.
+
+**Try it:** the claim "people who finished onboarding churn less", from the churn table of lesson DS3: the raw gap, the gap inside each channel averaged with the channel sizes and an interval for it, and the paid-social share in each group.
+
+```python
+by_channel = table.groupby(["channel", "onboarded"])["churned"].mean().unstack()
+raw = table.groupby("onboarded")["churned"].mean()
+weights = table["channel"].value_counts(normalize=True).reindex(by_channel.index)
+adjusted = float(((by_channel[1] - by_channel[0]) * weights).sum())               # the gap inside each channel, averaged with the channel sizes
+print(round(float(raw[1] - raw[0]), 3), round(adjusted, 3))
+code_, o, y = table["channel"].astype("category").cat.codes.to_numpy(), table["onboarded"].to_numpy(), table["churned"].to_numpy()
+rng = np.random.default_rng(SEED)
+draws = []
+for _ in range(2000):                                                            # resample the people, recompute the adjusted gap
+    i = rng.integers(0, len(y), len(y))
+    cell = code_[i] * 2 + o[i]
+    rate = np.bincount(cell, weights=y[i], minlength=10) / np.bincount(cell, minlength=10)
+    draws.append(((rate[1::2] - rate[0::2]) * np.bincount(code_[i], minlength=5) / len(i)).sum())
+print(np.round(np.percentile(draws, [2.5, 97.5]), 3))
+share = pd.crosstab(table["onboarded"], table["channel"], normalize="index")["paid_social"]
+arms = pd.crosstab(pw["variant"], pw["channel"], normalize="index")["paid_social"]
+print(share.round(3).to_dict(), arms.round(3).to_dict())                          # the paid-social share, by onboarding and by experiment arm
+```
+
+**Predict:** People who finished onboarding churned 10.8 points less. Inside each channel, will the gap be about the same, about half, or about zero?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+-0.108 -0.011
+[-0.028  0.005]
+{0: 0.404, 1: 0.139} {'control': 0.101, 'variant': 0.102}
+```
+
+</details>
+
+*Why:* About zero: -0.011, with an interval of -0.028 to 0.005 (2,000 resamples, seed 2026). Paid social is 40.4 percent of the people who did not finish onboarding and 13.9 percent of those who did, and paid-social people churn most, so the raw gap is mostly the channel. The dataset's rules make channel decide both how likely a person is to finish onboarding and how active they are, and draw onboarding from the channel alone. Where people are put in groups by a coin, as in `paywall_v2`, the paid-social share is 0.101 in the control and 0.102 in the variant. The adjustment worked here because the channel was measured; it would not have balanced a column nobody recorded.
+
+<Aside type="tip" title="Remember">
+
+- For a mean, people per arm grow with spread squared over lift squared; simulate when the tail is heavy.
+- Bootstrap the person, and pick the statistic from the decision: a median of mostly zeros hides the lift.
+- Check the split, the balance and an A/A test before reading an outcome.
+- Ask how people got into the groups, what else differs, whether the gap survives, and how sure it is.
+- A coin balances every column; holding a column fixed balances only that one.
+
+**Common trap:** a segment check at a bar of 0.05, with a few segments. With no effect, about one test in twenty falls below 0.05 by chance, so read the one that falls far below it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-experiment-analysis-in-python-1">
+
+**A null test, with an interval.** `welcome_tips` changed nothing. Use `bootstrap` of unit 2 on the statistic `relative_revenue`, the relative change in mean revenue per person, for the variant and the control of `welcome_tips`. Put the list [low, high] of the interval in `answer_1`, each rounded to 2 decimals. Expected: `answer_1` is a list of two numbers.
+
+```python
+wt_ctrl, wt_var = wt[wt["variant"] == "control"], wt[wt["variant"] == "variant"]
+relative_revenue = lambda v, c: v["revenue_14d"].mean() / c["revenue_14d"].mean() - 1           # given: the relative change in mean revenue per person
+# bootstrap this statistic for welcome_tips with bootstrap() of unit 2, and read the interval
+answer_1 = None  # replace None with [low, high] of the interval, each rounded to 2 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`bootstrap(stat, variant, control)` takes the statistic first, then the variant rows, then the control rows. `wt_var` and `wt_ctrl` are ready.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+low, high = bootstrap(relative_revenue, ..., ...)
+answer_1 = [round(float(low), 2), round(float(high), 2)]
+```
+
+</details>
+
+<Solution>
+
+```python
+wt_ctrl, wt_var = wt[wt["variant"] == "control"], wt[wt["variant"] == "variant"]
+relative_revenue = lambda v, c: v["revenue_14d"].mean() / c["revenue_14d"].mean() - 1
+low, high = bootstrap(relative_revenue, wt_var, wt_ctrl)
+answer_1 = [round(float(low), 2), round(float(high), 2)]
+```
+
+The relative change in mean revenue per person for `welcome_tips` is -0.10, and its interval, -0.28 to 0.13, holds 0: a test that changed nothing still cannot rule out a drop of up to 28 percent or a rise of up to 13 percent at this size. The interval, not the point estimate, says what the data allow (seed 2026, 2,000 resamples).
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-experiment-analysis-in-python-2">
+
+**Where is the split off?** Before you start, say in one sentence what you expect: the ratio check of `signup_flow_v2` failed, so one platform's own split should fail and the others pass. Count the people of each arm inside each platform of `sf` and put the list of three p-values of the ratio check, for android, ios and web in that order, in `answer_2`, each rounded to 3 decimals. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of three numbers.
+
+<details>
+<summary>Hint</summary>
+
+`sf[sf["platform"] == level]["variant"].value_counts()` gives the two counts. Give them to `stats.chisquare` as [control, variant].
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+for level in ["android", "ios", "web"]:
+    g = sf[sf["platform"] == level]["variant"].value_counts()
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+platform_p = []
+for level in ["android", "ios", "web"]:
+    g = sf[sf["platform"] == level]["variant"].value_counts()
+    platform_p.append(round(float(stats.chisquare([g["control"], g["variant"]]).pvalue), 3))
+answer_2 = platform_p
+```
+
+The split of android is far off (p below 0.0005, 1,020 against 656), iOS is at 0.014 (1,070 against 1,187) and web is at 0.477. A bar of 0.05 over three segments flags iOS too; the bar of 0.0005 that C14 used leaves only android, where the new screen crashes on old Android versions. One segment that fails by a lot is the signal; one that fails by a little is expected now and then.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does a bootstrap resample people and not the rows of their events?
+
+   <details>
+   <summary>answer</summary>
+
+   The coin was tossed for the person, so the person is the unit that varies between repeats of the test; a person's events belong together.
+
+   </details>
+
+<Exercise id="data-scientist-experiment-analysis-in-python-3">
+
+**Spot the flaw.** A colleague sizes a test for +$0.40 a person with the spread of what *buyers* pay, "the spread of what a person pays". Put in `answer_3` the people needed in each arm when the spread is that of every person put in the test, as in unit 1. Expected: `answer_3` is a whole number.
+
+```python
+buyers = pilot[pilot > 0]
+sd_buyers = buyers.std(ddof=1)                                   # colleague: "the spread of what a person pays"
+answer_3 = n_per_arm(sd_buyers, 0.40)                            # people per arm to catch +$0.40 a person at power 0.80
+# size it with the spread of revenue for every person who is put in the test
+```
+
+<details>
+<summary>Hint</summary>
+
+The test compares the mean over every person assigned, so the spread must be the spread over every person assigned: `pilot`, not `buyers`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = n_per_arm(pilot....std(ddof=1), 0.40)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = n_per_arm(pilot.std(ddof=1), 0.40)
+```
+
+The spread of what buyers pay is $22.65, because every buyer pays $7.99 or $59.99, and it gives 50,342 per arm. The test compares the mean over everyone put in it, zeros included, whose spread is $10.59, and it gives 11,010 per arm: the colleague's plan is 4.6 times too large.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can size a test on a mean by a formula and a simulation, put a bootstrap interval on a mean, a ratio or a median, run the checks that need no outcome, and say what a causal claim needs before I believe it.*
+Test: Exercise data-scientist-experiment-analysis-in-python-2, done from the notebook without opening the hints.
+
+The pattern to remember: **size it, check it, then read it with an interval that fits the question.** The next lesson, [*GenAI tools in a data science project*](/data-scientist/genai-tools-in-a-ds-project/) (DS14), grades work you did not write.

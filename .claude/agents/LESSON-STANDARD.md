@@ -357,6 +357,121 @@ reviewer ticks them one by one.
     an Excel or SQL twin), each opened, with the access date in the title. A Colab screen, menu name or shortcut that no opened
     page states goes in `TODO(owner)` and the report says so.
 
+## Data Scientist track (D55): conventions set by batch 1 (DS1 to DS5)
+
+Written 2026-11-24 by the first DS batch. The next batches (DS6 to DS16) read this section and keep it; a change goes into this section in the same PR.
+
+- **One target, one table for the whole track.** The example is a churn model for the budgeting app `app-events`. The *person* is the entity; the *prediction
+  moment* is 7 days after signup (the cutoff, a timestamp: signup time plus 7 days, never a calendar date); the *target* is `churned` = 1 when the person has no
+  `session_start` and no `add_expense` between the cutoff and 30 days after signup (days 8 to 30); the *decision* is who gets a win-back offer. The *table*
+  has one row for each person who signed up from 2026-01-01 to 2026-05-31 (a full 30 days of follow-up before the export): **17,816 people, 9,696 churned
+  (54.4%)**. Columns: `user_id`, `signup_date`, `channel`, `platform`, `region`, then the week-1 features `sessions_7d`, `expenses_7d`, `recent_3d` (visits and
+  expenses in the last 3 days before the cutoff), `active_days_7d`, `onboarded`, `saw_paywall` (either paywall event name), `bought_plus`, then `churned`.
+  Features count only events that are not retry copies, had happened by the cutoff (`event_ts`) and had arrived by it (`received_at`); the label reads the raw
+  events after the cutoff. Why churn and not "buys Plus": the core already uses "buys within 14 days of signup" (C19 to C21), and a track that reused it would
+  re-teach the core (D55). Quote this definition, never another (SPEC rule: one counting convention per quantity). The README's second natural target
+  (a subscription ended) was left for a later lesson if one needs it; it is censored by the end of the data (README, "Base rates").
+- **The query is one string.** The table is built by the query of DS3 (`ONE_STATEMENT` in `notebooks/data-scientist/data-scientist-sql-for-modeling-tables.ipynb`).
+  Every other notebook of the track pastes the same text as `MODELING_SQL` and runs `table = con.sql(MODELING_SQL).df()`; the chart scripts read it from the DS3
+  notebook and stop if it is missing. If the query changes, change all notebooks, rerun the charts and every number. No derived file was added (D57 not used).
+- **Notebooks.** `notebooks/data-scientist/{lesson-id}.ipynb` (the id is `data-scientist-...`, as `core-...` for the core), frontmatter `notebook:` with that path, `<OpenInColab />`
+  in "Learn by doing". Data from the release tag **`v0.2.0`** (`https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.2.0/datasets/app-events/v1/users.csv`
+  and `events.csv`; `subscriptions.csv` where needed), with the `LOCAL = "../../datasets/app-events/v1/"` fallback the core notebooks use, read into DuckDB
+  (`pip install duckdb` fallback in the setup cell) and handed to pandas with `.df()`. Skeleton: title and goals, `Setup` (imports, `SEED`, `EXERCISES`, `same`/`check`),
+  `Data`, optional given cells (column lists, the split, helper models: "Run this cell as it is"), `Unit k` cells (a Predict-first line and one code cell), the
+  three exercises (task, starter or empty cell, check cell, hint, half-solution, solution), `Run all from the top`. Never name a loop variable `label` or `name`
+  that a unit uses later (the scoreboard loop reuses `label`). Print Python floats (`float(...)`), not NumPy scalars, inside lists and dicts: NumPy 2 prints
+  `np.float64(...)`.
+- **Seed and splits.** `SEED = 2026` for every split, resample and model; `random_state=SEED` or `np.random.default_rng(SEED)`. The track's split is
+  `train_test_split(X, y, test_size=0.25, random_state=SEED, stratify=y)` on the table (13,362 training, 4,454 test people, 54.4% churners in both); a validation part
+  is cut from the training part the same way (10,021 and 3,341); the test part is used once, at the end of a lesson that tunes. Exercises use seed 5 with an 80/20
+  split and seeds 100 to 119 for "twenty other splits". Check a headline seed against about 20 other seeds before printing it (DS2: 0.690 against a median of 0.691).
+- **Reporting numbers.** Chances, ROC AUC, odds ratios and accuracy as proportions to 3 decimals (accuracy may also be "63.2 of 100"); money to the dollar (to the cent
+  only for a price); shares of people as percent with one decimal. A gain is a difference of the same metric, with a **95 percent percentile bootstrap interval of the
+  held-out people, both models scored on the same resamples**: 2,000 resamples for a gain on one split (3 decimals), 300 refits for coefficients (2 decimals in prose), 300
+  resamples for a threshold. Print the seed beside any resampled number and say that its last digit can move on another NumPy. Cross-validation reports the mean and the
+  range of the folds, never mean plus or minus a standard error (folds are not independent). Every comparison names the baseline beside it: the flat guess
+  (`DummyClassifier(strategy="prior")`, ROC AUC 0.5) and the "signup columns only" rung (AUC 0.668), then the model (day-7 logistic regression, AUC 0.690).
+- **Costs of the DS4 example** (assumptions, said so in the lesson): an offer costs $2; one leaver in four who gets it comes back, worth $12, so the regret of a wasted
+  offer is $2 (`FP`) and of a leaver left without one $1 (`FN`); the rule threshold is 2 / (2 + 1) = 0.667.
+- **Charts.** `scripts/charts/ds-batch-N.py` with `--out`, `--paste` and `--check` (N is the batch: ds-batch-1.py for DS1 to DS5, then 2 to 4), built on the `Svg` class of
+  `da-batch-1.py` (plain SVG, `currentColor` text, blue, green, purple, ochre in that order, title and desc, centered by the class). Matplotlib and seaborn are not used for the
+  pages: their SVG needs a converter that changes with the version, and a chart that must match its lesson byte for byte (`--check`) cannot depend on it. A chart sits at
+  `{/* CHART: ds4-odds */}` in the lesson (name = lesson number + a word) and is pasted with `--paste`; a chart repeats the code of the notebook cell it draws and
+  asserts the numbers the lesson prints. Look at every chart in light and dark at 390 px before shipping. At most one concept animation per batch (none in batch 1: a still
+  fold diagram shows all folds at once, which an animation would not).
+- **Lesson shape.** The interleaved Python shape (above), with the units numbered; "About 30 minutes, K new ideas: ..." and a last check unit only when it teaches nothing new.
+  A TODO(owner) paragraph at the top (what is invented, what was not checked, the versions of the run). Body words at most about 3,300 for a 30-minute lesson (SQL and
+  code count: a unit costs 400 to 550 words). `reviewed` is left at the stub's date until the owner publishes. Prerequisites name the code of what the lesson uses.
+  Draft DS lessons are named in italics, never linked.
+- **Library versions of batch 1** (every number comes from these; the same notebooks give the same outputs on pandas 2.2.3, NumPy 2.1.3, scikit-learn 1.6.1 and DuckDB 1.4.3):
+  Python 3.13, pandas 3.0.5, NumPy 2.5.3, scikit-learn 1.9.1, DuckDB 2.0.0. Do not pass `penalty=` to `LogisticRegression` (deprecated in 1.8); `C=` is fine.
+- **Answers already used by DS1 to DS5** (do not reuse them as exercise answers): 835 copies, 1,303 renamed events, 393 events of 40 deleted accounts, 97 exact copies and
+  874 subscriptions with several rows, 0.323 (churners with no activity), 10,466 and 12,386 people (first expense within an hour), 46 people touched by the arrival rule, 1,665 churners of May 15 to 31,
+  AUC 0.704 (seed 5, 80/20), the 20-seed AUC range 0.684 to 0.701, odds ratios 4.283 and 3.231, the thresholds 0.65 and 0.27, 1,003 and 974 people flagged, ten-fold AUC
+  0.692 (0.673 to 0.730), three time folds 0.646, 0.702, 0.726, and 0.653 against 0.668 for a tuned tree. Exercise classes taken: seed shopping, all-column `duplicated`,
+  `COUNT(*)` against `COUNT(column)` over NULLs, dropping zero-activity rows, a horizon measured from the cutoff, `class_weight="balanced"` with a cost threshold, tuning on a pilot and reporting the
+  winning score. Truth checks used: region has no effect (DS2 Exercise 2, DS4 unit 2), channel sets activity (DS2 unit 4, DS4 unit 2).
+- **What the next lessons can lean on:** `tree(depth, leaf)` and `logit()` of DS5 (DS7 opens the tree), the three splits of DS4, `odds_ratios` of DS4 (DS6 regularization:
+  compare `C`), the week-1 columns (DS9 feature engineering: encode, scale and impute inside the folds, with the folds of DS5), `region` as the column that adds nothing (DS11 fairness slices:
+  platform and channel are the slices with a real gap), the cohort table of DS3 (DS12 forecasting uses daily counts of the events table instead).
+
+### Batch 2 (DS6 to DS10): additions
+
+Written 2026-11-24 by the second DS batch; the later batches keep these on top of the section above.
+
+- **The honest story, told plainly.** On this table no model beats the day-7 logistic model: five-fold CV means 0.688 to 0.692 (the range of the five models' means, never of one model's folds) for logistic (0.692), ridge and lasso (0.692), tree (0.688), forest
+  (0.691), boosted (0.692 at best), and on the 4,454 test people 0.690 (logistic), 0.690 (ridge), 0.689 (lasso), 0.688 (forest, boosted), 0.684 (tuned tree). Every model lesson ends in a short
+  last unit that scores the new model once on the test part beside the day-7 model, each gain with the paired 95 percent interval of 2,000 resamples (`auc_gain`, a given cell, seed 2026).
+  Say "ties" when the interval includes 0, and keep the track's one story: the columns, not the algorithm, set the ceiling. A lesson never hides a null result.
+- **Test part.** Each tuning lesson scores the track's one test part once, after its own choices, and a later lesson does not tune on it. A real project would keep one final test part for the
+  last model only; the lesson TODO says so if a reviewer asks.
+- **Demos where the method shows.** On the full 13,362 people regularization, tree depth, learning rate and engineered columns change almost nothing. Show their effect on a pilot sized to it
+  (500 people with 60 random columns, DS6), on a column of random numbers (DS7), on a deliberately leaky or wrongly coded column (DS9), or on made-up data with real groups (DS10). When a
+  headline pilot or seed is used, check about 20 other seeds (100 to 119) and say where the headline sits (DS6's pilot is at the unfavorable end: medians 0.634, 0.653, 0.661 for no
+  penalty, ridge, lasso against 0.609, 0.642, 0.649; the lasso beat no penalty in 20 of 20 pilots, the ridge in 18, the lasso beat the ridge in 14). The 20-seed loop lives in an optional notebook cell, because a number the page quotes must be reproducible from the repository.
+- **Version traps found.** `LogisticRegression` takes `l1_ratio=1` from scikit-learn 1.8 and `penalty="l1"` before (in 1.6 `l1_ratio=1` is ignored with a warning and gives a ridge); the notebook
+  helper `lasso_args` picks by version. `HistGradientBoostingClassifier` switches early stopping on by itself above 10,000 training rows (the 10,021 fitting people are just above it; DS8 explains the switch in Exercise 3's Solution, never in a unit).
+  `TargetEncoder`'s `random_state` and `shuffle` are deprecated in 1.9 (removed in 1.11) and its seeding moves to `cv`, so it is described and not run (a small `GroupShare` transformer stands in). Print `n_iter_` whenever a default matters.
+- **Charts read the notebooks.** `scripts/charts/ds-batch-2.py` runs each lesson's own notebook cells up to "Finish it" and draws from the variables they leave, then asserts the printed
+  numbers; it takes about ten minutes. Units that a chart draws keep the data in a named variable (`stages`, `cv_table`, `built_in_by`, `ruler_rows`).
+- **Answers already used by DS6 to DS10** (do not reuse): [0.03, 0.700] (lasso C on the validation part), [0.585, 0.636] (250-person pilot), 0.553 (platform alone), [0.687, 0.691, 0.690]
+  (`max_features` 1, 4, 19), [877, 0.835] (the purest depth-3 leaf), 0.077 against 0.020 (activity columns shuffled together, one at a time), [0.701, 0.694, 0.682] (2, 8, 31 leaves after 300
+  trees), [0.03, 0.691] (learning rate on folds), 0.681 (5,000-person pilot with early stopping), 3,336 (people with no ratio), [1,314, 0.278] (five segments), 0.175 (two segments' churn gap).
+  Exercise classes taken: choosing C on one validation part, more columns than people, "a lasso zero means no signal", `max_features`, reading a leaf, one-at-a-time against grouped
+  permutation, the silent early-stopping default, a flag made after the fill, the outcome among the clustering columns. Truth checks used: platform's signal travels through the channel
+  (DS6), a continuum has no groups (DS10), a random column beats real ones in built-in importance (DS7).
+
+### Batch 3 (DS11 to DS14): notes added by the third DS batch
+
+- **Written-for-the-lesson illustrations.** A lesson that grades AI output (DS14) runs no model. An assistant answer or a column of classifier labels is written for the lesson, shown in an Aside "written for this lesson, in the style of an
+  assistant" and said so again in the notebook and the `TODO(owner)` paragraph; a number computed from it (an accuracy, a recall) describes the illustration, and the lesson says that it says nothing about any real model. A text set
+  that the datasets do not have (DS14's 60 cancellation notes, labeled with the five `cancel_reason` values) is written in the notebook and named as written.
+- **Token cost.** Tokens are estimated at 4 characters each (OpenAI help page, opened and dated); a price is the row of a vendor's pricing page with the page's date in the source title, and the lesson tells the reader to recheck it. Say that
+  the real count is the usage an API returns, and that a newer tokenizer may give more tokens for the same text (the Anthropic page says about 30 percent).
+- **Experiment table (DS13).** `EXP_SQL` in the DS13 notebook builds `exp`: one row for each of the 15,868 people in an experiment, with channel, platform, region, `converted`, `revenue_14d` (the price of the plan each purchase in the 14 days
+  after assignment started with: monthly $7.99, annual $59.99, the README prices) and `hours_to_buy`. Chart scripts read it from that notebook.
+- **Forecasting (DS12).** One series: `signup_complete` events counted by UTC day, 181 days, 21,871 signups. A backtest forecasts whole weeks (Monday to Sunday) from the days up to the Sunday night before, from the 9th week (March 2): 17
+  forecast weeks. The dataset's expected values (README rules: line 90 to 125, weekday factors, 1.3 on days 1 to 3, the campaign) are a yardstick, never a forecast. The README's holiday dip is in visits, not in signups.
+- **Intervals.** A gap between groups or two forecasts: 2,000 resamples of the held-out people (DS11) or of whole weeks (DS12), seed 2026; a bootstrap of people for experiments (DS13, 2,000 resamples); a simulated share (power, A/A) is
+  printed to two decimals. Avoid scikit-learn arguments newer than 1.6 (`partial_dependence(custom_values=...)` is 1.7): the notebooks must give identical outputs on both library sets.
+- **Answers already used by DS11 to DS14** (do not reuse them as exercise answers): permutation losses 0.0977, 0.0246, 0.0554 and 0.0289; the tree's 0.094 and 0.063; recall 0.047 and 0.421 on web and apps, 0.041 and 0.369 at 0.75, and the web and
+  app shares 0.071 and 0.434 at 0.6; seasonal naive 20.92, model 18.62, flat 22.68, 20.25, 18.38, 22.86 and 12.26 for the month-start weeks; sizes 7,047, 11,010 and 50,342 per arm, simulated power 0.72 and 0.34; bootstrap intervals for `paywall_v2`
+  (+$0.627, +20.7 percent) and the adjusted onboarding gap -0.011; platform p-values 0.014 and 0.477 for `signup_flow_v2`; classifier accuracy 0.833, recalls 0.857, 0.905, 0.8, 0.778 and 0.667, costs $0.0043, $0.0852 and $0.256.
+
+### Batch 4 (DS15 and DS16): simulation and capstone
+
+- **Shape.** The two lessons copy the Data Analyst simulation and capstone (`take-home-simulation`, `portfolio-case-study`), not the interleaved Python shape: The question, Warm-up, How this simulation (capstone) works, The brief, a rubric of eight items scored 2, 1 or 0 (16 in all; 13 ready, 8 to 12 redo, under 8 rebuild), then a Reference answer in one `<details>`. The clock covers the learner's work, not the reading, so the 100 words per minute rule does not apply. Words so far: DA simulation 3,622 for 90 minutes, DA capstone 2,710 for 180, DS15 3,286 for 90 (its defense page 296 words, limit 300), DS16 3,849 for 180 (the reference's code and printed output count; show a cell only when the lesson explains it, and cite the other cells' output from the notebook).
+- **Notebook layout.** Given cells (setup, data, helpers: "Run this cell as it is"), then "Your work" with text cells for each deliverable and empty code cells, then "Reference answer: open only after you finish". The reference cells read only the given cells, so a starter run and a solved run print the same thing. No exercises and no check cells: the rubric is the check.
+- **The rubric names no trap.** Items are worded generically, with counts where a count settles them ("every column has a line saying when it was known"); the cases, numbers and answers sit inside the reference. A learner reads the rubric before the reference.
+- **DS15 take-home.** A new target on purpose, so no answer of DS1 to DS14 repeats: a person's first Plus subscription, monthly plan, started 2026-01-01 to 2026-05-31, `canceled` = 1 when it ended within 30 days of starting (the first renewal; in the data the cancels of a first renewal end on days 25 to 30). **1,792 people, 348 canceled (19.4%)**; 668 first subscriptions were annual and 389 monthly ones started in June, both left out. Prediction moment: the purchase time plus 14 days. `TAKE_HOME_SQL` in the DS15 notebook builds the file, with four columns that break the timing rule on purpose: `cancel_reason`, `plus_uses` (all uses up to the export), `plan_now` (the latest saved plan, switched at a later renewal) and `active_events` (all visits and expenses up to the export, which breaks the rule and does not move the score). Split `train_test_split(test_size=0.25, random_state=2026, stratify)`: 1,344 and 448 people, 261 and 87 cancelers; the split comes before the column screen, which runs on the 1,344 training people only (the screen flags and chooses nothing). The reviewer's three questions: is the number real, could it be known in time, what do we do with it.
+- **DS16 capstone.** Stakeholder Maya Okafor (invented), decision: the DS4 win-back offer at day 7. The track's table, the DS4 parts (fit 10,021, validation 3,341, test 4,454) and the day-7 model fitted on the fitting part; `value_per_1000` earns, against sending nobody, `TP x (0.25 x $12 - $2) - FP x $2` for every 1,000 people (DS4's cost framing, so its $464 against $544 is $80 rounded and $80.6 unrounded). The honest result: the model's rule at the validation-chosen threshold 0.65 and the rule "offer every paid-social person" tie (value $80.6 and $81.3, difference -$0.7 with interval -6.3 to 4.5; over 20 other splits -7.9 to +5.8, median +0.2, the model rule ahead in 12); the memo recommends a pilot of the paid-social rule, so its numbers are that rule's: 792 leavers and 215 stayers offered, break-even return rate 0.212, -$25 at a return rate of 0.20 (the model rule: 825, 233, 0.214, -$31). The held-out people are "used in this lesson only after every choice", never "used once". The back-test fits on signups before March 2 and scores 13 full weeks; the retraining trigger (gap over 0.05 or weekly AUC under 0.60, two weeks in a row) is the lesson's choice and fires 0 times.
+- **Seed check.** DS15's held-out AUC at seed 2026 (0.645) is at the favorable end of 20 other splits (median 0.610, range 0.519 to 0.648); the reference says so and quotes about 0.61. So are the other two numbers its defense page quotes: the share of cancelers in the top fifth (33.7 percent here, median 0.287 over 20 splits, 0.213 to 0.326, so the page says about 29 percent) and the gain over the channel rule (+0.039 here, median +0.021, -0.027 to +0.040, above 0 in 15 of 20). Leave this as a worked example of "every quoted statistic is checked against others, not only the headline".
+- **Version traps found.** DuckDB 2.0 has no `relation.fetchone()`: call `con.execute(sql).fetchone()`. `GroupBy.apply(include_groups=False)` needs pandas 2.2 or later, so the slice tables use a loop. The notebooks give identical output on pandas 3.0.5, scikit-learn 1.9.1, DuckDB 2.0.0, NumPy 2.5.3 and on pandas 2.2.3, scikit-learn 1.6.1, DuckDB 1.4.3, NumPy 2.1.3.
+- **Charts.** `scripts/charts/ds-batch-4.py` runs the lesson's own notebook with the network off and draws from its variables (about 30 seconds), then asserts the printed numbers.
+- **AI log in a DS lesson.** The reference log rows are illustrations "written for this lesson, in the style of an assistant" (as DS14), with a check of the notebook behind each: a name that does not exist in the library (`hasattr`), scaling before the split (0.6898 either way), a rounded saving, an assumption turned into a finding, a platform gap that is a channel gap, a retraining schedule the back-test does not support.
+- **Answers already used by DS15 and DS16** (do not reuse): 1,792, 348, 0.618, 0.898, 0.975 (held-out AUC with the honest columns, `plus_uses`, all four late columns), 0.891 and 0.849 (`cancel_reason` and `plus_uses` alone, on the training people), 41 training people with `annual_now`, 0.574, 0.590, 0.570 (cross-validated), 0.605 and 0.645 (rule and model, held out), +0.039, +0.021, 33.7% and 28.7% in the top fifth; 0.65, 1,058, $80.6, $81.3, -$367.3, 0.214 and 0.212, 825 and 233, 792 and 215, -$25, 2,424 leavers, $359, 0.037, 0.636, 0.716 and 0.717 (paired gain +0.001), -7.9 to +5.8, 0.6898.
+
 ## Markup
 
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,
@@ -372,7 +487,7 @@ reviewer ticks them one by one.
 - No links to other lessons' URLs while they are drafts: name them by title.
 - American English (gray, color, canceled). Frontmatter: change only `sources`, `datasets` and the body unless the
   brief says otherwise; keep `status: draft`.
-- A title too wide for one sidebar line gets a `short_title` of at most 24 (D47; capitals count 1.25, the line holds 26.5;
+- A title too wide for one sidebar line gets a `short_title` of at most 24 (D47; `check:lessons` sums measured Geist glyph widths, the line holds 185 px;
   prefer words to long runs of capitals): the one-line sidebar name, 2–4 words,
   naming the tool or idea (`Files and tables`, `LAG, LEAD, moving avg`), never a different meaning from the title.
 

@@ -1,0 +1,451 @@
+---
+id: data-scientist-gradient-boosting
+title: Gradient boosting
+short_title: 'Gradient boosting'
+description: Fit small trees one after another, stop the model before it overfits, tune the few settings that matter, and compare it fairly with simpler models.
+stage: data-scientist
+order: 80
+level: advanced
+duration: 30
+objectives:
+  - Explain boosting as trees that each fix the errors of the ones before
+  - Stop early to avoid overfitting
+  - Tune learning rate and tree size with cross-validation
+  - Compare a boosted model with a forest and a logistic model on the same people
+prerequisites:
+  - data-scientist-decision-trees-and-forests
+  - data-scientist-cross-validation-and-overfitting
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-gradient-boosting.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: Ensembles, histogram-based gradient boosting (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/ensemble.html
+  - title: 'scikit-learn documentation: HistGradientBoostingClassifier, parameters and attributes (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.HistGradientBoostingClassifier.html
+  - title: 'scikit-learn documentation: Tuning the hyper-parameters of an estimator, RandomizedSearchCV (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/grid_search.html
+  - title: 'Friedman (2001), Greedy function approximation: a gradient boosting machine, The Annals of Statistics 29(5), 1189 to 1232 (record opened 2026-11-24)'
+    url: https://doi.org/10.1214/aos/1013203451
+status: published
+---
+
+## The question
+
+In lesson DS7 a forest of 300 trees tied the day-7 logistic model on the test people. Trees grown one after another, each fitted to what the trees before it get wrong, are the other way to combine trees, and the team asks the question the forest left open: *does boosting break the tie, and how many trees is enough?* The table is the one of lesson DS3:
+
+| user_id | channel | expenses_7d | active_days_7d | churned |
+|---:|---|---:|---:|---:|
+| 10001 | organic_search | 1 | 1 | 1 |
+| 10002 | app_store | 2 | 2 | 1 |
+| 10003 | paid_search | 0 | 1 | 1 |
+| 10004 | organic_search | 0 | 0 | 0 |
+
+By the end you can build a boosted model, stop it before it memorizes, tune it on folds, and compare it fairly with the two models it has to beat.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In lesson DS7 a forest averaged trees grown side by side and limited their leaves. Boosting also uses small trees, and the leaf settings of unit 4 are the same ones.
+
+**Diverge.** The forest's trees do not know about each other. Unit 1 shows what happens when each tree is fitted to the errors of the ones before it.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS7 the forest scored 0.688 on the test people and the day-7 model 0.690. Did the forest win, tie or lose, and how do you know?
+
+   <details>
+   <summary>answer</summary>
+
+   It tied: the 95 percent interval of its gain, from -0.004 to 0.002, includes 0.
+
+   </details>
+
+2. In lesson DS5, which part of the data must never be used to choose a setting?
+
+   <details>
+   <summary>answer</summary>
+
+   The test part: it is used once, after every choice is made.
+
+   </details>
+
+## The big idea
+
+Boosting builds a model one small tree at a time, each fitted to what the trees so far get wrong, and it stops when new trees stop helping people it has not seen.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: trees in sequence, early stopping, the learning rate against the number of trees, and tuning on folds; a short last unit gives the verdict. The setup cell holds `boost(...)`, a gradient-boosted model, and the forest of lesson DS7. Everything runs on the 13,362 training people.
+
+<OpenInColab />
+
+### 1. Trees in sequence
+
+**Idea.** In a *gradient-boosted* model the trees are built one after another, and each is fitted to correct the errors of the ones before it; the scikit-learn guide puts it as each tree being "trained to correct the errors made by the previous ones". The model's score for a person adds up the trees' contributions, each scaled by the `learning_rate`. Friedman's 2001 paper, where the method comes from, connects this to steepest-descent minimization of the loss, which is the gradient in the name. `max_iter` is the number of trees, and `max_leaf_nodes` and `min_samples_leaf` size each tree. The model is `HistGradientBoostingClassifier`.
+
+**Try it:** fit two boosted models of 300 trees, one with the default settings and one with small trees, and score them on the fitting part and on the validation part after every tree.
+
+```python
+SMALL = dict(learning_rate=0.05, max_leaf_nodes=4, min_samples_leaf=100)           # many small trees: each one has at most 4 leaves
+stages = {}
+for tag, settings in {"defaults": {}, "small trees": SMALL}.items():
+    m = boost(max_iter=300, **settings).fit(X_fit, y_fit)                          # 300 trees, one after another
+    stages[tag] = (staged_auc(m, X_fit, y_fit), staged_auc(m, X_val, y_val))
+rows = [(k, *[round(stages[t][j][k - 1], 3) for t in stages for j in (0, 1)]) for k in [1, 5, 10, 25, 50, 100, 300]]
+print(pd.DataFrame(rows, columns=["trees", "defaults: fitting", "defaults: validation", "small: fitting", "small: validation"]).to_string(index=False))
+print({t: (int(np.argmax(stages[t][1])) + 1, round(max(stages[t][1]), 3)) for t in stages})       # the number of trees with the best validation AUC, and that AUC
+```
+
+**Predict:** With the default settings (trees of up to 31 leaves, a learning rate of 0.1) the AUC on the fitting rows keeps rising. At about which tree will the AUC on the validation rows be highest: about the 6th, about the 60th or about the 300th?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ trees  defaults: fitting  defaults: validation  small: fitting  small: validation
+     1              0.697                 0.684           0.671              0.682
+     5              0.705                 0.690           0.681              0.694
+    10              0.711                 0.688           0.685              0.695
+    25              0.722                 0.687           0.689              0.697
+    50              0.736                 0.686           0.692              0.700
+   100              0.757                 0.681           0.695              0.700
+   300              0.800                 0.671           0.699              0.699
+{'defaults': (6, 0.69), 'small trees': (77, 0.7)}
+```
+
+</details>
+
+*Why:* The default model's AUC on the fitting rows rises from 0.697 with one tree to 0.800 with 300, while its validation AUC peaks at 0.690 with 6 trees and falls to 0.671. The model of small trees (4 leaves at most, a rate of 0.05, at least 100 people in a leaf) peaks later, at 0.700 with 77 trees, and holds: 0.699 with 300. Each tree is a small correction. A big tree corrects noise as well as signal, so it starts to memorize after a few trees; a small tree needs many more trees for the same fit and memorizes slowly.
+
+<figure>
+<svg viewBox="0 0 360 207" width="360" role="img" aria-labelledby="ds8-stages-t ds8-stages-d">
+<title id="ds8-stages-t">Validation ROC AUC after each of 300 trees, for the default settings and for small trees</title>
+<desc id="ds8-stages-d">A line chart of the ROC AUC on the validation people, from 0.66 to 0.71, after 1 to 300 trees. The model with the default settings peaks at 0.690 with 6 trees and falls to 0.671 with 300. The model of small trees (at most 4 leaves, a rate of 0.05, at least 100 people in a leaf) rises more slowly to 0.700 with 77 trees and holds at 0.699 with 300.</desc>
+<g fill="currentColor">
+<text x="15" y="22.4" font-size="10.5" font-weight="600">Validation ROC AUC after each tree</text>
+<path d="M55 162.4 L257 162.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="49" y="165.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.66</text>
+<path d="M55 140.4 L257 140.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="49" y="143.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.67</text>
+<path d="M55 118.4 L257 118.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="49" y="121.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.68</text>
+<path d="M55 96.4 L257 96.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="49" y="99.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.69</text>
+<path d="M55 74.4 L257 74.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="49" y="77.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.70</text>
+<path d="M55 52.4 L257 52.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="49" y="55.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.71</text>
+<path d="M55 109.2 L55.7 101.8 L56.4 98.6 L57 98.9 L57.7 97.3 L58.4 96.9 L59.1 99.5 L59.7 102.3 L60.4 99.8 L61.1 101 L61.8 102.5 L62.4 102.7 L63.1 101.2 L63.8 100.5 L64.5 100.8 L65.1 100.6 L65.8 100.3 L66.5 100.9 L67.2 100.7 L67.8 100.2 L68.5 100.7 L69.2 100.5 L69.9 100.6 L70.5 101.9 L71.2 102 L71.9 102 L72.6 102.5 L73.2 103.3 L73.9 103.3 L74.6 103.6 L75.3 103.5 L75.9 103.2 L76.6 103 L77.3 102.5 L78 102 L78.6 103.4 L79.3 103.5 L80 104 L80.7 103.8 L81.3 104.4 L82 105.5 L82.7 105 L83.4 105.2 L84.1 105.2 L84.7 105.5 L85.4 105.1 L86.1 105.3 L86.8 105.2 L87.4 104.4 L88.1 104.4 L88.8 104.4 L89.5 104.7 L90.1 104.4 L90.8 104.5 L91.5 104.8 L92.2 104.8 L92.8 105.1 L93.5 104.7 L94.2 105.4 L94.9 105.6 L95.5 106.4 L96.2 106.4 L96.9 106 L97.6 106.3 L98.2 107 L98.9 107.3 L99.6 107.1 L100.3 107.3 L100.9 107.5 L101.6 107.2 L102.3 107.9 L103 107.9 L103.6 108.1 L104.3 108.3 L105 108.8 L105.7 109.3 L106.3 109.3 L107 109.4 L107.7 109.8 L108.4 110.3 L109 110.7 L109.7 110.7 L110.4 111 L111.1 111.1 L111.7 111.2 L112.4 111.5 L113.1 112.3 L113.8 112.7 L114.5 112.7 L115.1 113.4 L115.8 113.7 L116.5 114 L117.2 114.2 L117.8 114.2 L118.5 114.2 L119.2 115 L119.9 115.3 L120.5 115.3 L121.2 115.4 L121.9 115.9 L122.6 116.5 L123.2 116.6 L123.9 117.4 L124.6 118 L125.3 118.1 L125.9 118.4 L126.6 118.7 L127.3 118.9 L128 118.6 L128.6 119.1 L129.3 119.1 L130 118.3 L130.7 119 L131.3 118.7 L132 118.9 L132.7 118.9 L133.4 119.5 L134 119.3 L134.7 118.7 L135.4 118.2 L136.1 118.5 L136.7 118.7 L137.4 119.5 L138.1 119.8 L138.8 119.9 L139.4 119.9 L140.1 120.3 L140.8 120.3 L141.5 120.4 L142.2 120.8 L142.8 121.5 L143.5 121.5 L144.2 121.8 L144.9 122.5 L145.5 123 L146.2 122.8 L146.9 122.7 L147.6 122.6 L148.2 123 L148.9 123.2 L149.6 123.2 L150.3 123.3 L150.9 123.1 L151.6 123.3 L152.3 124.2 L153 124.5 L153.6 124.5 L154.3 124.3 L155 124.6 L155.7 124.8 L156.3 124.6 L157 125 L157.7 125.2 L158.4 125.5 L159 125.9 L159.7 126.2 L160.4 126.3 L161.1 125.5 L161.7 126 L162.4 125.6 L163.1 125.2 L163.8 125.5 L164.4 125.4 L165.1 125.9 L165.8 126.2 L166.5 127 L167.1 127.3 L167.8 127.1 L168.5 127.4 L169.2 127.5 L169.8 126.9 L170.5 126.5 L171.2 126.4 L171.9 126.5 L172.6 126.5 L173.2 126.8 L173.9 126.4 L174.6 126.4 L175.3 126.6 L175.9 126.7 L176.6 127 L177.3 127 L178 127.3 L178.6 127 L179.3 126.9 L180 127.2 L180.7 127.9 L181.3 127.8 L182 127.7 L182.7 127.5 L183.4 128.3 L184 128.2 L184.7 128.9 L185.4 129.2 L186.1 129.3 L186.7 129 L187.4 129.1 L188.1 129.1 L188.8 129 L189.4 128.8 L190.1 128.7 L190.8 128.5 L191.5 128.1 L192.1 128.4 L192.8 129 L193.5 128.4 L194.2 128.6 L194.8 128.8 L195.5 129 L196.2 129 L196.9 129.2 L197.5 129.4 L198.2 129.6 L198.9 129.6 L199.6 129.7 L200.3 129.6 L200.9 129.5 L201.6 130.2 L202.3 130.3 L203 130.9 L203.6 131.2 L204.3 131.6 L205 132.3 L205.7 132.4 L206.3 132.6 L207 132.4 L207.7 132.9 L208.4 133.1 L209 133.3 L209.7 133.2 L210.4 133.6 L211.1 133.6 L211.7 133.8 L212.4 133.9 L213.1 134.6 L213.8 134.9 L214.4 135.3 L215.1 135.2 L215.8 135.3 L216.5 136.1 L217.1 136.2 L217.8 136.1 L218.5 136.1 L219.2 135.9 L219.8 136 L220.5 136 L221.2 135.9 L221.9 135.9 L222.5 136.2 L223.2 136.3 L223.9 136 L224.6 136 L225.2 135.9 L225.9 135.5 L226.6 135.5 L227.3 135.5 L228 135.7 L228.6 136 L229.3 135.9 L230 135.9 L230.7 135.8 L231.3 136.1 L232 135.9 L232.7 135.9 L233.4 136.2 L234 136.3 L234.7 136.1 L235.4 136.1 L236.1 135.8 L236.7 136.2 L237.4 136.2 L238.1 136.9 L238.8 137 L239.4 136.8 L240.1 136.6 L240.8 136.8 L241.5 136.9 L242.1 137.2 L242.8 137.6 L243.5 137.4 L244.2 137.6 L244.8 137.6 L245.5 137.7 L246.2 137.8 L246.9 137.8 L247.5 137.9 L248.2 138.2 L248.9 138.2 L249.6 138.3 L250.2 138.9 L250.9 138.9 L251.6 139.3 L252.3 139.3 L252.9 138.9 L253.6 139.1 L254.3 139.2 L255 139.1 L255.6 138.8 L256.3 138.8 L257 139.1" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M55 113 L55.7 99.2 L56.4 97.6 L57 91 L57.7 88 L58.4 88.1 L59.1 88 L59.7 86.3 L60.4 83.8 L61.1 84.5 L61.8 83.4 L62.4 85.1 L63.1 83.5 L63.8 84.5 L64.5 83.4 L65.1 84.2 L65.8 84.5 L66.5 83.3 L67.2 83.5 L67.8 83.3 L68.5 82.4 L69.2 82.2 L69.9 82.1 L70.5 80.9 L71.2 80.5 L71.9 81 L72.6 80.9 L73.2 79.4 L73.9 80.4 L74.6 79.9 L75.3 79.1 L75.9 79.3 L76.6 79.4 L77.3 79.3 L78 78.3 L78.6 78.4 L79.3 78.3 L80 78.3 L80.7 79.6 L81.3 78.2 L82 78.1 L82.7 78.3 L83.4 77.2 L84.1 77 L84.7 77 L85.4 76.5 L86.1 75.8 L86.8 75.6 L87.4 75.7 L88.1 75.3 L88.8 75.4 L89.5 75.4 L90.1 74.7 L90.8 74.7 L91.5 74.7 L92.2 74.7 L92.8 74.7 L93.5 74.3 L94.2 74.5 L94.9 74.6 L95.5 74.2 L96.2 74 L96.9 73.7 L97.6 73.5 L98.2 73.7 L98.9 73.9 L99.6 73.8 L100.3 74 L100.9 73.9 L101.6 74.2 L102.3 74.2 L103 74.1 L103.6 73.6 L104.3 73.7 L105 73.7 L105.7 73.7 L106.3 73.5 L107 73.5 L107.7 73.6 L108.4 74 L109 74.1 L109.7 74.4 L110.4 74.4 L111.1 74.3 L111.7 74.4 L112.4 74.5 L113.1 74.6 L113.8 74.7 L114.5 74.5 L115.1 74.4 L115.8 74.5 L116.5 74.5 L117.2 74.5 L117.8 74.5 L118.5 74.4 L119.2 74.5 L119.9 74.5 L120.5 74.4 L121.2 74.6 L121.9 74.6 L122.6 74.6 L123.2 74.6 L123.9 74.5 L124.6 74.5 L125.3 74.5 L125.9 74.5 L126.6 74.6 L127.3 74.6 L128 74.6 L128.6 74.6 L129.3 74.7 L130 74.7 L130.7 74.5 L131.3 74.6 L132 74.7 L132.7 74.8 L133.4 74.8 L134 74.8 L134.7 74.7 L135.4 74.6 L136.1 74.7 L136.7 74.7 L137.4 74.8 L138.1 74.8 L138.8 74.7 L139.4 74.6 L140.1 74.7 L140.8 74.8 L141.5 75 L142.2 75 L142.8 75.1 L143.5 75.2 L144.2 75.2 L144.9 75.4 L145.5 75.4 L146.2 75.5 L146.9 75.4 L147.6 75.7 L148.2 75.8 L148.9 75.7 L149.6 75.9 L150.3 75.9 L150.9 75.9 L151.6 75.9 L152.3 75.5 L153 75.6 L153.6 75.6 L154.3 75.6 L155 75.5 L155.7 75.5 L156.3 75.6 L157 75.4 L157.7 75.7 L158.4 75.7 L159 75.8 L159.7 75.6 L160.4 75.6 L161.1 75.6 L161.7 75.7 L162.4 75.7 L163.1 75.5 L163.8 75.6 L164.4 75.6 L165.1 75.6 L165.8 75.7 L166.5 75.4 L167.1 75.5 L167.8 75.6 L168.5 75.6 L169.2 75.7 L169.8 75.8 L170.5 75.8 L171.2 75.9 L171.9 76.1 L172.6 76.1 L173.2 76 L173.9 76 L174.6 76.1 L175.3 76.2 L175.9 76.1 L176.6 76.1 L177.3 76.1 L178 76.1 L178.6 76.1 L179.3 76.2 L180 76.2 L180.7 76.2 L181.3 76.1 L182 76.1 L182.7 76 L183.4 75.9 L184 76 L184.7 76 L185.4 76 L186.1 76 L186.7 76.1 L187.4 76.2 L188.1 76.3 L188.8 76.3 L189.4 76.2 L190.1 76.3 L190.8 76.2 L191.5 76.2 L192.1 76.2 L192.8 76.3 L193.5 76.3 L194.2 76.3 L194.8 76.3 L195.5 76.3 L196.2 76.3 L196.9 76.2 L197.5 76.3 L198.2 76.1 L198.9 76 L199.6 76 L200.3 76.1 L200.9 76.1 L201.6 76.1 L202.3 76 L203 76 L203.6 76 L204.3 76.1 L205 76 L205.7 76 L206.3 76.1 L207 76.2 L207.7 76.3 L208.4 76.3 L209 76.3 L209.7 76.5 L210.4 76.4 L211.1 76.4 L211.7 76.4 L212.4 76.5 L213.1 76.5 L213.8 76.6 L214.4 76.5 L215.1 76.4 L215.8 76.5 L216.5 76.4 L217.1 76.4 L217.8 76.4 L218.5 76.5 L219.2 76.7 L219.8 76.6 L220.5 76.6 L221.2 76.6 L221.9 76.6 L222.5 76.7 L223.2 76.6 L223.9 76.5 L224.6 76.5 L225.2 76.5 L225.9 76.5 L226.6 76.5 L227.3 76.5 L228 76.4 L228.6 76.4 L229.3 76.6 L230 76.5 L230.7 76.6 L231.3 76.6 L232 76.6 L232.7 76.7 L233.4 76.7 L234 76.7 L234.7 76.5 L235.4 76.6 L236.1 76.6 L236.7 76.6 L237.4 76.7 L238.1 76.7 L238.8 76.7 L239.4 76.7 L240.1 76.9 L240.8 77 L241.5 76.9 L242.1 77.2 L242.8 77.2 L243.5 77.1 L244.2 77.2 L244.8 77 L245.5 77.1 L246.2 77.1 L246.9 77.1 L247.5 77.1 L248.2 77.2 L248.9 77.2 L249.6 77.2 L250.2 77.2 L250.9 77.2 L251.6 77.3 L252.3 77.2 L252.9 77.3 L253.6 77.3 L254.3 77.3 L255 77.3 L255.6 77.2 L256.3 77.3 L257 77.3" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.4" cy="96.9" r="4" fill="#0072b2" />
+<text x="68.4" y="122.8" font-size="9.5" font-weight="600">best: 6 trees</text>
+<circle cx="106.3" cy="73.5" r="4" fill="#00a07a" />
+<text x="106.3" y="64.5" font-size="9.5" font-weight="600" text-anchor="middle">best: 77 trees</text>
+<text x="265" y="142.6" font-size="9.5" font-weight="600">defaults 0.671</text>
+<text x="265" y="80.8" font-size="9.5" font-weight="600">small trees 0.699</text>
+<text x="55" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">1</text>
+<text x="121.9" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">100</text>
+<text x="189.4" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">200</text>
+<text x="257" y="176.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">300</text>
+<text x="297" y="190.4" font-size="10" text-anchor="end" fill-opacity="0.8">number of trees</text>
+</g>
+</svg>
+</figure>
+
+### 2. Early stopping
+
+**Idea.** Instead of watching a validation part yourself, switch early stopping on. The model holds back a share of the training people (`validation_fraction`) and stops when none of the last `n_iter_no_change` scores is better than the one before them. By default it follows the loss, not the AUC; `n_iter_` says how many trees it built.
+
+**Try it:** fit the default model with early stopping and compare it with all 300 trees on the validation part, then repeat the stopping with ten other seeds.
+
+```python
+full = boost(max_iter=300).fit(X_fit, y_fit)                                                  # the default settings, all 300 trees
+stopped = boost(max_iter=300, early_stopping=True, validation_fraction=0.15, n_iter_no_change=10).fit(X_fit, y_fit)
+auc_full, auc_stopped = (roc_auc_score(y_val, m.predict_proba(X_val)[:, 1]) for m in (full, stopped))
+print(300, round(float(auc_full), 3), stopped[-1].n_iter_, round(float(auc_stopped), 3))
+stops = []
+for seed in range(100, 110):                                                                  # ten other seeds: the held-back 15 percent changes
+    m = make_pipeline(prep(), HistGradientBoostingClassifier(max_iter=300, early_stopping=True, validation_fraction=0.15, n_iter_no_change=10, random_state=seed)).fit(X_fit, y_fit)
+    stops.append(int(m[-1].n_iter_))
+print(stops)
+```
+
+**Predict:** Will early stopping cost AUC compared with all 300 trees, and about how many trees will it keep: about 30, about 100 or all 300?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+300 0.671 32 0.687
+[32, 38, 27, 26, 29, 30, 33, 27, 28, 26]
+```
+
+</details>
+
+*Why:* It does not cost: it keeps 32 trees and scores 0.687 on the validation people, against 0.671 for all 300 trees, so stopping saved 0.016. With ten other seeds (another 15 percent held back each time) the model stopped after 26 to 38 trees. The stopping point is a draw from the people held back, so report it as a range and never as a number to copy. The held-back 15 percent comes out of the people the model learns from; the validation people took no part.
+
+### 3. The learning rate sets how many trees
+
+**Idea.** The learning rate scales every tree's contribution; the class's documentation calls it a multiplicative factor for the leaves' values. A small rate takes small steps and needs more trees to get as far. The guide's section on shrinkage (for the older gradient-boosting classes) says that small values of the learning rate "favor better test error", and that the authors of *The Elements of Statistical Learning* recommend a small constant, 0.1 or less, with the number of trees found by early stopping.
+
+**Try it:** give early stopping up to 2,000 trees at four learning rates, and read the trees it kept and the validation AUC.
+
+```python
+lr_rows = []
+for lr in [0.3, 0.1, 0.03, 0.01]:
+    m = boost(learning_rate=lr, max_leaf_nodes=8, min_samples_leaf=100, max_iter=2000, early_stopping=True, validation_fraction=0.15, n_iter_no_change=20).fit(X_fit, y_fit)
+    lr_rows.append((lr, int(m[-1].n_iter_), round(float(roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])), 3)))
+print(pd.DataFrame(lr_rows, columns=["learning_rate", "trees kept", "validation AUC"]).to_string(index=False))
+```
+
+**Predict:** With early stopping choosing the number of trees, will a learning rate of 0.01 beat 0.1 on the validation people by more than 0.005 AUC, and about how many times as many trees will it keep?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+ learning_rate  trees kept  validation AUC
+          0.30          35           0.693
+          0.10          60           0.697
+          0.03         172           0.696
+          0.01         419           0.696
+```
+
+</details>
+
+*Why:* No. A rate of 0.1 keeps 60 trees and scores 0.697; a rate of 0.01 keeps 419, about 7 times as many, and scores 0.696. The rates 0.03 and 0.01 differ by less than a thousandth. A rate of 0.3 is a little lower, 0.693 after 35 trees. Here the rate sets the number of trees and hardly the score, so a rate between 0.03 and 0.1 with early stopping is a sensible start. The smaller rate costs more fits.
+
+### 4. Tune the rest on the folds
+
+**Idea.** Tune the other settings on the folds, with early stopping inside every fit, so that the number of trees is never a setting. `RandomizedSearchCV` tries a number of settings drawn from the grid; the guide says the number of sampled candidates is given by `n_iter`. Twelve of the 24 combinations here are tried. Print the best five with the range of their folds.
+
+**Try it:** search the learning rate (0.03 and 0.1), the leaves per tree and the people per leaf, and print the best five.
+
+```python
+space = {"histgradientboostingclassifier__learning_rate": [0.03, 0.1],
+         "histgradientboostingclassifier__max_leaf_nodes": [4, 8, 16, 31],
+         "histgradientboostingclassifier__min_samples_leaf": [20, 100, 300]}
+search = RandomizedSearchCV(boost(max_iter=1000, early_stopping=True, validation_fraction=0.15, n_iter_no_change=20), space, n_iter=12, cv=folds, scoring="roc_auc", random_state=SEED, n_jobs=-1).fit(X_train, y_train)
+res = pd.DataFrame(search.cv_results_)
+splits = res[[f"split{k}_test_score" for k in range(5)]]
+res["low"], res["high"] = splits.min(axis=1), splits.max(axis=1)
+for _, r in res.sort_values("mean_test_score", ascending=False).head(5).iterrows():
+    print(round(float(r["mean_test_score"]), 4), round(float(r["low"]), 3), round(float(r["high"]), 3), {k.split("__")[1]: v for k, v in r["params"].items()})
+print("worst", round(float(res["mean_test_score"].min()), 4), "day-7 model on the same folds", round(float(cross_val_score(logit(), X_train, y_train, cv=folds, scoring="roc_auc").mean()), 4))
+```
+
+**Predict:** How far apart will the best five settings score on the folds: under 0.003, about 0.01 or over 0.02? And will the best beat the day-7 model's mean on the same folds?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.6917 0.681 0.703 {'min_samples_leaf': 300, 'max_leaf_nodes': 4, 'learning_rate': 0.1}
+0.6906 0.681 0.702 {'min_samples_leaf': 100, 'max_leaf_nodes': 8, 'learning_rate': 0.03}
+0.69 0.682 0.7 {'min_samples_leaf': 20, 'max_leaf_nodes': 8, 'learning_rate': 0.03}
+0.6895 0.679 0.701 {'min_samples_leaf': 100, 'max_leaf_nodes': 8, 'learning_rate': 0.1}
+0.6894 0.681 0.701 {'min_samples_leaf': 20, 'max_leaf_nodes': 8, 'learning_rate': 0.1}
+worst 0.6829 day-7 model on the same folds 0.6916
+```
+
+</details>
+
+*Why:* The best five run from 0.6917 to 0.6894, 0.0023 apart, far less than the range of the best one's own folds, 0.681 to 0.703. The best, with trees of at most 4 leaves, at least 300 people per leaf and a rate of 0.1, scores 0.6917 on the folds, level with the 0.6916 of the day-7 model. The worst of the twelve is 0.6829. Which of the near-tied settings comes first is partly the luck of the folds; the sensible reading is "small trees with big leaves".
+
+### 5. The verdict on the test part
+
+**Idea.** Score the best boosted model of unit 4 and the forest of lesson DS7 (300 trees, leaves of at least 100 people) on the 4,454 test people, once, beside the day-7 model. Each gain has a 95 percent interval from 2,000 resamples (seed 2026) on which both models of a pair are scored.
+
+**Try it:** score the day-7 model, the boosted model and the forest on the test part.
+
+```python
+p_day7 = logit().fit(X_train, y_train).predict_proba(X_test)[:, 1]              # the test part is used once, here
+p_boost = search.best_estimator_.predict_proba(X_test)[:, 1]
+p_forest = forest().fit(X_train, y_train).predict_proba(X_test)[:, 1]
+print("day-7 model", round(float(roc_auc_score(y_test, p_day7)), 3), "boosted", round(float(roc_auc_score(y_test, p_boost)), 3), "forest", round(float(roc_auc_score(y_test, p_forest)), 3))
+print("boosted over day-7", auc_gain(p_boost, p_day7, y_test), "boosted over forest", auc_gain(p_boost, p_forest, y_test))
+```
+
+**Predict:** Will the boosted model beat the day-7 model, or the forest, by more than 0.005 AUC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+day-7 model 0.69 boosted 0.688 forest 0.688
+boosted over day-7 [-0.002, -0.004, 0.001] boosted over forest [0.0, -0.003, 0.002]
+```
+
+</details>
+
+*Why:* No. The day-7 model scores 0.690, the boosted model 0.688 and the forest 0.688. The boosted model's gain over the day-7 model is -0.002, with a 95 percent interval of -0.004 to 0.001, and over the forest 0.000, -0.003 to 0.002: both intervals include 0. Three kinds of model, from a straight line to boosted trees, land within 0.002 of each other on the test people and between 0.688 and 0.692 on the folds. That points at the columns, not at the algorithm, as the limit: a week of counts is a noisy sign of how active someone is. The team keeps the simplest model, the logistic one.
+
+<Aside type="tip" title="Remember">
+
+- Boosting adds small trees one after another; each is fitted to what the model so far gets wrong, and the learning rate scales its contribution.
+- Small trees, a small learning rate and early stopping are a safe start; big trees memorize within a few trees.
+- Early stopping holds back part of the training people, and its stopping point moves from seed to seed.
+- The learning rate mostly sets how many trees are needed, not how good the model gets.
+- Tune on folds, then put the model beside the simpler ones on the same people, with an interval.
+
+**Common trap:** choosing the number of trees by looking at the test part.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-gradient-boosting-1">
+
+**Bigger trees, same count.** Fit a boosted model of 300 trees with a learning rate of 0.05 and at least 100 people per leaf on the fitting part, for each number of leaves in `leaves` (the loop is given: 2, 8 and 31), and put the validation AUC after all 300 trees, for each, in `answer_1`, in the order of the list, each rounded to 3 decimals. Use `staged_auc`. Expected: `answer_1` is a list of three numbers.
+
+```python
+after_300 = []
+for leaves in [2, 8, 31]:                   # given: trees of 2, 8 and 31 leaves
+    # fit boost(max_iter=300, learning_rate=0.05, max_leaf_nodes=leaves, min_samples_leaf=100) on the fitting part and keep its validation AUC after all 300 trees
+    pass
+answer_1 = None  # replace None with the three validation AUCs in the order of the list, each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`boost(max_iter=300, learning_rate=0.05, max_leaf_nodes=leaves, min_samples_leaf=100).fit(X_fit, y_fit)` builds the model; `staged_auc(m, X_val, y_val)` gives a list of 300 scores, and its last item is the score after 300 trees.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+m = boost(max_iter=300, learning_rate=0.05, max_leaf_nodes=leaves, min_samples_leaf=100).fit(X_fit, y_fit)
+after_300.append(round(staged_auc(m, X_val, y_val)[-1], 3))
+```
+
+</details>
+
+<Solution>
+
+```python
+after_300 = []
+for leaves in [2, 8, 31]:
+    m = boost(max_iter=300, learning_rate=0.05, max_leaf_nodes=leaves, min_samples_leaf=100).fit(X_fit, y_fit)
+    after_300.append(round(staged_auc(m, X_val, y_val)[-1], 3))
+answer_1 = after_300
+```
+
+The scores after 300 trees are 0.701, 0.694, 0.682 for 2, 8 and 31 leaves. The bigger the trees, the earlier the model memorizes: trees of two leaves are still improving or flat at tree 300, and trees of 31 leaves have long passed their best.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-gradient-boosting-2">
+
+**Pick the learning rate on folds.** Before you start, say in one sentence what the result looks like: a rate from the list and a mean AUC near 0.69. For each learning rate in 0.3, 0.1 and 0.03, score a boosted model with 8 leaves per tree, at least 100 people per leaf, up to 2,000 trees and early stopping (`validation_fraction=0.15`, `n_iter_no_change=20`) on the five folds of the training part with ROC AUC. Put the list [the rate with the best mean, that mean rounded to 3 decimals] in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+`cross_val_score(boost(learning_rate=lr, max_leaf_nodes=8, min_samples_leaf=100, max_iter=2000, early_stopping=True, validation_fraction=0.15, n_iter_no_change=20), X_train, y_train, cv=folds, scoring="roc_auc")` gives the five fold scores of one rate.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A rate of 0.1 or lower and a mean a hair under 0.692, the same level as the day-7 model."*
+
+```python
+five_rows = []
+for lr in [0.3, 0.1, 0.03]:
+    s = cross_val_score(boost(learning_rate=lr, ...), X_train, y_train, cv=folds, scoring="roc_auc")
+    five_rows.append((lr, round(float(s.mean()), 3)))
+```
+
+</details>
+
+<Solution>
+
+```python
+five_rows = []
+for lr in [0.3, 0.1, 0.03]:
+    s = cross_val_score(boost(learning_rate=lr, max_leaf_nodes=8, min_samples_leaf=100, max_iter=2000, early_stopping=True, validation_fraction=0.15, n_iter_no_change=20),
+                        X_train, y_train, cv=folds, scoring="roc_auc")
+    five_rows.append((lr, round(float(s.mean()), 3)))
+answer_2 = [max(five_rows, key=lambda r: r[1])[0], max(r[1] for r in five_rows)]
+```
+
+The means are 0.3: 0.686, 0.1: 0.689, 0.03: 0.691, so the best rate is 0.03. The means rise as the rate falls, by 0.005 from the biggest rate to the smallest, a quarter of the range of the folds of any one rate: a small rate is a safe choice and not a large gain.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does a smaller learning rate need more trees?
+
+   <details>
+   <summary>answer</summary>
+
+   Each tree moves the model less, so it takes more of them to get to the same fit.
+
+   </details>
+
+<Exercise id="data-scientist-gradient-boosting-3">
+
+**Spot the flaw.** A colleague fits `HistGradientBoostingClassifier` with every setting at its default on the whole fitting part and on a pilot of 5,000 people (the code is given), reads the two validation AUCs, and writes that 5,000 people instead of 10,021 cost the model the gap between the two scores. Print `n_iter_` of both models first. Then change the last line: refit the pilot model with `early_stopping=True` and put its validation AUC in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0.5 and 1.
+
+```python
+pilot = X_fit.sample(5000, random_state=5)               # given: a pilot of 5,000 people
+y_pilot = y_fit.loc[pilot.index]
+rows_ = []
+for X_part, y_part in [(X_fit, y_fit), (pilot, y_pilot)]:
+    m = make_pipeline(prep(), HistGradientBoostingClassifier(random_state=SEED)).fit(X_part, y_part)           # every setting at its default
+    rows_.append((int(m[-1].n_iter_), round(float(roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])), 3)))
+print(rows_)                  # for the whole fitting part and for the pilot: trees built, validation AUC
+answer_3 = rows_[1][1]        # colleague: "5,000 people instead of 10,021 cost this much AUC (see the gap between the two scores)"
+# change the last line: refit the pilot model with early_stopping=True and put its validation AUC in answer_3, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+The two models were not fitted the same way. Look at how many trees each one built, and read what the documentation says about `early_stopping='auto'`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+pilot_stop = make_pipeline(prep(), HistGradientBoostingClassifier(random_state=SEED, early_stopping=True)).fit(pilot, y_pilot)
+answer_3 = round(float(roc_auc_score(y_val, pilot_stop.predict_proba(X_val)[:, 1])), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+pilot_stop = make_pipeline(prep(), HistGradientBoostingClassifier(random_state=SEED, early_stopping=True)).fit(pilot, y_pilot)
+answer_3 = round(float(roc_auc_score(y_val, pilot_stop.predict_proba(X_val)[:, 1])), 3)
+```
+
+The default `early_stopping="auto"` switches early stopping on when the training part holds more than 10,000 people, and off below that. The whole fitting part has 10,021 people, so early stopping switched itself on and the model built 34 trees; the pilot has 5,000, so it built all 100 and memorized. The colleague's gap is 0.021 AUC. With early stopping on for both, the pilot scores 0.681 and the gap is 0.009: most of the "cost of less data" came from a setting that changed with the number of rows. Print `n_iter_` whenever a boosted model's default behavior matters.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can build a boosted model of small trees, let early stopping choose the number of trees, tune its settings on folds, and say whether it beat a simpler model.*
+Test: Exercise data-scientist-gradient-boosting-2, done from the notebook without opening the hints.
+
+The pattern to remember: **small trees, a small learning rate, early stopping, tuning on folds, and a fair comparison with a simple model.** The next lesson, [*Feature engineering*](/data-scientist/feature-engineering/) (DS9), changes the columns the models see instead of the model.

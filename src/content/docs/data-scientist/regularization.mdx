@@ -1,0 +1,481 @@
+---
+id: data-scientist-regularization
+title: 'Regularization: keeping a model simple on purpose'
+short_title: Ridge and lasso
+description: Shrink coefficients with a ridge or lasso penalty, choose its strength with cross-validation, and see where the penalty helps and where it cannot.
+stage: data-scientist
+order: 60
+level: intermediate
+duration: 25
+objectives:
+  - Explain regularization as a penalty on large coefficients
+  - Fit ridge and lasso models and compare their coefficients
+  - Choose the penalty strength with cross-validation
+  - Say when scaling features matters
+prerequisites:
+  - data-scientist-cross-validation-and-overfitting
+  - data-scientist-logistic-regression-in-practice
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-regularization.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: Linear models, ridge, lasso and logistic regression (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/linear_model.html
+  - title: 'scikit-learn documentation: LogisticRegression, parameters C and l1_ratio (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+  - title: 'scikit-learn documentation: Preprocessing data, standardization (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/preprocessing.html
+  - title: 'scikit-learn documentation: Tuning the hyper-parameters of an estimator (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/grid_search.html
+status: published
+---
+
+## The question
+
+The model of lesson DS4 has 19 coefficients, learned from 13,362 people. A reviewer asks: *does it need a brake, and can it be made smaller without losing score?* Regularization is the brake. The table is the one of lesson DS3:
+
+| user_id | channel | expenses_7d | active_days_7d | churned |
+|---:|---|---:|---:|---:|
+| 10001 | organic_search | 1 | 1 | 1 |
+| 10002 | app_store | 2 | 2 | 1 |
+| 10003 | paid_search | 0 | 1 | 1 |
+| 10004 | organic_search | 0 | 0 | 0 |
+
+<Aside type="note" title="You already know this">
+
+**Match.** scikit-learn's guide says regularization "is applied by default" in logistic regression, so the model of lessons DS2 to DS4 is already a ridge, with C = 1.
+
+**Diverge.** Nobody chose C there. Units 3 and 4 choose it, and unit 4 shows when the choice matters.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS5, where must a scaler learn its mean?
+
+   <details>
+   <summary>answer</summary>
+
+   Inside each fold, from the fitting rows only. A pipeline does it for you.
+
+   </details>
+
+2. What did the odds ratio 0.745 for `expenses_7d` mean in lesson DS4?
+
+   <details>
+   <summary>answer</summary>
+
+   Each extra standard deviation of `expenses_7d`, the other columns held fixed, multiplies the odds of churning by 0.745.
+
+   </details>
+
+## The big idea
+
+A penalty makes every unit of coefficient cost something, so the model keeps only the weight that its people can support.
+
+## Learn by doing
+
+About 25 minutes, 4 new ideas: the penalty and C, scaling before the penalty, choosing C with folds, and where the penalty pays. `recipe` is the day-7 model with a penalty you can change. Everything runs on the 13,362 training people.
+
+<OpenInColab />
+
+### 1. A penalty on big coefficients
+
+**Idea.** A model fits by making its cost small. A *penalty* adds the size of the coefficients to the cost, so a large coefficient has to earn its place:
+
+$$
+\text{mean log-loss} + \frac{r(w)}{n\,C}
+$$
+
+Here $$w$$ holds the coefficients, $$n$$ is the number of people and $$C$$ is a setting you choose. *Ridge* (an L2 penalty) sets $$r(w)$$ to half the sum of the squared coefficients, *lasso* (an L1 penalty) to the sum of their absolute values. A smaller C means a bigger penalty.
+
+**Try it:** fit a ridge and a lasso at six values of C on the fitting part, and count the coefficients that are not exactly zero.
+
+```python
+rows = []
+for C in [1.0, 0.1, 0.03, 0.01, 0.003, 0.001]:
+    ridge_coef = recipe(C).fit(X_fit, y_fit)[-1].coef_[0]                   # 19 coefficients: 12 text-column levels and 7 number columns
+    lasso_coef = recipe(C, lasso=True).fit(X_fit, y_fit)[-1].coef_[0]
+    rows.append((C, round(float(np.abs(ridge_coef).max()), 2), int((ridge_coef != 0).sum()), round(float(np.abs(lasso_coef).max()), 2), int((lasso_coef != 0).sum())))
+print(pd.DataFrame(rows, columns=["C", "ridge: largest", "ridge: not zero", "lasso: largest", "lasso: not zero"]).to_string(index=False))
+```
+
+**Predict:** As C falls from 1 to 0.001, the penalty grows a thousand times. Will the coefficients of the ridge reach exactly zero, or shrink and stay above it? And the lasso's?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+    C  ridge: largest  ridge: not zero  lasso: largest  lasso: not zero
+1.000            0.94               19            1.00               17
+0.100            0.91               19            0.98               14
+0.030            0.83               19            0.92               10
+0.010            0.70               19            0.81                7
+0.003            0.46               19            0.27                3
+0.001            0.25               19            0.05                2
+```
+
+</details>
+
+*Why:* The ridge shrinks: its largest coefficient falls from 0.94 to 0.25, and all 19 coefficients are still not zero at C = 0.001. The lasso sets coefficients exactly to zero: 17 of 19 are not zero at C = 1, 10 at C = 0.03 and 2 at C = 0.001. The guide says the lasso "is able to set coefficients exactly to zero", while ridge only shrinks.
+
+### 2. Scale before you penalize
+
+**Idea.** A penalty adds up coefficients, and the size of a coefficient depends on the units of its column. So the number columns can go in as they are, or scaled with `StandardScaler` (mean 0, standard deviation 1) inside the pipeline, as in lesson DS5. scikit-learn's guide warns that the l1 and l2 regularizers of linear models "may assume that all features are centered around zero or have variance in the same order".
+
+**Try it:** fit a lasso at C = 0.01 on the number columns as they are and on the scaled columns, and list the columns it keeps.
+
+```python
+kept_by = {}
+for scaled in (True, False):
+    kept_by[scaled] = kept(recipe(0.01, lasso=True, scaled=scaled).fit(X_fit, y_fit))
+print("scaled:  ", kept_by[True])
+print("unscaled:", kept_by[False])
+```
+
+**Predict:** Will the lasso keep the same columns on the raw number columns as on the scaled ones?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+scaled:   ['channel_paid_social', 'channel_referral', 'sessions_7d', 'expenses_7d', 'active_days_7d', 'onboarded', 'bought_plus']
+unscaled: ['channel_paid_social', 'channel_referral', 'sessions_7d', 'expenses_7d', 'active_days_7d']
+```
+
+</details>
+
+*Why:* No. Scaled, it keeps 7 columns, including `onboarded` and `bought_plus`, which are 0 or 1. Unscaled, it keeps 5, and both flags are gone. A flag runs from 0 to 1, so its coefficient must be large to matter and the penalty charges for it; a count such as `expenses_7d` runs to 34, so a small coefficient costs little. The units, not the people, made the lists differ.
+
+### 3. Choose C on the folds
+
+**Idea.** Choose C like any setting of a model: try values on a log grid, score each on the same folds, and keep the one with the best mean. `GridSearchCV` runs the loop over the folds you give it and keeps the best model as `best_estimator_`. The test part stays outside the search. Report the range of the folds beside the mean, as in lesson DS5.
+
+**Try it:** choose C for the ridge and for the lasso on the five folds of the training part.
+
+```python
+grid = {"logisticregression__C": [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 100]}
+searches = {}
+for lasso in (False, True):
+    searches[lasso] = GridSearchCV(recipe(lasso=lasso), grid, cv=folds, scoring="roc_auc").fit(X_train, y_train)     # the same five folds for every C
+table_cv = pd.DataFrame({"C": grid["logisticregression__C"], "ridge": searches[False].cv_results_["mean_test_score"].round(4), "lasso": searches[True].cv_results_["mean_test_score"].round(4)})
+print(table_cv.to_string(index=False))
+for lasso in (False, True):
+    best_row = int(searches[lasso].best_index_)
+    scores = [searches[lasso].cv_results_[f"split{k}_test_score"][best_row] for k in range(5)]
+    print("lasso" if lasso else "ridge", searches[lasso].best_params_["logisticregression__C"], round(float(min(scores)), 3), round(float(max(scores)), 3))
+```
+
+**Predict:** How much will the best C gain over C = 1 in the mean ROC AUC: about 0.0005, about 0.005 or about 0.02?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+      C  ridge  lasso
+  0.001 0.6833 0.6465
+  0.003 0.6890 0.6789
+  0.010 0.6914 0.6896
+  0.030 0.6918 0.6920
+  0.100 0.6917 0.6919
+  0.300 0.6917 0.6917
+  1.000 0.6916 0.6917
+  3.000 0.6916 0.6916
+ 10.000 0.6916 0.6916
+100.000 0.6916 0.6916
+ridge 0.03 0.683 0.701
+lasso 0.03 0.684 0.701
+```
+
+</details>
+
+*Why:* About 0.0005 or less: the ridge scores 0.6916 at C = 1 and 0.6918 at its best, C = 0.03; the lasso 0.6917 and 0.6920 at C = 0.03. The folds of the best ridge run from 0.683 to 0.701, far wider than any gap between values of C from 0.03 up. Only below C = 0.01 does the penalty hurt. With 13,362 people for 19 coefficients the data already holds them in place.
+
+<figure>
+<svg viewBox="0 0 360 219" width="360" role="img" aria-labelledby="ds6-cv-t ds6-cv-d">
+<title id="ds6-cv-t">Mean ROC AUC of ridge and lasso on the five folds, by C</title>
+<desc id="ds6-cv-d">A line chart of the mean ROC AUC on the five folds of the training part, from 0.64 to 0.70, for ten values of C from 0.001 to 100 on a log scale. The ridge rises from 0.683 at C = 0.001 to 0.6918 at C = 0.03 and stays within 0.0003 of that from there to C = 100. The lasso rises from 0.646 at C = 0.001, more steeply, to 0.6920 at C = 0.03 and then lies on the ridge's line. Above C = 0.03 the penalty makes no difference to the score; only a strong penalty, a small C, hurts.</desc>
+<g fill="currentColor">
+<text x="29.9" y="22.4" font-size="10.5" font-weight="600">Mean ROC AUC on the five folds, by C</text>
+<rect x="121.9" y="34.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="133.9" y="41.9" font-size="9.5">ridge</text>
+<rect x="181.9" y="34.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="193.9" y="41.9" font-size="9.5">lasso</text>
+<path d="M69.9 172.4 L321.9 172.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="63.9" y="175.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.64</text>
+<path d="M69.9 132.4 L321.9 132.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="63.9" y="135.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.66</text>
+<path d="M69.9 92.4 L321.9 92.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="63.9" y="95.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.68</text>
+<path d="M69.9 52.4 L321.9 52.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="63.9" y="55.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.70</text>
+<path d="M69.9 159.4 L94 94.6 L120.3 73.2 L144.4 68.4 L170.7 68.6 L194.8 69 L221.1 69 L245.2 69.2 L271.5 69.2 L321.9 69.2" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M69.9 85.8 L94 74.4 L120.3 69.6 L144.4 68.8 L170.7 69 L194.8 69 L221.1 69.2 L245.2 69.2 L271.5 69.2 L321.9 69.2" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="69.9" cy="85.8" r="3" fill="#0072b2" />
+<circle cx="69.9" cy="159.4" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="94" cy="74.4" r="3" fill="#0072b2" />
+<circle cx="94" cy="94.6" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="120.3" cy="69.6" r="3" fill="#0072b2" />
+<circle cx="120.3" cy="73.2" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="144.4" cy="68.8" r="3" fill="#0072b2" />
+<circle cx="144.4" cy="68.4" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="170.7" cy="69" r="3" fill="#0072b2" />
+<circle cx="170.7" cy="68.6" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="194.8" cy="69" r="3" fill="#0072b2" />
+<circle cx="194.8" cy="69" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="221.1" cy="69.2" r="3" fill="#0072b2" />
+<circle cx="221.1" cy="69" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="245.2" cy="69.2" r="3" fill="#0072b2" />
+<circle cx="245.2" cy="69.2" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="271.5" cy="69.2" r="3" fill="#0072b2" />
+<circle cx="271.5" cy="69.2" r="3" fill="#00a07a" fill-opacity="1" />
+<circle cx="321.9" cy="69.2" r="3" fill="#0072b2" />
+<circle cx="321.9" cy="69.2" r="3" fill="#00a07a" fill-opacity="1" />
+<text x="150.4" y="88.8" font-size="9.5" font-weight="600">best C = 0.03</text>
+<text x="150.4" y="100.8" font-size="9.5" font-weight="600">ridge 0.6918, lasso 0.6920</text>
+<path d="M69.9 172.4 L69.9 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="69.9" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0.001</text>
+<path d="M120.3 172.4 L120.3 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="120.3" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0.01</text>
+<path d="M170.7 172.4 L170.7 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="170.7" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0.1</text>
+<path d="M221.1 172.4 L221.1 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="221.1" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">1</text>
+<path d="M271.5 172.4 L271.5 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="271.5" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">10</text>
+<path d="M321.9 172.4 L321.9 176.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="321.9" y="188.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">100</text>
+<text x="321.9" y="202.4" font-size="10" text-anchor="end" fill-opacity="0.8">C (log scale; smaller is a stronger penalty)</text>
+</g>
+</svg>
+</figure>
+
+### 4. Where the penalty pays: few people, many columns
+
+**Idea.** A penalty earns its keep when a model has more columns than its people can pin down. Give a pilot of 500 people 60 extra columns of random numbers, which carry nothing about churn, and fit three models: almost no penalty (C = 1,000,000), a ridge and a lasso, the last two with C chosen on the pilot's five folds. Score each on the 3,341 validation people.
+
+**Try it:** fit the three models on the pilot and score them on the validation people.
+
+```python
+noise = pd.DataFrame(np.random.default_rng(SEED).normal(size=(len(table), 60)), index=table.index, columns=[f"noise{i}" for i in range(60)])   # 60 columns of random numbers
+Xn = X.join(noise)
+NUM = WEEK1 + list(noise.columns)
+pilot = Xn.loc[X_fit.sample(500, random_state=SEED).index]            # a pilot of 500 people from the fitting part
+y_pilot = y.loc[pilot.index]
+grid_small = {"logisticregression__C": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1]}
+pilot_models = {"almost no penalty": recipe(1e6, num=NUM).fit(pilot, y_pilot),
+                "ridge, C by CV": GridSearchCV(recipe(num=NUM), grid_small, cv=folds, scoring="roc_auc").fit(pilot, y_pilot).best_estimator_,
+                "lasso, C by CV": GridSearchCV(recipe(lasso=True, num=NUM), grid_small, cv=folds, scoring="roc_auc").fit(pilot, y_pilot).best_estimator_}
+for tag, m in pilot_models.items():
+    chosen = kept(m)
+    print(f"{tag:18s} AUC on 3,341 other people {roc_auc_score(y_val, m.predict_proba(Xn.loc[X_val.index])[:, 1]):.3f}   columns not zero {len(chosen):3d}   of them random {sum(c.startswith('noise') for c in chosen)}")
+```
+
+**Predict:** Which model will score best on the 3,341 other people, and how many of the 60 random columns will the lasso keep: none, a few, or about half?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+almost no penalty  AUC on 3,341 other people 0.609   columns not zero  79   of them random 60
+ridge, C by CV     AUC on 3,341 other people 0.642   columns not zero  79   of them random 60
+lasso, C by CV     AUC on 3,341 other people 0.649   columns not zero  22   of them random 17
+```
+
+</details>
+
+*Why:* The lasso scores best, 0.649, then the ridge, 0.642, then almost no penalty, 0.609: 67 columns for 500 people let it learn noise. The lasso keeps 22 columns, 17 of them random, so most of what is left is still noise. This pilot sits at the low end for the unpenalized model. Twenty other pilots (seeds 100 to 119, the optional cell after unit 4 in the notebook) give median AUCs of 0.634, 0.653 and 0.661 for almost no penalty, ridge and lasso. The lasso beat almost no penalty in all twenty pilots and the ridge beat it in 18; the lasso beat the ridge in 14. The lasso kept from 1 to 57 columns, because C is chosen on only 500 people.
+
+### 5. The verdict on the test part
+
+**Idea.** Score the two models of unit 3 on the 4,454 test people, once, beside the day-7 model, with a 95 percent interval on each gain from 2,000 resamples (seed 2026, as in lesson DS2), and count the columns each keeps.
+
+**Try it:** score the tuned ridge, the tuned lasso and the day-7 model on the test part, and count their columns that are not zero.
+
+```python
+p_day7 = logit().fit(X_train, y_train).predict_proba(X_test)[:, 1]              # the test part is used once, here
+tuned = {"ridge": searches[False].best_estimator_, "lasso": searches[True].best_estimator_}
+p_tuned = {tag: m.predict_proba(X_test)[:, 1] for tag, m in tuned.items()}
+print("day-7 model", round(float(roc_auc_score(y_test, p_day7)), 3), {tag: round(float(roc_auc_score(y_test, p)), 3) for tag, p in p_tuned.items()})
+print({tag: auc_gain(p, p_day7, y_test) for tag, p in p_tuned.items()})
+print("columns not zero:", {tag: len(kept(m)) for tag, m in tuned.items()})
+```
+
+**Predict:** Will either tuned model beat the day-7 model by more than 0.005 AUC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+day-7 model 0.69 {'ridge': 0.69, 'lasso': 0.689}
+{'ridge': [0.0, -0.001, 0.0], 'lasso': [-0.001, -0.003, 0.001]}
+columns not zero: {'ridge': 19, 'lasso': 12}
+```
+
+</details>
+
+*Why:* No. The day-7 model scores 0.690, the tuned ridge 0.690 and the tuned lasso 0.689. The ridge's gain is 0.000 with a 95 percent interval of -0.001 to 0.000; the lasso's is -0.001, -0.003 to 0.001. Both include 0. The penalty gave no better ranking here; the lasso scores 0.689 with 12 columns not zero, where the ridge has 19.
+
+<Aside type="tip" title="Remember">
+
+- A penalty adds the size of the coefficients to the cost; a smaller C is a stronger brake.
+- Ridge shrinks every coefficient; lasso can set some to exactly zero.
+- Scale the number columns first, inside the pipeline, and choose C on the same folds for every value.
+- A penalty helps when people are few for the columns; with plenty of people it changes little.
+
+**Common trap:** choosing C by the score on the test part. The test part is for the one honest score at the end.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-regularization-1">
+
+**Choose C on one validation part.** Fit the lasso at each C of `Cs` (given) on the fitting part, score each on the validation part with ROC AUC, and put the list [the C with the highest AUC, that AUC rounded to 3 decimals] in `answer_1`. Expected: `answer_1` is a list of two numbers.
+
+```python
+Cs = [0.003, 0.01, 0.03, 0.1, 0.3, 1.0]       # given: the values of C to try
+val_scores = []
+for C in Cs:
+    m = recipe(C, lasso=True).fit(X_fit, y_fit)
+    # score this lasso on the validation part with ROC AUC and keep the number in val_scores
+answer_1 = None  # replace None with [the C with the highest validation AUC, that AUC rounded to 3 decimals]
+```
+
+<details>
+<summary>Hint</summary>
+
+`roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])` is the score of one fitted lasso; `np.argmax` finds the position of the highest one in the list.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+val_scores.append(float(roc_auc_score(y_val, m.predict_proba(...)[:, 1])))
+answer_1 = [Cs[int(np.argmax(val_scores))], round(max(val_scores), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+Cs = [0.003, 0.01, 0.03, 0.1, 0.3, 1.0]
+val_scores = []
+for C in Cs:
+    m = recipe(C, lasso=True).fit(X_fit, y_fit)
+    val_scores.append(float(roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])))
+answer_1 = [Cs[int(np.argmax(val_scores))], round(max(val_scores), 3)]
+```
+
+The best C is 0.03, with 0.700 on the validation part. The scores from C = 0.03 to 1 are 0.6998, 0.6996, 0.6996, 0.6995: a flat top, so one validation part picks a point inside a region.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-regularization-2">
+
+**Fewer people than columns.** Before you start, say in one sentence what the result looks like: two AUCs between 0.55 and 0.7, the second higher. Repeat unit 4 with a pilot of 250 people (`X_fit.sample(250, random_state=SEED)`; `Xn`, `NUM` and `grid_small` come from unit 4), and put [AUC with almost no penalty, AUC of the ridge with C chosen on `folds`] on the validation people in `answer_2`, each rounded to 3 decimals. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+Cut the pilot with `Xn.loc[X_fit.sample(250, random_state=SEED).index]`, fit `recipe(1e6, num=NUM)` on it, and put `recipe(num=NUM)` into `GridSearchCV(..., grid_small, cv=folds, scoring="roc_auc")`. Score on `Xn.loc[X_val.index]`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two scores, the ridge clearly higher than the model with almost no penalty."*
+
+```python
+small = Xn.loc[X_fit.sample(250, random_state=SEED).index]
+y_small = y.loc[small.index]
+ridge_small = GridSearchCV(recipe(num=NUM), grid_small, cv=folds, scoring="roc_auc").fit(small, y_small).best_estimator_
+```
+
+</details>
+
+<Solution>
+
+```python
+small = Xn.loc[X_fit.sample(250, random_state=SEED).index]
+y_small = y.loc[small.index]
+plain_small = recipe(1e6, num=NUM).fit(small, y_small)
+ridge_small = GridSearchCV(recipe(num=NUM), grid_small, cv=folds, scoring="roc_auc").fit(small, y_small).best_estimator_
+Xv_small = Xn.loc[X_val.index]
+answer_2 = [round(float(roc_auc_score(y_val, m.predict_proba(Xv_small)[:, 1])), 3) for m in (plain_small, ridge_small)]
+```
+
+The scores are 0.585 with almost no penalty and 0.636 for the ridge. The ridge recovers 0.051 of AUC.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does C = 0.001 do to a ridge model, compared with C = 1?
+
+   <details>
+   <summary>answer</summary>
+
+   It makes the penalty a thousand times stronger: the coefficients shrink and the model is simpler.
+
+   </details>
+
+<Exercise id="data-scientist-regularization-3">
+
+**Spot the flaw.** A colleague fits the lasso at C = 0.03, sees that it zeroed the two platform columns, and concludes that platform tells us nothing: a model on platform alone would score a coin flip, 0.5. Change the last line: fit a logistic regression on the `platform` column alone on the fitting part, and put its ROC AUC on the validation part in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0.5 and 1.
+
+```python
+flat = recipe(0.03, lasso=True).fit(X_fit, y_fit)
+zeroed = [n.split("__")[1] for n, c in zip(flat[0].get_feature_names_out(), flat[-1].coef_[0]) if c == 0]
+print([n for n in zeroed if n.startswith("platform")])        # the lasso at C = 0.03 gave the platform columns a coefficient of exactly zero
+answer_3 = 0.5      # colleague: "the lasso zeroed platform, so platform tells us nothing: its AUC is a coin flip, 0.5"
+# change the last line: fit a logistic regression on the platform column alone (fitting part) and give its AUC on the validation part, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+A coefficient of zero says that the lasso could do without the column at this price, given the other columns. What does a model that has only this column score?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+only_platform = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["platform"])]), LogisticRegression(max_iter=1000)).fit(X_fit, y_fit)
+answer_3 = round(float(roc_auc_score(y_val, only_platform.predict_proba(...)[:, 1])), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+only_platform = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["platform"])]), LogisticRegression(max_iter=1000)).fit(X_fit, y_fit)
+answer_3 = round(float(roc_auc_score(y_val, only_platform.predict_proba(X_val)[:, 1])), 3)
+```
+
+Platform alone scores 0.553, above a coin flip. The lasso dropped the platform columns because the channel columns, which it kept, already carry most of what platform says: in the dataset's rules the platform mix depends on the channel. A zero from the lasso means "not needed, given the others, at this price", not "no signal".
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can fit a ridge and a lasso on scaled columns, choose C with the same folds for every value, and say whether the penalty changed anything.*
+Test: Exercise data-scientist-regularization-2, done from the notebook without opening the hints.
+
+The pattern to remember: **scale, penalize, choose the brake on folds, and report what it gained with the folds' spread beside it.** The next lesson, [*Decision trees and random forests*](/data-scientist/decision-trees-and-forests/) (DS7), limits a model's flexibility another way: the size of the leaves.

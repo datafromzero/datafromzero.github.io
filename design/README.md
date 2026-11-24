@@ -48,6 +48,7 @@ drawn indirectly**. Lots of negative space, no gradients, no colour accents, no 
 | Headings | weight 400, tight tracking (−0.04 to −0.055em), line-height .9–1 | |
 | Easing | `expo.out` for reveals, `expo.inOut` for transforms, `power2` for draws | |
 | Radius | buttons fully round (999px); panels 6px | |
+| Docs layout | content column `--sl-content-width: 48rem` (prose capped at 42rem), left sidebar `--sl-sidebar-width: 20rem`, "On this page" column fixed at `--dfz-toc-width: 16rem` (from Starlight's `lg`, 72rem); the content is centered between the two sidebars; the taskbar reads the same variables | Docs and project pages (`src/styles/tokens.css`) |
 
 ### Light theme (every page, the homepage included)
 

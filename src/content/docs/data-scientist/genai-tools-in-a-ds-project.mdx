@@ -1,0 +1,487 @@
+---
+id: data-scientist-genai-tools-in-a-ds-project
+title: GenAI tools in a data science project
+short_title: GenAI in a DS project
+description: Grade an AI assistant's modeling answers and a text classifier against labels with the checks you know, and put a token cost on a run and a pass.
+stage: data-scientist
+order: 140
+level: intermediate
+duration: 35
+objectives:
+  - Grade an assistant's modeling answers with the five checks and log accept, revise or reject
+  - Grade a text classifier against labeled notes with accuracy, recall, precision and an interval
+  - Estimate the token cost of a run and of a classification pass from a dated price
+  - Say when a model you train is the better tool
+prerequisites:
+  - data-scientist-model-interpretation-and-fairness
+  - core-trust-but-verify-ai-output
+  - core-prompting-with-the-data-in-the-room
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-genai-tools-in-a-ds-project.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: Metrics and scoring, confusion matrix and classification metrics (version 1.9.1, accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+  - title: 'Anthropic documentation: Pricing, model pricing table and token counting FAQ (page read 2026-11-24)'
+    url: https://platform.claude.com/docs/en/about-claude/pricing
+  - title: 'OpenAI Help Center: What are tokens and how to count them (page read 2026-11-24)'
+    url: https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
+status: published
+---
+
+## The question
+
+The team asks the data scientist two things this week: *can we use an assistant to build the churn model, and can a language model read the cancellation notes for us?* Both come back with a confident answer. Four notes of the 60 that the lesson works with (written for it) and the label that the writer meant:
+
+| note | label |
+|---|---|
+| At $7.99 a month it costs more than the savings it finds me. | too_expensive |
+| I haven't added an expense in a month. | not_using |
+| It can't import my bank statement. | missing_feature |
+| Switched to another budgeting app that my bank offers. | found_alternative |
+
+By the end you can grade both with the metrics you already know, put a dollar figure on them and say when to train a model instead.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Trust, but verify: checking AI output*](/core/trust-but-verify-ai-output/) (C38) gave five checks and a log of accept, revise or reject. Unit 1 uses them on modeling answers.
+
+**Diverge.** In C38 a wrong answer was a wrong query. In a model an answer can run and be well-formed and still be wrong: a score read on the wrong rows, a metric fed the wrong kind of output.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C38, what are the three verdicts, and what goes next to each?
+
+   <details>
+   <summary>answer</summary>
+
+   Accept, revise or reject, each with one sentence of reason and the check that decided it.
+
+   </details>
+
+2. In DS2, which number did the flat guess get for ROC AUC, and what does it mean?
+
+   <details>
+   <summary>answer</summary>
+
+   0.5: a coin flip. A model must beat it on held-out people.
+
+   </details>
+
+## The big idea
+
+An answer from a model is a claim: grade it against something outside the model, with the same metrics, intervals and costs as any other model.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: grading modeling answers, grading a classifier against labels, a token cost line, and when to train your own. The setup cell gave the table of lesson DS3, the split of DS2 to DS5, the day-7 logistic regression of DS4, `notes` (60 notes with their labels and two columns of classifier labels) and `CANCELERS`, the 692 people of the app who canceled a subscription.
+
+Everything an "assistant" or a "classifier" says in this lesson was written for it. No model was run, and the accuracy of the labels says nothing about any real model.
+
+<OpenInColab />
+
+### 1. Grade the assistant's answers
+
+**Idea.** Treat each answer as a claim and run the checks of C38 that fit: predict the number before you look, recompute it a second way, then decide. For modeling the second way is a rerun on held-out people, and for a claim about what to do it is a question about what the data can show. Log every verdict with one sentence.
+
+<Aside type="note" title="Four answers written for this lesson, in the style of an assistant">
+
+**A. The split.** I cut the people into 13,362 to fit and 4,454 to test, stratified, seed 2026; both parts have 54.4 percent churners.
+
+**B. The score.** The logistic regression on the week-1 columns has a ROC AUC of 0.62 on the test people: `roc_auc_score(y_test, model.predict(X_test))`.
+
+**C. A tree.** An unlimited decision tree scores 0.791 accuracy: `deep.score(Xe_train, y_train)`.
+
+**D. The decision.** Paid-social people churn 3.2 times as often, so stopping paid social would cut churn by two thirds.
+
+</Aside>
+
+**Try it:** check each answer, then write the log.
+
+```python
+prep = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC), ("num", "passthrough", WEEK1)])
+Xe_train, Xe_test = prep.fit_transform(X_train), prep.transform(X_test)
+deep = DecisionTreeClassifier(random_state=SEED).fit(Xe_train, y_train)                  # the assistant's tree, with no limit on its depth
+paid = table["channel"] == "paid_social"
+a = (len(X_train), len(X_test), round(float(y_train.mean()), 3), round(float(y_test.mean()), 3))                          # answer A: the split
+b = (round(float(roc_auc_score(y_test, model.predict(X_test))), 3), round(float(roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])), 3))      # answer B: hard labels, then chances
+c = (round(float(deep.score(Xe_train, y_train)), 3), round(float(deep.score(Xe_test, y_test)), 3))                          # answer C: training rows, then test rows
+d = (round(float(table.loc[paid, "churned"].mean()), 3), round(float(table.loc[~paid, "churned"].mean()), 3), round(float(table["churned"].mean()), 3))      # answer D
+log = pd.DataFrame([
+    ("A split", f"counted {a[0]:,} and {a[1]:,}; churners {a[2]} and {a[3]}", "accept", "The counts and the shares match the claim."),
+    ("B ROC AUC", f"with chances {b[1]}, with hard labels {b[0]}", "revise", "ROC AUC needs the chances: predict_proba."),
+    ("C tree", f"training rows {c[0]}, test rows {c[1]}", "revise", "The score was read on the rows the tree learned from."),
+    ("D cut paid social", f"churn {d[0]} for paid social, {d[1]} for the rest, {d[2]} for all", "reject", "A gap between groups is not what a change would do."),
+], columns=["answer", "check", "verdict", "reason"])
+print(log.to_string(index=False))
+```
+
+**Predict:** Four answers came back from an assistant, each with a claim. Which do you accept, which do you revise, and do you reject any?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+           answer                                                          check verdict                                                reason
+          A split             counted 13,362 and 4,454; churners 0.544 and 0.544  accept            The counts and the shares match the claim.
+        B ROC AUC                      with chances 0.69, with hard labels 0.623  revise             ROC AUC needs the chances: predict_proba.
+           C tree                           training rows 0.791, test rows 0.582  revise The score was read on the rows the tree learned from.
+D cut paid social churn 0.788 for paid social, 0.474 for the rest, 0.544 for all  reject   A gap between groups is not what a change would do.
+```
+
+</details>
+
+*Why:* A is accepted: both counts and both shares match. B is revised: the claim is a ROC AUC of 0.62, but a ROC AUC takes the chances, and the call gave it hard 0/1 labels (0.623); with `predict_proba` it is 0.690, the number of DS2. C is revised: 0.791 is the score on the rows the tree learned from. On the 4,454 test people it is 0.582, 3.8 points above the flat guess of 0.544. D is rejected: paid-social people churn at 0.788 against 0.474 for the rest, a ratio of 1.7, not 3.2 (an odds ratio multiplies odds, not chances), and removing them from a table changes who is in it, not whether anyone stays. No experiment in the data supports "would cut churn", so the claim cannot be checked here. Reject when the approach is wrong or you cannot check it.
+
+### 2. Grade a classifier against labels
+
+**Idea.** A classifier of text is graded like any other: put its answers beside labels you trust. An answer outside the allowed labels is an error, not a missing value. Read a confusion matrix, whose rows are the true labels and whose columns are the predicted ones, then recall (the share of each true label found) and precision (the share of each predicted label that was right), and an interval for the accuracy, because 60 notes are few.
+
+**Try it:** the answers of run 1 against the 60 labels.
+
+```python
+valid = notes["run1"].isin(LABELS)
+pred = notes["run1"].where(valid, "invalid")                                      # an answer outside the five labels counts as wrong
+hit = (pred == notes["truth"]).to_numpy()
+print(int((~valid).sum()), round(float(hit.mean()), 3), round(float(notes["truth"].value_counts(normalize=True).max()), 3))
+print(pd.crosstab(notes["truth"], pred).reindex(index=LABELS, columns=LABELS + ["invalid"], fill_value=0).to_string())
+recall = pd.Series({k: float(hit[(notes["truth"] == k).to_numpy()].mean()) for k in LABELS})
+precision = pd.Series({k: float(hit[(pred == k).to_numpy()].mean()) for k in LABELS})
+print(pd.DataFrame({"recall": recall.round(2), "precision": precision.round(2)}).T.to_string())
+rng = np.random.default_rng(SEED)
+accs = [hit[rng.integers(0, len(hit), len(hit))].mean() for _ in range(2000)]      # resample the 60 notes
+print(np.round(np.percentile(accs, [2.5, 97.5]), 3))
+```
+
+**Predict:** Run 1 labels 60 notes. About how many of its answers are right: about 0.55, about 0.85 or about 0.98? And how many are not one of the five labels?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+1 0.833 0.35
+run1               too_expensive  not_using  missing_feature  found_alternative  other  invalid
+truth                                                                                          
+too_expensive                 13          1                0                  0      0        0
+not_using                      1         19                0                  0      0        1
+missing_feature                0          0                8                  1      1        0
+found_alternative              1          0                0                  7      1        0
+other                          1          2                0                  0      3        0
+           too_expensive  not_using  missing_feature  found_alternative  other
+recall              0.93       0.90              0.8               0.78    0.5
+precision           0.81       0.86              1.0               0.88    0.6
+[0.733 0.917]
+```
+
+</details>
+
+*Why:* About 0.85: 0.833, 50 of 60, with one answer outside the five labels (counted wrong). The flat guess, always `not_using`, gets 0.350. The interval is 0.733 to 0.917 (2,000 resamples of the 60 notes, seed 2026): 60 notes cannot tell 0.75 from 0.9. The weak label is `other`: recall 0.50, precision 0.60, with two `other` notes read as `not_using`. A single accuracy hid that. The labels were written for the lesson, so these numbers describe the illustration and not a model.
+
+<figure>
+<svg viewBox="0 0 360 282" width="360" role="img" aria-labelledby="ds14-recall-t ds14-recall-d">
+<title id="ds14-recall-t">Recall and precision of run 1 for each label, on 60 notes</title>
+<desc id="ds14-recall-d">A bar chart from 0 to 1 with two bars for each of the five labels: recall in blue and precision in green. too expensive: recall 0.93, precision 0.81; not using: recall 0.90, precision 0.86; missing feature: recall 0.80, precision 1.00; found alternative: recall 0.78, precision 0.88; other: recall 0.50, precision 0.60. A tick under the axis marks the overall accuracy, 0.833. The labels of run 1 were written for the lesson as an illustration; they are not output of any model.</desc>
+<g fill="currentColor">
+<text x="20.9" y="22.4" font-size="10.5" font-weight="600">Run 1 by label (an illustration)</text>
+<rect x="112.9" y="34.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="124.9" y="41.9" font-size="9.5">recall</text>
+<rect x="176.9" y="34.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="188.9" y="41.9" font-size="9.5">precision</text>
+<text x="20.9" y="75.4" font-size="9.5">too expensive</text>
+<rect x="112.9" y="64.4" width="189.4" height="10" rx="1.5" fill="#0072b2" />
+<text x="306.3" y="72.9" font-size="9" font-weight="600">0.93</text>
+<rect x="112.9" y="77.4" width="165.8" height="10" rx="1.5" fill="#00a07a" />
+<text x="282.7" y="85.9" font-size="9" font-weight="600">0.81</text>
+<text x="20.9" y="111.4" font-size="9.5">not using</text>
+<rect x="112.9" y="100.4" width="184.6" height="10" rx="1.5" fill="#0072b2" />
+<text x="301.5" y="108.9" font-size="9" font-weight="600">0.90</text>
+<rect x="112.9" y="113.4" width="176.2" height="10" rx="1.5" fill="#00a07a" />
+<text x="293.1" y="121.9" font-size="9" font-weight="600">0.86</text>
+<text x="20.9" y="147.4" font-size="9.5">missing feature</text>
+<rect x="112.9" y="136.4" width="163.2" height="10" rx="1.5" fill="#0072b2" />
+<text x="280.1" y="144.9" font-size="9" font-weight="600">0.80</text>
+<rect x="112.9" y="149.4" width="204" height="10" rx="1.5" fill="#00a07a" />
+<text x="320.9" y="157.9" font-size="9" font-weight="600">1.00</text>
+<text x="20.9" y="183.4" font-size="9.5">found alternative</text>
+<rect x="112.9" y="172.4" width="158.7" height="10" rx="1.5" fill="#0072b2" />
+<text x="275.6" y="180.9" font-size="9" font-weight="600">0.78</text>
+<rect x="112.9" y="185.4" width="178.5" height="10" rx="1.5" fill="#00a07a" />
+<text x="295.4" y="193.9" font-size="9" font-weight="600">0.88</text>
+<text x="20.9" y="219.4" font-size="9.5">other</text>
+<rect x="112.9" y="208.4" width="102" height="10" rx="1.5" fill="#0072b2" />
+<text x="218.9" y="216.9" font-size="9" font-weight="600">0.50</text>
+<rect x="112.9" y="221.4" width="122.4" height="10" rx="1.5" fill="#00a07a" />
+<text x="239.3" y="229.9" font-size="9" font-weight="600">0.60</text>
+<path d="M112.9 56.4 L112.9 236.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<path d="M112.9 236.4 L316.9 236.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M112.9 236.4 L112.9 240.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="112.9" y="251.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.0</text>
+<path d="M214.9 236.4 L214.9 240.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="214.9" y="251.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.5</text>
+<path d="M316.9 236.4 L316.9 240.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="316.9" y="251.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1.0</text>
+<path d="M282.9 236.4 L282.9 245.4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-opacity="1" />
+<text x="316.9" y="265.4" font-size="9.5" font-weight="600" text-anchor="end">overall accuracy 0.833 (tick)</text>
+</g>
+</svg>
+</figure>
+
+### 3. Two runs, and what a pass costs
+
+**Idea.** If a model samples its answers, two runs of one prompt can differ, so run twice and count the notes that changed. A *token* is the unit a model is billed in. Count it as about 4 characters of English, the rule of thumb of the OpenAI help page, and price it with the vendor's page, with a date, because prices move. Cost is a line of arithmetic: tokens for each note, times notes, times the price per million.
+
+**Try it:** the agreement of the two runs, the tokens and the dollars of one assistant run at its floor and of a pass over the notes of the 692 people who canceled, and the cost of a million notes.
+
+```python
+agree = float((notes["run1"] == notes["run2"]).mean())
+print(round(agree, 3), int((notes["run1"] != notes["run2"]).sum()))
+PROMPT = "Classify this cancellation note as one of: too_expensive, not_using, missing_feature, found_alternative, other. Answer with the label only.\nNote: "
+PRICE = {"Haiku 5.5": (0.10, 0.50), "Sonnet 5.5": (2.00, 10.00)}               # US dollars per million input and output tokens, from the vendor's pricing page of 2026-11-24 (Haiku 5.5: for prompts up to 100,000 tokens)
+CHARS_PER_TOKEN = 4                                                              # a rule of thumb for English text, not the count of any tokenizer
+tokens_in = (len(PROMPT) + notes["text"].str.len()) / CHARS_PER_TOKEN
+tokens_out = notes["run1"].str.len() / CHARS_PER_TOKEN
+per_note = (float(tokens_in.mean()), float(tokens_out.mean()))
+print(round(per_note[0], 1), round(per_note[1], 1))
+ANSWERS = ["A. The split: 13,362 to fit, 4,454 to test, 54.4% churners in both parts.", "B. The logistic regression has a ROC AUC of 0.62 on the test people.",
+           "C. An unlimited decision tree scores 0.791 accuracy.", "D. Paid-social people churn 3.2 times as often, so stopping paid social would cut churn by two thirds."]
+context = MODELING_SQL + table.head(5).to_csv()                                  # what the assistant was given: the table's definition and five rows
+run_in, run_out = len(context) / CHARS_PER_TOKEN, len(" ".join(ANSWERS)) / CHARS_PER_TOKEN
+print(round(run_in), round(run_out), f"{(run_in * PRICE['Sonnet 5.5'][0] + run_out * PRICE['Sonnet 5.5'][1]) / 1e6:.4f}")      # the floor of one run: no code, no retries
+for model_name, (p_in, p_out) in PRICE.items():
+    cost = (per_note[0] * p_in + per_note[1] * p_out) / 1e6                       # dollars for one note
+    print(model_name, f"{cost * CANCELERS:.4f}", f"{cost * 1_000_000:,.2f}")       # the 692 people who canceled, and a million notes
+```
+
+**Predict:** Classifying the notes of the 692 people who canceled with the small model: will the bill be under a cent, about a dollar, or about a hundred dollars?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.9 6
+47.1 2.9
+754 74 0.0023
+Haiku 5.5 0.0043 6.16
+Sonnet 5.5 0.0852 123.13
+```
+
+</details>
+
+*Why:* Under a cent for the small model: $0.0043 for 692 notes, from 47.1 input and 2.9 output tokens for each note at $0.10 and $0.50 per million tokens (Haiku 5.5 on the page of 2026-11-24; that price holds for prompts up to 100,000 tokens). Sonnet 5.5, at $2 and $10, costs $0.0852, about twenty times more. Cost is not the problem at 692 notes; at a million notes it is $6.16 and $123.13. The two runs agree on 0.900 of the notes, 6 differ, so one run is one draw. The floor of one assistant run, its context and four short answers, is 754 and 74 tokens, $0.0023; a real run adds code, retries and a longer context, and bills the usage the API reports. The real count can differ from the 4-characters rule: the page says its newer tokenizer gives about 30 percent more tokens for the same text, and that the exact increase depends on the content, so count with the vendor's token counter before you budget.
+
+### 4. Or a model you train
+
+**Idea.** A text classifier you train needs labeled rows; a language model needs none to start. Ask what the trained one would need to reach the bar. Score it as before, by cross-validation on the labeled notes, with the mean and the range of the folds, and look at how the score moves when it trains on more notes.
+
+**Try it:** a TF-IDF logistic regression trained on 40, 48 and 50 of the 60 notes, with the mean and range of its folds.
+
+```python
+text_model = make_pipeline(TfidfVectorizer(ngram_range=(1, 2)), LogisticRegression(max_iter=1000))
+for folds in (3, 5, 6):
+    scores = cross_val_score(text_model, notes["text"], notes["truth"], cv=StratifiedKFold(folds, shuffle=True, random_state=SEED))
+    print(folds, round(60 - 60 / folds), round(float(scores.mean()), 3), round(float(scores.min()), 3), round(float(scores.max()), 3))
+```
+
+**Predict:** With 60 labeled notes, will a classical text model trained on 48 of them score about 0.95, about 0.80 or under 0.6 on the other 12?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+3 40 0.433 0.4 0.45
+5 48 0.433 0.333 0.583
+6 50 0.4 0.3 0.6
+```
+
+</details>
+
+*Why:* Under 0.6: with 48 training notes the mean is 0.433, folds from 0.333 to 0.583, and with 40 or 50 notes it is 0.433 and 0.400. The trained model is only a little above the flat guess of 0.350, the share of the most common label, and does not improve between 40 and 50 notes: 60 labeled notes are not enough, and how many are cannot be read from here. As a rule of thumb of this lesson, train your own when you have thousands of labeled rows, a fixed set of labels and a volume where a per-note fee adds up; use a language model when labels are few or change, and grade it the same way, against labels, with an interval, on a prompt written before you look at the score.
+
+<figure>
+<svg viewBox="0 0 360 218" width="360" role="img" aria-labelledby="ds14-folds-t ds14-folds-d">
+<title id="ds14-folds-t">Accuracy of a text model trained on 40, 48 and 50 notes, mean and range of its folds</title>
+<desc id="ds14-folds-d">A chart from 0 to 1 of accuracy for a TF-IDF logistic regression trained on 40, 48 and 50 of the 60 notes. 40 notes: mean 0.433, folds from 0.400 to 0.450; 48 notes: mean 0.433, folds from 0.333 to 0.583; 50 notes: mean 0.400, folds from 0.300 to 0.600. Two dashed lines mark the flat guess, 0.350, and the accuracy of the illustrated run 1, 0.833. The trained model stays near 0.4, far below the illustration.</desc>
+<g fill="currentColor">
+<text x="26" y="22.4" font-size="10.5" font-weight="600">Trained text model, mean and range of folds</text>
+<path d="M62 172.4 L334 172.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="56" y="175.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.0</text>
+<path d="M62 114.4 L334 114.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="56" y="117.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.5</text>
+<path d="M62 56.4 L334 56.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="56" y="59.9" font-size="10" text-anchor="end" fill-opacity="0.8">1.0</text>
+<path d="M62 75.8 L334 75.8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="334" y="71.8" font-size="9.5" text-anchor="end">illustrated run 1: 0.833</text>
+<path d="M62 131.8 L334 131.8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="334" y="143.8" font-size="9.5" text-anchor="end">flat guess: 0.350</text>
+<path d="M107.3 126 L107.3 120.2" fill="none" stroke="#00a07a" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="107.3" cy="122.1" r="5" fill="#00a07a" />
+<text x="107.3" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">40 notes</text>
+<text x="116.3" y="125.6" font-size="9.5" font-weight="600">0.433</text>
+<path d="M198 133.7 L198 104.7" fill="none" stroke="#00a07a" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="198" cy="122.1" r="5" fill="#00a07a" />
+<text x="198" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">48 notes</text>
+<text x="207" y="125.6" font-size="9.5" font-weight="600">0.433</text>
+<path d="M288.7 137.6 L288.7 102.8" fill="none" stroke="#00a07a" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="288.7" cy="126" r="5" fill="#00a07a" />
+<text x="288.7" y="187.4" font-size="10" text-anchor="middle" fill-opacity="0.8">50 notes</text>
+<text x="297.7" y="129.5" font-size="9.5" font-weight="600">0.400</text>
+<text x="334" y="201.4" font-size="10" text-anchor="end" fill-opacity="0.8">trained on this many of the 60 notes</text>
+</g>
+</svg>
+</figure>
+
+<Aside type="tip" title="Remember">
+
+- An answer is a claim: predict it, recompute it a second way, then accept, revise or reject with one sentence.
+- A score read on training rows, or an AUC fed hard labels, runs and is wrong.
+- Grade a classifier against labels: invalid answers count as errors, read recall and precision by label, and put an interval on 60 notes.
+- Cost is tokens times notes times a dated price; the tokens are an estimate until the API reports them.
+- Train your own when labels are many and fixed; else grade the language model.
+
+**Common trap:** leaving out the hard notes and reporting the rest. The accuracy rises and the notes a reader would disagree on disappear.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-genai-tools-in-a-ds-project-1">
+
+**Recall by label, run 2.** Unit 2 graded run 1. Grade run 2 the same way: for each label, the share of the notes with that true label that run 2 got right, counting an answer outside the five labels as wrong. Put the five recalls, in the order of `LABELS`, in `answer_1`, each rounded to 3 decimals. Expected: `answer_1` is a list of five numbers.
+
+```python
+pred2 = notes["run2"].where(notes["run2"].isin(LABELS), "invalid")
+hit2 = (pred2 == notes["truth"]).to_numpy()
+# recall of run 2 for each label: the share of the notes with that true label that run 2 got right
+answer_1 = None  # replace None with the five recalls in the order of LABELS, each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`hit2` says whether each note was right. For each label, keep the notes whose `truth` is that label and take the mean of `hit2` over them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [round(float(hit2[(notes["truth"] == k).to_numpy()].mean()), 3) for k in ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+pred2 = notes["run2"].where(notes["run2"].isin(LABELS), "invalid")
+hit2 = (pred2 == notes["truth"]).to_numpy()
+answer_1 = [round(float(hit2[(notes["truth"] == k).to_numpy()].mean()), 3) for k in LABELS]
+```
+
+Run 2 gets 0.857 of the too-expensive notes, 0.905 of the not-using notes, 0.8 of the missing-feature notes, 0.778 of the found-alternative notes and 0.667 of the other notes. Its overall accuracy is the same as run 1's, but the notes it gets wrong are not the same ones: an accuracy hides which notes fail, and recall by label shows it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-genai-tools-in-a-ds-project-2">
+
+**A longer prompt.** Before you start, say in one sentence what you expect: a prompt with worked examples costs more for every note, and the answer is still cents. Now the instructions are 640 characters long (three worked examples), the model is Sonnet 5.5, and the answer is the label as before. Use `per_note`, `PRICE` and `CHARS_PER_TOKEN` of unit 3 and put the list [input tokens for each note, dollars for the 692 people who canceled, rounded to 3 decimals] in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers, tokens rounded to 1 decimal.
+
+<details>
+<summary>Hint</summary>
+
+Input tokens for a note are the characters of the prompt plus the characters of the note, divided by `CHARS_PER_TOKEN`; use the mean note length. The output tokens are `per_note[1]`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+tokens_in2 = (640 + notes["text"].str.len().mean()) / CHARS_PER_TOKEN
+cost_each = (tokens_in2 * ... + per_note[1] * ...) / 1e6
+answer_2 = [round(float(tokens_in2), 1), round(float(cost_each * CANCELERS), 3)]
+```
+
+</details>
+
+<Solution>
+
+```python
+LONG_PROMPT_CHARS = 640                    # the same task with three worked examples in the prompt
+tokens_in2 = (LONG_PROMPT_CHARS + notes["text"].str.len().mean()) / CHARS_PER_TOKEN
+p_in, p_out = PRICE["Sonnet 5.5"]
+cost_each = (tokens_in2 * p_in + per_note[1] * p_out) / 1e6
+answer_2 = [round(float(tokens_in2), 1), round(float(cost_each * CANCELERS), 3)]
+```
+
+A prompt of 640 characters gives 170.6 input tokens for each note, about 3.6 times the 47.1 of the short prompt, and the bill for the 692 people who canceled, on Sonnet 5.5 is $0.256, three times the $0.085 of unit 3. The prompt dominates the input, so a longer prompt, or examples, is where the cost grows. These are estimates from 4 characters a token; the usage an API returns is the bill.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what makes "reject" different from "revise"?
+
+   <details>
+   <summary>answer</summary>
+
+   Revise: the approach is sound and one thing is wrong. Reject: the approach is wrong, or you cannot check the claim with what you have.
+
+   </details>
+
+<Exercise id="data-scientist-genai-tools-in-a-ds-project-3">
+
+**Spot the flaw.** A colleague grades run 1 on the 55 notes that give one reason and leaves out the 5 that give two, "because those are ambiguous anyway", and reports the accuracy of the starter. Put in `answer_3` the list [accuracy of run 1 on the 55 one-reason notes, accuracy of run 1 on the 5 two-reason notes], each rounded to 3 decimals. Expected: `answer_3` is a list of two numbers.
+
+```python
+easy = notes["hard"] == 0
+colleague = round(float((notes.loc[easy, "run1"] == notes.loc[easy, "truth"]).mean()), 3)      # colleague: "the five two-reason notes are ambiguous anyway, so I left them out"
+answer_3 = None  # replace None with [accuracy of run 1 on the 55 one-reason notes, accuracy of run 1 on the 5 two-reason notes], each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`notes["hard"]` is 1 for the two-reason notes. Take the mean of `run1 == truth` inside each group.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+easy = notes["hard"] == 0
+answer_3 = [round(float((notes.loc[easy, "run1"] == notes.loc[easy, "truth"]).mean()), 3), ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+easy = notes["hard"] == 0
+answer_3 = [round(float((notes.loc[easy, "run1"] == notes.loc[easy, "truth"]).mean()), 3), round(float((notes.loc[~easy, "run1"] == notes.loc[~easy, "truth"]).mean()), 3)]
+```
+
+Run 1 is right on 0.891 of the 55 one-reason notes and on 0.2 of the 5 two-reason notes: one right out of five. Leaving the hard notes out raised the accuracy from 0.833 to 0.891 and hid the notes where a real reader would also disagree. With 5 notes the 0.2 is itself very uncertain; the point is that the hard notes need their own line in the grade.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can grade a modeling answer from an assistant with the checks of the core, grade a text classifier against labels with an interval, put a dated token cost on a run and a pass, and say when to train my own model.*
+Test: Exercise data-scientist-genai-tools-in-a-ds-project-2, done from the notebook without opening the hints.
+
+The pattern to remember: **grade what a model says against something outside it, and write the grade down.** The next lessons are the track's simulation and capstone, where the grade goes on your own work.

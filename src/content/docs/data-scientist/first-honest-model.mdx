@@ -1,0 +1,440 @@
+---
+id: data-scientist-first-honest-model
+title: Your first honest model with scikit-learn
+short_title: First honest model
+description: Fit a first model, line it up against two simpler rules on held-out people, put an interval on the gain, and write the verdict with its limits.
+stage: data-scientist
+order: 20
+level: intermediate
+duration: 30
+objectives:
+  - Fit, predict and score with one scikit-learn pipeline on a training and a test split
+  - Compare a first model with two simpler rules on held-out data
+  - Put an interval on the gain with a paired bootstrap
+  - Find which groups of columns carry the gain
+  - Write the verdict and a limitations line
+prerequisites:
+  - data-scientist-exploring-before-modeling
+  - core-framing-split-and-baseline
+  - core-metrics-and-error-costs
+  - core-confidence-intervals
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-first-honest-model.ipynb
+reviewed: 2026-11-24
+sources:
+  - title: 'scikit-learn documentation: DummyClassifier, the strategy "prior" (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.dummy.DummyClassifier.html
+  - title: 'scikit-learn documentation: LogisticRegression, the score method (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+  - title: 'scikit-learn documentation: Cross-validation, the introduction and data transformation with held-out data (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/cross_validation.html
+status: published
+---
+
+## The question
+
+Priya's team runs a budgeting app, `app-events`, and can send one win-back message a week to the people who are about to go quiet. They write:
+
+> On the seventh day after someone signs up, can you tell us who will have gone quiet by day 30?
+
+*Gone quiet* needs a definition, and this one is written down: a person has **churned** when there is no visit and no expense in days 8 to 30 after signing up. The first rows of the table, one row for each person who signed up from January 1 to May 31 (everyone with a full 30 days to show up in):
+
+| user_id | signup_date | channel | platform | sessions_7d | expenses_7d | active_days_7d | churned |
+|---:|---|---|---|---:|---:|---:|---:|
+| 10001 | 2026-01-01 | organic_search | web | 0 | 1 | 1 | 1 |
+| 10002 | 2026-01-01 | app_store | android | 1 | 2 | 2 | 1 |
+| 10003 | 2026-01-01 | paid_search | android | 1 | 0 | 1 | 1 |
+| 10004 | 2026-01-01 | organic_search | web | 0 | 0 | 0 | 0 |
+| 10005 | 2026-01-01 | referral | ios | 2 | 3 | 3 | 0 |
+
+[*Building a modeling table in SQL*](/data-scientist/sql-for-modeling-tables/) (DS3) writes the query that makes this table from the raw events; here it arrives ready. By the end you can fit a model, set it beside two simpler rules, put an interval on its gain, and write the verdict with a line that says what the numbers cannot tell.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Framing a prediction problem, splitting and a baseline*](/core/framing-split-and-baseline/) (C19) a seeded split held people out, a baseline and a first model were fitted on the training part only, and both were scored on the held-out part. The same four steps run here.
+
+**Diverge.** In C19 the model knew only what is known at signup, and it was the whole answer. Here it is one rung of a ladder, and unit 1 shows where the signup-only model lands.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. Write the four lines of this lesson's problem: the target, the unit, the prediction moment and the decision.
+
+   <details>
+   <summary>answer</summary>
+
+   The target is `churned`: no visit and no expense in days 8 to 30. The unit is one person. The prediction moment is the end of day 7 after signup. The decision is who gets the win-back message.
+
+   </details>
+
+2. In C19, why does the baseline give everyone the share of 1s in the training part and not 0.5?
+
+   <details>
+   <summary>answer</summary>
+
+   It is the simplest honest answer, learned from the training part only. A baseline weaker than that makes any model look good.
+
+   </details>
+
+## The big idea
+
+A model is a claim: better than the best simpler rule you could have built, on people it never saw, by a gain you can put an interval on.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a ladder of baselines, the verbs of a pipeline, an interval on a gain, the columns that carry it. A last unit teaches nothing new: it checks the gap and writes the verdict. The setup cell loaded `users` and `events` and built `table`, one row for each of 17,816 people.
+
+<OpenInColab />
+
+### 1. Two rungs below the model
+
+**Idea.** A *baseline* is a rule the model has to beat, and one rung is not enough. Rung 1 is the flat guess: every person gets the share of churners in the training part. Rung 2 is the best rule you could have built before day 7: a model that knows only the three columns known at signup. A model is judged against the highest rung below it.
+
+**Try it:** split the people once, with the seed of the track, then fit both rungs on the training part and score them on the held-out part. Accuracy is the share of people called right when a chance of 0.5 or more means "churns". ROC AUC scores the ranking: 0.5 is a coin flip and 1 is a perfect ranking.
+
+```python
+STATIC = ["channel", "platform", "region"]                    # known at signup
+WEEK1 = ["sessions_7d", "expenses_7d", "recent_3d", "active_days_7d", "onboarded", "saw_paywall", "bought_plus"]    # known at day 7
+X, y = table[STATIC + WEEK1], table["churned"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=SEED, stratify=y)
+print(len(X_train), len(X_test), round(float(y_train.mean()), 4))
+
+rung1 = DummyClassifier(strategy="prior").fit(X_train, y_train)     # the flat guess: everyone gets the training share of churners
+rung2 = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC)]), LogisticRegression(max_iter=1000))
+rung2.fit(X_train, y_train)                                         # the day-0 rule: the three signup columns only
+for name, m in [("rung 1", rung1), ("rung 2", rung2)]:
+    print(name, round(accuracy_score(y_test, m.predict(X_test)), 3), round(roc_auc_score(y_test, m.predict_proba(X_test)[:, 1]), 3))
+```
+
+**Predict:** Rung 1 gives everyone the same chance, 0.544. Rung 2 learns from channel, platform and region. How many more people out of 100 does rung 2 call right than rung 1: about 1, about 7 or about 20?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+13362 4454 0.5442
+rung 1 0.544 0.5
+rung 2 0.611 0.668
+```
+
+</details>
+
+*Why:* Both rungs learned from 13,362 people and were scored on 4,454 others; the stratified split keeps the share of churners at 54.4 percent in both parts. The flat guess calls 54.4 of 100 right, simply the share of churners, and its ROC AUC is 0.5 because everyone gets the same chance. Rung 2 calls 61.1 of 100 right, about 7 more, and ranks with an AUC of 0.668. Signup columns alone already beat the flat guess, so that is the number the next model has to beat.
+
+### 2. One object, three verbs
+
+**Idea.** A scikit-learn model is an object with verbs. `fit` learns from the training part; `predict_proba` gives a chance for each person; `predict` gives a 0 or a 1 for each; `score` gives one number. Put the preparation steps and the model in one `Pipeline`, so that every verb runs every step in order and a step that learns, the encoder or the scaler, learns from the training part only.
+
+**Try it:** build the day-7 model with the week-1 columns added, and look at what each verb returns for the held-out people.
+
+```python
+model = make_pipeline(
+    ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC),      # text columns: one 0/1 column per value
+                       ("num", StandardScaler(), WEEK1)]),                           # number columns: centered and scaled
+    LogisticRegression(max_iter=1000),
+)
+model.fit(X_train, y_train)                       # learns from the training part only
+chance = model.predict_proba(X_test)[:, 1]        # a chance of churning for every test person
+call = model.predict(X_test)                      # a 0 or a 1 for every test person
+print(np.round(chance[:3], 3), call[:3])
+print(round(model.score(X_test, y_test), 4), round(accuracy_score(y_test, call), 4), round(roc_auc_score(y_test, chance), 4))
+print(bool(((chance > 0.5).astype(int) == call).all()))
+```
+
+**Predict:** `model.score(X_test, y_test)` is one number. Which is it: the accuracy, the ROC AUC or the share of churners? And is `predict` the same as asking whether the chance is above 0.5?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[0.322 0.359 0.381] [0 0 0]
+0.6322 0.6322 0.6898
+True
+```
+
+</details>
+
+*Why:* The first three held-out people get chances of 0.32, 0.36 and 0.38, all under 0.5, so `predict` calls each of them a 0, someone who stays. `score` is the accuracy, 0.6322: the same number as `accuracy_score` on the labels, as the documentation of the class says ("Return accuracy on provided data and labels"). The ROC AUC of 0.6898 needs the chances, not the 0 and 1 calls, because it scores the ranking. On every held-out person `predict` agreed with "chance above 0.5", so that is the cut it uses. It is a default and not a decision: lesson DS4 chooses the cut from what each kind of mistake costs.
+
+### 3. An interval on the gain
+
+**Idea.** A score from one split is one draw. To see how far it could move, resample the held-out people with replacement, score both models on the same draw, and repeat 2,000 times: a bootstrap, as in [*Confidence intervals*](/core/confidence-intervals/) (C7). The middle 95 percent of the 2,000 gains is the interval. Use the same resample for both models, so that each gain is measured on the same people.
+
+**Try it:** bootstrap the gain in ROC AUC of the day-7 model over rung 2.
+
+```python
+rng = np.random.default_rng(SEED)
+y_arr = y_test.to_numpy()
+p_day0 = rung2.predict_proba(X_test)[:, 1]
+gain = []
+for _ in range(2000):
+    i = rng.integers(0, len(y_arr), len(y_arr))                # one resample of the test people, used for both models
+    gain.append(roc_auc_score(y_arr[i], chance[i]) - roc_auc_score(y_arr[i], p_day0[i]))
+print(round(roc_auc_score(y_arr, chance) - roc_auc_score(y_arr, p_day0), 3))
+print(np.round(np.percentile(gain, [2.5, 97.5]), 3))
+```
+
+**Predict:** The two models were scored on the same 4,454 people. Will the 95 percent interval of the gain in ROC AUC include 0, and about how wide will it be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.022
+[0.012 0.033]
+```
+
+</details>
+
+*Why:* The gain is 0.022 and its 95 percent interval runs from 0.012 to 0.033: it does not include 0, and it is about 0.010 either side. On these people the week-1 columns add to what the signup columns knew. The interval is for this table and these 4,454 held-out people; it does not promise the same gain in June. It comes from the seed 2026: with seed 1 it is 0.012 to 0.033, so the ends move by a thousandth or so.
+
+### 4. Which columns carry the gain
+
+**Idea.** Refit the same recipe with a group of columns removed and score it on the same held-out people. This is a look, not a decision: it shows which columns carry the gain on these people. Choosing columns to keep is a choice about the model, and a choice made on the held-out people spends them.
+
+**Try it:** refit without the week-1 columns, without the signup columns, and without the three flags (`onboarded`, `saw_paywall`, `bought_plus`).
+
+```python
+COUNTS, FLAGS = WEEK1[:4], WEEK1[4:]
+
+
+def auc_with(cat, num):
+    """Fit the same recipe on some of the columns and give its test AUC."""
+    parts = ([("cat", OneHotEncoder(handle_unknown="ignore"), cat)] if cat else []) + ([("num", StandardScaler(), num)] if num else [])
+    m = make_pipeline(ColumnTransformer(parts), LogisticRegression(max_iter=1000)).fit(X_train[cat + num], y_train)
+    return round(float(roc_auc_score(y_test, m.predict_proba(X_test[cat + num])[:, 1])), 3)
+
+
+print({"all columns": auc_with(STATIC, WEEK1), "without the week-1 columns": auc_with(STATIC, []),
+       "without the signup columns": auc_with([], WEEK1), "without the three flags": auc_with(STATIC, COUNTS)})
+```
+
+**Predict:** Which removal costs more ROC AUC: the week-1 columns or the signup columns? And what do the three flags add?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'all columns': 0.69, 'without the week-1 columns': 0.668, 'without the signup columns': 0.648, 'without the three flags': 0.691}
+```
+
+</details>
+
+*Why:* Without the week-1 columns the AUC is 0.668, a loss of 0.022; without the signup columns it is 0.648, a loss of 0.042. So the signup columns carry more of the ranking, and the week-1 columns add a smaller, real part on top. Without the three flags the AUC is 0.691, a thousandth higher than with them: on these people they add nothing. Dropping them would be a choice made on the held-out people, so it waits for a validation part (lesson DS4 cuts one). The truth is on the side of this reading: in the rules that made the data, the channel sets how active a person is (a factor from 1.80 for referral down to 0.35 for paid social), and activity is what keeps people coming back.
+
+<figure>
+<svg viewBox="0 0 360 201" width="360" role="img" aria-labelledby="ds2-ladder-t ds2-ladder-d">
+<title id="ds2-ladder-t">ROC AUC of each rung on 4,454 held-out people, with 95 percent intervals</title>
+<desc id="ds2-ladder-d">A dot chart on a scale from 0.45 to 0.75 of the ROC AUC on the held-out people. The flat guess, rung 1, scores 0.500, a coin flip, with no interval because everyone gets the same chance. The signup columns only, rung 2, score 0.668 with a 95 percent interval of 0.651 to 0.683. The day-7 model scores 0.690, interval 0.675 to 0.705. The intervals come from 2,000 resamples of the held-out people, and they overlap because both models are scored on the same people: the gain between them has its own, narrower interval, written in the lesson.</desc>
+<g fill="currentColor">
+<text x="25" y="22.4" font-size="10.5" font-weight="600">ROC AUC on the held-out people, with 95% intervals</text>
+<text x="25" y="59.9" font-size="9.5">Rung 1: flat guess</text>
+<circle cx="176.7" cy="56.4" r="5" fill="none" fill-opacity="0.9" stroke="currentColor" stroke-width="2" />
+<text x="176.7" y="45.4" font-size="9.5" font-weight="600" text-anchor="middle">0.500</text>
+<text x="25" y="95.9" font-size="9.5">Rung 2: signup columns</text>
+<path d="M272.5 92.4 L292.7 92.4" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="282.8" cy="92.4" r="5" fill="#0072b2" />
+<text x="282.8" y="81.4" font-size="9.5" font-weight="600" text-anchor="middle">0.668</text>
+<text x="25" y="131.9" font-size="9.5" font-weight="600">Day-7 model</text>
+<path d="M287.4 128.4 L306.7 128.4" fill="none" stroke="#00a07a" stroke-width="2.5" stroke-opacity="1" />
+<circle cx="296.9" cy="128.4" r="5" fill="#00a07a" />
+<text x="296.9" y="117.4" font-size="9.5" font-weight="600" text-anchor="middle">0.690</text>
+<path d="M145 154.4 L335 154.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M176.7 154.4 L176.7 158.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="176.7" y="170.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.5</text>
+<path d="M240 154.4 L240 158.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="240" y="170.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.6</text>
+<path d="M303.3 154.4 L303.3 158.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="303.3" y="170.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.7</text>
+<path d="M176.7 42.4 L176.7 154.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.35" stroke-dasharray="3 3" />
+<text x="335" y="184.4" font-size="10" text-anchor="end" fill-opacity="0.8">ROC AUC (0.5 is a coin flip)</text>
+</g>
+</svg>
+</figure>
+
+### 5. Is it memorizing, and the verdict
+
+**Idea.** Score the model on the rows it learned from as well. A big gap between that score and the held-out score is a warning of overfitting; a small gap is only the absence of that warning, not proof that the model will hold up.
+
+**Try it:** compare the model's training score with its held-out score, then write the verdict.
+
+```python
+print(round(model.score(X_train, y_train), 4), round(model.score(X_test, y_test), 4))
+print(round(roc_auc_score(y_train, model.predict_proba(X_train)[:, 1]), 4), round(roc_auc_score(y_test, chance), 4))
+```
+
+**Predict:** Will the model's ROC AUC on the training part be more than 0.03 above its held-out AUC?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.6399 0.6322
+0.6942 0.6898
+```
+
+</details>
+
+*Why:* The training AUC is 0.6942 and the held-out AUC 0.6898, a gap of 0.0044; accuracy is 64.0 percent on the training part and 63.2 on the held-out part. Ten columns and 13,362 people leave little room to memorize. The verdict is the part you write:
+
+> **Verdict.** On 4,454 held-out people the day-7 model has a ROC AUC of 0.690 and calls 63.2 of 100 right. A rule that knew only the signup columns scores 0.668 and 61.1, and the flat guess 0.5 and 54.4. The gain over the signup rule is 0.022 AUC, 95 percent interval 0.012 to 0.033.
+>
+> **Limits.** One split of one five-month stretch of a synthetic app. The share who churn rose from 50 percent of the January signups to 61 percent of the May signups, and this split mixes them, so it does not say how the model does on later people (lesson DS5 splits by time). The model ranks people; it does not say why anyone leaves.
+
+<Aside type="tip" title="Remember">
+
+- A model is judged against the best simpler rule below it, not only the flat guess.
+- `fit` learns, `predict_proba` gives chances, `predict` gives 0 or 1, and `score` is the accuracy for a classifier.
+- Put an interval on the gain by resampling the same held-out people for both models.
+- Remove a group of columns to see what carries the gain; on the held-out people that is a look, not a choice.
+- A verdict names the numbers with the baselines beside them, and a limits line says what they cannot tell.
+
+**Common trap:** a score alone. 63 of 100 means nothing until the rule below it and the interval of the gain stand beside it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-first-honest-model-1">
+
+**How good is the day-7 model on another split?** Split the people 80 to 20 with the seed 5 (given), fit the recipe of unit 2 on the training part only, and put the ROC AUC of its chances on the test part in `answer_1`, rounded to 3 decimals. Expected: `answer_1` is a number between 0.5 and 1.
+
+```python
+X5_train, X5_test, y5_train, y5_test = train_test_split(X, y, test_size=0.2, random_state=5, stratify=y)    # given: an 80 to 20 split with seed 5
+recipe = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC), ("num", StandardScaler(), WEEK1)]), LogisticRegression(max_iter=1000))    # given: the recipe of unit 2
+# fit the recipe on the training part only, then compute the ROC AUC of the chances it gives the test part
+answer_1 = None  # replace None with the AUC, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+Fit with `recipe.fit(X5_train, y5_train)`. Then `recipe.predict_proba(X5_test)[:, 1]` gives the chance of churning for each test person, the call of unit 2 that `roc_auc_score` needs.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+recipe.fit(..., ...)
+answer_1 = round(float(roc_auc_score(..., recipe.predict_proba(...)[:, 1])), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+recipe.fit(X5_train, y5_train)
+answer_1 = round(float(roc_auc_score(y5_test, recipe.predict_proba(X5_test)[:, 1])), 3)
+```
+
+On this split the recipe scores 0.704 on 3,564 test people. The check cell also names two near misses: the AUC on the training part (0.690) and the AUC of the hard 0 and 1 calls (0.643), which throws away the ranking. It is not the 0.690 of unit 2 because it is another split: Exercise 3 shows how far the score moves from split to split.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-first-honest-model-2">
+
+**Does the app's region help?** Before you start, say in one sentence what the result looks like: two numbers, the first between 0.65 and 0.75, the second very close to 0. The dataset README says region only decides the hour of day of a person's events and has no effect on anything else. Use the split and the recipe of Exercise 1. Refit the recipe without `region` and put the list [its ROC AUC on the test part, the full recipe's AUC minus that AUC] in `answer_2`, each rounded to 3 decimals. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+Copy the recipe of Exercise 1 and take `"region"` out of the list of text columns; select the same columns from `X5_train` and `X5_test`. Fit the full recipe too, so that you can subtract.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two numbers: the AUC without region, about 0.70, and a difference of a few thousandths at most."*
+
+```python
+no_region = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), [...]), ("num", StandardScaler(), WEEK1)]), LogisticRegression(max_iter=1000))
+recipe.fit(X5_train, y5_train)
+```
+
+</details>
+
+<Solution>
+
+```python
+recipe.fit(X5_train, y5_train)
+no_region = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), ["channel", "platform"]), ("num", StandardScaler(), WEEK1)]), LogisticRegression(max_iter=1000))
+no_region.fit(X5_train[["channel", "platform"] + WEEK1], y5_train)
+auc_no_region = roc_auc_score(y5_test, no_region.predict_proba(X5_test[["channel", "platform"] + WEEK1])[:, 1])
+auc_full = roc_auc_score(y5_test, recipe.predict_proba(X5_test)[:, 1])
+answer_2 = [round(float(auc_no_region), 3), round(float(auc_full - auc_no_region), 3)]
+```
+
+Without `region` the recipe scores 0.705; the full recipe scores 0.704. The difference, -0.001, is inside the noise of one split. The rules of the dataset say the same: region sets the hour of day of a person's events and nothing the model sees. A column that adds nothing on the test people is a candidate to stop defining; the decision itself belongs to a validation part.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the two rungs below the model and say what each one knows.
+
+   <details>
+   <summary>answer</summary>
+
+   Rung 1 knows only the share of churners in the training part and gives it to everyone. Rung 2 knows the columns of signup (channel, platform, region) and nothing from the first week.
+
+   </details>
+
+<Exercise id="data-scientist-first-honest-model-3">
+
+**Spot the flaw.** A colleague wants one number for the model's ROC AUC. The colleague scores the recipe on twenty different splits of the same people and reports the best of the twenty. Change the last line so that it reports a number you could defend, and put it in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0.5 and 1.
+
+```python
+recipe3 = make_pipeline(ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), STATIC), ("num", StandardScaler(), WEEK1)]), LogisticRegression(max_iter=1000))   # given
+scores = []
+for seed in range(100, 120):                                           # given: twenty different splits of the same people
+    a, b, c, d = train_test_split(X, y, test_size=0.25, random_state=seed, stratify=y)
+    scores.append(roc_auc_score(d, recipe3.fit(a, c).predict_proba(b)[:, 1]))
+answer_3 = round(float(max(scores)), 3)        # colleague: "I tried twenty splits and report the best one"
+```
+
+<details>
+<summary>Hint</summary>
+
+If you could not look at the twenty scores, which single number would you say is typical? Think of the middle one, and `np.median`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = round(float(np.median(...)), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = round(float(np.median(scores)), 3)
+```
+
+The best of the twenty is 0.701 and the worst 0.684; the median is 0.691. Choosing the best split picks the luckiest draw, a score the model will not repeat on new people, and it hides how far the score moves. Report the middle with the range: AUC 0.691, 0.684 to 0.701 over twenty splits. The headline split of the lesson (seed 2026, 0.690) sits near that middle, which is why it was kept.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can fit a model on a training part, score it on held-out people beside two simpler rules, put an interval on the gain, say which columns carry it, and write the verdict with a limitations line.*
+Test: Exercise data-scientist-first-honest-model-2, done from the notebook without opening the hints.
+
+The pattern to remember: **climb the ladder one rung at a time, put an interval on each step, and write down what the numbers cannot say.** The next lesson, [*Building a modeling table in SQL*](/data-scientist/sql-for-modeling-tables/) (DS3), builds the table of this lesson from the raw events.
