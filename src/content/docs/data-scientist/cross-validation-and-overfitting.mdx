@@ -1,0 +1,495 @@
+---
+id: data-scientist-cross-validation-and-overfitting
+title: Overfitting and cross-validation
+short_title: Overfitting and CV
+description: See overfitting as a gap between training and unseen scores, and estimate a model's performance with cross-validation on folds that fit the question.
+stage: data-scientist
+order: 50
+level: intermediate
+duration: 30
+objectives:
+  - Diagnose overfitting from the gap between the score on fitting rows and on unseen rows
+  - Run k-fold cross-validation and read its spread
+  - Use stratified and time-based folds when the question needs them
+  - Keep every step that learns inside the folds
+prerequisites:
+  - data-scientist-first-honest-model
+  - data-scientist-logistic-regression-in-practice
+  - core-data-leakage
+datasets:
+  - app-events
+notebook: notebooks/data-scientist/data-scientist-cross-validation-and-overfitting.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Cross-validation, evaluating estimator performance (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/cross_validation.html
+  - title: 'scikit-learn documentation: Common pitfalls and recommended practices, data leakage (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/common_pitfalls.html
+  - title: 'scikit-learn documentation: DecisionTreeClassifier, max_depth and min_samples_leaf (accessed 2026-11-24)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.tree.DecisionTreeClassifier.html
+status: draft
+---
+
+TODO(owner): Team draft (D24) for you to edit; `reviewed` is the stub's date, yours to set when you publish. The decision tree appears only as a model with one flexibility knob; lesson DS7 teaches it. The stub's source R2D3 (an essay on bias and variance) and the Google crash course were dropped: no claim here rests on them. No concept animation: the fold diagram is a still figure, because all folds show at once. Numbers come from the notebook run on pandas 3.0.5, scikit-learn 1.9.1 and NumPy 2.5.3, seed 2026; a Colab run is unchecked.
+
+## The question
+
+The team of lesson DS2 has one score for its model, 0.690, from one split. Before it goes to anyone, they ask the questions a reviewer will ask: *is that number luck, would it hold on people who signed up later, and could the model have peeked?* The three questions are the three halves of this lesson: how far a score moves, how to cut the folds so that they look like the use, and how to keep the model from seeing what it is scored on. The table is the one of lesson DS3, in numbers:
+
+| user_id | signup_date | channel | active_days_7d | churned |
+|---:|---|---|---:|---:|
+| 10001 | 2026-01-01 | organic_search | 1 | 1 |
+| 10002 | 2026-01-01 | app_store | 2 | 1 |
+| 10003 | 2026-01-01 | paid_search | 1 | 1 |
+| 10004 | 2026-01-01 | organic_search | 0 | 0 |
+
+By the end you can read an overfitting gap, run cross-validation and report its spread, pick folds by the use, and put every learning step inside them.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Data leakage*](/core/data-leakage/) (C20) a scaler was fitted on the training part only, and a split by time was compared with a random one. Units 3 and 4 do both inside every fold of a cross-validation.
+
+**Diverge.** In C20 the scaler was the leak, and it leaked little. Unit 4 shows a learning step that reads the labels, and what it does to a score.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS2 the day-7 model scored 0.690 on one split. Why is that one number not the model's AUC?
+
+   <details>
+   <summary>answer</summary>
+
+   It is one draw: another split gives another score, and Exercise 3 of DS2 shows that twenty splits spread from about 0.68 to 0.70.
+
+   </details>
+
+2. In C20, where must a scaler learn its mean?
+
+   <details>
+   <summary>answer</summary>
+
+   From the training part only. A pipeline does it for you.
+
+   </details>
+
+## The big idea
+
+A score is only as honest as the rows it was measured on: cross-validation measures it several times on rows the model never saw, and shows how far it moves.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: the overfitting gap, k-fold and its spread, folds that fit the question, learning inside each fold. The setup cell built the table of lesson DS3, cut the test part of lesson DS2 (untouched until Exercise 3) and defined the day-7 model `logit()` and a tree `tree(depth)`. Everything runs on the 13,362 training people.
+
+<OpenInColab />
+
+### 1. Overfitting is a gap
+
+**Idea.** *Overfitting* is learning the rows instead of the pattern: the model scores well on the rows it learned from and worse on rows it has not seen. Make the gap visible with a model whose flexibility is one number. A decision tree splits the rows again and again by a question about one column, and `max_depth` is the maximum depth of the tree; with no limit it keeps splitting until its leaves are pure or too small to split. Score it twice at each depth: on the fitting rows, and on a validation part held back from them.
+
+**Try it:** fit a tree at eight depths on part of the training people and score each on the fitting rows and on the validation rows.
+
+```python
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=SEED, stratify=y_train)   # a validation part, cut from the training part
+curve = []
+for depth in [1, 2, 3, 4, 6, 8, 12, None]:                                   # None: let the tree grow until it cannot split any more
+    m = tree(depth).fit(X_fit, y_fit)
+    curve.append(("no limit" if depth is None else depth, round(float(roc_auc_score(y_fit, m.predict_proba(X_fit)[:, 1])), 3), round(float(roc_auc_score(y_val, m.predict_proba(X_val)[:, 1])), 3)))
+print(pd.DataFrame(curve, columns=["max_depth", "AUC on the fitting rows", "AUC on the validation rows"]).to_string(index=False))
+```
+
+**Predict:** As the depth grows, the AUC on the fitting rows keeps rising. Will the AUC on the validation rows keep rising too, rise and then fall, or stay flat? At about what depth does it stop improving?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+max_depth  AUC on the fitting rows  AUC on the validation rows
+        1                    0.610                       0.607
+        2                    0.659                       0.669
+        3                    0.676                       0.687
+        4                    0.686                       0.688
+        6                    0.698                       0.686
+        8                    0.719                       0.669
+       12                    0.804                       0.627
+ no limit                    0.906                       0.570
+```
+
+</details>
+
+*Why:* The AUC on the fitting rows climbs from 0.610 to 0.906 for the tree with no limit. The AUC on the validation rows rises to 0.688 at depth 4 and then falls, to 0.570 with no limit: a gap of 0.336 between what the tree remembers and what it knows. Depths 3 to 6 are within a few thousandths of each other, so the best depth is a region, and one validation part cannot pick a point in it.
+
+<figure>
+<svg viewBox="0 0 360 225" width="360" role="img" aria-labelledby="ds5-curves-t ds5-curves-d">
+<title id="ds5-curves-t">ROC AUC of a decision tree on the fitting rows and on the validation rows, by depth</title>
+<desc id="ds5-curves-d">A line chart of the ROC AUC, on a scale from 0.5 to 1.0, for trees of depth 1, 2, 3, 4, 6, 8, 12, no limit. On the fitting rows it rises from 0.610 to 0.906. On the validation rows it rises to 0.688 at depth 4, stays within a few thousandths from depth 3 to 6, and then falls to 0.570 for the tree with no limit. The widening gap between the two lines is the overfitting.</desc>
+<g fill="currentColor">
+<text x="24.7" y="22.4" font-size="10.5" font-weight="600">ROC AUC by the depth of the tree</text>
+<path d="M64.7 180.4 L252.7 180.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="58.7" y="183.9" font-size="10" text-anchor="end" fill-opacity="0.8">0.5</text>
+<path d="M64.7 154 L252.7 154" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="58.7" y="157.5" font-size="10" text-anchor="end" fill-opacity="0.8">0.6</text>
+<path d="M64.7 127.6 L252.7 127.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="58.7" y="131.1" font-size="10" text-anchor="end" fill-opacity="0.8">0.7</text>
+<path d="M64.7 101.2 L252.7 101.2" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="58.7" y="104.7" font-size="10" text-anchor="end" fill-opacity="0.8">0.8</text>
+<path d="M64.7 74.8 L252.7 74.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="58.7" y="78.3" font-size="10" text-anchor="end" fill-opacity="0.8">0.9</text>
+<path d="M64.7 48.4 L252.7 48.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="58.7" y="51.9" font-size="10" text-anchor="end" fill-opacity="0.8">1.0</text>
+<path d="M64.7 151.4 L91.6 138.4 L118.4 134 L145.3 131.3 L172.1 128 L199 122.5 L225.8 100.2 L252.7 73.3" fill="none" stroke="#0072b2" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M64.7 152 L91.6 135.8 L118.4 131 L145.3 130.7 L172.1 131.4 L199 135.7 L225.8 146.8 L252.7 161.9" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="64.7" cy="151.4" r="3.5" fill="#0072b2" />
+<circle cx="64.7" cy="152" r="3.5" fill="#00a07a" />
+<text x="64.7" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">1</text>
+<circle cx="91.6" cy="138.4" r="3.5" fill="#0072b2" />
+<circle cx="91.6" cy="135.8" r="3.5" fill="#00a07a" />
+<text x="91.6" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">2</text>
+<circle cx="118.4" cy="134" r="3.5" fill="#0072b2" />
+<circle cx="118.4" cy="131" r="3.5" fill="#00a07a" />
+<text x="118.4" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">3</text>
+<circle cx="145.3" cy="131.3" r="3.5" fill="#0072b2" />
+<circle cx="145.3" cy="130.7" r="3.5" fill="#00a07a" />
+<text x="145.3" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">4</text>
+<circle cx="172.1" cy="128" r="3.5" fill="#0072b2" />
+<circle cx="172.1" cy="131.4" r="3.5" fill="#00a07a" />
+<text x="172.1" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">6</text>
+<circle cx="199" cy="122.5" r="3.5" fill="#0072b2" />
+<circle cx="199" cy="135.7" r="3.5" fill="#00a07a" />
+<text x="199" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">8</text>
+<circle cx="225.8" cy="100.2" r="3.5" fill="#0072b2" />
+<circle cx="225.8" cy="146.8" r="3.5" fill="#00a07a" />
+<text x="225.8" y="194.4" font-size="9.5" text-anchor="middle" fill-opacity="0.8">12</text>
+<circle cx="252.7" cy="73.3" r="3.5" fill="#0072b2" />
+<circle cx="252.7" cy="161.9" r="3.5" fill="#00a07a" />
+<text x="252.7" y="194.4" font-size="9" text-anchor="middle" fill-opacity="0.8">no limit</text>
+<text x="260.7" y="76.8" font-size="9.5" font-weight="600">fitting 0.906</text>
+<text x="260.7" y="165.4" font-size="9.5" font-weight="600">validation 0.570</text>
+<text x="145.3" y="121.8" font-size="9.5" font-weight="600" text-anchor="middle">best 0.688</text>
+<text x="262.7" y="208.4" font-size="10" text-anchor="end" fill-opacity="0.8">max depth of the tree</text>
+</g>
+</svg>
+</figure>
+
+### 2. K-fold: a score and its spread
+
+**Idea.** A validation part is one draw. *K-fold cross-validation* cuts the training rows into k folds, fits on k − 1 of them and scores on the one left out, and repeats until every fold has been the one left out, so each score is on rows its model never saw. Report the mean and the range of the fold scores. To compare two models, give both the same folds (an integer seed in the splitter) and compare fold by fold.
+
+**Try it:** score the day-7 model on five stratified folds of the training part, and score a depth-3 tree on the same five folds.
+
+```python
+scores = cross_val_score(logit(), X_train, y_train, cv=folds, scoring="roc_auc")      # five fits, each scored on the fold it did not learn from
+print(np.round(scores, 3), round(float(scores.mean()), 3), round(float(scores.std()), 4))
+tree_scores = cross_val_score(tree(3), X_train, y_train, cv=folds, scoring="roc_auc")  # the same five folds for a second model
+print(round(float(tree_scores.mean()), 3), np.round(scores - tree_scores, 3))
+```
+
+**Predict:** Will the five fold scores of the day-7 model all lie within 0.01 of each other, within 0.03, or further apart? And will it beat the depth-3 tree on every fold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[0.685 0.687 0.701 0.702 0.683] 0.692 0.0082
+0.676 [0.014 0.012 0.017 0.022 0.015]
+```
+
+</details>
+
+*Why:* The five scores run from 0.683 to 0.702, a range of 0.019: within 0.03 but not within 0.01. Their mean is 0.692, and the single split of lesson DS2 (0.690) was one draw of this kind. The model beats the tree on all five folds, by 0.012 to 0.022, so the comparison is clear even though each score moves by about 0.008: the same folds make the fold-to-fold differences small. The test part has not been touched.
+
+### 3. Folds that fit the question
+
+**Idea.** Folds should look like the use. *Stratified* folds keep the share of each class equal in every fold (`StratifiedKFold`); it matters when the classes are unequal or the rows come in blocks. A model that will be used on later people needs *time-based* folds: `TimeSeriesSplit` trains on the past and tests on what comes next, and each training set holds the one before it.
+
+**Try it:** compare the churn share of blocks cut in time order with that of stratified folds, then score the day-7 model on four time-based folds.
+
+```python
+Xs, ys = X_train.sort_index(), y_train.sort_index()              # the training people in signup order (user_id rises with the signup time)
+print([round(float(ys.iloc[test].mean()), 3) for _, test in KFold(5).split(Xs)])        # five blocks in time order, no shuffling
+print([round(float(ys.iloc[test].mean()), 3) for _, test in folds.split(Xs, ys)])       # stratified folds
+rows_ = []
+for train_ix, test_ix in TimeSeriesSplit(n_splits=4).split(Xs):                          # each fold trains on the past and tests on what comes next
+    m = logit().fit(Xs.iloc[train_ix], ys.iloc[train_ix])
+    p = m.predict_proba(Xs.iloc[test_ix])[:, 1]
+    rows_.append((len(train_ix), round(float(ys.iloc[test_ix].mean()), 3), round(float(p.mean()), 3), round(float(roc_auc_score(ys.iloc[test_ix], p)), 3)))
+print(pd.DataFrame(rows_, columns=["trained on", "churned in test block", "mean chance", "AUC"]).to_string(index=False))
+print(round(float(np.mean([r[3] for r in rows_])), 3))
+```
+
+**Predict:** The model will be used on later signups. Will its mean AUC on four time-based folds be lower than the 0.692 of the random folds, about the same, or higher?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[0.5, 0.507, 0.505, 0.599, 0.611]
+[0.544, 0.544, 0.544, 0.544, 0.544]
+ trained on  churned in test block  mean chance   AUC
+       2674                  0.507        0.499 0.651
+       5346                  0.505        0.510 0.667
+       8018                  0.599        0.587 0.708
+      10690                  0.611        0.599 0.728
+0.688
+```
+
+</details>
+
+*Why:* Cut in time order without shuffling, the five blocks have churn shares from 0.500 to 0.611: the last two blocks come after the paid-social campaign began on April 13 (the README's dates). The stratified folds hold 0.544 each. The time-based AUC is 0.651, 0.667, 0.708 and 0.728, a mean of 0.688: about the same as the random folds. The first fold is the lowest, and it trained on only 2,674 people. The mean chance follows the real share in every block (0.499 against 0.507 in the first, 0.599 against 0.611 in the last), because the channel columns carry the shift. For this data the model holds up on later people; June, after the campaign ended on June 7, is not in the table.
+
+<figure>
+<svg viewBox="0 0 360 273" width="360" role="img" aria-labelledby="ds5-folds-t ds5-folds-d">
+<title id="ds5-folds-t">Five stratified folds and four time-based folds of the 13,362 training people</title>
+<desc id="ds5-folds-d">Two groups of bars. First, five stratified folds: in each of five rows one fifth of the people, about 2,673 chosen at random, is the test fold in green and the rest train the model in blue, so every fold has the same share of churners. Second, four time-based folds with the people in signup order from January to May: the first model trains on 2,674, 5,346, 8,018, 10,690 people and is tested on the next 2,672 each time, never on earlier people; the people after the test block are not used in that fold.</desc>
+<g fill="currentColor">
+<text x="19" y="22.4" font-size="10.5" font-weight="600">How the training people are cut into folds</text>
+<text x="19" y="44.4" font-size="9.5" font-weight="600">Stratified, 5 folds (random people)</text>
+<text x="19" y="62.4" font-size="9" fill-opacity="0.85">fold 1</text>
+<rect x="121.5" y="52.4" width="43" height="12" rx="2" fill="#00a07a" fill-opacity="1" />
+<rect x="165.5" y="52.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="209.5" y="52.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="253.5" y="52.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="297.5" y="52.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<text x="19" y="78.4" font-size="9" fill-opacity="0.85">fold 2</text>
+<rect x="121.5" y="68.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="165.5" y="68.4" width="43" height="12" rx="2" fill="#00a07a" fill-opacity="1" />
+<rect x="209.5" y="68.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="253.5" y="68.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="297.5" y="68.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<text x="19" y="94.4" font-size="9" fill-opacity="0.85">fold 3</text>
+<rect x="121.5" y="84.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="165.5" y="84.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="209.5" y="84.4" width="43" height="12" rx="2" fill="#00a07a" fill-opacity="1" />
+<rect x="253.5" y="84.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="297.5" y="84.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<text x="19" y="110.4" font-size="9" fill-opacity="0.85">fold 4</text>
+<rect x="121.5" y="100.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="165.5" y="100.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="209.5" y="100.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="253.5" y="100.4" width="43" height="12" rx="2" fill="#00a07a" fill-opacity="1" />
+<rect x="297.5" y="100.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<text x="19" y="126.4" font-size="9" fill-opacity="0.85">fold 5</text>
+<rect x="121.5" y="116.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="165.5" y="116.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="209.5" y="116.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="253.5" y="116.4" width="43" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="297.5" y="116.4" width="43" height="12" rx="2" fill="#00a07a" fill-opacity="1" />
+<text x="19" y="150.4" font-size="9.5" font-weight="600">Time-based, 4 folds (signup order)</text>
+<text x="19" y="168.4" font-size="9" fill-opacity="0.85">fold 1</text>
+<rect x="121" y="158.4" width="44" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="166" y="158.4" width="43" height="12" rx="2" fill="#00a07a" />
+<rect x="210" y="158.4" width="131" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+<text x="19" y="184.4" font-size="9" fill-opacity="0.85">fold 2</text>
+<rect x="121" y="174.4" width="88" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="210" y="174.4" width="43" height="12" rx="2" fill="#00a07a" />
+<rect x="254" y="174.4" width="87" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+<text x="19" y="200.4" font-size="9" fill-opacity="0.85">fold 3</text>
+<rect x="121" y="190.4" width="132" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="254" y="190.4" width="43" height="12" rx="2" fill="#00a07a" />
+<rect x="298" y="190.4" width="43" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+<text x="19" y="216.4" font-size="9" fill-opacity="0.85">fold 4</text>
+<rect x="121" y="206.4" width="176" height="12" rx="2" fill="#0072b2" fill-opacity="0.55" />
+<rect x="298" y="206.4" width="43" height="12" rx="2" fill="#00a07a" />
+<rect x="342" y="206.4" width="-1" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+<text x="121" y="236.4" font-size="9" fill-opacity="0.8">January</text>
+<text x="341" y="236.4" font-size="9" text-anchor="end" fill-opacity="0.8">May</text>
+<rect x="19" y="249.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="31" y="256.4" font-size="9">train</text>
+<rect x="77" y="249.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="89" y="256.4" font-size="9">test</text>
+<rect x="131" y="249.4" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+<text x="143" y="256.4" font-size="9">not used in that fold</text>
+</g>
+</svg>
+</figure>
+
+### 4. Learning inside each fold
+
+**Idea.** Every step that learns from the rows, a scaler, an encoder or a feature selector, is part of the model, and in cross-validation it must be fitted inside each fold on that fold's training rows only. Put the steps in a `Pipeline` and give the pipeline to `cross_val_score`: it refits every step in every fold. A step fitted before the folds has already seen the labels of the rows it will be scored on.
+
+**Try it:** pick the 20 best of 300 random columns outside the folds, and then inside them.
+
+```python
+rng = np.random.default_rng(SEED)
+pilot = X_train.sample(400, random_state=SEED)
+y_pilot = y_train.loc[pilot.index].to_numpy()
+noise = rng.normal(size=(400, 300))                   # 300 columns of random numbers: nothing in them predicts churn
+five = StratifiedKFold(5, shuffle=True, random_state=SEED)
+top20 = SelectKBest(f_classif, k=20).fit(noise, y_pilot)             # outside the folds: it looks at every label first
+leaky = cross_val_score(LogisticRegression(max_iter=1000), top20.transform(noise), y_pilot, cv=five, scoring="roc_auc")
+honest = cross_val_score(make_pipeline(SelectKBest(f_classif, k=20), LogisticRegression(max_iter=1000)), noise, y_pilot, cv=five, scoring="roc_auc")
+print(round(float(leaky.mean()), 3), round(float(honest.mean()), 3))
+```
+
+**Predict:** The 300 columns are random numbers: nothing in them predicts churn. The first route picks the 20 columns most related to churn from all 400 people and then cross-validates; the second puts the selection inside the folds. What AUC will each report: near 0.5, a little above, or well above?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.718 0.489
+```
+
+</details>
+
+*Why:* The first route reports 0.718 for columns that carry no information, and the second 0.489, near 0.5, which is the truth. Outside the folds the selector had already seen every label, so the rows that later played the part of unseen helped to choose the columns. scikit-learn's pitfalls page shows the same with 10,000 random features: an accuracy of 0.76 on a target that is pure chance. The scaler of lesson C20 is the mild case, because only means leak; a selector that reads the labels is the strong one.
+
+<Aside type="tip" title="Remember">
+
+- Overfitting is a gap: a high score on the fitting rows and a lower one on unseen rows.
+- Cross-validation scores a model k times on rows it never saw; report the mean and the range, and give two models the same folds.
+- Stratified folds keep the class shares equal; time-based folds train on the past and test on what comes next.
+- A step that learns from the rows, above all one that reads the labels, belongs inside the folds: use a pipeline.
+- The test part is used once, after every choice is made.
+
+**Common trap:** a cross-validated score that looks too good. Look for a step that learned before the folds were cut.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-scientist-cross-validation-and-overfitting-1">
+
+**Do ten folds change the answer?** Score the day-7 model, `logit()`, on the ten stratified folds `ten` (given) of the training part with ROC AUC, and put the list [mean, lowest, highest] of the ten scores in `answer_1`, each rounded to 3 decimals. Expected: `answer_1` is a list of three numbers.
+
+```python
+ten = StratifiedKFold(10, shuffle=True, random_state=SEED)       # given: ten folds
+# score the day-7 model, logit(), on the ten folds of the training part with ROC AUC
+answer_1 = None  # replace None with [mean, lowest, highest] of the ten scores, each rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+`cross_val_score(logit(), X_train, y_train, cv=ten, scoring="roc_auc")` gives the ten scores; `mean`, `min` and `max` of the array give the three numbers.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+s10 = cross_val_score(..., X_train, y_train, cv=..., scoring="roc_auc")
+answer_1 = [round(float(s10.mean()), 3), ..., ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+s10 = cross_val_score(logit(), X_train, y_train, cv=ten, scoring="roc_auc")
+answer_1 = [round(float(s10.mean()), 3), round(float(s10.min()), 3), round(float(s10.max()), 3)]
+```
+
+Ten folds give a mean of 0.692, with scores from 0.673 to 0.730. The mean hardly moves from the five-fold mean of 0.692, and the range widens because each fold holds fewer people. More folds cost more fits and do not buy a better answer once the mean is stable.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-scientist-cross-validation-and-overfitting-2">
+
+**Fewer, longer folds in time.** Before you start, say in one sentence what the result looks like: three AUC scores between 0.6 and 0.8. Use `Xs` and `ys`, the training people in signup order from unit 3. Score the day-7 model on the three folds of `TimeSeriesSplit(n_splits=3)`, each fold trained on the earlier people and tested on the next block, and put the list of the three AUC scores in `answer_2`, each rounded to 3 decimals. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of three numbers.
+
+<details>
+<summary>Hint</summary>
+
+Loop over `TimeSeriesSplit(n_splits=3).split(Xs)`: fit `logit()` on the rows of `train_ix`, take the chances of the rows of `test_ix`, and score them with `roc_auc_score`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three scores, each on a later and larger stretch, the first near 0.65."*
+
+```python
+for train_ix, test_ix in TimeSeriesSplit(n_splits=3).split(Xs):
+    m = logit().fit(Xs.iloc[train_ix], ys.iloc[train_ix])
+```
+
+</details>
+
+<Solution>
+
+```python
+ex2_scores = []
+for train_ix, test_ix in TimeSeriesSplit(n_splits=3).split(Xs):
+    m = logit().fit(Xs.iloc[train_ix], ys.iloc[train_ix])
+    ex2_scores.append(round(float(roc_auc_score(ys.iloc[test_ix], m.predict_proba(Xs.iloc[test_ix])[:, 1])), 3))
+answer_2 = ex2_scores
+```
+
+The three scores are 0.646, 0.702 and 0.726. With three splits each test block is longer (about 3,340 people) and the first model trains on 3,340 people, so the first score is the weakest. The mean, 0.691, says as before that the model holds up on later people.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what do the folds of a cross-validation have to look like if the model will be used on next month's people?
+
+   <details>
+   <summary>answer</summary>
+
+   Time-based: each fold trains on the earlier people and tests on the block that comes after, never the reverse.
+
+   </details>
+
+<Exercise id="data-scientist-cross-validation-and-overfitting-3">
+
+**Spot the flaw.** A colleague tunes a tree on a pilot of 1,000 people: 56 settings, each scored by cross-validation, and reports the best cross-validated score as the model's AUC. Change the last line so that the number is a score on people who played no part in the choice: fit the chosen model on the pilot and score it once on the test part. Put it in `answer_3`, rounded to 3 decimals. Expected: `answer_3` is a number between 0.5 and 1.
+
+```python
+pilot3, y_pilot3 = X_train.iloc[:1000], y_train.iloc[:1000]            # given: a pilot of 1,000 people
+best_score, best_model = -1.0, None
+for depth in range(1, 15):
+    for leaf in [1, 5, 20, 50]:                                       # given: 56 settings in all
+        candidate = tree(depth, leaf)
+        score = cross_val_score(candidate, pilot3, y_pilot3, cv=folds, scoring="roc_auc").mean()
+        if score > best_score:
+            best_score, best_model = score, candidate
+answer_3 = round(float(best_score), 3)      # colleague: "the best of the 56 settings scores this, so that is the model's AUC"
+# change the last line: fit the chosen model on the pilot and score it once on the test part
+```
+
+<details>
+<summary>Hint</summary>
+
+The cross-validated score of the winner is the best of 56 draws, so it is biased upward. Which rows have had no part in picking the winner?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+best_model.fit(pilot3, y_pilot3)
+answer_3 = round(float(roc_auc_score(y_test, best_model.predict_proba(...)[:, 1])), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+best_model.fit(pilot3, y_pilot3)
+answer_3 = round(float(roc_auc_score(y_test, best_model.predict_proba(X_test)[:, 1])), 3)
+```
+
+The winner of the 56 scores 0.668 in cross-validation (depth 4, at least 20 people in each leaf) and 0.653 on the test part. The gap is the price of choosing the maximum of 56 noisy scores: the best score was picked partly because it was lucky. The test part gives the honest number, and it can be used once.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can show an overfitting gap, run cross-validation and report its mean and range, choose stratified or time-based folds from the use, and keep every learning step inside the folds.*
+Test: Exercise data-scientist-cross-validation-and-overfitting-2, done from the notebook without opening the hints.
+
+The pattern to remember: **cut the folds like the use, fit every step inside them, report the mean with its range, and touch the test part once.** The next lesson, *Regularization* (DS6), tunes a model's flexibility with the folds of this one.

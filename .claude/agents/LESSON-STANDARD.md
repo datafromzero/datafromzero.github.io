@@ -357,6 +357,65 @@ reviewer ticks them one by one.
     an Excel or SQL twin), each opened, with the access date in the title. A Colab screen, menu name or shortcut that no opened
     page states goes in `TODO(owner)` and the report says so.
 
+## Data Scientist track (D55): conventions set by batch 1 (DS1 to DS5)
+
+Written 2026-11-24 by the first DS batch. The next batches (DS6 to DS16) read this section and keep it; a change goes into this section in the same PR.
+
+- **One target, one table for the whole track.** The example is a churn model for the budgeting app `app-events`. The *person* is the entity; the *prediction
+  moment* is 7 days after signup (the cutoff, a timestamp: signup time plus 7 days, never a calendar date); the *target* is `churned` = 1 when the person has no
+  `session_start` and no `add_expense` between the cutoff and 30 days after signup (days 8 to 30); the *decision* is who gets a win-back offer. The *table*
+  has one row for each person who signed up from 2026-01-01 to 2026-05-31 (a full 30 days of follow-up before the export): **17,816 people, 9,696 churned
+  (54.4%)**. Columns: `user_id`, `signup_date`, `channel`, `platform`, `region`, then the week-1 features `sessions_7d`, `expenses_7d`, `recent_3d` (visits and
+  expenses in the last 3 days before the cutoff), `active_days_7d`, `onboarded`, `saw_paywall` (either paywall event name), `bought_plus`, then `churned`.
+  Features count only events that are not retry copies, had happened by the cutoff (`event_ts`) and had arrived by it (`received_at`); the label reads the raw
+  events after the cutoff. Why churn and not "buys Plus": the core already uses "buys within 14 days of signup" (C19 to C21), and a track that reused it would
+  re-teach the core (D55). Quote this definition, never another (SPEC rule: one counting convention per quantity). The README's second natural target
+  (a subscription ended) was left for a later lesson if one needs it; it is censored by the end of the data (README, "Base rates").
+- **The query is one string.** The table is built by the query of DS3 (`ONE_STATEMENT` in `notebooks/data-scientist/data-scientist-sql-for-modeling-tables.ipynb`).
+  Every other notebook of the track pastes the same text as `MODELING_SQL` and runs `table = con.sql(MODELING_SQL).df()`; the chart scripts read it from the DS3
+  notebook and stop if it is missing. If the query changes, change all notebooks, rerun the charts and every number. No derived file was added (D57 not used).
+- **Notebooks.** `notebooks/data-scientist/{lesson-id}.ipynb` (the id is `data-scientist-...`, as `core-...` for the core), frontmatter `notebook:` with that path, `<OpenInColab />`
+  in "Learn by doing". Data from the release tag **`v0.2.0`** (`https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.2.0/datasets/app-events/v1/users.csv`
+  and `events.csv`; `subscriptions.csv` where needed), with the `LOCAL = "../../datasets/app-events/v1/"` fallback the core notebooks use, read into DuckDB
+  (`pip install duckdb` fallback in the setup cell) and handed to pandas with `.df()`. Skeleton: title and goals, `Setup` (imports, `SEED`, `EXERCISES`, `same`/`check`),
+  `Data`, optional given cells (column lists, the split, helper models: "Run this cell as it is"), `Unit k` cells (a Predict-first line and one code cell), the
+  three exercises (task, starter or empty cell, check cell, hint, half-solution, solution), `Run all from the top`. Never name a loop variable `label` or `name`
+  that a unit uses later (the scoreboard loop reuses `label`). Print Python floats (`float(...)`), not NumPy scalars, inside lists and dicts: NumPy 2 prints
+  `np.float64(...)`.
+- **Seed and splits.** `SEED = 2026` for every split, resample and model; `random_state=SEED` or `np.random.default_rng(SEED)`. The track's split is
+  `train_test_split(X, y, test_size=0.25, random_state=SEED, stratify=y)` on the table (13,362 training, 4,454 test people, 54.4% churners in both); a validation part
+  is cut from the training part the same way (10,021 and 3,341); the test part is used once, at the end of a lesson that tunes. Exercises use seed 5 with an 80/20
+  split and seeds 100 to 119 for "twenty other splits". Check a headline seed against about 20 other seeds before printing it (DS2: 0.690 against a median of 0.691).
+- **Reporting numbers.** Chances, ROC AUC, odds ratios and accuracy as proportions to 3 decimals (accuracy may also be "63.2 of 100"); money to the dollar (to the cent
+  only for a price); shares of people as percent with one decimal. A gain is a difference of the same metric, with a **95 percent percentile bootstrap interval of the
+  held-out people, both models scored on the same resamples**: 2,000 resamples for a gain on one split (3 decimals), 300 refits for coefficients (2 decimals in prose), 300
+  resamples for a threshold. Print the seed beside any resampled number and say that its last digit can move on another NumPy. Cross-validation reports the mean and the
+  range of the folds, never mean plus or minus a standard error (folds are not independent). Every comparison names the baseline beside it: the flat guess
+  (`DummyClassifier(strategy="prior")`, ROC AUC 0.5) and the "signup columns only" rung (AUC 0.668), then the model (day-7 logistic regression, AUC 0.690).
+- **Costs of the DS4 example** (assumptions, said so in the lesson): an offer costs $2; one leaver in four who gets it comes back, worth $12, so the regret of a wasted
+  offer is $2 (`FP`) and of a leaver left without one $1 (`FN`); the rule threshold is 2 / (2 + 1) = 0.667.
+- **Charts.** `scripts/charts/ds-batch-N.py` with `--out`, `--paste` and `--check` (N is the batch: ds-batch-1.py for DS1 to DS5, then 2 to 4), built on the `Svg` class of
+  `da-batch-1.py` (plain SVG, `currentColor` text, blue, green, purple, ochre in that order, title and desc, centered by the class). Matplotlib and seaborn are not used for the
+  pages: their SVG needs a converter that changes with the version, and a chart that must match its lesson byte for byte (`--check`) cannot depend on it. A chart sits at
+  `{/* CHART: ds4-odds */}` in the lesson (name = lesson number + a word) and is pasted with `--paste`; a chart repeats the code of the notebook cell it draws and
+  asserts the numbers the lesson prints. Look at every chart in light and dark at 390 px before shipping. At most one concept animation per batch (none in batch 1: a still
+  fold diagram shows all folds at once, which an animation would not).
+- **Lesson shape.** The interleaved Python shape (above), with the units numbered; "About 30 minutes, K new ideas: ..." and a last check unit only when it teaches nothing new.
+  A TODO(owner) paragraph at the top (what is invented, what was not checked, the versions of the run). Body words at most about 3,300 for a 30-minute lesson (SQL and
+  code count: a unit costs 400 to 550 words). `reviewed` is left at the stub's date until the owner publishes. Prerequisites name the code of what the lesson uses.
+  Draft DS lessons are named in italics, never linked.
+- **Library versions of batch 1** (every number comes from these; the same notebooks give the same outputs on pandas 2.2.3, NumPy 2.1.3, scikit-learn 1.6.1 and DuckDB 1.4.3):
+  Python 3.13, pandas 3.0.5, NumPy 2.5.3, scikit-learn 1.9.1, DuckDB 2.0.0. Do not pass `penalty=` to `LogisticRegression` (deprecated in 1.8); `C=` is fine.
+- **Answers already used by DS1 to DS5** (do not reuse them as exercise answers): 835 copies, 1,303 renamed events, 393 events of 40 deleted accounts, 97 exact copies and
+  874 subscriptions with several rows, 0.323 (churners with no activity), 10,466 and 12,386 people (first expense within an hour), 46 people touched by the arrival rule, 1,665 churners of May 15 to 31,
+  AUC 0.704 (seed 5, 80/20), the 20-seed AUC range 0.684 to 0.701, odds ratios 4.283 and 3.231, the thresholds 0.65 and 0.27, 1,003 and 974 people flagged, ten-fold AUC
+  0.692 (0.673 to 0.730), three time folds 0.646, 0.702, 0.726, and 0.653 against 0.668 for a tuned tree. Exercise classes taken: seed shopping, all-column `duplicated`,
+  `COUNT(*)` against `COUNT(column)` over NULLs, dropping zero-activity rows, a horizon measured from the cutoff, `class_weight="balanced"` with a cost threshold, tuning on a pilot and reporting the
+  winning score. Truth checks used: region has no effect (DS2 Exercise 2, DS4 unit 2), channel sets activity (DS2 unit 4, DS4 unit 2).
+- **What the next lessons can lean on:** `tree(depth, leaf)` and `logit()` of DS5 (DS7 opens the tree), the three splits of DS4, `odds_ratios` of DS4 (DS6 regularization:
+  compare `C`), the week-1 columns (DS9 feature engineering: encode, scale and impute inside the folds, with the folds of DS5), `region` as the column that adds nothing (DS11 fairness slices:
+  platform and channel are the slices with a real gap), the cohort table of DS3 (DS12 forecasting uses daily counts of the events table instead).
+
 ## Markup
 
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,
