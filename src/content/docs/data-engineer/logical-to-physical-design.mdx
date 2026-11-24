@@ -1,0 +1,532 @@
+---
+id: data-engineer-logical-to-physical-design
+title: From a logical model to physical tables
+short_title: Logical to physical
+description: Turn a data contract into types, constraints and keys that a database enforces, learn which cloud warehouses do not, and sort a big table by how it is filtered.
+stage: data-engineer
+order: 120
+level: advanced
+duration: 36
+objectives:
+  - Turn the rules of a data contract into column types, NOT NULL, CHECK and a primary key, and watch a table refuse a row that breaks one
+  - Declare an alternate key with UNIQUE, a foreign key between tables and a composite key at the grain of a table
+  - Say from their documentation which of these a cloud warehouse enforces, and what checks the rule where it does not
+  - Choose the sort order of a big table from the filter its queries use, and read the row groups a query scans
+prerequisites:
+  - sql-designing-tables-workflow
+  - sql-create-table-constraints
+  - sql-indexes-and-explain
+  - data-engineer-data-quality-checks
+  - data-engineer-dbt-tests-and-documentation
+datasets:
+  - cafe-sales
+reviewed: 2026-11-21
+sources:
+  - title: 'DuckDB documentation: Constraints (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/constraints
+  - title: 'DuckDB documentation: Numeric types (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/data_types/numeric
+  - title: 'DuckDB documentation: Indexing (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/guides/performance/indexing
+  - title: 'BigQuery documentation: Primary and foreign keys (accessed 2026-11-24)'
+    url: https://docs.cloud.google.com/bigquery/docs/primary-foreign-keys
+  - title: 'Snowflake documentation: Constraints overview (accessed 2026-11-24)'
+    url: https://docs.snowflake.com/en/sql-reference/constraints-overview
+  - title: 'BigQuery documentation: Introduction to partitioned tables (accessed 2026-11-24)'
+    url: https://docs.cloud.google.com/bigquery/docs/partitioned-tables
+  - title: 'BigQuery documentation: Introduction to clustered tables (accessed 2026-11-24)'
+    url: https://docs.cloud.google.com/bigquery/docs/clustered-tables
+status: draft
+---
+
+TODO(owner): Team draft (D24) of a stub with no text (research issue #107, D53); tags `de-12-start` and `de-12-done`; needs the tags pushed to `de-pipeline-starter`. Run with DuckDB 2.0.0, no dbt. Given files: `scripts/sql.py` (runs SQL against `data/serving/design.duckdb`, printing the result or the first line of the error), `scripts/row_groups.py` (prints the "Row Groups Scanned" line of `EXPLAIN ANALYZE`), `sql/physical_design.sql` and `sql/layout.sql`. The table of unit 3 is invented (the 3,287 real lines copied 300 times, copy k dated k days later: 986,100 lines, nine row groups of 122,880 on the run shown); the DuckDB page says only that zonemaps skip row groups and that ordered data makes them more useful, so the counts are the run's. A double sum of the real amounts equals the decimal sum on this data (every price is a multiple of 25 cents, which binary floating point holds exactly), so the lesson shows `0.1 + 0.2` and does not claim that doubles fail here. The Snowflake page also says CHECK constraints are enforced; the lesson cites NOT NULL only. Nothing was run on BigQuery or Snowflake, and no price is used. Not run: Windows, macOS, Codespaces. Found, not taught: DuckDB refuses a foreign key that points at a view; dbt-duckdb 1.11.1 enforced `not_null`, `primary_key` and `check` constraints of a model contract in a test model, material for a later lesson. Stub changes: duration 35 became 36 (the text runs 110 words a minute); the objectives about generalization storage, a weak entity with a composite key, superkeys and candidate keys, and UML aggregation and composition with a cascading delete are not taught (the cafe data has no subtype or weak entity; the batch brief asked for keys, types, constraints and partition and cluster choices) and are replaced by the four above; prerequisites add S33 and DE6; the UML and PostgreSQL sources are dropped, not opened.
+
+## The question
+
+The owner of the cafes writes:
+
+> You have kept our sales in files and views so far. If I ask you to build the tables that people will query for the next five years, what do you decide before you write a single `CREATE TABLE`?
+
+The sales API has a contract (DE6): what each column is, whether it may be empty, which values it accepts. A table can enforce that or only record it. By the end you can turn the contract into tables that refuse bad rows, and choose the order of a table from the questions it must answer.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Creating tables and constraints*](/sql/create-table-constraints/) (S33) declared `NOT NULL`, `CHECK`, a primary key and a foreign key on a table, and [*Designing tables: a workflow*](/sql/designing-tables-workflow/) (S37) went from questions to columns. *Data quality checks that fail loudly* (DE6) wrote the same rules as queries over the incoming lines.
+
+**Diverge.** A DE6 check reports a bad line after it arrived. A constraint is part of the table, so what it can do depends on the database that holds the table.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE6, which columns of `order_lines` may be empty, and what is its key?
+
+   <details>
+   <summary>answer</summary>
+
+   `customer_id`, for a walk-in, and `channel`, which older versions of a line do not have. The key is `order_item_id`.
+
+   </details>
+
+2. In [*Indexes and reading a query plan*](/sql/indexes-and-explain/) (S38), how does DuckDB skip rows without an index you built?
+
+   <details>
+   <summary>answer</summary>
+
+   It keeps the smallest and largest value of each column for each row group, and skips a row group whose range cannot contain the filter value.
+
+   </details>
+
+## The big idea
+
+A logical model says what must hold; the physical model is the table that holds it, and only the database that stores it decides which of those rules are enforced.
+
+## Learn by doing
+
+About 36 minutes, 3 new ideas: a contract as a table, keys between tables and who enforces them, and the order of a big table. Work in `de-pipeline-starter` with the full pull staged (`data/staging/` holds three Parquet files) and the broken copies of DE10 made (`data/broken_staging/`; if not, run `uv run python scripts/break_staging.py`). To catch up, run `git checkout de-12-start`. Everything here runs from the repository root, in DuckDB 2.0.0, and no dbt is needed.
+
+### 1. The contract as a table
+
+**Idea.** The **logical** model of `order_lines` is the contract of DE6: a key, columns that may not be empty, accepted values, a range. The **physical** table is the `CREATE TABLE` that a database can check: a type for each column, `NOT NULL`, `CHECK`, `PRIMARY KEY`. Choose the type that holds every legitimate value and no more. The DuckDB documentation says `DECIMAL` is exact and `FLOAT` and `DOUBLE` are approximate, and that a value outside an integer type's range is an error.
+
+**Try it.** A small script is given that runs SQL against a database file of its own, `data/serving/design.duckdb`, and prints what comes back. Fetch it, save the table as `sql/physical_order_lines.sql`, create it, and load the real lines:
+
+```bash
+git show de-12-done:scripts/sql.py > scripts/sql.py
+mkdir -p sql
+```
+
+```sql
+-- The contract of DE6 as a table: a row that breaks a rule is refused.
+CREATE OR REPLACE TABLE order_lines (
+    order_item_id INTEGER PRIMARY KEY,
+    order_id INTEGER NOT NULL,
+    ordered_at TIMESTAMP NOT NULL,
+    store_id INTEGER NOT NULL,
+    customer_id INTEGER,
+    status VARCHAR NOT NULL CHECK (status IN ('completed', 'canceled')),
+    payment_method VARCHAR NOT NULL CHECK (payment_method IN ('card', 'mobile', 'cash')),
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 10),
+    discount_usd DECIMAL(8, 2) NOT NULL CHECK (discount_usd >= 0),
+    updated_at TIMESTAMP NOT NULL,
+    channel VARCHAR CHECK (channel IN ('counter', 'app'))
+);
+```
+
+```bash
+uv run python scripts/sql.py sql/physical_order_lines.sql
+uv run python scripts/sql.py "INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+```
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+lines
+-----
+3287
+```
+
+Now load each of the five broken copies of DE10 in turn, into an emptied table:
+
+```bash
+for fault in null_key repeated_key odd_status unknown_product extra_zero; do
+  echo "$fault"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/broken_staging/$fault/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+done
+```
+
+**Predict:** Which of the five copies does the table refuse?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ for fault in null_key repeated_key odd_status unknown_product extra_zero; do
+  echo "$fault"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM data/broken_staging//order_lines.parquet; SELECT count(*) AS lines FROM order_lines"
+done
+null_key
+ParserException: Parser Error: syntax error at or near "/"
+repeated_key
+ParserException: Parser Error: syntax error at or near "/"
+odd_status
+ParserException: Parser Error: syntax error at or near "/"
+unknown_product
+ParserException: Parser Error: syntax error at or near "/"
+extra_zero
+ParserException: Parser Error: syntax error at or near "/"
+```
+
+</details>
+
+*Why:* four are refused, each by a different part of the table: the line with no key by `NOT NULL` (a primary key forbids `NULL`, the DuckDB page says), the repeated key by the primary key, the odd status by the `CHECK` on status, and the quantity of 20 by the `CHECK` on the range. The copy with product 99 is accepted: no rule of this table mentions the menu. Types do quiet work too. A double adds as the machine does and a decimal as a person does; and an integer type refuses a value outside its range instead of storing a wrong one (the DuckDB page):
+
+```bash
+uv run python scripts/sql.py "SELECT 0.1::DOUBLE + 0.2::DOUBLE AS double_sum, 0.1::DECIMAL(4, 2) + 0.2::DECIMAL(4, 2) AS decimal_sum"
+```
+
+```console
+$ uv run python scripts/sql.py "SELECT 0.1::DOUBLE + 0.2::DOUBLE AS double_sum, 0.1::DECIMAL(4, 2) + 0.2::DECIMAL(4, 2) AS decimal_sum"
+double_sum          | decimal_sum
+--------------------+------------
+0.30000000000000004 | 0.30
+```
+
+The ids of the sales API are far below the largest `INTEGER`, so it holds them. A refusal here is not the quarantine of DE6b: a constraint stops the whole `INSERT`, which is right for a rule that must never be broken, and wrong for one where the other lines should still load.
+
+### 2. Keys between tables, and who enforces them
+
+**Idea.** A **foreign key** says that a column must hold a value that exists in a key of another table. An **alternate key** is a second set of columns that identifies a row; you declare it with `UNIQUE`, and a table has one primary key but many unique constraints. A **composite key** has several columns; for a table whose grain is a store and a day, the key is both. The DuckDB documentation says each of these also creates an index to check it.
+
+**Try it.** The whole design is given as `sql/physical_design.sql`: three tables with their keys, the table of store-days, and the loads in the order the keys need. These are the parts that matter. In `stores` the name is an alternate key next to the primary key, and `products` does the same with `product_name`:
+
+```sql
+CREATE TABLE stores (
+    store_id INTEGER PRIMARY KEY,
+    store_name VARCHAR NOT NULL UNIQUE,
+    city VARCHAR NOT NULL,
+    opened_on DATE NOT NULL
+);
+```
+
+In `order_lines`, `store_id` and `product_id` each `REFERENCES` the key of their table. The table of store-days has a composite key, its grain:
+
+```sql
+-- One row for each store and day: the key is the grain.
+CREATE TABLE store_daily_sales (
+    store_id INTEGER NOT NULL REFERENCES stores (store_id),
+    order_date DATE NOT NULL,
+    lines INTEGER NOT NULL,
+    units INTEGER NOT NULL,
+    PRIMARY KEY (store_id, order_date)
+);
+```
+
+```bash
+git show de-12-done:sql/physical_design.sql > sql/physical_design.sql
+uv run python scripts/sql.py sql/physical_design.sql
+uv run python scripts/sql.py "SELECT (SELECT count(*) FROM stores) AS stores, (SELECT count(*) FROM products) AS products, (SELECT count(*) FROM order_lines) AS order_lines, (SELECT count(*) FROM store_daily_sales) AS store_days"
+```
+
+```console
+$ uv run python scripts/sql.py "SELECT (SELECT count(*) FROM stores) AS stores, (SELECT count(*) FROM products) AS products, (SELECT count(*) FROM order_lines) AS order_lines, (SELECT count(*) FROM store_daily_sales) AS store_days"
+stores | products | order_lines | store_days
+-------+----------+-------------+-----------
+3      | 16       | 3287        | 453
+```
+
+Load two of the broken copies again, then try to break the other two keys by hand:
+
+```bash
+for fault in unknown_product null_key; do
+  echo "$fault"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/broken_staging/$fault/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+done
+uv run python scripts/sql.py "INSERT INTO store_daily_sales VALUES (1, DATE '2026-01-02', 1, 1)"
+uv run python scripts/sql.py "INSERT INTO products VALUES (17, 'Latte', 'coffee', 4.50)"
+```
+
+**Predict:** The copy with product 99 was accepted in unit 1. What does it do now, and what do the last two statements do?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ for fault in unknown_product null_key; do
+  echo "$fault"
+  uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM data/broken_staging//order_lines.parquet; SELECT count(*) AS lines FROM order_lines"
+done
+unknown_product
+ParserException: Parser Error: syntax error at or near "/"
+null_key
+ParserException: Parser Error: syntax error at or near "/"
+```
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO store_daily_sales VALUES (1, DATE '2026-01-02', 1, 1)"
+ConstraintException: Constraint Error: Duplicate key "store_id: 1, order_date: 2026-01-02" violates primary key constraint.
+```
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO products VALUES (17, 'Latte', 'coffee', 4.50)"
+ConstraintException: Constraint Error: Duplicate key "product_name: Latte" violates unique constraint.
+```
+
+</details>
+
+*Why:* the foreign key refuses product 99 because the menu has no such product; the table of store-days refuses a second row for store 1 on January 2 because its key is that pair; and the name `Latte` is taken, so the alternate key on `product_name` refuses it, even with a new `product_id`. Put the real lines back before the next unit:
+
+```bash
+uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+```
+
+```console
+$ uv run python scripts/sql.py "DELETE FROM order_lines; INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+lines
+-----
+3287
+```
+
+All of this protection is DuckDB's. The BigQuery documentation says it does not enforce primary and foreign key constraints and uses them to optimize queries, so a table that breaks them can give wrong results; the Snowflake documentation says it does not enforce `PRIMARY KEY`, `UNIQUE` and `FOREIGN KEY` on standard tables, and does enforce `NOT NULL`. There the declaration is a note to the optimizer and to people, and the check is a test you run: the `unique` and `relationships` tests of DE10 are the same promises, run after the load.
+
+### 3. The order of a big table
+
+**Idea.** Rows have to be stored in some order, and the order is a physical choice. The DuckDB documentation says it creates min-max indexes (zonemaps) automatically, skips a row group whose range cannot hold the filter value, and that the more ordered a column is, the more valuable its zonemap. A warehouse that lets you declare the layout gives it a name: the BigQuery documentation says a partitioned table is divided into segments that a filter on the partition column can skip, and that clustered tables sort data in storage blocks by the clustered columns.
+
+**Try it.** At 3,287 lines a table is one row group and nothing can be skipped, so the lesson uses an invented table built from the real lines: they are copied 300 times, copy k dated k days later, which gives 986,100 lines. Two tables hold the same rows: `lines_arrival` in a shuffled order, and `lines_by_date`, made like this from it:
+
+```sql
+CREATE OR REPLACE TABLE lines_by_date AS
+SELECT * FROM lines_arrival ORDER BY order_date, store_id;
+```
+
+The script that makes both is given as `sql/layout.sql`, with one that prints the line "Row Groups Scanned" of a plan:
+
+```bash
+git show de-12-done:sql/layout.sql > sql/layout.sql
+git show de-12-done:scripts/row_groups.py > scripts/row_groups.py
+uv run python scripts/sql.py sql/layout.sql
+uv run python scripts/row_groups.py "order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
+uv run python scripts/row_groups.py "store_id = 3"
+uv run python scripts/row_groups.py "store_id = 3 AND order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
+```
+
+**Predict:** The table has nine row groups. For each of the three filters, how many does each of the two tables scan?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/row_groups.py "order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
+lines_arrival   23,009 rows matched, 9 of 9 row groups scanned
+lines_by_date   23,009 rows matched, 2 of 9 row groups scanned
+```
+
+```console
+$ uv run python scripts/row_groups.py "store_id = 3"
+lines_arrival  193,500 rows matched, 9 of 9 row groups scanned
+lines_by_date  193,500 rows matched, 9 of 9 row groups scanned
+```
+
+```console
+$ uv run python scripts/row_groups.py "store_id = 3 AND order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
+lines_arrival    4,515 rows matched, 9 of 9 row groups scanned
+lines_by_date    4,515 rows matched, 2 of 9 row groups scanned
+```
+
+</details>
+
+*Why:* the shuffled table has every date and every store in every row group, so no range excludes anything and all nine are read. The sorted table puts a week of dates in two row groups, so a filter on date reads two. A filter on the store alone gets nothing from it. Counting the stores in each row group of the sorted table, 122,880 rows at a time, shows why:
+
+```bash
+uv run python scripts/sql.py "SELECT count(*) AS row_groups, min(stores) AS fewest_stores FROM (SELECT rowid // 122880 AS g, count(DISTINCT store_id) AS stores FROM lines_by_date GROUP BY g)"
+```
+
+```console
+$ uv run python scripts/sql.py "SELECT count(*) AS row_groups, min(stores) AS fewest_stores FROM (SELECT rowid // 122880 AS g, count(DISTINCT store_id) AS stores FROM lines_by_date GROUP BY g)"
+row_groups | fewest_stores
+-----------+--------------
+9          | 3
+```
+
+Every row group holds all three stores, so no range of `store_id` excludes store 3; the filter on both gets what the date gave. The order of the sort serves its first column. BigQuery's page says the same of clustering: the order of the clustered columns affects performance, and a table can have up to four. The choice is made from the filters of the queries the table must answer, which is why you ask for them before you create it.
+
+The BigQuery clustering page adds that the cost of a query on a clustered table can be known only after it has run; no price is quoted here, because none was read.
+
+<Aside type="tip" title="Remember">
+
+- A contract becomes a table: a type, `NOT NULL`, `CHECK` and a primary key for each rule; the table then refuses a row that breaks one.
+- `PRIMARY KEY` once, `UNIQUE` for each alternate key, `REFERENCES` for a foreign key, a composite key at the grain.
+- BigQuery does not enforce primary and foreign keys and Snowflake does not on standard tables: there the check is a test.
+- The sort order of a table serves its first column; choose it, like a partition or a cluster, from the filters of the queries.
+
+**Common trap:** reading a declared key as a guarantee on a warehouse that does not enforce it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-logical-to-physical-design-1">
+
+**A rule across two columns.** A line cannot be posted before it was ordered: `updated_at` must not be earlier than `ordered_at`. Add that rule to the table of `sql/physical_order_lines.sql` as a constraint over both columns, recreate the table, load the real lines, and then try to move the `updated_at` of line 5500 to a minute before its `ordered_at`. The start is given; fill in the constraint. Expected: the 3,287 real lines load, and the update is refused. When you are done, undo the change.
+
+```sql
+    channel VARCHAR CHECK (channel IN ('counter', 'app')),
+    CHECK (___)
+```
+
+```bash
+uv run python scripts/sql.py sql/physical_order_lines.sql
+uv run python scripts/sql.py "INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+uv run python scripts/sql.py "UPDATE order_lines SET updated_at = ordered_at - INTERVAL 1 MINUTE WHERE order_item_id = 5500"
+```
+
+<details>
+<summary>Hint</summary>
+
+A table-level `CHECK` is one line at the end of the column list, after a comma, and it names the two columns. The DuckDB page says a check is an arbitrary Boolean expression.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+    CHECK (updated_at >= ...)
+```
+
+</details>
+
+<Solution>
+
+```sql
+    channel VARCHAR CHECK (channel IN ('counter', 'app')),
+    CHECK (updated_at >= ordered_at)
+```
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO order_lines SELECT * FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM order_lines"
+lines
+-----
+3287
+```
+
+```console
+$ uv run python scripts/sql.py "UPDATE order_lines SET updated_at = ordered_at - INTERVAL 1 MINUTE WHERE order_item_id = 5500"
+ConstraintException: Constraint Error: CHECK constraint failed on table "order_lines" with expression CHECK((updated_at >= ordered_at))
+```
+
+The check runs on an update as well as on an insert. A rule across two tables, such as an order before the day its store opened, cannot be a `CHECK`: that is what the singular tests of DE10 are for.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-logical-to-physical-design-2">
+
+**A sort order for another question.** The owner's next question is about one store: "how did Harbor (store 3) do in a week?". Before you start, write which of the three filters of unit 3 you expect to need the fewest row groups on a table sorted by store first and date second. Then, from a blank edit, create that table from `lines_arrival` as `lines_by_store`, and compare it with `lines_by_date` on the three filters. Expected: your sentence, and three pairs of counts.
+
+<details>
+<summary>Hint</summary>
+
+`CREATE OR REPLACE TABLE lines_by_store AS SELECT * FROM lines_arrival ORDER BY store_id, order_date`; `row_groups.py` takes the filter, then the tables to compare.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Sorted by store first, the store filter reads about a third of the row groups, and the week filter reads more."*
+
+</details>
+
+<Solution>
+
+```bash
+uv run python scripts/sql.py "CREATE OR REPLACE TABLE lines_by_store AS SELECT * FROM lines_arrival ORDER BY store_id, order_date"
+uv run python scripts/row_groups.py "store_id = 3" lines_by_date lines_by_store
+```
+
+```console
+$ uv run python scripts/row_groups.py "store_id = 3" lines_by_date lines_by_store
+lines_by_date  193,500 rows matched, 9 of 9 row groups scanned
+lines_by_store 193,500 rows matched, 3 of 9 row groups scanned
+```
+
+```bash
+uv run python scripts/row_groups.py "order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'" lines_by_date lines_by_store
+uv run python scripts/row_groups.py "store_id = 3 AND order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'" lines_by_date lines_by_store
+```
+
+```console
+$ uv run python scripts/row_groups.py "order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'" lines_by_date lines_by_store
+lines_by_date   23,009 rows matched, 2 of 9 row groups scanned
+lines_by_store  23,009 rows matched, 5 of 9 row groups scanned
+```
+
+```console
+$ uv run python scripts/row_groups.py "store_id = 3 AND order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'" lines_by_date lines_by_store
+lines_by_date    4,515 rows matched, 2 of 9 row groups scanned
+lines_by_store   4,515 rows matched, 2 of 9 row groups scanned
+```
+
+The table sorted by store serves the store filter (3 of 9 against 9 of 9) and loses on the week (5 of 9 against 2 of 9), because each store has its own stretch of dates inside the file. For one store in one week both read 2 of 9. Which order is right depends on which filters are most common, and no order serves them all. In BigQuery's terms, the choices are which column to partition on and in which order to cluster, and the answer again comes from the filters of your queries.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in DuckDB, what is the difference between `PRIMARY KEY` and `UNIQUE`?
+
+   <details>
+   <summary>answer</summary>
+
+   A table can have only one primary key but many unique constraints, and a primary key also forbids `NULL`.
+
+   </details>
+
+<Exercise id="data-engineer-logical-to-physical-design-3">
+
+**Spot the flaw.** A colleague sees that no order has the same product twice: 3,287 lines, and 3,287 different pairs of order and product. "So the pair is an alternate key", they say, and declare it `UNIQUE`. The real lines load without a problem. Save the statement as `sql/alternate_key.sql`, create the table, load the lines, and then insert a line for order 1001 and product 10 with a quantity of 1: a customer orders a second croissant after the first is rung up. What is wrong with the declared key, and what in the run showed it? When you are done, delete the file.
+
+```sql
+-- sql/alternate_key.sql
+CREATE OR REPLACE TABLE lines_alt (
+    order_item_id INTEGER PRIMARY KEY,
+    order_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    UNIQUE (order_id, product_id)
+);
+```
+
+```bash
+uv run python scripts/sql.py sql/alternate_key.sql
+uv run python scripts/sql.py "INSERT INTO lines_alt SELECT order_item_id, order_id, product_id, quantity FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM lines_alt"
+uv run python scripts/sql.py "INSERT INTO lines_alt VALUES (9001, 1001, 10, 1)"
+```
+
+<details>
+<summary>Hint</summary>
+
+The real lines load, so the data does not break the key. Ask what the key says about a second line that is true in the cafe.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The statement of the colleague is about the 3,287 lines that exist. A key is a rule about every line that could exist.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO lines_alt SELECT order_item_id, order_id, product_id, quantity FROM 'data/staging/order_lines.parquet'; SELECT count(*) AS lines FROM lines_alt"
+lines
+-----
+3287
+```
+
+```console
+$ uv run python scripts/sql.py "INSERT INTO lines_alt VALUES (9001, 1001, 10, 1)"
+ConstraintException: Constraint Error: Duplicate key "order_id: 1001, product_id: 10" violates unique constraint.
+```
+
+The key is true of the data and false of the business: no order so far has repeated a product, but nothing in the cafe forbids it, and a second croissant on its own line, perhaps with its own discount, is a valid sale. The constraint turns it into an error at the till, and in a pipeline into a failed load. A key is a rule you choose: declare an alternate key only for a rule the business states (no two stores share a name, the menu has one row for each name), and let the primary key, `order_item_id`, identify the line.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can turn the contract of a table into types, `NOT NULL`, `CHECK`, keys and foreign keys, say from a warehouse's documentation whether it will enforce them, and choose the sort order of a big table from the filters of its queries.*
+Test: Exercise data-engineer-logical-to-physical-design-2, done without opening the hints.
+
+The pattern to remember: **declare what must hold, and know who will check it.** The next lesson, *Dimensional models and slowly changing dimensions* (DE13), shapes the same tables into a star and keeps the history of a dimension.

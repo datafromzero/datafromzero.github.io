@@ -2,7 +2,7 @@
 
     python3 starters/de-pipeline-checkpoints/check_lessons.py
 
-It covers three things, for each of the eleven lessons:
+It covers three things, for each of the lessons DE1 to DE14 (DE6b and DE11b are the second halves of DE6 and DE11):
 
 1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json` or `toml` block outside an `<Exercise>` must equal a file of
    the checkpoints (or the starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that
@@ -23,7 +23,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LESSONS = HERE.parent.parent / "src" / "content" / "docs" / "data-engineer"
-NAMES = [  # (label, checkpoint number, lesson file); DE6 is two lessons that share the checkpoint de-06
+NAMES = [  # (label, checkpoint number, lesson file); DE6 and DE11 are each two lessons that share a checkpoint
     ("DE1", 1, "role-and-lifecycle"),
     ("DE2", 2, "ingest-apis-and-files"),
     ("DE3", 3, "file-formats-and-partitioning"),
@@ -35,6 +35,11 @@ NAMES = [  # (label, checkpoint number, lesson file); DE6 is two lessons that sh
     ("DE8", 8, "backfills-and-failure-recovery"),
     ("DE9", 9, "dbt-project-and-first-model"),
     ("DE10", 10, "dbt-tests-and-documentation"),
+    ("DE11", 11, "materializations-and-incremental-models"),
+    ("DE11b", 11, "jinja-and-macros"),
+    ("DE12", 12, "logical-to-physical-design"),
+    ("DE13", 13, "dimensional-models-and-scd"),
+    ("DE14", 14, "ci-and-deployment-for-dbt"),
 ]
 FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
 FILE_NAMES = {".gitignore"}

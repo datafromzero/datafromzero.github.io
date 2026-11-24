@@ -1,0 +1,502 @@
+---
+id: data-engineer-ci-and-deployment-for-dbt
+title: 'CI for dbt: checks on every pull request'
+short_title: CI for dbt
+description: Run the dbt build and its tests on every pull request in GitHub Actions, build only what a change touches, and keep the check away from your own database.
+stage: data-engineer
+order: 140
+level: advanced
+duration: 31
+objectives:
+  - Write a GitHub Actions workflow that runs the dbt build and its tests on every pull request, and read what it checks
+  - Build the project from nothing in a database of its own, so that the check never touches the one you work in
+  - Select the models a change touches, and the models after them, with state:modified+ and defer to the unchanged ones
+  - Say what a green check proves, and one way it can be green having tested nothing
+prerequisites:
+  - data-engineer-dbt-tests-and-documentation
+  - data-engineer-dimensional-models-and-scd
+  - core-git-branches-and-pull-requests
+datasets:
+  - cafe-sales
+reviewed: 2026-11-16
+sources:
+  - title: 'GitHub Docs: Understanding GitHub Actions (accessed 2026-11-24)'
+    url: https://docs.github.com/en/actions/get-started/understand-github-actions
+  - title: 'GitHub Docs: Events that trigger workflows (accessed 2026-11-24)'
+    url: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+  - title: 'GitHub Docs: Workflow syntax for GitHub Actions (accessed 2026-11-24)'
+    url: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+  - title: 'uv documentation: Using uv in GitHub Actions (accessed 2026-11-24)'
+    url: https://docs.astral.sh/uv/guides/integration/github/
+  - title: 'dbt documentation: Continuous integration jobs (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/deploy/continuous-integration
+  - title: 'dbt documentation: Defer (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/reference/node-selection/defer
+  - title: 'dbt documentation: Node selection methods, state (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/reference/node-selection/methods
+  - title: 'dbt-duckdb README: attach (accessed 2026-11-24)'
+    url: https://github.com/duckdb/dbt-duckdb
+status: draft
+---
+
+TODO(owner): Team draft (D24), same run and pins as DE9 to DE13 (dbt-core 1.12.6, dbt-duckdb 1.11.1, DuckDB 2.0.0, uv 0.11.32); tags `de-14-start` and `de-14-done` (and `de-15-start`, the same commit); needs the tags pushed to `de-pipeline-starter`. **GitHub Actions was not run.** The workflow is written from the pages opened and checked with actionlint 1.7.12 (no findings) and as YAML; every command in it (the script `ci/dbt_ci.sh`) and the whole `state:modified+` and `--defer` flow were run here on Linux. No page opened states, so the lesson does not claim, that a failed step turns the pull request's check red (the workflow syntax page lists `bash -e {0}` as the shell of a `run` step) or how a required check blocks a merge. The two actions are pinned by commit as the uv guide shows them on 2026-11-24 (`actions/checkout` v7.0.1, `astral-sh/setup-uv` v9.0.0), with a pinned uv version; the owner may prefer tags. The script starts the mock API with `--retry-after 0` when none answers and kills it on exit (checked on Linux only). It shows the snapshot the partner's file twice (version 1, then 3), because a build from version 3 alone drops lines (DE13, Exercise 3). `state:modified+` and `--defer` use `analytics.duckdb`, the learner's own full build, as the stand-in for production, attached read-only by the `ci_defer` target (dbt-duckdb README); the GitHub runner has no production database, so the workflow builds everything (about one and a half seconds on the run shown). Not run: Windows, macOS, Codespaces, GitHub. Stub changes: duration 30 became 31 (the text runs 110 words a minute); title was *Review, CI and scheduled runs for dbt*; the scheduled production run is not taught (DE7 already schedules a pipeline); "separate development and production schemas" became separate DuckDB files for `dev`, `ci` and `ci_defer`; "open a pull request and read the checks" became writing the workflow and reading the same run locally; prerequisites drop DE7 and add DE13; the page *About pull requests* was not opened and is dropped.
+
+## The question
+
+The owner of the cafes writes:
+
+> Last week a change to the product model went live and the store report was wrong for a day. Can something check every change before it reaches the main branch, without touching our real tables?
+
+A person reads the diff of a pull request, and cannot run a build of dozens of steps in their head. By the end you can write the check that runs the build and its tests on every pull request, run it the way GitHub would, and make it build only what a change touches.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Git: branches, pull requests and review*](/core/git-branches-and-pull-requests/) (C30) proposed a change on a branch for others to review before it joined the main branch. CI adds a second reviewer that runs the project.
+
+**Diverge.** A reviewer reads what changed. A CI run builds and tests the whole project as the change leaves it, in a place of its own.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C30, what does a pull request ask other people to do before a change is merged?
+
+   <details>
+   <summary>answer</summary>
+
+   To review the change: to read what it changes, comment on it and approve it or ask for more.
+
+   </details>
+
+2. In DE10, what does `dbt build` do with a model whose test fails, and with the models that read it?
+
+   <details>
+   <summary>answer</summary>
+
+   The failing test is an error, and the models and tests that depend on that model are skipped.
+
+   </details>
+
+## The big idea
+
+A check on a pull request builds the project from nothing in a place of its own, so that a failure is found before the merge and costs no one's data.
+
+## Learn by doing
+
+About 31 minutes, 3 new ideas: a workflow that builds from nothing, building only what a change touches, and what a green check proves. Work in `de-pipeline-starter` with the dbt project of DE13 built (46 nodes), the partner's product file at version 3, the full pull staged and the mock API running in the first terminal. To catch up, run `git checkout de-14-start`. The lesson cannot show GitHub itself: it runs on your computer the same script that the workflow runs, and the workflow file is the part that GitHub runs when you push. Run `bash` and `uv run` commands from the repository root, and dbt commands from `dbt` where a block says `cd dbt`.
+
+### 1. A workflow that builds the project from nothing
+
+**Idea.** The GitHub documentation says a workflow is defined by a YAML file checked in to the repository, in `.github/workflows`. An **event** triggers it, a **job** is a set of steps run on the same **runner**, a server, and a step is a shell script or an action. For the `pull_request` event the default is to run when a pull request is opened, when commits are pushed to it, and when it is reopened. Each workflow run starts in a freshly provisioned machine, so everything the build needs has to be made by the run itself.
+
+**Try it.** Fetch the workflow, the script it calls, the profile with two new targets, and the ignore file of the dbt folder:
+
+```bash
+mkdir -p ci .github/workflows
+git show de-14-done:.github/workflows/dbt-ci.yml > .github/workflows/dbt-ci.yml
+git show de-14-done:ci/dbt_ci.sh > ci/dbt_ci.sh
+git show de-14-done:dbt/profiles.yml > dbt/profiles.yml
+git show de-14-done:dbt/.gitignore > dbt/.gitignore
+```
+
+The workflow, `.github/workflows/dbt-ci.yml`:
+
+```yaml
+name: dbt CI
+
+on:
+  pull_request:
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.32"
+          enable-cache: true
+      - name: Install the project
+        run: uv sync --locked
+      - name: Build, snapshot and test every model
+        run: bash ci/dbt_ci.sh
+```
+
+It checks out the repository, installs uv at a fixed version (the uv guide calls pinning a version best practice, and pins the two actions by commit, as here), installs the locked dependencies, and runs one script. The script, `ci/dbt_ci.sh`, is the part you can run yourself. It starts the mock API if none answers, and these are its first and last lines:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DATA_DIR="$PWD/data/ci"
+export STAGING_DIR="$DATA_DIR/staging"
+export PARTNER_DIR="$DATA_DIR/partner"
+export CI_DB="$DATA_DIR/ci.duckdb"
+rm -rf "$DATA_DIR"
+mkdir -p "$DATA_DIR"
+```
+
+```bash
+uv run python -m pipeline.ingest
+uv run python -m pipeline.stage
+
+# The snapshot keeps history only from the runs it has seen, so CI shows it the partner's file twice: first, then as it is now.
+uv run python scripts/partner_files.py 1
+(cd dbt && uv run dbt snapshot --target ci)
+uv run python scripts/partner_files.py 3
+(cd dbt && uv run dbt build --target ci)
+```
+
+Every step of DE2, DE3 and DE13 is in it: land, stage, replay the partner's file, build. Run it, and compare a fingerprint of your own database before and after:
+
+```bash
+md5sum data/serving/analytics.duckdb | cut -c1-12
+bash ci/dbt_ci.sh 2>&1 | grep -E "landed|kept|version 1|Finished running|Done"
+md5sum data/serving/analytics.duckdb | cut -c1-12
+ls data/ci
+```
+
+**Predict:** Does this run change `analytics.duckdb`, the database you have been building in, and where does it build?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ md5sum data/serving/analytics.duckdb | cut -c1-12
+15f827556acd
+```
+
+```console
+$ bash ci/dbt_ci.sh 2>&1 | grep -E "landed|kept|version 1|Finished running|Done"
+INFO landed 33 pages in since=start_until=now
+INFO 3288 records read, 3287 lines kept
+data/partner/products.parquet: version 1, 16 products, 0 changed since version 1
+20:09:56  Finished running 1 snapshot in 0 hours 0 minutes and 0.27 seconds (0.27s).
+20:09:56  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+data/partner/products.parquet: version 3, 16 products, 2 changed since version 1
+20:10:00  Finished running 1 incremental model, 1 snapshot, 6 table models, 35 data tests, 3 view models in 0 hours 0 minutes and 1.46 seconds (1.46s).
+20:10:00  Done. PASS=46 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=46
+```
+
+```console
+$ md5sum data/serving/analytics.duckdb | cut -c1-12
+15f827556acd
+```
+
+```console
+$ ls data/ci
+ci.duckdb
+partner
+raw
+staging
+```
+
+</details>
+
+*Why:* the script points the pipeline at a folder of its own, `data/ci/`, with `DATA_DIR`, `STAGING_DIR` and `PARTNER_DIR`, and `CI_DB` names the database file for the `ci` target of `profiles.yml`; the fingerprint of your database is the same afterwards. The build is the 46 nodes of DE13: it ran in about a second and a half. The snapshot ran twice, with version 1 and then version 3 of the partner's file, so that the fresh database has the history that the tests expect. On a pull request, GitHub runs this on a fresh machine, which is why nothing in it may rely on what is already on yours.
+
+### 2. Build only what the change touches
+
+**Idea.** The dbt documentation says `state:modified` selects the nodes that are new or changed, by comparing the project with a manifest (the file `target/manifest.json` that a run writes) given with `--state`; a `+` after it adds everything downstream. `--defer`, with `--state`, resolves a `ref` to a model that was not selected by using the other environment's version, when it does not exist in the target database. The dbt page on CI jobs describes the same shape: only the modified assets and their downstream dependencies are built and tested, in a schema of their own for the pull request. Here your full build, `analytics.duckdb`, stands in for production, and the `ci_defer` target attaches it read-only, which the dbt-duckdb README says the `attach` setting of a profile does.
+
+**Try it.** Build, keep the manifest as the state, and change one file, the comment of `stg_stores.sql`:
+
+```bash
+cd dbt
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+mkdir -p prod-state && cp target/manifest.json prod-state/ && ls prod-state
+```
+
+Change the first line of `models/staging/stg_stores.sql` to `-- Grain: one row for each store, as the partner file lists it.`, and ask dbt which models that touches:
+
+```bash
+uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model
+```
+
+**Predict:** Which models does it list?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model
+cafe.marts.dim_store
+cafe.marts.fct_order_lines
+cafe.marts.fct_store_daily_sales
+cafe.staging.stg_stores
+```
+
+</details>
+
+Build them, and read what the `ci_defer` database holds:
+
+```bash
+uv run dbt build --select "state:modified+" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Done"
+uv run python ../scripts/sql.py "SELECT string_agg(table_name, ', ' ORDER BY table_name) AS built FROM information_schema.tables WHERE table_catalog = 'ci_defer'" --db ../data/serving/ci_defer.duckdb
+```
+
+```console
+$ uv run dbt build --select "state:modified+" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Done"
+20:10:15  Done. PASS=20 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=20
+```
+
+```console
+$ uv run python ../scripts/sql.py "SELECT string_agg(table_name, ', ' ORDER BY table_name) AS built FROM information_schema.tables WHERE table_catalog = 'ci_defer'" --db ../data/serving/ci_defer.duckdb
+built
+-------------------------------------------------------------
+dim_store, fct_order_lines, fct_store_daily_sales, stg_stores
+```
+
+*Why:* the edited model is `stg_stores`, and the `+` adds the models after it: `dim_store` and `fct_store_daily_sales`, which read it, and `fct_order_lines`, which reads `dim_store`. The build ran 20 of the 46 nodes, the four models and their tests, and `ci_defer` holds only those four relations: the models they read, such as `dim_product` and the incremental `int_order_lines_priced`, came from `analytics.duckdb` by the deferral. Put the comment back before you go on:
+
+```bash
+git show de-09-done:dbt/models/staging/stg_stores.sql > models/staging/stg_stores.sql
+```
+
+The workflow of unit 1 does not use this, on purpose: the machine of GitHub has no production database to defer to, and at this size the full build takes seconds. State and defer pay when the build takes minutes and the production tables live in a warehouse; the commands are the same.
+
+### 3. What a green check proves
+
+**Idea.** A check proves what its commands ran: here, that the project builds and that its tests pass on the data the run was given. Change a model in a way a reviewer could miss, and see whether the check says so.
+
+**Try it.** In `dbt/models/marts/fct_order_lines.sql`, delete the two `and` lines of the join to `dim_product`, the ones that compare `ordered_at` with `valid_from` and `valid_to`, so that it joins on `product_id` alone. Run the script, from the repository root:
+
+```bash
+cd ..
+bash ci/dbt_ci.sh 2>&1 | grep -E "FAIL|SKIP|Done"; echo "exit status ${PIPESTATUS[0]}"
+```
+
+**Predict:** Which tests fail, and what exit status does the script end with?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ bash ci/dbt_ci.sh 2>&1 | grep -E "FAIL|SKIP|Done"; echo "exit status ${PIPESTATUS[0]}"
+20:10:25  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+20:10:29  40 of 46 FAIL 1 assert_the_fact_keeps_every_line ............................... [FAIL 1 in 0.01s]
+20:10:29  46 of 46 FAIL 351 unique_fct_order_lines_order_line_id ......................... [FAIL 351 in 0.02s]
+20:10:29  Done. PASS=44 WARN=0 ERROR=2 SKIP=0 NO-OP=0 REUSED=0 TOTAL=46
+exit status 1
+```
+
+</details>
+
+*Why:* a product that changed twice has two rows in `dim_product`, so every one of its lines matched both and was counted twice: 351 repeated lines failed the `unique` test on the key of the fact, and the test that every staged line is in the fact failed on the count. The script stops with status 1 because `set -e` ends it at the first failing command, and a `run` step on a Linux runner uses `bash -e`, as the workflow syntax page lists, so a step like this one stops at the same place. This is the run that would show a failed check on a pull request. It caught the mistake only because the CI database had history to join: had the script shown the snapshot only version 1 of the file, every product would have had one version and the broken join would have passed. Put the file back and run it once more:
+
+```bash
+git show de-13-done:dbt/models/marts/fct_order_lines.sql > dbt/models/marts/fct_order_lines.sql
+bash ci/dbt_ci.sh > /dev/null 2>&1; echo "exit status $?"
+```
+
+```console
+$ bash ci/dbt_ci.sh > /dev/null 2>&1; echo "exit status $?"
+exit status 0
+```
+
+<Aside type="tip" title="Remember">
+
+- A workflow is a YAML file that an event triggers; a job runs steps on a fresh machine, so the run builds everything it needs, in a database of its own.
+- `state:modified+` with `--state` selects what changed and what is after it; `--defer` takes the unchanged models from the other environment.
+- A green check proves only what it ran, on the data it was given. Pin the tools of the workflow.
+
+**Common trap:** a check that sees data without the history your tests need can pass a change that is wrong.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-ci-and-deployment-for-dbt-1">
+
+**Another change, another selection.** The state in `dbt/prod-state` is the manifest of the unchanged project. Edit `dbt/models/marts/dim_store.sql`: add the words `(type 1)` after `as it is now` in its first line. Ask dbt which models that change touches, and build them with defer into `ci_defer`. The start is given; fill in the selector. Expected: two models, and a build of fewer nodes than the 20 of unit 2. When you are done, put the line back.
+
+```bash
+cd dbt
+uv run dbt ls --quiet --select "___" --state prod-state --resource-type model
+uv run dbt build --select "___" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+<details>
+<summary>Hint</summary>
+
+It is the selector of unit 2: the modified models, and everything after them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+uv run dbt ls --quiet --select "state:modified..." --state prod-state --resource-type model
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model
+cafe.marts.dim_store
+cafe.marts.fct_order_lines
+```
+
+```console
+$ uv run dbt build --select "state:modified+" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Done"
+20:11:04  Done. PASS=11 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=11
+```
+
+`dim_store` is read by `fct_order_lines` only, so two models and their tests, 11 nodes, ran: fewer than for `stg_stores`, which sits earlier in the graph and has more after it. The size of a change's reach depends on where in the graph it is made.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-ci-and-deployment-for-dbt-2">
+
+**A workflow of your own.** The tests of the pipeline run with `uv run pytest -q`. Before you start, say in a sentence what a pull request would show if one of them failed. Then, from a blank file, write `.github/workflows/tests.yml` that runs them on every pull request, in the pattern of the CI workflow, and check two things: that it is valid YAML whose last step is the test command, and that the command passes here. Expected: the parse prints the command, and the tests pass. When you are done, delete the file.
+
+<details>
+<summary>Hint</summary>
+
+Copy the shape of `dbt-ci.yml`: the same event, the same two actions with their pins, `uv sync --locked`, and then the command of the tests in place of the script. The parse is `yaml.safe_load` from the `yaml` module, which dbt installs.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The parse prints the one command of the last step, and pytest passes."*
+
+```yaml
+name: Tests
+
+on:
+  pull_request:
+```
+
+</details>
+
+<Solution>
+
+```yaml
+name: Tests
+
+on:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.32"
+      - run: uv sync --locked
+      - run: uv run pytest -q --tb=short
+```
+
+```bash
+uv run python -c "import yaml; d = yaml.safe_load(open(\".github/workflows/tests.yml\")); print(list(d[\"jobs\"][\"pytest\"][\"steps\"][-1].values()))"
+uv run pytest -q --tb=short 2>&1 | tail -3
+```
+
+```console
+$ uv run python -c "import yaml; d = yaml.safe_load(open(\".github/workflows/tests.yml\")); print(list(d[\"jobs\"][\"pytest\"][\"steps\"][-1].values()))"
+['uv run pytest -q --tb=short']
+```
+
+```console
+$ uv run pytest -q --tb=short 2>&1 | tail -3
+.......................                                                  [100%]
+23 passed in 1.95s
+```
+
+The parse proves the file is YAML and the tests prove the command; neither proves that GitHub accepts the workflow, which only a push shows.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `--defer` do, and what must you give it besides?
+
+   <details>
+   <summary>answer</summary>
+
+   It resolves a `ref` to a model that was not selected by using the other environment's relation, when that model does not exist in the target database. It needs `--state`, the manifest of that other environment.
+
+   </details>
+
+<Exercise id="data-engineer-ci-and-deployment-for-dbt-3">
+
+**Spot the flaw.** A colleague wants the check to build only what a pull request changes. In the CI job they save the manifest as the state after the pull request's own files are in place, and then select the changes: edit `dim_store.sql` as in Exercise 1, run `dbt parse`, copy `target/manifest.json` to `prod-state`, and select `state:modified+`. The job passes. Do the same and read what ran. Expected: the job is green. How many models did it test, and what does the state have to be instead? When you are done, put the line back.
+
+```bash
+cd dbt
+rm -rf prod-state && mkdir prod-state && uv run dbt parse --quiet && cp target/manifest.json prod-state/ && ls prod-state
+uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model | wc -l
+uv run dbt build --select "state:modified+" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Nothing|Done"; echo "exit status ${PIPESTATUS[0]}"
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the number the second command prints, and the warning of the third.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+`state:modified` compares the project with the manifest. Ask what the manifest was made from, and what it was compared with.
+
+</details>
+
+<Solution>
+
+```console
+$ rm -rf prod-state && mkdir prod-state && uv run dbt parse --quiet && cp target/manifest.json prod-state/ && ls prod-state
+manifest.json
+```
+
+```console
+$ uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model | wc -l
+0
+```
+
+```console
+$ uv run dbt build --select "state:modified+" --defer --state prod-state --target ci_defer 2>&1 | grep -E "FAIL|SKIP|Nothing|Done"; echo "exit status ${PIPESTATUS[0]}"
+20:11:18  [WARNING]: Nothing to do. Try checking your model configs and model specification args
+exit status 0
+```
+
+The state was made from the very files it is compared with, so nothing is modified: no model is listed, dbt warns that there is nothing to do, and the command ends with status 0. The job is green and tested nothing. The state has to be the manifest of the code in production, made before the change: from the main branch, not from the pull request's branch. Put the line back, save the state from the unchanged project, edit the line again, and select again:
+
+```console
+$ rm -rf prod-state && mkdir prod-state && uv run dbt parse --quiet && cp target/manifest.json prod-state/ && ls prod-state
+manifest.json
+```
+
+```console
+$ uv run dbt ls --quiet --select "state:modified+" --state prod-state --resource-type model
+cafe.marts.dim_store
+cafe.marts.fct_order_lines
+```
+
+A check that can select zero nodes and still pass is worth a second look: have the job print how many it selected.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a workflow that builds and tests a dbt project on every pull request from nothing, point it at a database of its own, select the models a change touches with state and defer, and say what a green check does and does not prove.*
+Test: Exercise data-engineer-ci-and-deployment-for-dbt-2, done without opening the hints.
+
+The pattern to remember: **build from nothing, in a place of your own, and know what the check ran.** The next lesson in the track, *Running on a cloud warehouse* (DE15), runs these models in a warehouse, where the unchanged models live in a schema of their own.

@@ -3,7 +3,7 @@
     python3 starters/de-pipeline-checkpoints/make_history.py TARGET_DIR
 
 TARGET_DIR must not exist. It becomes a repository whose `main` is the state after the last lesson,
-with these tags (the lessons say "check out de-03-start to catch up"):
+with these tags (the lessons say "check out de-03-start to catch up"; DE11 and DE11b share de-11):
 
     de-01-start                      the starter as the learner first clones it
     de-NN-done                       the starter after lesson NN, with the files the lesson saves
@@ -26,10 +26,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STARTER = HERE.parent / "de-pipeline"
-LESSONS = 10
+LESSONS = 14
 AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
 DATE = "2026-11-24T12:00:00+0000"
-# The commits of the published repository, by lesson (the starter commit is key 0). Add a lesson's hash once it is pushed.
+# The commits whose files never change again, by lesson (the starter commit is key 0): the published repository (0 to 5) and
+# the checkpoints that later lessons build on. Add a lesson's hash once it is pushed or once a later lesson depends on it.
 PUBLISHED = {
     0: "ed98dbedbf5966caf13110923c46286bb75f87b1",
     1: "6ebbc9ece65776b95503d6fba65307b383bde764",
@@ -37,6 +38,13 @@ PUBLISHED = {
     3: "7af7bf670106158f72239fd5a1f2b535cabdb548",
     4: "eee98d78a11e1ed56dd8700c8691835537250cee",
     5: "b939cb4a99553af143065b5e0036761ea7c591e3",
+    # Lessons 6 to 10 are fixed from here on, though not pushed yet: de-10-done is de-11-start. A rebuild that gives
+    # another hash means a file of a checkpoint up to 10 changed.
+    6: "393a8204144975196963cd5733efbada34853e54",
+    7: "ccb3b7940c2fbcada9680cc923194ae3f215a26d",
+    8: "fa0a03b75ec474aaa1bc65627815e62d1162f646",
+    9: "59573a615b8936f5b93313f92790f8e7e0cd9aa3",
+    10: "deb0e4779c60e81fc358c1c54345b6d564d5baf4",
 }
 IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc")
 
