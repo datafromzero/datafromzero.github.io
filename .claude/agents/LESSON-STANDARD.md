@@ -416,6 +416,23 @@ Written 2026-11-24 by the first DS batch. The next batches (DS6 to DS16) read th
   compare `C`), the week-1 columns (DS9 feature engineering: encode, scale and impute inside the folds, with the folds of DS5), `region` as the column that adds nothing (DS11 fairness slices:
   platform and channel are the slices with a real gap), the cohort table of DS3 (DS12 forecasting uses daily counts of the events table instead).
 
+### Batch 3 (DS11 to DS14): notes added by the third DS batch
+
+- **Written-for-the-lesson illustrations.** A lesson that grades AI output (DS14) runs no model. An assistant answer or a column of classifier labels is written for the lesson, shown in an Aside "written for this lesson, in the style of an
+  assistant" and said so again in the notebook and the `TODO(owner)` paragraph; a number computed from it (an accuracy, a recall) describes the illustration, and the lesson says that it says nothing about any real model. A text set
+  that the datasets do not have (DS14's 60 cancellation notes, labeled with the five `cancel_reason` values) is written in the notebook and named as written.
+- **Token cost.** Tokens are estimated at 4 characters each (OpenAI help page, opened and dated); a price is the row of a vendor's pricing page with the page's date in the source title, and the lesson tells the reader to recheck it. Say that
+  the real count is the usage an API returns, and that a newer tokenizer may give more tokens for the same text (the Anthropic page says about 30 percent).
+- **Experiment table (DS13).** `EXP_SQL` in the DS13 notebook builds `exp`: one row for each of the 15,868 people in an experiment, with channel, platform, region, `converted`, `revenue_14d` (the price of the plan each purchase in the 14 days
+  after assignment started with: monthly $7.99, annual $59.99, the README prices) and `hours_to_buy`. Chart scripts read it from that notebook.
+- **Forecasting (DS12).** One series: `signup_complete` events counted by UTC day, 181 days, 21,871 signups. A backtest forecasts whole weeks (Monday to Sunday) from the days up to the Sunday night before, from the 9th week (March 2): 17
+  forecast weeks. The dataset's expected values (README rules: line 90 to 125, weekday factors, 1.3 on days 1 to 3, the campaign) are a yardstick, never a forecast. The README's holiday dip is in visits, not in signups.
+- **Intervals.** A gap between groups or two forecasts: 2,000 resamples of the held-out people (DS11) or of whole weeks (DS12), seed 2026; a bootstrap of people for experiments (DS13, 2,000 resamples); a simulated share (power, A/A) is
+  printed to two decimals. Avoid scikit-learn arguments newer than 1.6 (`partial_dependence(custom_values=...)` is 1.7): the notebooks must give identical outputs on both library sets.
+- **Answers already used by DS11 to DS14** (do not reuse them as exercise answers): permutation losses 0.0977, 0.0246, 0.0554 and 0.0289; the tree's 0.094 and 0.063; recall 0.047 and 0.421 on web and apps, 0.041 and 0.369 at 0.75, and the web and
+  app shares 0.071 and 0.434 at 0.6; seasonal naive 20.92, model 18.62, flat 22.68, 20.25, 18.38, 22.86 and 12.26 for the month-start weeks; sizes 7,047, 11,010 and 50,342 per arm, simulated power 0.72 and 0.34; bootstrap intervals for `paywall_v2`
+  (+$0.627, +20.7 percent) and the adjusted onboarding gap -0.011; platform p-values 0.014 and 0.477 for `signup_flow_v2`; classifier accuracy 0.833, recalls 0.857, 0.905, 0.8, 0.778 and 0.667, costs $0.0043, $0.0852 and $0.256.
+
 ## Markup
 
 - `.mdx` only when a lesson uses components (`git mv` from `.md`; the slug stays). Components: `Exercise`,

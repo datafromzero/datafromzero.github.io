@@ -158,6 +158,12 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   people, not the core's "buys within 14 days". Choices the owner may reverse: the target; no derived dataset file (the table is a DuckDB query run in each notebook); a still fold
   diagram instead of a concept animation; charts drawn with the DA `Svg` class, not seaborn. Still open: edits and approval of every text, and a Colab run of the five notebooks
   (they ran here on pandas 3.0.5 and 2.2.3 with identical outputs).
+- **Data Scientist batch 3 (2026-11-24, branch `ds-batch-3`, team drafts, D24, still `status: draft`):** DS11 `model-interpretation-and-fairness` (permutation importance, partial dependence, group error
+  rates, model card and release checklist), DS12 `time-series-forecasting-basics` (daily signups, weekly backtest against a seasonal naive baseline, the README's expected values as a noise floor), DS13
+  `experiment-analysis-in-python` (revenue sizing, bootstrap, checks that need no outcome, a causal-reading segment) and DS14 `genai-tools-in-a-ds-project` (graded assistant answers and classifier
+  labels written for the lesson, token cost from a dated price) with notebooks and `scripts/charts/ds-batch-3.py`. All four notebooks gave identical outputs on pandas 3.0.5 / scikit-learn 1.9.1 / NumPy 2.5.3
+  and on pandas 2.2.3 / scikit-learn 1.6.1 / NumPy 2.1.3. Choices the owner may reverse: the stubs' prerequisites, objectives, descriptions and `datasets` were rewritten to match the briefs (see each `TODO(owner)`);
+  DS14 ran no model and says so. Still open: edits and approval of every text, a Colab run, and a recheck of the vendor prices on the DS14 page before publishing.
 
 ## Open items and owner decisions still pending
 
