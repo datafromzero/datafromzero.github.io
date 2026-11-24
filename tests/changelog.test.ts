@@ -75,7 +75,7 @@ describe('summaryHtml', () => {
 	test('links a lesson named by its title or the part before the colon, escapes the rest', () => {
 		assert.equal(
 			summaryHtml('Telling the story now cites <b> and `a<b`.', lessons),
-			'<a href="/core/telling-the-story/">Telling the story</a> now cites &lt;b&gt; and <code>a&lt;b</code>.',
+			'<a href="/core/telling-the-story/">Telling the story</a> now cites &lt;b&gt; and <code translate="no">a&lt;b</code>.',
 		);
 	});
 	test('short titles never link', () => {
