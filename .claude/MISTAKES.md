@@ -45,6 +45,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-24 — A `<form>` placed inside the footer's `<p class="links">` made the browser close the paragraph, so the link row broke into stacked lines. → **Never nest a form, `<details>` panel or other block content in a `<p>`; use a `<div>` for rows that can hold a panel, and screenshot the row at 360 px.**
+- 2026-11-24 — Typing `\uXXXX` escapes into a file written through a shell heredoc stored the raw invisible characters (a regex literal broke on U+2028). → **Build invisible or special characters in code with `String.fromCharCode` and check the file with `grep -nP '[^\x00-\x7f]'`.**
 - 2026-11-20 — KaTeX shipped a red `span.katex-error` for bad TeX and only warned. → **A build-time renderer that falls back on error (KaTeX, a highlighter, an image tool) must be made to fail the build, with an invalid fixture, because a fallback that only warns ships broken output to readers.** (`src/lib/rehype-math-errors.ts`, fixture `math-tex-error`.)
 - 2026-11-19 — The step buttons 1 2 3 4 of every concept animation lost their bottom edge (owner, on a phone): the shared
   `.sa-sb` rule draws `border-bottom: 4px solid var(--c)`, and concept buttons carry no clause class, so `--c` was unset

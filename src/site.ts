@@ -35,3 +35,8 @@ export const ANALYTICS_ENABLED = GA_ID !== '';
 if (ANALYTICS_ENABLED && GA_RETENTION === '') {
 	throw new Error('src/site.ts: set GA_RETENTION (the GA4 data retention period) before enabling analytics; /privacy/ must state it.');
 }
+/**
+ * Address of the feedback Worker (SPEC D58, workers/feedback/README.md), e.g. `https://datafromzero-feedback.NAME.workers.dev/`.
+ * Empty = no form: lessons keep the plain "Report an issue" link to the GitHub issue form, so the site never ships a dead form.
+ */
+export const FEEDBACK_URL: string = '';
