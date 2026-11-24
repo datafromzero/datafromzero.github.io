@@ -1,0 +1,486 @@
+---
+id: data-engineer-join-algorithms
+title: Join algorithms and optimizer mistakes
+short_title: Join algorithms
+description: Find nested loop, hash and merge joins as plan nodes, switch them on and off, and watch a skewed product break a row estimate at the join node.
+stage: data-engineer
+order: 220
+level: advanced
+duration: 30
+objectives:
+  - Name the three join algorithms and say how each one works
+  - Produce each algorithm on the same query by switching the others off, and compare cost with time
+  - Find the join node where a skewed column breaks the row estimate
+prerequisites:
+  - data-engineer-indexes-honestly
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: Planner/Optimizer (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/planner-optimizer.html
+  - title: 'PostgreSQL 16 documentation: Planner method configuration (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/runtime-config-query.html
+  - title: 'PostgreSQL 16 documentation: Using EXPLAIN (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/using-explain.html
+  - title: 'CMU 15-445/645 Database Systems, Fall 2025: schedule (accessed 2026-11-24)'
+    url: https://15445.courses.cs.cmu.edu/fall2025/schedule.html
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15, Linux; its TODO lists what to pin and what was not run). `join_report` is given in `setup.sql`; the picture and the medians come from one run of `scripts/de-internals/join_windows.py` (seven runs per cell), so the lesson reads the order of the methods and never an absolute time. Estimates such as 59,401 depend on the lab data and on PostgreSQL 16; the date-window estimates move 1 to 2 percent each time `ANALYZE` samples again. Two sentences rest on no opened page: the hash node growing to two batches because the rows did not fit in `work_mem` (the plan line and a `work_mem` run), and the remark on `random_page_cost` (its documentation says a lower value suits cached data; no change of it was run). CMU 15-445 is cited only for the title of its lecture on join algorithms. Stub changes: the objective "when each is cheap" is now how each works plus a measured comparison, because cost and clock rank the methods differently here. The owner writes `reviewed`.
+
+## The question
+
+The owner of the three cafes asks:
+
+> The report of yesterday's sales is instant, but the same report for the whole spring takes minutes on the big copy. Does the database use a different method?
+
+The two tables behind the report, with 500,000 orders and 950,414 lines in the big copy (the first lines of each):
+
+| order_id | ordered_at | store_id |
+|---:|---|---:|
+| 1 | 2026-01-01 00:00:31 | 1 |
+| 2 | 2026-01-01 00:01:02 | 1 |
+
+| order_item_id | order_id | product_id | quantity |
+|---:|---:|---:|---:|
+| 1 | 1 | 2 | 2 |
+| 2 | 2 | 1 | 2 |
+
+By the end you can find the method a plan uses, ask for each of the others, and say where a join's row estimate goes wrong.
+
+<Aside type="note" title="You already know this">
+
+**Match.** *Indexes, honestly* priced a scan against an index lookup, and [*Inner join*](/sql/inner-join/) (S20) gave the rule for what a join returns.
+
+**Diverge.** The rule says what comes out. It says nothing about how the rows are paired, and that is the part with three methods and different costs.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In S20, what does an inner join keep?
+
+   <details>
+   <summary>answer</summary>
+
+   Every pair of rows, one from each table, for which the `ON` condition is true.
+
+   </details>
+
+2. In *Indexes, honestly*, what does a lookup through an index read, compared with a scan of the table?
+
+   <details>
+   <summary>answer</summary>
+
+   A page on each level of the index and then one table page, where a scan reads every page of the table.
+
+   </details>
+
+## The big idea
+
+A join is a way of pairing rows, and the planner picks one of three: loop over one side and look up the other, build a hash table, or merge two sorted lists.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the three methods as plan nodes, the winner as the number of rows changes, and an estimate that skew breaks. The lab of the first lesson of this module must exist (`psql -d lab`, then `\pset footer off`). Create the two indexes the joins use:
+
+```sql
+CREATE INDEX order_items_big_order_idx ON order_items_big (order_id);
+CREATE INDEX orders_big_ordered_idx ON orders_big (ordered_at);
+ANALYZE order_items_big;
+ANALYZE orders_big;
+```
+
+### 1. Three methods, three plan nodes
+
+**Idea.** The PostgreSQL documentation describes three join methods. In a **nested loop**, the right relation is scanned once for every row found in the left relation. In a **merge join**, each relation is sorted on the join attributes (by a sort step or by scanning an index in order), then the two are scanned in parallel and matching rows combined. In a **hash join**, the right relation is loaded into a hash table keyed on the join attributes, then the left relation is scanned and each row looks up its matches. The settings `enable_nestloop`, `enable_hashjoin` and `enable_mergejoin` enable or disable each method for the planner; for nested loops the documentation adds that it is impossible to suppress them entirely and that turning the setting off discourages the planner from using one.
+
+**Try it.** The lines of one day, March 1, run with the planner's own choice, then with nested loops off, then with hash joins off as well:
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF)
+SELECT count(*), sum(i.quantity)
+FROM orders_big o JOIN order_items_big i ON i.order_id = o.order_id
+WHERE o.ordered_at >= '2026-03-01' AND o.ordered_at < '2026-03-02';
+SET enable_nestloop = off;
+-- run the same EXPLAIN again
+SET enable_hashjoin = off;
+-- and once more
+```
+
+**Predict:** Which join method does the first plan use, and which of the three plans finishes first? About how many times faster than the slowest is it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+ Aggregate  (cost=16400.60..16400.61 rows=1 width=16) (actual rows=1 loops=1)
+   ->  Nested Loop  (cost=0.85..16375.87 rows=4946 width=4) (actual rows=5274 loops=1)
+         ->  Index Scan using orders_big_ordered_idx on orders_big o  (cost=0.42..110.91 rows=2602 width=4) (actual rows=2762 loops=1)
+               Index Cond: ((ordered_at >= '2026-03-01 00:00:00'::timestamp without time zone) AND (ordered_at < '2026-03-02 00:00:00'::timestamp without time zone))
+         ->  Index Scan using order_items_big_order_idx on order_items_big i  (cost=0.42..6.23 rows=2 width=8) (actual rows=2 loops=2762)
+               Index Cond: (order_id = o.order_id)
+ Planning Time: 0.431 ms
+ Execution Time: 2.673 ms
+
+ Aggregate  (cost=18231.16..18231.17 rows=1 width=16) (actual rows=1 loops=1)
+   ->  Hash Join  (cost=143.43..18206.43 rows=4946 width=4) (actual rows=5274 loops=1)
+         Hash Cond: (i.order_id = o.order_id)
+         ->  Seq Scan on order_items_big i  (cost=0.00..15568.14 rows=950414 width=8) (actual rows=950414 loops=1)
+         ->  Hash  (cost=110.91..110.91 rows=2602 width=4) (actual rows=2762 loops=1)
+               Buckets: 4096  Batches: 1  Memory Usage: 130kB
+               ->  Index Scan using orders_big_ordered_idx on orders_big o  (cost=0.42..110.91 rows=2602 width=4) (actual rows=2762 loops=1)
+                     Index Cond: ((ordered_at >= '2026-03-01 00:00:00'::timestamp without time zone) AND (ordered_at < '2026-03-02 00:00:00'::timestamp without time zone))
+ Planning Time: 0.136 ms
+ Execution Time: 75.690 ms
+
+ Aggregate  (cost=31501.38..31501.39 rows=1 width=16) (actual rows=1 loops=1)
+   ->  Merge Join  (cost=259.13..31476.65 rows=4946 width=4) (actual rows=5274 loops=1)
+         Merge Cond: (i.order_id = o.order_id)
+         ->  Index Scan using order_items_big_order_idx on order_items_big i  (cost=0.42..28779.63 rows=950414 width=8) (actual rows=314695 loops=1)
+         ->  Sort  (cost=258.51..265.02 rows=2602 width=4) (actual rows=2762 loops=1)
+               Sort Key: o.order_id
+               Sort Method: quicksort  Memory: 97kB
+               ->  Index Scan using orders_big_ordered_idx on orders_big o  (cost=0.42..110.91 rows=2602 width=4) (actual rows=2762 loops=1)
+                     Index Cond: ((ordered_at >= '2026-03-01 00:00:00'::timestamp without time zone) AND (ordered_at < '2026-03-02 00:00:00'::timestamp without time zone))
+ Planning Time: 0.211 ms
+ Execution Time: 38.762 ms
+```
+
+</details>
+
+*Why:* the planner chose the nested loop, and it also finished first, in 2.7 ms against 75.7 ms for the hash join and 38.8 ms for the merge join, 28 times faster than the slowest. The costs say the same order: 16,376, 18,206 and 31,477. The inner index scan of the nested loop ran 2,762 times (`loops=2762`), once for each order of the day, and found 2 lines each time. The hash join read all 950,414 lines to match 5,274 of them, and the merge join read 314,695 index entries before it stopped. Over seven runs each, the medians were 2.6 ms (2.4 to 3.1) for the nested loop, 57.0 ms (53.2 to 90.7) for the hash join and 31.8 ms (29.2 to 38.7) for the merge join. Leave the settings with `RESET enable_nestloop; RESET enable_hashjoin;`. University database courses give join algorithms a lecture of their own; the schedule of CMU 15-445 lists "Joins Algorithms".
+
+### 2. The winner follows the number of rows
+
+**Idea.** A nested loop pays for one lookup for each row of its outer side, and a hash join or a merge join pays to read both sides. The same query on more rows can therefore rank the methods differently. The helper `join_report` (given in `setup.sql`) runs a query under `EXPLAIN ANALYZE` and prints one row: its first join node, that node's cost and the run time in ms.
+
+**Try it.** The same query for the week of March 1 to 7, first as the planner would run it, then forcing each method. Run each `join_report` line twice and read the second line (the first run may read pages from disk):
+
+```sql
+\set q '$$SELECT count(*), sum(i.quantity) FROM orders_big o JOIN order_items_big i ON i.order_id = o.order_id WHERE o.ordered_at >= ''2026-03-01'' AND o.ordered_at < ''2026-03-08''$$'
+SELECT 'default' AS setting, * FROM join_report(:q);
+SET enable_hashjoin = off; SET enable_mergejoin = off;
+SELECT 'nested loop' AS setting, * FROM join_report(:q);
+RESET enable_hashjoin; RESET enable_mergejoin;
+SET enable_nestloop = off; SET enable_mergejoin = off;
+SELECT 'hash' AS setting, * FROM join_report(:q);
+RESET enable_nestloop; RESET enable_mergejoin;
+SET enable_nestloop = off; SET enable_hashjoin = off;
+SELECT 'merge' AS setting, * FROM join_report(:q);
+RESET enable_nestloop; RESET enable_hashjoin;
+```
+
+**Predict:** For the week, which method does the planner choose on its own, and which of the three runs fastest?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+ setting | join_node | join_cost | run_ms
+---------+-----------+-----------+--------
+ default | Hash Join |  19106.57 | 104.737
+
+   setting   |  join_node  | join_cost | run_ms
+-------------+-------------+-----------+--------
+ nested loop | Nested Loop |  43036.38 | 31.452
+
+ setting | join_node | join_cost | run_ms
+---------+-----------+-----------+--------
+ hash    | Hash Join |  19106.57 | 89.223
+
+ setting | join_node  | join_cost | run_ms
+---------+------------+-----------+--------
+ merge   | Merge Join |  33844.83 | 38.378
+```
+
+Your times will differ.
+
+</details>
+
+*Why:* for the week the planner chose the hash join (cost 19,107, against 43,036 for the nested loop), yet the nested loop was the fastest of the three here. The picture shows the five windows with the median of seven runs for each method: the nested loop is the planner's pick for one day and the fastest for one day, three days and a week; the merge join is the fastest for 31 days and for all orders; the hash join, which the planner picks from three days on, is the slowest or second slowest in every window. The planner ranks by its cost, a number in its own units, and the clock can rank differently. The documentation of `random_page_cost` says a lower value than its default suits data that is entirely cached, and the lab's tables, a few hundred megabytes, fit in the memory of most computers; this lesson leaves the setting alone.
+
+<figure>
+<svg viewBox="0 0 360 251" width="360" role="img" aria-labelledby="dd3-windows-t dd3-windows-d">
+<title id="dd3-windows-t">Run time of the three join methods on five windows of orders, median of seven runs, and the method the planner chose</title>
+<desc id="dd3-windows-d">Five groups of three bars on a log scale of milliseconds from 1 to 1,000, one group for each window of orders. 1 day: nested loop 2.6 ms, hash 57 ms, merge 31.8 ms, the planner chose nested loop. 3 days: nested loop 9.4 ms, hash 56.5 ms, merge 36.2 ms, the planner chose hash. 1 week: nested loop 19.4 ms, hash 81.7 ms, merge 42.3 ms, the planner chose hash. 31 days: nested loop 103.3 ms, hash 115.5 ms, merge 72.5 ms, the planner chose hash. all orders: nested loop 426.1 ms, hash 306 ms, merge 216.1 ms, the planner chose hash. The nested loop is fastest for one day, three days and a week, and the merge join is fastest for 31 days and for all orders.</desc>
+<g fill="currentColor">
+<text x="16" y="22.4" font-size="10.5" font-weight="600">Median run time by window and join method (ms)</text>
+<rect x="16" y="33.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="28" y="41.4" font-size="10">nested loop</text>
+<rect x="96.7" y="33.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="108.7" y="41.4" font-size="10">hash</text>
+<rect x="145" y="33.4" width="8" height="8" rx="2" fill="#9a6be0" />
+<text x="157" y="41.4" font-size="10">merge</text>
+<circle cx="204.7" cy="37.4" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<text x="212.7" y="41.4" font-size="10">planner's pick</text>
+<path d="M50 202.4 L344 202.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="44" y="205.9" font-size="10" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M50 156.4 L344 156.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="44" y="159.9" font-size="10" text-anchor="end" fill-opacity="0.8">10</text>
+<path d="M50 110.4 L344 110.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="44" y="113.9" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M50 64.4 L344 64.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="44" y="67.9" font-size="10" text-anchor="end" fill-opacity="0.8">1,000</text>
+<rect x="56" y="183.3" width="15" height="19.1" rx="2" fill="#0072b2" />
+<circle cx="63.5" cy="176.3" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<rect x="73" y="121.6" width="15" height="80.8" rx="2" fill="#00a07a" />
+<rect x="90" y="133.3" width="15" height="69.1" rx="2" fill="#9a6be0" />
+<text x="80" y="217.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1 day</text>
+<rect x="114.5" y="157.6" width="15" height="44.8" rx="2" fill="#0072b2" />
+<rect x="131.5" y="121.8" width="15" height="80.6" rx="2" fill="#00a07a" />
+<circle cx="139" cy="114.8" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<rect x="148.5" y="130.7" width="15" height="71.7" rx="2" fill="#9a6be0" />
+<text x="138.5" y="217.4" font-size="10" text-anchor="middle" fill-opacity="0.9">3 days</text>
+<rect x="173" y="143.2" width="15" height="59.2" rx="2" fill="#0072b2" />
+<rect x="190" y="114.4" width="15" height="88" rx="2" fill="#00a07a" />
+<circle cx="197.5" cy="107.4" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<rect x="207" y="127.6" width="15" height="74.8" rx="2" fill="#9a6be0" />
+<text x="197" y="217.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1 week</text>
+<rect x="231.5" y="109.8" width="15" height="92.6" rx="2" fill="#0072b2" />
+<rect x="248.5" y="107.5" width="15" height="94.9" rx="2" fill="#00a07a" />
+<circle cx="256" cy="100.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<rect x="265.5" y="116.8" width="15" height="85.6" rx="2" fill="#9a6be0" />
+<text x="255.5" y="217.4" font-size="10" text-anchor="middle" fill-opacity="0.9">31 days</text>
+<rect x="290" y="81.4" width="15" height="121" rx="2" fill="#0072b2" />
+<rect x="307" y="88.1" width="15" height="114.3" rx="2" fill="#00a07a" />
+<circle cx="314.5" cy="81.1" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
+<rect x="324" y="95" width="15" height="107.4" rx="2" fill="#9a6be0" />
+<text x="314" y="217.4" font-size="10" text-anchor="middle" fill-opacity="0.9">all orders</text>
+<text x="344" y="234.4" font-size="10" text-anchor="end" fill-opacity="0.8">milliseconds, log scale</text>
+</g>
+</svg>
+</figure>
+
+### 3. Skew breaks the estimate at the join node
+
+**Idea.** A join's row estimate starts from the sizes of its two inputs. Here the inputs are the big lines table (950,414 rows) and `products` filtered to one product. The lab's lines are skewed on purpose: a few products sell most of them, and the made-up data gives Latte (product 3) 30 percent.
+
+**Try it.** The lines of one product, for Latte and for Turkey Sandwich:
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT p.category, count(*)
+FROM order_items_big i JOIN products p ON p.product_id = i.product_id
+WHERE p.product_name = 'Latte' GROUP BY p.category;
+-- and again with 'Turkey Sandwich'
+```
+
+**Predict:** At the join node, is the estimate (`rows=`) above or below the actual rows for Latte, and for Turkey Sandwich?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+ HashAggregate  (cost=19022.03..19022.04 rows=1 width=14) (actual rows=1 loops=1)
+   Group Key: p.category
+   Batches: 1  Memory Usage: 24kB
+   ->  Hash Join  (cost=1.21..18725.03 rows=59401 width=6) (actual rows=285307 loops=1)
+         Hash Cond: (i.product_id = p.product_id)
+         ->  Seq Scan on order_items_big i  (cost=0.00..15568.14 rows=950414 width=4) (actual rows=950414 loops=1)
+         ->  Hash  (cost=1.20..1.20 rows=1 width=10) (actual rows=1 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               ->  Seq Scan on products p  (cost=0.00..1.20 rows=1 width=10) (actual rows=1 loops=1)
+                     Filter: (product_name = 'Latte'::text)
+                     Rows Removed by Filter: 15
+
+ HashAggregate  (cost=19022.03..19022.04 rows=1 width=14) (actual rows=1 loops=1)
+   Group Key: p.category
+   Batches: 1  Memory Usage: 24kB
+   ->  Hash Join  (cost=1.21..18725.03 rows=59401 width=6) (actual rows=24838 loops=1)
+         Hash Cond: (i.product_id = p.product_id)
+         ->  Seq Scan on order_items_big i  (cost=0.00..15568.14 rows=950414 width=4) (actual rows=950414 loops=1)
+         ->  Hash  (cost=1.20..1.20 rows=1 width=10) (actual rows=1 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               ->  Seq Scan on products p  (cost=0.00..1.20 rows=1 width=10) (actual rows=1 loops=1)
+                     Filter: (product_name = 'Turkey Sandwich'::text)
+                     Rows Removed by Filter: 15
+```
+
+</details>
+
+*Why:* the planner expected 59,401 rows for both products. Latte found 285,307, which is 4.8 times more, and Turkey Sandwich 24,838, which is 2.4 times fewer. The number 59,401 is 950,414 divided by 16: the estimate treats the 16 products as equally popular, so it cannot tell a popular product from a rare one. The same product filtered on the lines table itself is estimated well, because the statistics of `product_id` there know how common each value is:
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) SELECT count(*) FROM order_items_big i WHERE i.product_id = 3;
+```
+
+```console
+ Aggregate  (cost=18648.35..18648.36 rows=1 width=8) (actual rows=1 loops=1)
+   ->  Seq Scan on order_items_big i  (cost=0.00..17944.18 rows=281671 width=0) (actual rows=285307 loops=1)
+         Filter: (product_id = 3)
+         Rows Removed by Filter: 665107
+```
+
+A wrong estimate has a price further up. Add the `orders_big` table to the Latte query and look at the `Hash` node that holds the Latte lines: it prints `Buckets: 262144 (originally 65536)  Batches: 2 (originally 1)`. The node began with 65,536 buckets and one batch and grew to 262,144 buckets and two batches, because 285,307 rows did not fit in the working memory (`work_mem`, 4 MB here). In the runs behind this lesson the same query took 1.5 times longer than with `SET work_mem = '64MB'` (medians 384 ms and 258 ms over seven runs; ranges 287 to 457 and 239 to 306 ms).
+
+<Aside type="tip" title="Remember">
+
+- A nested loop looks up the inner side once for each outer row, a hash join builds a table from one side, a merge join walks two sorted inputs.
+- `enable_nestloop`, `enable_hashjoin` and `enable_mergejoin` ask for another method so you can compare; they do not forbid one.
+- The planner ranks plans by cost, a number in its own units; compare the clock too.
+- Look for the join node where `rows=` and `actual rows` part: skew is one cause.
+
+**Common trap:** trusting the planner's cost as the speed of a plan. The cheapest plan by cost was not the fastest in four of the five windows of this lab.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-join-algorithms-1">
+
+**The last day of June.** Run the report for orders since June 30 (`o.ordered_at >= '2026-06-30'`) with the planner's own choice and with each method forced, using `join_report`. Expected: four rows with the node, the cost and the time. Say which method is the fastest, which is the slowest, and whether the order differs from the March day of unit 1. The first two settings are given:
+
+```sql
+\set q '$$SELECT count(*), sum(i.quantity) FROM orders_big o JOIN order_items_big i ON i.order_id = o.order_id WHERE o.ordered_at >= ''2026-06-30''$$'
+SELECT 'default' AS setting, * FROM join_report(:q);
+SET enable_hashjoin = off; SET enable_mergejoin = off;
+SELECT 'nested loop' AS setting, * FROM join_report(:q);
+RESET enable_hashjoin; RESET enable_mergejoin;
+```
+
+<details>
+<summary>Hint</summary>
+
+For the hash join switch off the other two methods, and the same for the merge join. Reset after each one.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SET enable_nestloop = off; SET enable_mergejoin = off;
+SELECT 'hash' AS setting, * FROM join_report(:q);
+...
+```
+
+</details>
+
+<Solution>
+
+```sql
+RESET enable_nestloop; RESET enable_mergejoin;
+SET enable_nestloop = off; SET enable_hashjoin = off;
+SELECT 'merge' AS setting, * FROM join_report(:q);
+RESET enable_nestloop; RESET enable_hashjoin;
+```
+
+The planner chose the nested loop (cost 17,860) and it was the fastest, with a median of 3.2 ms over seven runs (3.06 to 5.28) when forced. The hash join cost 18,217 and ran in 43.6 ms (43.4 to 44.3), and the merge join cost 31,511 and ran in 90.1 ms (74.4 to 99.8): the slowest. In March the merge join had been faster than the hash join; for June 30 it is slower. The clock changed the order of two methods that the cost order never changed, and this lesson did not test why.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-join-algorithms-2">
+
+**Another skewed filter.** The category `coffee` holds seven of the 16 products. Before you start, say whether you expect the join's estimate for `category = 'coffee'` to be above or below the actual rows. From a blank file or the `psql` prompt, run `EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)` on the count of the lines of coffee products, joining `order_items_big` to `products`. Expected: one plan; read `rows=` and `actual rows` at the join.
+
+<details>
+<summary>Hint</summary>
+
+Copy the Latte query of unit 3 and change the filter to `p.category = 'coffee'`. Count the lines instead of grouping them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A join node whose estimate is far below the actual rows."*
+
+```sql
+SELECT count(*) FROM order_items_big i JOIN products p ON ... WHERE p.category = 'coffee';
+```
+
+</details>
+
+<Solution>
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT count(*)
+FROM order_items_big i JOIN products p ON p.product_id = i.product_id
+WHERE p.category = 'coffee';
+```
+
+```console
+ Aggregate  (cost=19764.62..19764.63 rows=1 width=8) (actual rows=1 loops=1)
+   ->  Hash Join  (cost=1.29..18725.10 rows=415806 width=0) (actual rows=673836 loops=1)
+         Hash Cond: (i.product_id = p.product_id)
+         ->  Seq Scan on order_items_big i  (cost=0.00..15568.14 rows=950414 width=4) (actual rows=950414 loops=1)
+         ->  Hash  (cost=1.20..1.20 rows=7 width=4) (actual rows=7 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               ->  Seq Scan on products p  (cost=0.00..1.20 rows=7 width=4) (actual rows=7 loops=1)
+                     Filter: (category = 'coffee'::text)
+                     Rows Removed by Filter: 9
+```
+
+The estimate is 415,806, which is 950,414 times 7 / 16, and the join found 673,836, 1.6 times more. The seven coffee products sell 71 percent of the lines in this lab, and the estimate gave them seven sixteenths, 44 percent.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in which of the three methods is the right relation scanned once for every row of the left one?
+
+   <details>
+   <summary>answer</summary>
+
+   The nested loop. The hash join scans each side once and the merge join walks two sorted inputs.
+
+   </details>
+
+<Exercise id="data-engineer-join-algorithms-3">
+
+**Spot the flaw.** A colleague reads the plan of unit 3 and says: "The estimate of 59,401 is far from the 285,307 found, so the statistics are stale. Run `ANALYZE` on both tables and the estimate will be right." Run his steps and read the join node again. Expected: one plan. What does his fix change, and what does the result say about the cause?
+
+```sql
+ANALYZE order_items_big;
+ANALYZE products;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT p.category, count(*)
+FROM order_items_big i JOIN products p ON p.product_id = i.product_id
+WHERE p.product_name = 'Latte' GROUP BY p.category;
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare `rows=` at the join with the 59,401 of unit 3. Then look at what the statistics of `order_items_big.product_id` hold.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT most_common_vals::text, most_common_freqs::text
+FROM pg_stats WHERE tablename = 'order_items_big' AND attname = 'product_id';
+```
+
+</details>
+
+<Solution>
+
+```console
+   ->  Hash Join  (cost=1.21..18725.03 rows=59401 width=6) (actual rows=285307 loops=1)
+```
+
+The estimate is still 59,401. The statistics were not stale: `pg_stats` already lists product 3 first among the common values of `order_items_big.product_id`, with a frequency of 0.3004, and the estimate did not use it. The error comes from how the estimate of a join with a filtered `products` is made, not from old numbers, so another `ANALYZE` has nothing to correct. A filter on the key of the lines table (`i.product_id = 3`) is the form the statistics can answer, and it was estimated at 281,671.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can find the join method of a plan, ask for the others with the enable settings, compare their costs with their times, and find the join node where a skewed column breaks the estimate.*
+Test: Exercise data-engineer-join-algorithms-2, done without opening the hints.
+
+The pattern to remember: **a join is a method chosen by cost; check the clock, and look for the node where the rows part from the estimate.** Next comes *Storage shapes: rows, columns and files*, which asks why a whole database can be fast at one question and slow at another.

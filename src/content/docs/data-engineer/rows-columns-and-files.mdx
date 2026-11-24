@@ -1,0 +1,540 @@
+---
+id: data-engineer-rows-columns-and-files
+title: 'Storage shapes: rows, columns and files'
+short_title: Rows, columns and files
+description: Run one aggregation and one lookup on the same 950,414 lines in PostgreSQL, SQLite and DuckDB, count the bytes a query needs, and read a SQLite file header.
+stage: data-engineer
+order: 230
+level: advanced
+duration: 30
+objectives:
+  - Say what row storage and column storage each make cheap, with the bytes a query needs
+  - Time the same aggregation and the same lookup in DuckDB, SQLite and PostgreSQL, and read the direction, not the magnitude
+  - Read the header of a SQLite database file and find its rows in the file
+prerequisites:
+  - data-engineer-join-algorithms
+  - data-engineer-file-formats-and-partitioning
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: Database page layout (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/storage-page-layout.html
+  - title: 'Apache Parquet documentation: Overview (accessed 2026-11-24)'
+    url: https://parquet.apache.org/docs/overview/
+  - title: 'DuckDB documentation: Reading and writing Parquet files (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/parquet/overview.html
+  - title: 'DuckDB documentation: Storage versions and format (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/internals/storage
+  - title: 'SQLite documentation: Database file format (accessed 2026-11-24)'
+    url: https://sqlite.org/fileformat2.html
+  - title: 'CMU 15-445/645 Database Systems, Fall 2025: schedule (accessed 2026-11-24)'
+    url: https://15445.courses.cs.cmu.edu/fall2025/schedule.html
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15, DuckDB 2.0.0, Python 3.13.18 with SQLite 3.53.1, psycopg 3.3.9; Linux, 4 cores). The given script `scripts/de-internals/storage_shapes.py` is fetched from the `main` branch: pin a tag or move it into the starter repository before publishing. Times are medians of seven runs or means of 2,000 lookups on one machine; the lesson reads direction and says what each number includes (PostgreSQL's socket round trip, DuckDB's four cores with a one-thread control, each statement's fixed cost). The Parquet column sizes are DuckDB 2.0.0's writer and illustrate column storage, not DuckDB's own file. Two sentences rest on one run only: where SQLite places a new row (the last row inserted is first in the file) and what `PRAGMA page_size` does after a table exists. CMU 15-445 is cited for a lecture title only. Stub changes: SQLite added as a third engine, objective 1 gains the bytes a query needs, the stub's DuckDB `explain` source is dropped. The owner writes `reviewed`.
+
+## The question
+
+The owner of the three cafes asks:
+
+> The same sales are in the till database and in the analyst's laptop. Adding up a month of revenue takes a blink on the laptop and a long minute on the till. But looking up one order is instant on the till. Why do two databases disagree about what is fast?
+
+The table is one row for each order line, 950,414 of them in the big copy, with twelve columns. The first three lines:
+
+| order_item_id | order_id | ordered_at | store_id | customer_id | status | payment_method | product_id | quantity | unit_price_usd | discount_usd | channel |
+|---:|---:|---|---:|---:|---|---|---:|---:|---:|---:|---|
+| 1 | 1 | 2026-01-01 00:00:31 | 1 | 152291 | completed | mobile | 2 | 2 | 3.50 | 0.00 | counter |
+| 2 | 2 | 2026-01-01 00:01:02 | 1 | 14808 | completed | mobile | 1 | 2 | 3.00 | 0.00 | counter |
+| 3 | 2 | 2026-01-01 00:01:02 | 1 | 14808 | completed | mobile | 10 | 1 | 3.25 | 0.00 | counter |
+
+By the end you can say which question each layout answers cheaply, show it with a run, and open a database file by hand.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Warehouses, data lakes and what things cost*](/core/warehouses-lakes-and-cost/) (C35) tied column storage to reading only the columns a query needs, and *File formats and partitioning* measured one table as CSV and Parquet.
+
+**Diverge.** Those lessons compared file formats. Here the same engines read the same table, and the layout decides which question is cheap.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C35, why does a query that needs two columns of twelve read less from a column format?
+
+   <details>
+   <summary>answer</summary>
+
+   It reads only those two columns; a row format keeps the other ten next to them and reads them as well.
+
+   </details>
+
+2. In *File formats and partitioning*, which of JSON, CSV and Parquet was the smallest for the same lines?
+
+   <details>
+   <summary>answer</summary>
+
+   Parquet.
+
+   </details>
+
+## The big idea
+
+A table is stored one row at a time or one column at a time, and a row store makes a whole row cheap while a column store makes a whole column cheap.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the bytes a query needs, two questions with two winners, and a database file you can read. The lab of the first lesson of this module must exist, with `lab/` in the folder you are in (`ls lab` shows `big` and `cafe`). Fetch the script and keep it beside `lab/`; the three engines are DuckDB (a column store), PostgreSQL and SQLite (row stores):
+
+```bash
+curl -fLO https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/main/scripts/de-internals/storage_shapes.py
+uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py bytes
+```
+
+### 1. The bytes a query needs
+
+**Idea.** The PostgreSQL documentation says every table is stored as an array of pages of a fixed size, usually 8 kB, and that in a table an item on a page is a row. A row store therefore reads whole pages of whole rows. Apache Parquet is a column-oriented file format, and the DuckDB documentation says it can push projections into Parquet file scans. The aggregation below needs five of the twelve columns: `store_id`, `status`, `quantity`, `unit_price_usd` and `discount_usd`.
+
+```sql
+SELECT store_id, sum(quantity * unit_price_usd - discount_usd) AS revenue
+FROM lines_big WHERE status = 'completed' GROUP BY store_id ORDER BY store_id;
+```
+
+**Try it.** The script above wrote the lines as one Parquet file and printed the bytes of each column. In `psql`, count the pages the aggregation touches (`\pset footer off` first, then run it twice and read the second `Buffers` line of the scan):
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY OFF)
+SELECT store_id, sum(quantity * unit_price_usd - discount_usd) AS revenue
+FROM lines_big WHERE status = 'completed' GROUP BY store_id ORDER BY store_id;
+```
+
+**Predict:** What share of the Parquet file's bytes do the five columns take: about 7 percent, 40 percent or 80 percent? And does PostgreSQL touch about 1,000 pages, or the whole table?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py bytes
+ordered_at       3,899,309 bytes   26.9%
+order_item_id    3,802,042 bytes   26.2%
+customer_id      2,555,014 bytes   17.6%
+order_id         2,353,718 bytes   16.2%
+product_id         479,938 bytes    3.3%
+unit_price_usd     479,883 bytes    3.3%   <- read by the aggregation
+store_id           242,825 bytes    1.7%   <- read by the aggregation
+payment_method     241,598 bytes    1.7%
+quantity           237,570 bytes    1.6%   <- read by the aggregation
+channel            124,668 bytes    0.9%
+discount_usd        76,353 bytes    0.5%   <- read by the aggregation
+status               6,168 bytes    0.0%   <- read by the aggregation
+all columns     14,499,086 bytes
+the 5 columns the aggregation reads: 1,042,799 bytes, 7.2% of the file
+```
+
+```console
+ Sort  (cost=35277.49..35277.49 rows=3 width=36) (actual rows=3 loops=1)
+   Sort Key: store_id
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=3860 read=7684
+   ->  HashAggregate  (cost=35277.43..35277.46 rows=3 width=36) (actual rows=3 loops=1)
+         Group Key: store_id
+         Batches: 1  Memory Usage: 24kB
+         Buffers: shared hit=3860 read=7684
+         ->  Seq Scan on lines_big  (cost=0.00..23424.18 rows=948260 width=17) (actual rows=948542 loops=1)
+               Filter: (status = 'completed'::text)
+               Rows Removed by Filter: 1872
+               Buffers: shared hit=3860 read=7684
+```
+
+</details>
+
+*Why:* the five columns take 1,042,799 of the 14,499,086 bytes, 7.2 percent, although they are five of twelve columns: a column that holds a few repeated values (`status`, `store_id`, `discount_usd`) compresses to almost nothing. PostgreSQL's scan touched 3,860 + 7,684 = 11,544 pages, which is every page of the table (`SELECT relpages FROM pg_class WHERE relname = 'lines_big'` prints 11,544, about 90 MB), because each page holds whole rows of all twelve columns. The split between `hit` and `read` changes from run to run; their sum does not. DuckDB's own file format also stores row groups, which its documentation calls equivalent to Parquet's, and the Parquet sizes here are an illustration of column storage, not a measurement of DuckDB's own file. University database courses give whole lectures to these layouts: the schedule of CMU 15-445 lists one titled "Storage Models & Compression".
+
+<figure>
+<svg viewBox="0 0 360 273" width="360" role="img" aria-labelledby="dd4-bytes-t dd4-bytes-d">
+<title id="dd4-bytes-t">Compressed bytes of each of the 12 columns of the order lines in a Parquet file, and the five columns the aggregation reads</title>
+<desc id="dd4-bytes-d">Twelve horizontal bars, longest first, for the share of the file's 14,499,086 bytes that each column takes: ordered&#95;at 26.9 percent, order&#95;item&#95;id 26.2 percent, customer&#95;id 17.6 percent, order&#95;id 16.2 percent, product&#95;id 3.3 percent, unit&#95;price&#95;usd 3.3 percent, store&#95;id 1.7 percent, payment&#95;method 1.7 percent, quantity 1.6 percent, channel 0.9 percent, discount&#95;usd 0.5 percent, status 0.0 percent. Five of them are marked as read by the aggregation: unit&#95;price&#95;usd, store&#95;id, quantity, discount&#95;usd and status. Together they take 1,042,799 bytes, 7.2 percent of the file.</desc>
+<g fill="currentColor">
+<text x="19" y="22.4" font-size="10.5" font-weight="600">Share of the Parquet file's bytes, by column (%)</text>
+<text x="111" y="47.4" font-size="10" text-anchor="end" fill-opacity="0.9">ordered&#95;at</text>
+<rect x="119" y="36.4" width="138.1" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="263" y="47.4" font-size="10" fill-opacity="0.9">26.9%</text>
+<text x="111" y="64.4" font-size="10" text-anchor="end" fill-opacity="0.9">order&#95;item&#95;id</text>
+<rect x="119" y="53.4" width="134.6" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="259.6" y="64.4" font-size="10" fill-opacity="0.9">26.2%</text>
+<text x="111" y="81.4" font-size="10" text-anchor="end" fill-opacity="0.9">customer&#95;id</text>
+<rect x="119" y="70.4" width="90.5" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="215.4" y="81.4" font-size="10" fill-opacity="0.9">17.6%</text>
+<text x="111" y="98.4" font-size="10" text-anchor="end" fill-opacity="0.9">order&#95;id</text>
+<rect x="119" y="87.4" width="83.3" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="208.3" y="98.4" font-size="10" fill-opacity="0.9">16.2%</text>
+<text x="111" y="115.4" font-size="10" text-anchor="end" fill-opacity="0.9">product&#95;id</text>
+<rect x="119" y="104.4" width="17" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="142" y="115.4" font-size="10" fill-opacity="0.9">3.3%</text>
+<text x="111" y="132.4" font-size="10" font-weight="600" text-anchor="end">unit&#95;price&#95;usd</text>
+<rect x="119" y="121.4" width="17" height="13" rx="2" fill="#0072b2" />
+<text x="142" y="132.4" font-size="10" fill-opacity="0.9">3.3%</text>
+<text x="111" y="149.4" font-size="10" font-weight="600" text-anchor="end">store&#95;id</text>
+<rect x="119" y="138.4" width="8.6" height="13" rx="2" fill="#0072b2" />
+<text x="133.6" y="149.4" font-size="10" fill-opacity="0.9">1.7%</text>
+<text x="111" y="166.4" font-size="10" text-anchor="end" fill-opacity="0.9">payment&#95;method</text>
+<rect x="119" y="155.4" width="8.6" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="133.5" y="166.4" font-size="10" fill-opacity="0.9">1.7%</text>
+<text x="111" y="183.4" font-size="10" font-weight="600" text-anchor="end">quantity</text>
+<rect x="119" y="172.4" width="8.4" height="13" rx="2" fill="#0072b2" />
+<text x="133.4" y="183.4" font-size="10" fill-opacity="0.9">1.6%</text>
+<text x="111" y="200.4" font-size="10" text-anchor="end" fill-opacity="0.9">channel</text>
+<rect x="119" y="189.4" width="4.4" height="13" rx="2" fill="currentColor" fill-opacity="0.3" />
+<text x="129.4" y="200.4" font-size="10" fill-opacity="0.9">0.9%</text>
+<text x="111" y="217.4" font-size="10" font-weight="600" text-anchor="end">discount&#95;usd</text>
+<rect x="119" y="206.4" width="2.7" height="13" rx="2" fill="#0072b2" />
+<text x="127.7" y="217.4" font-size="10" fill-opacity="0.9">0.5%</text>
+<text x="111" y="234.4" font-size="10" font-weight="600" text-anchor="end">status</text>
+<rect x="119" y="223.4" width="1.5" height="13" rx="2" fill="#0072b2" />
+<text x="125.2" y="234.4" font-size="10" fill-opacity="0.9">0.0%</text>
+<path d="M119 34.4 L119 240.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<rect x="119" y="248.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="132" y="256.4" font-size="10">the five columns the aggregation reads: 7.2%</text>
+</g>
+</svg>
+</figure>
+
+### 2. Two questions, two winners
+
+**Idea.** The same table sits in all three engines, loaded from the same CSV file with a primary key on `order_item_id`. Two questions can be asked of it: an aggregation over a whole column, and the lookup of one line by its key. The script `storage_shapes.py` times both, in Python, for each engine.
+
+**Try it.** The aggregation first (median of seven runs after one warm-up), then 2,000 single-line lookups with keys drawn from seed 2026:
+
+```bash
+uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py aggregation
+uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py lookup
+```
+
+The first call builds `lab/lines.duckdb` and `lab/lines.sqlite` from the CSV file, which takes a few seconds.
+
+**Predict:** Which engine is fastest at the aggregation, and which is fastest at one lookup? About how many times faster is DuckDB than PostgreSQL at the first?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py aggregation
+engine      median ms  range
+DuckDB            7.7  6.3 to 10.6
+SQLite          338.1  307.5 to 371.6
+PostgreSQL      332.9  329.8 to 360.1
+same answer from all three: [(1, 2229956.75), (2, 1938862.5), (3, 1396629.0)]
+$ uv run --with duckdb --with "psycopg[binary]" python storage_shapes.py lookup
+engine      ms for one lookup
+DuckDB                  0.967
+SQLite                  0.017
+PostgreSQL              0.153
+```
+
+Your times will differ.
+
+</details>
+
+*Why:* the order reverses. DuckDB finished the aggregation in 7.7 ms against 332.9 for PostgreSQL, 43 times faster, and SQLite took 338.1. On a lookup SQLite answered in 0.017 ms, PostgreSQL in 0.153 and DuckDB in 0.967: DuckDB was about 6 times slower than PostgreSQL and 57 times slower than SQLite. Two more runs of the lookup gave DuckDB 0.969 and 1.091, SQLite 0.019 and 0.021, PostgreSQL 0.118 and 0.118; a second run of the aggregation gave 7.3, 323.8 and 355.2. Three things in this comparison are not about layout alone, so read the direction and not the size. DuckDB uses all four cores of this machine and the lab's PostgreSQL one process: with `--duckdb-threads 1` and `--pg-workers 2` the aggregation took 15.6 ms and 130.5 ms, still 8 times apart. PostgreSQL's times include a round trip to the server, and each engine adds a fixed cost to every statement, which weighs most on a lookup that reads four pages.
+
+<figure>
+<svg viewBox="0 0 360 239" width="360" role="img" aria-labelledby="dd4-ratio-t dd4-ratio-d">
+<title id="dd4-ratio-t">Time of one aggregation and of one single-line lookup in DuckDB, PostgreSQL and SQLite, on a log scale of milliseconds</title>
+<desc id="dd4-ratio-d">Two groups of three horizontal bars on one log scale from 0.01 to 1,000 milliseconds. The aggregation over the whole table: DuckDB 7.7 ms, PostgreSQL 332.9 ms, SQLite 338.1 ms. One lookup by key: SQLite 0.017 ms, PostgreSQL 0.153 ms, DuckDB 0.967 ms. DuckDB is fastest at the aggregation and slowest at the lookup.</desc>
+<g fill="currentColor">
+<text x="28.2" y="22.4" font-size="10.5" font-weight="600">Time of one question, by engine (ms, log scale)</text>
+<text x="28.2" y="50.4" font-size="10" font-weight="600">Aggregation over every line</text>
+<text x="98.2" y="68.4" font-size="10" text-anchor="end">DuckDB</text>
+<rect x="104.2" y="56.4" width="113.2" height="15" rx="2" fill="#0072b2" />
+<text x="223.3" y="68.4" font-size="10" font-weight="600">7.7 ms</text>
+<text x="98.2" y="88.4" font-size="10" text-anchor="end">PostgreSQL</text>
+<rect x="104.2" y="76.4" width="177.3" height="15" rx="2" fill="#00a07a" />
+<text x="287.4" y="88.4" font-size="10" font-weight="600">332.9 ms</text>
+<text x="98.2" y="108.4" font-size="10" text-anchor="end">SQLite</text>
+<rect x="104.2" y="96.4" width="177.5" height="15" rx="2" fill="#9a6be0" />
+<text x="287.7" y="108.4" font-size="10" font-weight="600">338.1 ms</text>
+<text x="28.2" y="134.4" font-size="10" font-weight="600">One line, by its key</text>
+<text x="98.2" y="152.4" font-size="10" text-anchor="end">SQLite</text>
+<rect x="104.2" y="140.4" width="9" height="15" rx="2" fill="#9a6be0" />
+<text x="119.2" y="152.4" font-size="10" font-weight="600">0.017 ms</text>
+<text x="98.2" y="172.4" font-size="10" text-anchor="end">PostgreSQL</text>
+<rect x="104.2" y="160.4" width="46.4" height="15" rx="2" fill="#00a07a" />
+<text x="156.6" y="172.4" font-size="10" font-weight="600">0.153 ms</text>
+<text x="98.2" y="192.4" font-size="10" text-anchor="end">DuckDB</text>
+<rect x="104.2" y="180.4" width="77.8" height="15" rx="2" fill="#0072b2" />
+<text x="188" y="192.4" font-size="10" font-weight="600">0.967 ms</text>
+<path d="M104.2 42.4 L104.2 202.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<path d="M104.2 206.4 L300.2 206.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<path d="M104.2 206.4 L104.2 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="104.2" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.01</text>
+<path d="M143.4 206.4 L143.4 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="143.4" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0.1</text>
+<path d="M182.6 206.4 L182.6 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="182.6" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1</text>
+<path d="M221.8 206.4 L221.8 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="221.8" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">10</text>
+<path d="M261 206.4 L261 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="261" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">100</text>
+<path d="M300.2 206.4 L300.2 210.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="300.2" y="222.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1,000</text>
+</g>
+</svg>
+</figure>
+
+### 3. A database file you can read
+
+**Idea.** SQLite keeps a whole database in one file made of pages. Its documentation gives the first 100 bytes of the file as a header: the string `SQLite format 3` at offset 0, the page size in the two bytes at offset 16, the size of the file in pages at offset 28 and the text encoding at offset 56 (1 means UTF-8), all as big-endian numbers. It adds that page 1 is always a table b-tree, the one that holds the schema, and that the pages of a b-tree have a header, a pointer array and a cell content area.
+
+**Try it.** Save this as `read_header.py`. It builds a small database of the three cafes, asks SQLite which page holds the table, and reads the header from the raw bytes:
+
+```python
+import sqlite3
+
+con = sqlite3.connect("stores.sqlite")
+con.execute("CREATE TABLE stores (store_id INTEGER PRIMARY KEY, store_name TEXT, city TEXT, opened_on TEXT)")
+con.executemany("INSERT INTO stores VALUES (?, ?, ?, ?)", [
+    (1, "Old Town", "Oakland", "2023-05-12"), (2, "Campus", "Berkeley", "2024-09-03"), (3, "Harbor", "Alameda", "2026-04-01")])
+con.commit()
+print(con.execute("SELECT name, rootpage FROM sqlite_schema").fetchall())
+con.close()
+
+data = open("stores.sqlite", "rb").read()
+print(len(data), data[:16])
+print("page size", int.from_bytes(data[16:18], "big"), "pages in header", int.from_bytes(data[28:32], "big"),
+      "text encoding", int.from_bytes(data[56:60], "big"))
+```
+
+Run it with `uv run python read_header.py`.
+
+**Predict:** How many bytes does the file have, and which page holds the rows of `stores`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python read_header.py
+[('stores', 2)]
+8192 b'SQLite format 3\x00'
+page size 4096 pages in header 2 text encoding 1
+```
+
+</details>
+
+*Why:* the file has 8,192 bytes, two pages of 4,096 (2 × 4,096), the header says so, and the rows of `stores` are on page 2: page 1 holds the header and the schema table. The default page size is 4,096 in the SQLite that Python 3.13 carried here (3.53.1); other versions may differ, and the header would say so. Now look for text inside the file, and see where the rows are (add these lines to `read_header.py` and run it again):
+
+```python
+import re
+print([m.group().decode() for m in re.finditer(rb"[ -~]{6,}", data)])
+```
+
+**Predict:** In which order do the three cafes appear in the file?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+['SQLite format 3', 'Itablestoresstores', 'CREATE TABLE stores (store_id INTEGER PRIMARY KEY, store_name TEXT, city TEXT, opened_on TEXT)', '!HarborAlameda2026-04-01', '!CampusBerkeley2024-09-03', '!Old TownOakland2023-05-12']
+```
+
+</details>
+
+*Why:* page 1 holds the text of the `CREATE TABLE` statement, and the three rows are on page 2 with their bytes packed together, row after row, with no names of columns beside them: the schema is stored once, on page 1. Harbor, the last row inserted, comes first in the file and Old Town, the first, comes last, so in this run the rows filled the page from its end towards its front; the documentation's layout of a page puts the cell content area after the cell pointer array and the unallocated space, which fits it, but it does not say in which order cells are placed. Delete `stores.sqlite` when you are done.
+
+<Aside type="tip" title="Remember">
+
+- A row store keeps whole rows on a page and reads whole pages; a column store keeps each column together and reads the columns a query names.
+- Compression is strongest on columns with few distinct values, which is why a few columns can be a small part of the bytes.
+- The same table answered a whole-column question fastest in the column store and a one-line lookup fastest in a row store here; read the direction, because the sizes carry the machine's fixed costs.
+- A SQLite database is a file of pages, and its first 100 bytes say how big they are and how many there are.
+
+**Common trap:** timing a layout with a number that includes something else. The ratio of two engines is the ratio of everything in the measurement.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-rows-columns-and-files-1">
+
+**Another query's columns.** A report counts orders for each payment method and channel, so it needs two columns: `payment_method` and `channel`. What share of the Parquet file's bytes do they take? Expected: one row with the bytes and the share in percent. Before you run it, say whether you expect more or less than the five columns of unit 1. Finish the query (the file `lab/lines.parquet` was written by the `bytes` command):
+
+```python
+import duckdb
+
+print(duckdb.sql("""
+    SELECT sum(total_compressed_size) AS bytes,
+           round(100.0 * sum(total_compressed_size) / (SELECT sum(total_compressed_size) FROM parquet_metadata('lab/lines.parquet')), 1) AS share_pct
+    FROM parquet_metadata('lab/lines.parquet')
+    WHERE path_in_schema IN (...)
+"""))
+```
+
+<details>
+<summary>Hint</summary>
+
+`path_in_schema` holds the column names, as strings. List the two names inside the parentheses.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    WHERE path_in_schema IN ('payment_method', ...)
+```
+
+</details>
+
+<Solution>
+
+```python
+    WHERE path_in_schema IN ('payment_method', 'channel')
+```
+
+```console
+┌────────┬───────────┐
+│ bytes  │ share_pct │
+│ int128 │  double   │
+├────────┼───────────┤
+│ 366266 │       2.5 │
+└────────┴───────────┘
+```
+
+The two columns take 366,266 bytes, 2.5 percent of the file, against 7.2 percent for the five of unit 1. A row store would still read all 90 MB of pages for this report.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-rows-columns-and-files-2">
+
+**A bigger page.** Make a SQLite file of the same three cafes with a page size of 8,192 bytes, and read the header back. Before you start, say in one sentence how many bytes the file will have. From a blank file `page8k.py`, write the script and print the file's length, the page size in the header and the number of pages. Expected: one line with three numbers.
+
+<details>
+<summary>Hint</summary>
+
+SQLite's page size is set by `PRAGMA page_size = 8192`, sent on the connection before the table is created. The three numbers come from `len(data)` and the header bytes of unit 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The file has twice as many bytes as the 4,096-byte one, the header says 8,192, and it still has two pages."*
+
+```python
+con.execute("PRAGMA page_size = 8192")
+# then CREATE TABLE and the inserts of unit 3
+```
+
+</details>
+
+<Solution>
+
+```python
+import sqlite3
+
+con = sqlite3.connect("stores8k.sqlite")
+con.execute("PRAGMA page_size = 8192")
+con.execute("CREATE TABLE stores (store_id INTEGER PRIMARY KEY, store_name TEXT, city TEXT, opened_on TEXT)")
+con.executemany("INSERT INTO stores VALUES (?, ?, ?, ?)", [
+    (1, "Old Town", "Oakland", "2023-05-12"), (2, "Campus", "Berkeley", "2024-09-03"), (3, "Harbor", "Alameda", "2026-04-01")])
+con.commit()
+con.close()
+data = open("stores8k.sqlite", "rb").read()
+print(len(data), int.from_bytes(data[16:18], "big"), int.from_bytes(data[28:32], "big"))
+```
+
+```console
+$ uv run python page8k.py
+16384 8192 2
+```
+
+The file has 16,384 bytes: two pages of 8,192. Three rows fit on one page either way, so the page count stays at two and only the size of each page changed. In the run behind this lesson, sending the pragma after the table already existed left the page size in the header at 4,096.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which kind of storage makes a whole row cheap to read, and which makes a whole column cheap?
+
+   <details>
+   <summary>answer</summary>
+
+   A row store keeps a row's values together, so one page holds the whole row; a column store keeps a column's values together, so a query that names a few columns reads only those.
+
+   </details>
+
+<Exercise id="data-engineer-rows-columns-and-files-3">
+
+**Spot the flaw.** A colleague writes the benchmark below to see how much faster DuckDB is than PostgreSQL on the aggregation of unit 1, runs it twice, and writes in the notes: "the column store is only about twice as fast, so it is not worth a second system." Save it as `flawed_benchmark.py`, run it from the folder that holds `lab/`, and compare the number with unit 2's. Expected: one line each time. What is wrong with the measurement?
+
+```python
+import statistics
+import time
+
+import duckdb
+import psycopg
+
+AGG = """SELECT store_id, sum(quantity * unit_price_usd - discount_usd) AS revenue
+FROM {src} WHERE status = 'completed' GROUP BY store_id"""
+
+
+def median_ms(run, runs=7):
+    run()  # warm-up
+    times = []
+    for _ in range(runs):
+        start = time.perf_counter()
+        run()
+        times.append((time.perf_counter() - start) * 1000)
+    return statistics.median(times)
+
+
+duck = duckdb.connect()
+pg = psycopg.connect(dbname="lab", autocommit=True)
+duck_ms = median_ms(lambda: duck.execute(AGG.format(src="read_csv('lab/big/lines_big.csv')")).fetchall())
+pg_ms = median_ms(lambda: pg.execute(AGG.format(src="lines_big")).fetchall())
+print(f"DuckDB {duck_ms:.0f} ms, PostgreSQL {pg_ms:.0f} ms: DuckDB is {pg_ms / duck_ms:.1f} times faster")
+```
+
+<details>
+<summary>Hint</summary>
+
+Look at what each side of the comparison reads from: `FROM` in each query.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+duck.execute("CREATE TABLE lines_big AS SELECT * FROM read_csv('lab/big/lines_big.csv')")
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run --with duckdb --with "psycopg[binary]" python flawed_benchmark.py
+DuckDB 175 ms, PostgreSQL 343 ms: DuckDB is 2.0 times faster
+$ uv run --with duckdb --with "psycopg[binary]" python flawed_benchmark.py
+DuckDB 139 ms, PostgreSQL 324 ms: DuckDB is 2.3 times faster
+```
+
+The DuckDB side reads and parses the CSV text on every run, while PostgreSQL reads a table that was loaded into its own pages once. The measurement times the text file, not the layout. Load the lines into a DuckDB table first (the line in the half-solution, run once before the timing) and query that table: `storage_shapes.py aggregation` did exactly that and measured 7.7 and 7.3 ms in two runs, 43 and 49 times faster than PostgreSQL's 332.9 and 355.2 ms in the same runs. The notes should say what was measured, with the load excluded and the same data in each engine's own storage.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say which question a row store and a column store each answer cheaply, count the bytes a query needs, time the same table in three engines and read the direction, and read the header and rows of a SQLite file.*
+Test: Exercise data-engineer-rows-columns-and-files-2, done without opening the hints.
+
+The pattern to remember: **keep the layout that matches the question, and say what a timing includes.** Next comes *Transactions: what ACID actually promises*, which stays in PostgreSQL and asks what two sessions see of each other.

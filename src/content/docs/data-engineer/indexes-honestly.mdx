@@ -1,0 +1,588 @@
+---
+id: data-engineer-indexes-honestly
+title: Indexes, honestly
+description: Open a B-tree index page by page, see why table size decides if the planner uses it, speed up a lower(name) filter, and count what each index costs on writes.
+stage: data-engineer
+order: 210
+level: advanced
+duration: 30
+objectives:
+  - Describe a B-tree index as pages and levels, and walk one down by hand
+  - Explain from the cost formula why the planner prefers a scan on a small table and an index on a larger one
+  - Add an expression index for a filter on lower(name) and refresh its statistics
+  - Measure what each extra index adds to the cost of an insert
+prerequisites:
+  - data-engineer-query-plans-and-operators
+  - sql-indexes-and-explain
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: pageinspect (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/pageinspect.html
+  - title: 'PostgreSQL 16 documentation: B-tree implementation (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/btree-implementation.html
+  - title: 'PostgreSQL 16 documentation: Database page layout (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/storage-page-layout.html
+  - title: 'PostgreSQL 16 documentation: Using EXPLAIN (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/using-explain.html
+  - title: 'PostgreSQL 16 documentation: Planner cost constants (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/runtime-config-query.html
+  - title: 'PostgreSQL 16 documentation: Indexes on expressions (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/indexes-expressional.html
+  - title: 'PostgreSQL 16 documentation: Write-ahead logging, introduction (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/wal-intro.html
+  - title: 'Winand, Use The Index, Luke: The search tree (accessed 2026-11-24)'
+    url: https://use-the-index-luke.com/sql/anatomy/the-tree
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15; its TODO lists what to pin and what was not run). `CREATE EXTENSION pageinspect` and `CHECKPOINT` need a superuser, which the lab's `postgres` user is. The sweep behind the second picture is `scripts/de-internals/index_sweep.sql` (tables cut from `orders_big`); the chart script holds its numbers. Times are ranges over five or nine runs on one machine; the WAL bytes of unit 4 did not move between runs. The reason given for the larger cost of the `customer_id` index (random key order) was not tested, and the lesson says so. Stub changes: prerequisite `sql-indexes-and-explain` added; the objective on the small-table scan is C34's demonstration, so unit 2 explains it from the cost formula and finds where the choice flips; other objectives reworded; sources add the B-tree, page-layout, cost-constant and WAL pages, and Winand's page only for the tree. The owner writes `reviewed`.
+
+## The question
+
+The owner of the three cafes asks:
+
+> Customer service types a name into a search box and waits half a minute. Someone says "add an index". Another says indexes slow everything down. Who is right?
+
+The table in question has 200,000 customers. The first three, and the search that is slow:
+
+| customer_id | name | city | signup_date |
+|---:|---|---|---|
+| 1 | Dev Cruz | Alameda | 2025-07-12 |
+| 2 | Grace Fox | Alameda | 2026-01-06 |
+| 3 | VICTOR KIM | Berkeley | 2025-09-04 |
+
+```sql
+SELECT * FROM customers_big WHERE lower(name) = 'ana lopez';
+```
+
+By the end you can open an index, say when the planner is right to ignore one, make this search fast, and say what the fix costs.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Inside the database: plans, transactions and copies*](/core/inside-the-database/) (C34) showed the planner skipping an index on a three-row table, and [*Indexes and reading a query plan*](/sql/indexes-and-explain/) (S38) built one.
+
+**Diverge.** There the choice was something to accept. Here you open the index and the cost formula, so the choice becomes something you can compute.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In S38, write the statement that creates an index named `orders_store_idx` on `orders (store_id)`.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   CREATE INDEX orders_store_idx ON orders (store_id);
+   ```
+
+   </details>
+
+2. In *Reading the machine: plans and operators*, what does `actual rows` show beside `rows`?
+
+   <details>
+   <summary>answer</summary>
+
+   The rows the node really found, beside the rows the planner expected.
+
+   </details>
+
+## The big idea
+
+An index is a second, sorted copy of one column, cut into pages that point to the table's rows, and the planner uses it only when its price is lower than reading the table.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: an index as pages, the price of a scan against a lookup, a function that hides a column, and what each index costs on writes. The lab of the previous lesson must exist (`psql -d lab`, then `\pset footer off`).
+
+### 1. An index is pages in levels
+
+**Idea.** The PostgreSQL documentation describes its B-tree index as a multi-level tree whose levels are linked lists of pages: one metapage at the start, leaf pages on the lowest level and internal pages above them. Indexes and tables are stored as pages of a fixed size, usually 8 kB. The leaf pages hold the keys in order, each with the location of its table row; an internal page holds a pointer to each page below it, with the first key of that page; the top page is the root. The extension `pageinspect` shows the pages themselves, and the helper `bt_key` (given in `setup.sql`) turns a key into a number.
+
+**Try it.** In `psql`, the index behind the primary key of `orders` (1,800 rows):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pageinspect;
+SELECT root, level FROM bt_metap('orders_pkey');
+SELECT s.blkno, s.type, s.live_items
+FROM generate_series(1, 6) AS b(n), LATERAL bt_page_stats('orders_pkey', b.n) AS s;
+```
+
+**Predict:** Which block is the root, how many levels does the index have above its leaves, and how many leaf pages (type `l`) are there?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+ root | level
+------+-------
+    3 |     1
+
+ blkno | type | live_items
+-------+------+------------
+     1 | l    |        367
+     2 | l    |        367
+     3 | r    |          5
+     4 | l    |        367
+     5 | l    |        367
+     6 | l    |        336
+```
+
+</details>
+
+*Why:* block 3 is the root (`r`) and the index has one level above the leaves, with five leaf pages next to it (block 0 is a page of bookkeeping). The root holds five entries. Walk down by hand to find order 1900: read the root, choose the entry whose first key is the largest one not above 1900, open that leaf, and read the row's location.
+
+```sql
+SELECT itemoffset, ctid, bt_key(data) AS first_key FROM bt_page_items('orders_pkey', 3);
+SELECT itemoffset, ctid, bt_key(data) AS order_id FROM bt_page_items('orders_pkey', 4) WHERE bt_key(data) = 1900;
+SELECT ctid, order_id, ordered_at FROM orders WHERE order_id = 1900;
+```
+
+```console
+ itemoffset | ctid  | first_key
+------------+-------+-----------
+          1 | (1,0) |
+          2 | (2,1) |      1367
+          3 | (4,1) |      1733
+          4 | (5,1) |      2099
+          5 | (6,1) |      2465
+
+ itemoffset |  ctid  | order_id
+------------+--------+----------
+        169 | (7,89) |     1900
+
+  ctid  | order_id |     ordered_at
+--------+----------+---------------------
+ (7,89) |     1900 | 2026-04-16 07:27:00
+```
+
+In the root, `ctid` names the child block (the first entry has no key: it takes everything below 1367). Key 1900 lies between 1733 and 2099, so the walk goes to block 4. There the same column holds a table location: block 7, row 89 of `orders`, which is where the last query finds the order. Three pages (root, leaf, table block) found one row.
+
+<figure>
+<svg viewBox="0 0 360 208" width="360" role="img" aria-labelledby="dd2-btree-t dd2-btree-d">
+<title id="dd2-btree-t">The index behind orders.order&#95;id: a root page and five leaf pages, and the walk to key 1900</title>
+<desc id="dd2-btree-d">A tree with one root page at the top and five leaf pages below it. The root holds five entries: the first has no key, and the others hold the first keys 1367, 1733, 2099 and 2465 of the leaf pages they point to. The leaf pages are blocks 1, 2, 4, 5 and 6 and hold the keys 1001 to 1366, 1367 to 1732, 1733 to 2098, 2099 to 2464 and 2465 to 2800. A highlighted path runs from the root entry 1733 to leaf block 4, and from there to row 89 of table block 7, where order 1900 is stored.</desc>
+<g fill="currentColor">
+<text x="27" y="22.4" font-size="10.5" font-weight="600">Index on order&#95;id: root and leaves</text>
+<text x="35" y="42.4" font-size="10" fill-opacity="0.85">root page (block 3)</text>
+<rect x="35" y="48.4" width="58" height="24" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="64" y="64.4" font-size="10" text-anchor="middle" fill-opacity="0.9">none</text>
+<rect x="95" y="48.4" width="58" height="24" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="124" y="64.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1367</text>
+<rect x="155" y="48.4" width="58" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="184" y="64.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">1733</text>
+<rect x="215" y="48.4" width="58" height="24" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="244" y="64.4" font-size="10" text-anchor="middle" fill-opacity="0.9">2099</text>
+<rect x="275" y="48.4" width="58" height="24" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="304" y="64.4" font-size="10" text-anchor="middle" fill-opacity="0.9">2465</text>
+<path d="M64 72.4 L64 108.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="35" y="108.4" width="58" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="64" y="123.4" font-size="10" text-anchor="middle">block 1</text>
+<text x="64" y="138.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1001–1366</text>
+<path d="M124 72.4 L124 108.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="95" y="108.4" width="58" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="124" y="123.4" font-size="10" text-anchor="middle">block 2</text>
+<text x="124" y="138.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1367–1732</text>
+<path d="M184 72.4 L184 108.4" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<rect x="155" y="108.4" width="58" height="40" rx="3" fill="none" stroke="#0072b2" stroke-width="2" />
+<text x="184" y="123.4" font-size="10" font-weight="600" text-anchor="middle">block 4</text>
+<text x="184" y="138.4" font-size="10" text-anchor="middle" fill-opacity="0.9">1733–2098</text>
+<path d="M244 72.4 L244 108.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="215" y="108.4" width="58" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="244" y="123.4" font-size="10" text-anchor="middle">block 5</text>
+<text x="244" y="138.4" font-size="10" text-anchor="middle" fill-opacity="0.9">2099–2464</text>
+<path d="M304 72.4 L304 108.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<rect x="275" y="108.4" width="58" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1" />
+<text x="304" y="123.4" font-size="10" text-anchor="middle">block 6</text>
+<text x="304" y="138.4" font-size="10" text-anchor="middle" fill-opacity="0.9">2465–2800</text>
+<path d="M184 148.4 L184 172.4" fill="none" stroke="#0072b2" stroke-width="2.5" stroke-opacity="1" />
+<rect x="119" y="172.4" width="134" height="22" rx="3" fill="none" stroke="#0072b2" stroke-width="2" />
+<text x="186" y="187.4" font-size="10" font-weight="600" text-anchor="middle">table block 7, row 89</text>
+</g>
+</svg>
+</figure>
+
+### 2. A scan costs pages, a lookup costs a few
+
+**Idea.** The planner prices both ways and takes the cheaper. The PostgreSQL documentation gives the price of a sequential scan as the pages read times `seq_page_cost` plus the rows scanned times `cpu_tuple_cost`, with defaults 1.0 and 0.01, and a filter adds the rows times `cpu_operator_cost` (0.0025). It sets the cost of a non-sequential page fetch, `random_page_cost`, at 4.0 by default. An index lookup pays for a few such fetches, and their number grows only slowly with the size of the table.
+
+**Try it.** A lookup by primary key in four tables of the lab, then the number of pages each table has:
+
+```sql
+SELECT relname, relpages, reltuples FROM pg_class
+WHERE relname IN ('customers', 'orders', 'order_items', 'orders_big') ORDER BY reltuples;
+EXPLAIN SELECT * FROM customers WHERE customer_id = 54;
+EXPLAIN SELECT * FROM orders WHERE order_id = 1580;
+EXPLAIN SELECT * FROM order_items WHERE order_item_id = 5100;
+EXPLAIN SELECT * FROM orders_big WHERE order_id = 123456;
+```
+
+**Predict:** Which of the four lookups use the index?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+   relname   | relpages | reltuples
+-------------+----------+-----------
+ customers   |        1 |       150
+ orders      |       16 |      1800
+ order_items |       21 |      3287
+ orders_big  |     4360 |    500000
+
+                        QUERY PLAN
+----------------------------------------------------------
+ Seq Scan on customers  (cost=0.00..2.88 rows=1 width=26)
+   Filter: (customer_id = 54)
+
+                                QUERY PLAN
+---------------------------------------------------------------------------
+ Index Scan using orders_pkey on orders  (cost=0.28..8.29 rows=1 width=34)
+   Index Cond: (order_id = 1580)
+
+                                     QUERY PLAN
+-------------------------------------------------------------------------------------
+ Index Scan using order_items_pkey on order_items  (cost=0.28..8.30 rows=1 width=19)
+   Index Cond: (order_item_id = 5100)
+
+                                    QUERY PLAN
+-----------------------------------------------------------------------------------
+ Index Scan using orders_big_pkey on orders_big  (cost=0.42..8.44 rows=1 width=34)
+   Index Cond: (order_id = 123456)
+```
+
+</details>
+
+*Why:* only `customers` takes a scan, and the formula says why. A scan of `customers` costs 1 page + 150 rows × 0.01 + 150 × 0.0025 = 2.88, below the price of the index plan, which the planner puts at 8.16 for this table. A scan of `orders` would cost 16 + 18 + 4.5 = 38.5, above 8.29. The index price barely moves with size (8.29 for 1,800 rows, 8.44 for 500,000), and the scan price grows with the table: 38.5 for `orders`, 10,610 for `orders_big`. In a sweep of tables cut from `orders_big`, the switch came between 300 and 350 rows (4 pages), as the picture shows.
+
+<figure>
+<svg viewBox="0 0 360 237" width="360" role="img" aria-labelledby="dd2-sweep-t dd2-sweep-d">
+<title id="dd2-sweep-t">The planner's cost of a sequential scan and of an index lookup for one primary key, as the table grows from 10 to 100,000 rows</title>
+<desc id="dd2-sweep-d">A chart with both axes on a log scale: the table's rows from 10 to 100,000 across, the planner's estimated cost from 1 to 3,000 up. The cost of a sequential scan climbs from 1.12 at 10 rows through 7.75 at 300 rows and 28.50 at 1,000 rows to 2,146 at 100,000 rows. The cost of the index lookup stays between 8.15 and 8.31 over the whole range. The two lines cross between 300 and 350 rows, where the planner's choice changes from the scan to the index.</desc>
+<g fill="currentColor">
+<text x="21.2" y="22.4" font-size="10.5" font-weight="600">Planner cost of one primary-key lookup, by table size</text>
+<path d="M65.2 188.4 L319.2 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="59.2" y="191.9" font-size="10" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M65.2 147.6 L319.2 147.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="59.2" y="151.1" font-size="10" text-anchor="end" fill-opacity="0.8">10</text>
+<path d="M65.2 106.7 L319.2 106.7" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="59.2" y="110.2" font-size="10" text-anchor="end" fill-opacity="0.8">100</text>
+<path d="M65.2 65.9 L319.2 65.9" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="59.2" y="69.4" font-size="10" text-anchor="end" fill-opacity="0.8">1,000</text>
+<path d="M65.2 188.4 L65.2 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="65.2" y="205.4" font-size="10" text-anchor="middle" fill-opacity="0.8">10</text>
+<path d="M128.8 188.4 L128.8 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="128.8" y="205.4" font-size="10" text-anchor="middle" fill-opacity="0.8">100</text>
+<path d="M192.2 188.4 L192.2 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="192.2" y="205.4" font-size="10" text-anchor="middle" fill-opacity="0.8">1,000</text>
+<path d="M255.8 188.4 L255.8 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="255.8" y="205.4" font-size="10" text-anchor="middle" fill-opacity="0.8">10,000</text>
+<path d="M319.2 188.4 L319.2 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
+<text x="319.2" y="205.4" font-size="10" text-anchor="middle" fill-opacity="0.8">100,000</text>
+<text x="319.2" y="220.4" font-size="10" text-anchor="end" fill-opacity="0.8">rows in the table</text>
+<rect x="65.2" y="33.4" width="8" height="8" rx="2" fill="#0072b2" />
+<text x="77.2" y="41.4" font-size="10">table scan</text>
+<rect x="143.2" y="33.4" width="8" height="8" rx="2" fill="#00a07a" />
+<text x="155.2" y="41.4" font-size="10">index lookup</text>
+<path d="M161.3 52.4 L161.3 188.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.45" stroke-dasharray="3 3" />
+<text x="157.3" y="58.4" font-size="10" text-anchor="end" fill-opacity="0.9">switch near 300 to 350 rows</text>
+<path d="M65.2 186.4 L95.5 182.7 L128.8 174 L159 152.1 L192.2 129 L222.5 113.2 L255.8 90.3 L319.2 52.3" fill="none" stroke="#0072b2" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M65.2 151.2 L95.5 151.2 L128.8 151.2 L159 151.1 L192.2 150.9 L222.5 150.9 L255.8 150.9 L319.2 150.8" fill="none" stroke="#00a07a" stroke-width="2.2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="65.2" cy="186.4" r="3" fill="#0072b2" />
+<circle cx="65.2" cy="151.2" r="3" fill="#00a07a" />
+<circle cx="95.5" cy="182.7" r="3" fill="#0072b2" />
+<circle cx="95.5" cy="151.2" r="3" fill="#00a07a" />
+<circle cx="128.8" cy="174" r="3" fill="#0072b2" />
+<circle cx="128.8" cy="151.2" r="3" fill="#00a07a" />
+<circle cx="159" cy="152.1" r="3" fill="#0072b2" />
+<circle cx="159" cy="151.1" r="3" fill="#00a07a" />
+<circle cx="192.2" cy="129" r="3" fill="#0072b2" />
+<circle cx="192.2" cy="150.9" r="3" fill="#00a07a" />
+<circle cx="222.5" cy="113.2" r="3" fill="#0072b2" />
+<circle cx="222.5" cy="150.9" r="3" fill="#00a07a" />
+<circle cx="255.8" cy="90.3" r="3" fill="#0072b2" />
+<circle cx="255.8" cy="150.9" r="3" fill="#00a07a" />
+<circle cx="319.2" cy="52.3" r="3" fill="#0072b2" />
+<circle cx="319.2" cy="150.8" r="3" fill="#00a07a" />
+</g>
+</svg>
+</figure>
+
+The price is the planner's estimate; the pages tell the real story. Run the lookup on `orders_big` twice with `EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY OFF)` (the first run also prints a `Planning:` line), then once with `SET enable_indexscan = off; SET enable_bitmapscan = off;` to force the scan, and read the `Buffers` lines:
+
+```console
+ Index Scan using orders_big_pkey on orders_big  (cost=0.42..8.44 rows=1 width=34) (actual rows=1 loops=1)
+   Index Cond: (order_id = 123456)
+   Buffers: shared hit=4
+
+ Seq Scan on orders_big  (cost=0.00..10610.00 rows=1 width=34) (actual rows=1 loops=1)
+   Filter: (order_id = 123456)
+   Rows Removed by Filter: 499999
+   Buffers: shared hit=2113 read=2247
+```
+
+The index lookup touched 4 pages: the root, one page of the middle level, one leaf (the index has two levels above its leaves, `SELECT level FROM bt_metap('orders_big_pkey')` prints 2) and one table page. The scan touched 4,360 (2,113 + 2,247, the table's page count; the split between `hit` and `read` changes from run to run). Reset with `RESET enable_indexscan; RESET enable_bitmapscan;`.
+
+### 3. A function around a column hides it
+
+**Idea.** An index holds the values of the column it was built on. The PostgreSQL documentation describes an index on an expression such as `lower(col1)` as one that finds rows by a computed value, and notes that index expressions are computed at insert and update time and not for each search.
+
+**Try it.** An ordinary index on `name`, then the slow search, then an index on `lower(name)`, then `ANALYZE` and the same search again:
+
+```sql
+CREATE INDEX customers_big_name_idx ON customers_big (name);
+EXPLAIN (ANALYZE, TIMING OFF) SELECT * FROM customers_big WHERE lower(name) = 'ana lopez';
+CREATE INDEX customers_big_lower_name_idx ON customers_big (lower(name));
+EXPLAIN (ANALYZE, TIMING OFF) SELECT * FROM customers_big WHERE lower(name) = 'ana lopez';
+ANALYZE customers_big;
+EXPLAIN (ANALYZE, TIMING OFF) SELECT * FROM customers_big WHERE lower(name) = 'ana lopez';
+```
+
+**Predict:** Does the first plan use the index on `name`? What does the second plan expect for `rows=`, and what does the third expect?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+                                          QUERY PLAN
+----------------------------------------------------------------------------------------------
+ Seq Scan on customers_big  (cost=0.00..4472.00 rows=1000 width=26) (actual rows=220 loops=1)
+   Filter: (lower(name) = 'ana lopez'::text)
+   Rows Removed by Filter: 199780
+ Planning Time: 0.148 ms
+ Execution Time: 36.463 ms
+
+                                                       QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on customers_big  (cost=12.17..1418.75 rows=1000 width=26) (actual rows=220 loops=1)
+   Recheck Cond: (lower(name) = 'ana lopez'::text)
+   Heap Blocks: exact=198
+   ->  Bitmap Index Scan on customers_big_lower_name_idx  (cost=0.00..11.92 rows=1000 width=0) (actual rows=220 loops=1)
+         Index Cond: (lower(name) = 'ana lopez'::text)
+ Planning Time: 0.144 ms
+ Execution Time: 0.312 ms
+
+ANALYZE
+                                                      QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on customers_big  (cost=6.12..599.92 rows=220 width=26) (actual rows=220 loops=1)
+   Recheck Cond: (lower(name) = 'ana lopez'::text)
+   Heap Blocks: exact=198
+   ->  Bitmap Index Scan on customers_big_lower_name_idx  (cost=0.00..6.07 rows=220 width=0) (actual rows=220 loops=1)
+         Index Cond: (lower(name) = 'ana lopez'::text)
+ Planning Time: 0.116 ms
+ Execution Time: 0.267 ms
+```
+
+</details>
+
+*Why:* the first plan ignores the index on `name`: it holds names as stored, in order, and the filter asks for the lower-cased value of each. Only the index on `lower(name)` can answer it, and it took the search from 36 ms to 0.3 ms here (over nine runs: 38 to 49 ms for the scan and 0.08 to 0.27 ms for the index). The estimate in the second plan, 1,000 rows, is the fixed guess of the previous lesson, 0.5 percent of the 200,000 rows: statistics for the expression did not exist until `ANALYZE` ran, which is why the third plan expects 220. The index on `name` does answer `name = 'Ana Lopez'`, but it finds 156 customers where `lower(name)` finds 220, because 36 are stored as `ANA LOPEZ` and 28 as `ana lopez`.
+
+### 4. Every index is written on every insert
+
+**Idea.** Each index is a separate tree, so a new row must add an entry to every one of them. The documentation calls the write-ahead log (WAL) the record of every change, written before the data files change; the number of bytes it receives measures how much was written.
+
+**Try it.** Insert 200,000 orders into an empty table, with no index, then with one, two and three. Run the script as it is, then remove the two dashes at the start of the first index line and run it again, then of the first two lines, then of all three (`CHECKPOINT` needs a superuser):
+
+```sql
+\timing on
+DROP TABLE IF EXISTS ins_t;
+CREATE TABLE ins_t (LIKE orders_big);
+-- ALTER TABLE ins_t ADD PRIMARY KEY (order_id);
+-- CREATE INDEX ON ins_t (ordered_at);
+-- CREATE INDEX ON ins_t (customer_id);
+CHECKPOINT;
+SELECT pg_current_wal_lsn() AS before \gset
+INSERT INTO ins_t SELECT * FROM orders_big WHERE order_id <= 200000;
+SELECT round(pg_wal_lsn_diff(pg_current_wal_lsn(), :'before') / 1e6, 1) AS wal_mb;
+```
+
+**Predict:** Compared with the table without indexes, how many times more WAL and how many times more time does the table with all three indexes need: about 1.5, 3 or 6?
+
+<details>
+<summary>Reveal the result</summary>
+
+| indexes | WAL written (MB) | INSERT time, five runs (ms) |
+|---|---:|---|
+| none | 19.2 | 141 to 189 |
+| primary key | 32.5 | 285 to 344 |
+| and `ordered_at` | 45.8 | 427 to 488 |
+| and `customer_id` | 60.9 | 778 to 924 |
+
+</details>
+
+*Why:* the WAL grew 3.2 times (60.9 against 19.2 MB) and the time about 5 times (medians 865 and 170 ms). Each index added about 13 to 15 MB of WAL, and the one on `customer_id` added the most time. A likely reason is that its keys arrive in random order, while `order_id` and `ordered_at` arrive in order and land at the right edge of their trees; this lesson did not test that. The times are medians of five runs on one machine; the WAL bytes were the same in every run. An index is a trade: a search that took 36 ms takes 0.3 ms, and every insert pays a little more.
+
+<Aside type="tip" title="Remember">
+
+- A B-tree index is pages in levels: a root, maybe a middle level, then leaves that point at table rows. A lookup reads one page on each level, then the table page.
+- The planner compares prices: a scan pays for every page of the table, a lookup for a few. The switch point depends on the table's size.
+- An index serves the expression it was built on; `ANALYZE` after creating one gives the planner statistics for it.
+- Each index adds work to every insert and update.
+
+**Common trap:** judging an index on a small table. The planner's price there is right, and the winner changes with size.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-indexes-honestly-1">
+
+**How tall is an index?** Create an index on `lines_big (ordered_at)`, which has 950,414 rows, and read its root, its level and its number of pages. Expected: one row with `root` and `level`, and a second row with `relpages` for the index. Before you run it, say whether you expect a level of 1, 2 or 3. Finish the second query:
+
+```sql
+CREATE INDEX lines_big_ordered_idx ON lines_big (ordered_at);
+SELECT root, level FROM bt_metap('lines_big_ordered_idx');
+SELECT relpages FROM pg_class WHERE ...;
+```
+
+<details>
+<summary>Hint</summary>
+
+`pg_class` has a row for every index, named by `relname`. The pages are in `relpages`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT relpages FROM pg_class WHERE relname = '...';
+```
+
+</details>
+
+<Solution>
+
+```sql
+SELECT relpages FROM pg_class WHERE relname = 'lines_big_ordered_idx';
+```
+
+```console
+ root | level
+------+-------
+  290 |     2
+
+ relpages
+----------
+     2114
+```
+
+The index has 2 levels above its leaves and 2,114 pages, with the root on block 290. The table of `orders_big`, with 500,000 rows, had the same height (level 2, 1,374 pages for its primary key), so twice the rows added pages and no level. Drop the index when you are done (`DROP INDEX lines_big_ordered_idx;`), so that Exercise 3 starts from the table as `setup.sql` made it.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-indexes-honestly-2">
+
+**Load first, index after.** The nightly job loads 200,000 orders into an empty table that needs three indexes: a primary key on `order_id` and indexes on `ordered_at` and `customer_id`. Before you start, say in one sentence whether it is cheaper to create the indexes before the load or after it. From a blank file, run both orders with the script of unit 4 and compare the WAL written and the time of the whole job (the load and, in the second order, the three index builds). Expected: two lines, each with WAL in MB and milliseconds.
+
+<details>
+<summary>Hint</summary>
+
+In the second order the `INSERT` runs first and the three index statements run after it; start the clock and read the WAL position before the `INSERT` in both.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"With the indexes created after the load, the job writes about half the WAL and takes less than half the time."*
+
+```sql
+INSERT INTO ins_t SELECT * FROM orders_big WHERE order_id <= 200000;
+-- then the three index statements
+```
+
+</details>
+
+<Solution>
+
+```sql
+\timing on
+DROP TABLE IF EXISTS ins_t;
+CREATE TABLE ins_t (LIKE orders_big);
+CHECKPOINT;
+SELECT pg_current_wal_lsn() AS before \gset
+INSERT INTO ins_t SELECT * FROM orders_big WHERE order_id <= 200000;
+ALTER TABLE ins_t ADD PRIMARY KEY (order_id);
+CREATE INDEX ON ins_t (ordered_at);
+CREATE INDEX ON ins_t (customer_id);
+SELECT round(pg_wal_lsn_diff(pg_current_wal_lsn(), :'before') / 1e6, 1) AS wal_mb;
+```
+
+With the indexes first the job wrote 60.9 MB in 766 to 866 ms (five runs); with the indexes built after the load it wrote 31.1 MB in 316 to 366 ms. An index built over rows that are already there is written once, in order, instead of one entry at a time into a growing tree. The finished tables are the same.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why can the planner use an index on `name` for `name = 'Ana Lopez'` but not for `lower(name) = 'ana lopez'`?
+
+   <details>
+   <summary>answer</summary>
+
+   The index holds the names as stored; the second filter asks about a computed value, so only an index built on that expression can answer it.
+
+   </details>
+
+<Exercise id="data-engineer-indexes-honestly-3">
+
+**Spot the flaw.** A teammate wants faster lookups of one order line by `order_item_id` in `lines_big`, and runs the statement below. Check the plan of the lookup before and after, then list the indexes of the table. Expected: two plans and the index list. What is wrong with the change?
+
+```sql
+EXPLAIN SELECT * FROM lines_big WHERE order_item_id = 123456;
+CREATE INDEX lines_big_item_idx ON lines_big (order_item_id);
+EXPLAIN SELECT * FROM lines_big WHERE order_item_id = 123456;
+\d lines_big
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the first plan before the new index exists, and the `Indexes:` list at the bottom of `\d`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+-- the first plan already says: Index Scan using ...
+```
+
+</details>
+
+<Solution>
+
+```console
+                                   QUERY PLAN
+---------------------------------------------------------------------------------
+ Index Scan using lines_big_pkey on lines_big  (cost=0.42..8.44 rows=1 width=62)
+   Index Cond: (order_item_id = 123456)
+
+                                     QUERY PLAN
+-------------------------------------------------------------------------------------
+ Index Scan using lines_big_item_idx on lines_big  (cost=0.42..8.44 rows=1 width=62)
+   Index Cond: (order_item_id = 123456)
+```
+
+The lookup already used an index before the change, the one behind the primary key, and `\d lines_big` now lists two indexes on the same column (`lines_big_pkey` and `lines_big_item_idx`), each 20 MB. The second plan costs exactly what the first did, so nothing got faster, and the table now keeps two copies of the same tree. Inserting 200,000 order lines into a copy of the table with only the primary key wrote 38.6 MB of WAL in 303 to 413 ms (five runs); with the duplicate index it wrote 51.8 MB in 438 to 634 ms. Drop the extra index with `DROP INDEX lines_big_item_idx;`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can open a B-tree index and walk it to a row, say from the cost formula when the planner prefers a scan, make a lower(name) filter use an index, and measure what an index adds to an insert.*
+Test: Exercise data-engineer-indexes-honestly-2, done without opening the hints.
+
+The pattern to remember: **an index is a second copy that must be kept in step; build it for the question you ask, and price it on the inserts.** Next comes *Join algorithms and optimizer mistakes*, which opens the join nodes of a plan.
