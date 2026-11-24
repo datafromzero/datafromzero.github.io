@@ -187,7 +187,7 @@ arrived   43   0   0   1   0   0   0  286  42
 
 </details>
 
-*Why:* The events that happened in hours 14 to 19 (240 of them) arrived at 20:00 and just after: the row "arrived" is empty from hour 14 to hour 19 apart from one stray event, and 286 events arrive in hour 20, against 46 that happened then. Nothing is lost; a count by `received_at` shows a hole and then a spike. Over the whole log 1,135 events arrived an hour or more after they happened, and 608 of those a day or more.
+*Why:* The events that happened in hours 14 to 19 (240 of them) arrived at 20:00 and just after: the row "arrived" is empty from hour 14 to hour 19 apart from one stray event, and 286 events arrive in hour 20, against 46 that happened then. Nothing is lost; a count by `received_at` shows a hole and then a spike. Over the whole log 1,135 events arrived an hour or more after they happened, and 608 of those a day or more. The dataset README gives the two sources of the 1,135: 912 usage events from phones that were held on the device and sent later, and 223 events of the outage.
 
 <figure>
 <svg viewBox="0 0 360 207" width="360" role="img" aria-labelledby="ds1-outage-t ds1-outage-d">
@@ -274,7 +274,7 @@ True        android                0          1107
 
 ### 5. The problem list, and the split
 
-**Idea.** A problem list has three columns: the problem, the rows it touches, and a decision. *Fix* a problem that changes a number the model will read and that you can correct. *Flag* one you cannot correct but a reader must know. *Leave* one that falls outside the table or changes nothing. Write the list from profiles that never use the target. A decision that does use the target, such as which rows are noise, is made on the training part only, after the split: scikit-learn's rule is never to call `fit` on the test data, and a look at the target is part of fitting.
+**Idea.** A problem list has three columns: the problem, the rows it touches, and a decision. *Fix* a problem that changes a number the model will read and that you can correct. *Flag* one you cannot correct but a reader must know. *Leave* one that falls outside the table or changes nothing. Write the list from profiles that never use the target. A decision that does use the target, such as which rows are noise, is made on the training part only, after the split. scikit-learn's page on common pitfalls says that test data "should never be used to make choices about the model" and gives the general rule "to never call fit on the test data". Keeping the target out of the problem list, and looking at it on the training part only, is this lesson's own reading of that rule, not the page's wording.
 
 **Try it:** collect the evidence of units 1 to 4 and of the signups with a short follow-up, then split the people with the seed of the track and look at the target on the training part only.
 
@@ -293,6 +293,13 @@ print(problems.to_string(index=False))
 train, test = train_test_split(table, test_size=0.25, random_state=SEED, stratify=table["churned"])      # the split of the track, made before the target is used
 print(len(train), len(test))
 print(train.groupby("region")["churned"].mean().round(3).to_dict())
+gone = events[~events["user_id"].isin(users["user_id"])]                  # the 40 deleted accounts left events but no user row
+start = gone[gone["event_name"] == "signup_complete"].set_index("user_id")["event_ts"]
+act = gone[gone["event_name"].isin(["session_start", "add_expense"])]
+days = (act["event_ts"] - act["user_id"].map(start)).dt.total_seconds() / 86400
+churned_gone = len(start) - act.loc[(days > 7) & (days <= 30), "user_id"].nunique()     # same label: no visit and no expense in days 8 to 30
+january = train.loc[train["signup_date"] < pd.Timestamp("2026-02-01"), "churned"]      # the target, on the training part only
+print(len(start), churned_gone, round(100 * january.mean(), 2), round(100 * (january.sum() + churned_gone) / (len(january) + len(start)), 2))
 ```
 
 **Predict:** Seven problems stand in the list. Before you run the cell, write fix, flag or leave beside each one: events of people with no user row, users with no event, retry copies, events dated after they arrived, events that arrived late, the renamed event, and signups with under 30 days of follow-up.
@@ -311,11 +318,12 @@ events that arrived an hour or more late  1135      fix
  signups with under 30 days of follow-up  4025      fix
 13362 4454
 {'asia_pacific': 0.528, 'europe': 0.551, 'latin_america': 0.547, 'north_america': 0.546}
+40 22 49.88 49.98
 ```
 
 </details>
 
-*Why:* The list says what the next lessons do. **Fix:** the retry copies (keep the first copy), the late arrivals (count an event only once it has arrived), the renamed event (one event, two names) and the short follow-ups (the table keeps signups to May 31). **Flag:** the 393 events of deleted accounts, which stay out because the table starts from `users`, and the 30 future-dated events, 0.017 percent of the log, which cannot be corrected without knowing each phone's clock. **Leave:** the 10 users with no event, who signed up after the window. The split puts 13,362 people in the training part and 4,454 in the test part; the churn rate by region is looked at on the training part only (52.8 to 55.1 percent), and what to do with `region` is left to the model of lesson DS2.
+*Why:* The list says what the next lessons do. **Fix:** the retry copies (keep the first copy), the late arrivals (count an event only once it has arrived), the renamed event (one event, two names) and the short follow-ups (the table keeps signups to May 31). **Flag:** the 393 events of deleted accounts, which stay out because the table starts from `users` (none of the 40 people ever subscribed, so January's churn rate counts survivors only; their own events give 22 of 40 churned, and with them January's rate on the training part would move from 49.88 to 49.98 percent, too little to act on), and the 30 future-dated events, 0.017 percent of the log, which cannot be corrected without knowing each phone's clock. **Leave:** the 10 users with no event, who signed up after the window. The split puts 13,362 people in the training part and 4,454 in the test part; the churn rate by region is looked at on the training part only (52.8 to 55.1 percent), and what to do with `region` is left to the model of lesson DS2.
 
 <Aside type="tip" title="Remember">
 

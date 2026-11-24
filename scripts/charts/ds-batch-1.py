@@ -202,9 +202,11 @@ def charts():
     pe["late"] = pe["received_at"] > pe["signup_ts"] + pd.Timedelta(days=7)
     kinds = [("onboarding_complete", "onboarding"), ("session_start", "visit"), ("add_expense", "expense")]
     present = [(n, lab) for n, lab in kinds if (pe["event_name"] == n).any()]
-    counted = int(((pe["day"] <= 7) & (pe["copy_no"] == 1) & ~pe["late"]).sum())
-    copies = int(((pe["day"] <= 7) & (pe["copy_no"] > 1)).sum())
-    after = int((pe["day"] > 7).sum())
+    drawn = pe[pe["event_name"].isin([n for n, _ in present])]  # the desc counts only the rows the picture draws
+    counted = int(((drawn["day"] <= 7) & (drawn["copy_no"] == 1) & ~drawn["late"]).sum())
+    copies = int(((drawn["day"] <= 7) & (drawn["copy_no"] > 1)).sum())
+    after = int((drawn["day"] > 7).sum())
+    assert counted + copies + after + int(((drawn["day"] <= 7) & (drawn["copy_no"] == 1) & drawn["late"]).sum()) == len(drawn)
     s = Svg("ds3-timeline", f"The first 30 days of person {uid}, and what the table keeps",
             f"A timeline from day 0, the signup, to day 30 with one row for each kind of event of person {uid}. A cutoff line stands at day 7 and a horizon line at day 30. "
             f"Up to the cutoff there are {counted} events the app knew and counted, drawn in blue, and {copies} retry copy of an event, drawn in purple and dropped. "
@@ -380,7 +382,8 @@ def charts():
         s.text(8, yy + 10, f"fold {k + 1}", size=9, opacity=0.85)
         s.rect(X(0), yy, X(a) - X(0), 12, BLUE, rx=2, opacity=0.55)
         s.rect(X(a) + 1, yy, X(a + b) - X(a) - 1, 12, GREEN, rx=2)
-        s.rect(X(a + b) + 1, yy, X(n) - X(a + b) - 1, 12, None, stroke="currentColor", sw=1, dash="2 3", rx=2)
+        if X(n) - X(a + b) - 1 > 0:  # the last fold leaves no people unused: draw no rectangle (never a zero or negative width)
+            s.rect(X(a + b) + 1, yy, X(n) - X(a + b) - 1, 12, None, stroke="currentColor", sw=1, dash="2 3", rx=2)
     yb = y0 + 8 + 4 * 16 + 4
     s.text(X(0), yb + 10, "January", size=9, opacity=0.8)
     s.text(X(n), yb + 10, "May", anchor="end", size=9, opacity=0.8)
