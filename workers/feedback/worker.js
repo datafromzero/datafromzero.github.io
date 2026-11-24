@@ -145,11 +145,16 @@ function makeLimiter(max, windowMs) {
 }
 
 // A random salt per Worker instance: the same address gets a different key in every instance and after every restart,
-// and the address cannot be read back from the key.
-const SALT = crypto.getRandomValues(new Uint8Array(16));
+// and the address cannot be read back from the key. Made on the first request: Cloudflare does not allow random
+// values in global scope, so a module-level getRandomValues call fails the deploy.
+let SALT = null;
+function instanceSalt() {
+	if (SALT === null) SALT = crypto.getRandomValues(new Uint8Array(16));
+	return SALT;
+}
 
 /** SHA-256 of the salt and the address, as hex. */
-async function hashIp(ip, salt = SALT) {
+async function hashIp(ip, salt = instanceSalt()) {
 	const bytes = new TextEncoder().encode(ip);
 	const data = new Uint8Array(salt.length + bytes.length);
 	data.set(salt);
