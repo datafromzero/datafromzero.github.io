@@ -15,6 +15,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## What is live on `main`
 
+- **Page endings (2026-11-24, owner):** no page ends with a link row. Project links live in the sidebar's "About this site" group, in the taskbar sheet's Course pane (phones and the homepage; `.tb-about` in `Taskbar.astro`), and in the homepage footer; lessons end with the Report an issue form; Cookie settings is a button in the Analytics section of `/privacy/` only. Do not reintroduce a footer row (SPEC D34, §11).
 - **Docs layout (2026-11-24):** content 48rem (prose 42rem), left sidebar 20rem, fixed 16rem "On this page" column; tokens and the Starlight width overrides are in `src/styles/tokens.css`, the taskbar position in `Taskbar.astro` uses the same variables (`--dfz-toc-width`).
 - **Site:** Astro + Starlight, deployed to GitHub Pages on every push to `main`.
 - **Homepage** (dark and light, GSAP only here, each effect a deferred chunk):
