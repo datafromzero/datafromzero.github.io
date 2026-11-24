@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1560 nodes, 1859 edges, 200 communities (659 isolated nodes).
+- 1560 nodes, 1861 edges, 200 communities (658 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 228, content-type 5, decision 57, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 26, page 5, research-section 500, rule 10, script 184, skill 1, spec-section 25, starlight-component 6, style 7, symbol 309, template 2, token 12.
-- Edges: defines 309, imports 51, mentions 957, overrides 6, references 29, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
+- Edges: defines 309, imports 51, mentions 959, overrides 6, references 29, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -18,7 +18,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `D41` Lesson step-by-step figures | decision | 100 | SPEC.md:68 |
 | 4 | `src/components/content/RunSQL.astro` | component | 71 | src/components/content/RunSQL.astro:1 |
 | 5 | `src/components/content/OpenInColab.astro` | component | 65 | src/components/content/OpenInColab.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 54 | .claude/HANDOFF.md:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 55 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 43 | astro.config.mjs:1 |
 | 8 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 9 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
@@ -43,8 +43,8 @@ Label propagation; each community is named by its top-degree node.
 - **C8 roadmap.ts** (14): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES
 - **C9 sync-research-issues.mjs** (13): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md
 - **C10 Datasets** (11): S7 Datasets; D39 Data tag before v1.0.0; SPEC.md; S13 Repository layout; D46 Accented menu names for the text-…; D52 The `app-events` dataset, v1
-- **C11 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
-- **C12 changelog.ts** (10): src/lib/changelog.ts; src/lib/changelog.ts#ChangelogEntry; src/lib/changelog.ts#ChangelogProblem; src/lib/changelog.ts#LessonRef; src/lib/changelog.ts#dayLabel; src/lib/changelog.ts#groupByDay
+- **C11 tokens.css** (11): src/styles/tokens.css; src/styles/step-animation.css; src/styles/sql-runner.css; src/styles/print.css; token:--fg --fg; token:--bg --bg
+- **C12 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
 
 ## Surprising connections
 
@@ -55,7 +55,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C126 to C25, scripts/animations/concept-join.mjs:1)
 - `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C70, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C186 to C183, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C16, src/styles/math.css:17)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C11, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C20, .claude/skills/kb/SKILL.md:3)
 - `M8` -mentions-> `D24` (C77 to C20, CLAUDE.md:66)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C177 to C2, scripts/check-placeholders.mjs:2)
@@ -151,10 +151,10 @@ term: id — file:line
 - gsap: `pkg:gsap` — package.json:56
 - scroll: `S12` — SPEC.md:417
 - print: `src/styles/print.css` — src/styles/print.css:1
-- theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:52
+- theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:53
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
 - logo: `src/components/home/Logo.astro` — src/components/home/Logo.astro:1
-- favicon: `DG6` — design/README.md:212
+- favicon: `DG6` — design/README.md:213
 - i18n: `src/i18n/home/types.ts` — src/i18n/home/types.ts:1
 - vietnamese: `R:curriculum/01-competitor-map#5-gaps-data-from-zero-exploits:gap-3-vietnamese-scaffolding-is-a-moat-not-a-translation-feature` — research/curriculum/01-competitor-map.md:211
 - validation: `src/lib/content-validation.ts` — src/lib/content-validation.ts:1
