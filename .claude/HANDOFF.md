@@ -195,4 +195,4 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   `duckdb.org`. Package registries work by default.
 - Scratchpad files, mockup pages and chat history do not carry over. Everything needed is in this repository.
 
-- **Tag v0.3.0 (owner, 2026-11-23):** the owner created release v0.3.0 (pre-release) on main 1bb959b, before the DA track merged, so it lacks `datasets/cafe-sales/v1/extras/`. Owner chose: after the DA track PR merges, move the tag to the merge commit (delete and recreate tag v0.3.0, keep the release as pre-release), then check the three raw links return CSV.
+- **Tag v0.3.0 (done, 2026-11-24):** pre-release v0.3.0 now points at 8dfe873 (DA track merge); the three cafe-sales extras resolve at that tag (checked: 200, full row counts).
