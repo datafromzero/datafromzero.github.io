@@ -7,7 +7,7 @@
 //   homepage and the docs agree; dark unless the reader chose light;
 // - back-to-top (desktop) is dimmed near the top;
 // - the small label line names the section on screen: the homepage's sections ([data-tb-name]) or a docs page's
-//   h2s, behind the lesson code; the same section is marked in the sheet's first tab.
+//   h2s, behind the lesson code; the same section is marked in the sheet's This lesson tab.
 const d = document;
 const root = d.documentElement;
 const bar = d.querySelector<HTMLElement>('.tb');
