@@ -74,7 +74,7 @@ def ds11(out, con, table):
     rows = [(names.get(c, c), float(v), BLUE) for c, v in loss.items()]
     rows.insert(2, ("4 activity columns", together, GREEN))
     desc = ("A bar chart of the drop in ROC AUC on the 4,454 held-out people when one column of the logistic regression is shuffled, from 0 to 0.12. "
-            + "; ".join(f"{lab} {max(v, 0):.4f}" for lab, v, _ in rows)
+            + "; ".join(f"{lab} {v:.4f}" + (", below zero, so no bar is drawn" if v < 0 else "") for lab, v, _ in rows)
             + ". The four activity columns shuffled together, in green, cost 0.0554, more than the 0.0289 that their four bars add up to. Channel costs the most.")
     s = Svg("ds11-importance", "ROC AUC lost when a column is shuffled, one column and the four activity columns together", desc)
     X0, X1 = 130, 322
@@ -255,7 +255,8 @@ def ds12(out, con):
             "A line chart over the 17 forecast weeks from March 2 to June 22, with the mean absolute miss in signups a day from 0 to 80. "
             + "; ".join(f"{k}: " + ", ".join(f"{v:.1f}" for v in weeks[k]) for k in ("naive", "model", "expected"))
             + ". The seasonal naive forecast is in ochre, the model in green and the README's expected values in purple. The two forecasts jump in the weeks of April 13 and June 8, where the campaign starts and stops, "
-              "and the model also jumps in the week of May 4; the expected values stay near 9.")
+              "and the model also jumps in the week of May 4; "
+            + f"the expected values range from {weeks['expected'].min():.1f} to {weeks['expected'].max():.1f}.")
     title_line(s, "Mean miss for each forecast week", 8, 10)
     square(s, 8, 22, OCHRE)
     s.text(20, 29.5, "seasonal naive", size=9.5)
