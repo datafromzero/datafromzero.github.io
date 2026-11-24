@@ -29,7 +29,7 @@ TODO(owner): the tags `de-06-start` to `de-11-start` are built but not pushed. T
    and `uv run pytest -q`.
 
 Before the push, run `python3 starters/de-pipeline-checkpoints/check_lessons.py`. It covers every `python`, `markdown`, `sql`,
-`yaml`, `json` and `toml` block of the ten lessons: a block outside an exercise must equal a checkpoint file or be a piece of
+`yaml`, `json` and `toml` block of the lessons DE1 to DE10 (DE6 is two lessons, DE6 and DE6b): a block outside an exercise must equal a checkpoint file or be a piece of
 one, or the script fails; blocks inside an exercise (task code, half-solutions, solutions, flawed code) are matched when they
 can be and listed when they cannot. It also reads every `bash` block: a `git show de-NN-done:PATH`, a `python -m pipeline.NAME`
 and a `scripts/NAME.py` must name a file that exists. It does not check `console` output or the exercise solutions: run those

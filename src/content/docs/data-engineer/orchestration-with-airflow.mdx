@@ -15,7 +15,7 @@ objectives:
 prerequisites:
   - data-engineer-pipeline-as-testable-code
   - data-engineer-incremental-loads-idempotency
-  - data-engineer-data-quality-checks
+  - data-engineer-quality-gates-stop-or-quarantine
   - core-environments-and-dependencies
 datasets:
   - cafe-sales
@@ -52,7 +52,7 @@ The pipeline you have is a set of functions. A schedule needs three more things:
 
 <Aside type="note" title="You already know this">
 
-**Match.** *Data quality checks that fail loudly* (DE6) decided what a bad line does to a run. Airflow decides what a failed step does to the day.
+**Match.** *Quality gates: stop a run or quarantine a line* (DE6b) decided what a bad line does to a run. Airflow decides what a failed step does to the day.
 
 **Diverge.** Until now you started every run and watched it. A scheduler starts it when you are not there, so everything you would have seen must be in a log you can read later.
 
@@ -62,7 +62,7 @@ The pipeline you have is a set of functions. A schedule needs three more things:
 
 From memory first, then click to check.
 
-1. In DE6, what makes the run stop and not just hold a line back?
+1. In DE6b, what makes the run stop and not just hold a line back?
 
    <details>
    <summary>answer</summary>
@@ -111,7 +111,7 @@ $ uv run airflow db migrate 2>&1 | tail -1
 
 ### 1. A DAG: tasks and arrows
 
-**Idea.** A **DAG** (directed acyclic graph) is a Python file that names tasks and the arrows between them. Airflow reads the file; it runs each task when the tasks before it have succeeded. Keep the work out of the file: the Airflow best-practices page says top-level code should not do database access, heavy computation or networking. The work is in `src/pipeline/daily.py`, three steps that take one day, each of which you can test and run without Airflow.
+**Idea.** A **DAG** (directed acyclic graph) is a Python file that names tasks and the arrows between them. The Dags page says that declaring the dependencies between tasks is what makes up the Dag structure. Airflow reads the file; it runs each task when the tasks before it have succeeded. Keep the work out of the file: the Airflow best-practices page says top-level code should not do database access, heavy computation or networking. The work is in `src/pipeline/daily.py`, three steps that take one day, each of which you can test and run without Airflow.
 
 **Try it.** `daily.py` and the new `merge` of `load.py` are given files; the DAG is yours to save. Fetch the two, and read the heart of the first:
 
@@ -140,7 +140,7 @@ def run_step(step, day):
         con.close()
 ```
 
-`extract` lands the day's pages, `check` stages them and passes them through DE6's gate, and `publish` merges the clean lines. `load.py` now keeps the merge in a function of its own, `merge`, which both the incremental load and `publish` call. Save the DAG as `airflow/dags/cafe_pipeline.py`:
+`extract` lands the day's pages, `check` stages them and passes them through the gate of DE6b, and `publish` merges the clean lines. `load.py` now keeps the merge in a function of its own, `merge`, which both the incremental load and `publish` call. Save the DAG as `airflow/dags/cafe_pipeline.py`:
 
 ```python
 """The nightly job as a DAG. The order of the steps and the schedule live here; the work lives in pipeline.daily."""
@@ -216,7 +216,7 @@ run state: success
 
 </details>
 
-*Why:* `publish` inserts one line fewer: the gate of DE6 held the line with the quantity of 20 in quarantine, and the rest of the day loaded. The tasks ran in the order of the arrows `extract() >> check() >> publish()`, each only after the one before succeeded, and the log of each step is the log lines of your own modules. The DAG file imports `pipeline` inside each task, not at the top, so that Airflow can read the file without running anything. The file gives every task the same two settings through `default_args`, which the next unit uses.
+*Why:* `publish` inserts one line fewer: the gate of DE6b held the line with the quantity of 20 in quarantine, and the rest of the day loaded. The tasks ran in the order of the arrows `extract() >> check() >> publish()`, each only after the one before succeeded, and the log of each step is the log lines of your own modules. The DAG file imports `pipeline` inside each task, not at the top, so that Airflow can read the file without running anything. The file gives every task the same two settings through `default_args`, which the next unit uses.
 
 ### 2. Retries and an alert
 
@@ -273,7 +273,7 @@ run state: success
 
 ### 3. The schedule, and the day a run covers
 
-**Idea.** `schedule` says when a run starts, and also what the run is about. In Airflow 3, a bare cron string such as `"0 0 * * *"` makes a timetable with no data interval: the Timetables page says `data_interval_start` and `data_interval_end` are the same moment, the time the run is triggered. `CronDataIntervalTimetable("0 0 * * *")`, which the DAG uses, makes an interval between two triggers and starts the run at its end. The tasks read `data_interval_start` and never the clock; the best-practices page says to read and write a specific partition and not to use `now()` inside a task.
+**Idea.** `schedule` says when a run starts, and also what the run is about. `CronDataIntervalTimetable("0 0 * * *")`, which the DAG uses, makes an interval between two triggers and starts the run at its end. The tasks read `data_interval_start` and never the clock; the best-practices page says to read and write a specific partition and not to use `now()` inside a task.
 
 **Try it.** `airflow/examples/de07_bare.py` is the same DAG with the bare cron string and another name. Copy it into the DAGs folder, see how it differs, run it for May 4, and delete it:
 
@@ -324,7 +324,7 @@ run state: success
 
 </details>
 
-*Why:* the bare string loaded May 4, the day of the trigger, which is a day that has only just begun when a run starts at midnight: a nightly job on that schedule would always load a day that is empty. The first DAG, run for May 2 in unit 1, loaded May 1, the day that had just ended. The date you give `dags test` stands for the moment the run is triggered, and the interval is the one that ends there. A scheduler running the interval timetable starts the run for May 1 just after midnight on May 2. DE8 runs it through the scheduler, and shows that a backfill names its runs the other way.
+*Why:* in Airflow 3 a bare cron string such as `"0 0 * * *"` makes a timetable with no data interval: the Timetables page says `data_interval_start` and `data_interval_end` are the same moment, the time the run is triggered. So the bare string loaded May 4, the day of the trigger, which is a day that has only just begun when a run starts at midnight: a nightly job on that schedule would always load a day that is empty. The first DAG, run for May 2 in unit 1, loaded May 1, the day that had just ended. The date you give `dags test` stands for the moment the run is triggered, and the interval is the one that ends there. A scheduler running the interval timetable starts the run for May 1 just after midnight on May 2. DE8 runs it through the scheduler, and shows that a backfill names its runs the other way.
 
 How Dagster says the same thing: its documentation defines an asset as a logical unit of data such as a table, and says assets can depend on other assets, forming the data lineage. In Dagster you would declare `order_lines` and the marts built from it as assets, and the arrows run between data, not between tasks. Airflow here names the steps; Dagster names what they make. Dagster was not run for this lesson.
 

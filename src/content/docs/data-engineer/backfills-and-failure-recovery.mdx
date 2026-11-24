@@ -15,7 +15,7 @@ objectives:
 prerequisites:
   - data-engineer-orchestration-with-airflow
   - data-engineer-incremental-loads-idempotency
-  - data-engineer-data-quality-checks
+  - data-engineer-quality-gates-stop-or-quarantine
   - core-telling-the-story
 datasets:
   - cafe-sales
@@ -25,8 +25,8 @@ sources:
     url: https://airflow.apache.org/docs/apache-airflow/3.3.2/core-concepts/dag-run.html
   - title: 'Apache Airflow 3.3.2 documentation: Command line interface reference, backfill create (accessed 2026-11-24)'
     url: https://airflow.apache.org/docs/apache-airflow/3.3.2/cli-and-env-variables-ref.html
-  - title: 'Apache Airflow Task SDK documentation: API reference, max_active_runs of a Dag (accessed 2026-11-24)'
-    url: https://airflow.apache.org/docs/task-sdk/stable/api.html
+  - title: 'Apache Airflow 3.3.2 documentation: Configuration reference, max_active_runs_per_dag (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/configurations-ref.html
   - title: 'Apache Airflow 3.3.2 documentation: Quick start, airflow standalone (accessed 2026-11-24)'
     url: https://airflow.apache.org/docs/apache-airflow/3.3.2/start.html
   - title: 'DuckDB documentation: Concurrency (accessed 2026-11-24)'
@@ -34,7 +34,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same run as DE1 and DE7 (Airflow 3.3.2, exact pins in `airflow/uv.lock`); checkpoint tags `de-08-start` and `de-08-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). Which runs of the first backfill fail depends on timing: on the run shown, two of the five (the days of May 2 and May 5); yours may differ, and the lesson says so; the lock error is the same each time it happens. What `--reprocess-behavior failed` does (it ran the failed runs again from their first task and left the three that had succeeded alone) is what the run showed; the CLI page lists the three choices without explaining them. The Task SDK page, whose `stable` is newer than 3.3.2, gives `max_active_runs` without a default. DuckDB 2.0's Concurrency page also mentions writing from several processes through a remote protocol; the lesson does not use it. `airflow standalone` answered on port 8080 but the web interface was not opened in a browser. The reference incident note of Exercise 2 uses the facts of this run. Not run: Windows, WSL2, macOS, Codespaces. Stub changes: dataset `app-events` is now `cafe-sales`; "alert the people who use the data" is folded into the incident note, since no alerting tool is run; the DAGs page is dropped; prerequisites add the memo lesson.
+TODO(owner): Team draft (D24), same run as DE1 and DE7 (Airflow 3.3.2, exact pins in `airflow/uv.lock`); checkpoint tags `de-08-start` and `de-08-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). Which runs of the first backfill fail depends on timing: on the run shown, two of the five (the days of May 2 and May 5); yours may differ, and the lesson says so; the lock error is the same each time it happens. What `--reprocess-behavior failed` does (it ran the failed runs again from their first task and left the three that had succeeded alone) is what the run showed; the CLI page lists the three choices without explaining them. The `max_active_runs` sentence rests on the 3.3.2 configuration reference (`max_active_runs_per_dag`); the Task SDK page, whose `stable` is newer than 3.3.2, is not used. DuckDB 2.0's Concurrency page also mentions writing from several processes through a remote protocol; the lesson does not use it. `airflow standalone` answered on port 8080 but the web interface was not opened in a browser. The reference incident note of Exercise 2 uses the facts of this run. Not run: Windows, WSL2, macOS, Codespaces. Stub changes: dataset `app-events` is now `cafe-sales`; "alert the people who use the data" is folded into the incident note, since no alerting tool is run; the DAGs page is dropped; prerequisites add the memo lesson.
 
 ## The question
 
@@ -65,7 +65,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In DE6, what does the quarantine table keep for a held line?
+2. In DE6b, what does the quarantine table keep for a held line?
 
    <details>
    <summary>answer</summary>
@@ -92,7 +92,7 @@ DATA_DIR="$PWD/../data_de8" uv run airflow standalone
 
 ### 1. The interval a run covers
 
-**Idea.** A **backfill** runs a DAG again for past intervals, one run for each. The Dag Runs page says the logical date "denotes the start of the data interval, not when the Dag is actually executed", and warns that for a manual run you should not assume the interval equals the logical date. `backfill create` takes a first and a last date, both included. A run's id names the end of its interval, which is a trap for the eye.
+**Idea.** A **backfill** runs a DAG again for past intervals, one run for each. The Dag Runs page says the logical date "denotes the start of the data interval, not when the Dag is actually executed", and warns that for a manual run you should not assume the interval equals the logical date. `backfill create` takes a first and a last date.
 
 **Try it.** In terminal 2, unpause the DAG (new DAGs start paused) and backfill five days. `--max-active-runs 5` lets the five run at the same time. Wait about a minute and a half, then list the backfill's runs. Unpausing also lets the scheduler start its own run for yesterday, which `grep backfill` leaves out. `read_log.py` is a given file that prints a task log the short way:
 
@@ -128,7 +128,7 @@ info    pipeline.daily: 2026-05-01: 1 pages landed
 
 </details>
 
-*Why:* five runs, one for each day from May 1 to May 5. The run whose id says May 2 has the logical date May 1 and landed the lines of May 1: the id carries the end of the interval, the logical date its start, and the pipeline loads the day of the start. Not every run succeeded. On the run shown, two of the five failed, the ones for May 2 and May 5; yours may be other days, or none. The next unit reads why.
+*Why:* five runs, one for each day from May 1 to May 5, so the last date counts too. The run whose id says May 2 has the logical date May 1 and landed the lines of May 1: the id carries the end of the interval, the logical date its start, and the pipeline loads the day of the start. Not every run succeeded. On the run shown, two of the five failed, the ones for May 2 and May 5; yours may be other days, or none. The next unit reads why.
 
 ### 2. Reading a failed run
 
@@ -160,11 +160,11 @@ error   task: Task failed with exception
     max_active_runs=1,  # the table is a DuckDB file, and one process at a time may write to it
 ```
 
-The Task SDK reference says that beyond this number of runs in a running state the scheduler does not create new active runs. Save the DAG with that line (the checkpoint has it: `git show de-08-done:airflow/dags/cafe_pipeline.py > dags/cafe_pipeline.py`), and wait about a minute for Airflow to read the file again.
+The Airflow configuration reference says that the scheduler will not create more Dag runs once the limit is reached, and that `max_active_runs` sets that limit for one Dag. Save the DAG with that line (the checkpoint has it: `git show de-08-done:airflow/dags/cafe_pipeline.py > dags/cafe_pipeline.py`), and wait about a minute for Airflow to read the file again.
 
 ### 3. Rerun what failed, and prove nothing doubled
 
-**Idea.** The same backfill command with `--reprocess-behavior failed` creates runs again for the days whose run failed. A rerun starts from the first task of the day, which is safe for one reason: every step is idempotent, so `extract` lands the same files, `check` stages the same lines and `publish` merges what is already there as unchanged. A proof is better than the belief: take the same days through another route and compare fingerprints.
+**Idea.** The same backfill command with `--reprocess-behavior failed` creates runs again for the days whose run failed. A rerun starts from the first task of the day, so the steps that already ran for it run again. The steps were written to be idempotent (DE4), and that is a claim to test, not to trust: take the same days through another route and compare fingerprints.
 
 **Try it.** Rerun with one run at a time, wait for the runs to finish, and then fingerprint the lines whose current version was updated from May 1 to May 5. `range_fingerprint.py` is a given file. The other route is the incremental load of DE4 into a folder of its own, asked for the world as of May 5:
 
@@ -309,7 +309,7 @@ Expected output in words: *"A short note whose first line says the table is righ
 ```markdown
 **Where things stand.** The table is correct for May 1 to 5. We re-ran the days that failed and checked the result against a second load: 107 lines, 172 units, fingerprint 9d0ef5b3 in both.
 
-**Impact.** Two of the five daily runs (the days of May 2 and May 5) failed in the `check` step after three tries, so those days were missing from `order_lines` until the re-run. No figure was published from the partial table.
+**Impact.** Two of the five daily runs (the days of May 2 and May 5) failed in the `check` step after three tries, so those days were missing from `order_lines` until the re-run.
 
 **Cause.** The DAG let all five runs write the DuckDB file at once. DuckDB lets one process write at a time, and the others stopped with a lock error. The data was not at fault: the gate held the same one line as the second load saw.
 

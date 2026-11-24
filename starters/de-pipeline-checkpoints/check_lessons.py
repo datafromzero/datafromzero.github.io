@@ -2,7 +2,7 @@
 
     python3 starters/de-pipeline-checkpoints/check_lessons.py
 
-It covers three things, for each of the ten lessons:
+It covers three things, for each of the eleven lessons:
 
 1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json` or `toml` block outside an `<Exercise>` must equal a file of
    the checkpoints (or the starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that
@@ -23,18 +23,19 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LESSONS = HERE.parent.parent / "src" / "content" / "docs" / "data-engineer"
-NAMES = {
-    1: "role-and-lifecycle",
-    2: "ingest-apis-and-files",
-    3: "file-formats-and-partitioning",
-    4: "incremental-loads-idempotency",
-    5: "pipeline-as-testable-code",
-    6: "data-quality-checks",
-    7: "orchestration-with-airflow",
-    8: "backfills-and-failure-recovery",
-    9: "dbt-project-and-first-model",
-    10: "dbt-tests-and-documentation",
-}
+NAMES = [  # (label, checkpoint number, lesson file); DE6 is two lessons that share the checkpoint de-06
+    ("DE1", 1, "role-and-lifecycle"),
+    ("DE2", 2, "ingest-apis-and-files"),
+    ("DE3", 3, "file-formats-and-partitioning"),
+    ("DE4", 4, "incremental-loads-idempotency"),
+    ("DE5", 5, "pipeline-as-testable-code"),
+    ("DE6", 6, "data-quality-checks"),
+    ("DE6b", 6, "quality-gates-stop-or-quarantine"),
+    ("DE7", 7, "orchestration-with-airflow"),
+    ("DE8", 8, "backfills-and-failure-recovery"),
+    ("DE9", 9, "dbt-project-and-first-model"),
+    ("DE10", 10, "dbt-tests-and-documentation"),
+]
 FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
 FILE_NAMES = {".gitignore"}
 CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml"}
@@ -81,7 +82,7 @@ def check_bash(number, block, files):
 
 def main():
     errors = 0
-    for number, name in NAMES.items():
+    for label, number, name in NAMES:
         text = (LESSONS / f"{name}.mdx").read_text()
         files = checkpoint_files(number)
         spans = exercise_spans(text)
@@ -96,7 +97,7 @@ def main():
                 bash += 1
                 for problem in check_bash(number, block, files):
                     errors += 1
-                    print(f"DE{number}: ERROR {problem}")
+                    print(f"{label}: ERROR {problem}")
                 continue
             if language not in CHECKED_LANGUAGES:
                 continue
@@ -104,11 +105,11 @@ def main():
                 matched += 1
             elif inside:
                 in_exercise += 1
-                print(f"DE{number}: exercise code, not a checkpoint file: {block.splitlines()[0][:70]!r}")
+                print(f"{label}: exercise code, not a checkpoint file: {block.splitlines()[0][:70]!r}")
             else:
                 errors += 1
-                print(f"DE{number}: ERROR outside an exercise and in no checkpoint file or piece: {block.splitlines()[0][:70]!r}")
-        print(f"DE{number}: {matched} blocks match a checkpoint, {in_exercise} exercise blocks do not, {bash} bash blocks read")
+                print(f"{label}: ERROR outside an exercise and in no checkpoint file or piece: {block.splitlines()[0][:70]!r}")
+        print(f"{label}: {matched} blocks match a checkpoint, {in_exercise} exercise blocks do not, {bash} bash blocks read")
     if errors:
         sys.exit(f"{errors} problem(s) found")
 

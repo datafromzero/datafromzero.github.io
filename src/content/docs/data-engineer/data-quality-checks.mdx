@@ -2,16 +2,15 @@
 id: data-engineer-data-quality-checks
 title: Data quality checks that fail loudly
 short_title: Quality checks
-description: Write a contract, let it make the checks, decide whether a failed check stops the run or quarantines the line, and make the counts add up.
+description: Write a data contract, let it make the checks, and break the data on purpose to watch each check fire.
 stage: data-engineer
 order: 60
 level: intermediate
-duration: 35
+duration: 30
 objectives:
   - Name the dimensions of data quality and write each check as a query that returns the bad lines
   - Write a data contract and let it generate the checks, with freshness and volume as table checks
-  - Decide whether a failed check stops the run or quarantines the line, and say why
-  - Reconcile the lines read, kept and held back, and name the failure that must never be silent
+  - Break the data on purpose and read which check fires and with what action
 prerequisites:
   - data-engineer-pipeline-as-testable-code
   - data-engineer-incremental-loads-idempotency
@@ -27,16 +26,12 @@ sources:
     url: https://bitol-io.github.io/open-data-contract-standard/latest/
   - title: 'dbt documentation: Data tests (accessed 2026-11-24)'
     url: https://docs.getdbt.com/docs/build/data-tests
-  - title: 'dbt documentation: Sources, freshness (accessed 2026-11-24)'
+  - title: 'dbt documentation: Sources, source data freshness (accessed 2026-11-24)'
     url: https://docs.getdbt.com/docs/build/sources
-  - title: 'DuckDB documentation: FROM and JOIN clauses, ANTI JOIN (accessed 2026-11-24)'
-    url: https://duckdb.org/docs/2.0/sql/query_syntax/from.html
-  - title: 'DuckDB documentation: INSERT statement, ON CONFLICT DO NOTHING (accessed 2026-11-24)'
-    url: https://duckdb.org/docs/2.0/sql/statements/insert.html
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same run and versions as DE1; checkpoint tags `de-06-start` and `de-06-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). The quantity range 1 to 10, the 36 hours of freshness, 5 to 50 lines a day and the 25 percent share of held lines are this lesson's assumptions, not facts of the data (the largest quantity in the file is 3). The "break the data" files are made by `scripts/break_data.py`. The lesson's mapping of the contract's checks onto the framework's dimensions is its own reading. Stub changes: dataset `app-events` is now `cafe-sales`; the AWS exam guide is dropped (no sentence of it is used); sources are pages opened; objectives rewritten around the contract, the quarantine and the counts; prerequisites add the incremental-load, SQL and pytest lessons the page uses. Not run: Windows, macOS, Codespaces.
+TODO(owner): Team draft (D24), the first half of the former single DE6 lesson, split by owner decision because the whole was over the word limit (the second half is *Quality gates: stop a run or quarantine a line*, DE6b); same run and versions as DE1; checkpoint tags `de-06-start` and `de-06-done`, shared by both halves; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). The thresholds of the contract are this lesson's assumptions (the lesson says so). The lesson's mapping of the contract's checks onto the framework's dimensions is its own reading. Stub changes: dataset `app-events` is now `cafe-sales`; the AWS exam guide is dropped; objectives rewritten around the contract, the quarantine and the counts; prerequisites add the lessons the page uses. Not run: Windows, macOS, Codespaces.
 
 ## The question
 
@@ -52,7 +47,7 @@ Three lines of the staged file, as they are:
 | 5002 | 2026-01-01 08:02:00 | 2 | completed | 1 |
 | 5003 | 2026-01-01 08:02:00 | 2 | completed | 2 |
 
-Nothing in the pipeline so far would notice a line with no key, a quantity of 20, or a day with no lines. By the end you can write down what the data must be, let the pipeline check it, and decide what happens to a line that breaks a rule.
+Nothing in the pipeline so far would notice a line with no key, a quantity of 20, or a day with no lines. By the end you can write down what the data must be, let the pipeline check it, and see each check fire on data you broke on purpose.
 
 <Aside type="note" title="You already know this">
 
@@ -88,15 +83,15 @@ From memory first, then click to check.
 
 ## The big idea
 
-A check is a query that returns the lines that break a rule, and a loud pipeline either stops or sets those lines aside, and says how many.
+A check is a query that returns the lines that break a rule, and a contract is where those rules are written down before the data arrives.
 
 ## Learn by doing
 
-About 35 minutes, 4 new ideas: a contract that makes the checks, breaking the data on purpose, stop or quarantine, and counts that add up. Work in `de-pipeline-starter` with the mock API running (`uv run python mock_api.py` in terminal 1) and the full pull staged, as DE2 and DE3 left it: `data/staging/` holds `order_lines.parquet`, `products.parquet` and `stores.parquet`. If it does not, run `uv run python -m pipeline.ingest` and then `uv run python -m pipeline.stage`. To catch up, run `git checkout de-06-start`.
+About 30 minutes, 2 new ideas: a contract that makes the checks, and breaking the data on purpose. Work in `de-pipeline-starter` with the mock API running (`uv run python mock_api.py` in terminal 1) and the full pull staged, as DE2 and DE3 left it: `data/staging/` holds `order_lines.parquet`, `products.parquet` and `stores.parquet`. If it does not, run `uv run python -m pipeline.ingest` and then `uv run python -m pipeline.stage`. To catch up, run `git checkout de-06-start`.
 
 ### 1. A contract, and the checks it makes
 
-**Idea.** A **data contract** is a short file, written before the checks, that says what a table must be: its key, which columns may be empty, which values are allowed, how new it must be, how big a day is. The UK government's data quality framework names six dimensions: completeness, uniqueness, consistency, timeliness, validity and accuracy. This contract asks four, in the lesson's own mapping: uniqueness of the key, validity of values and ranges, completeness of values and of days, and timeliness. A **check** is a query that returns the lines that break a rule; the dbt documentation says the same of its data tests: no failing rows, the test passes.
+**Idea.** A **data contract** is a short file, written before the checks, that says what a table must be: its key, which columns may be empty, which values are allowed, how new it must be, how big a day is. The Open Data Contract Standard defines a YAML format for one, with sections such as Data Quality and Service-Level Agreement; this one is a small JSON file of its own. The UK government's data quality framework names six dimensions: completeness, uniqueness, consistency, timeliness, validity and accuracy. This contract asks four, in the lesson's own mapping: uniqueness of the key, validity of values and ranges, completeness of values and of days, and timeliness. A **check** is a query that returns the lines that break a rule; the dbt documentation says the same of its data tests: no failing rows, the test passes. Each rule also names an action for when it fails: `stop`, `quarantine` or, for the table checks, `warn`. The next lesson, *Quality gates: stop a run or quarantine a line* (DE6b), makes the first two do something; here the action only shows in the report.
 
 **Try it.** Save the contract as `contracts/order_lines.json`:
 
@@ -126,7 +121,9 @@ About 35 minutes, 4 new ideas: a contract that makes the checks, breaking the da
 }
 ```
 
-The code that turns a contract into checks, and runs them on a Parquet file, is a given file, `src/pipeline/checks.py`. Fetch it and read its two functions:
+The numbers in it (a quantity of 1 to 10, 36 hours, 5 to 50 lines a day, a quarter of the lines held) are this contract's choices, not facts of the data.
+
+The code that turns a contract into checks, and runs them on a Parquet file, is a given file, `src/pipeline/checks.py`. Fetch it and read `row_checks`, which turns each column's rules into a query:
 
 ```bash
 git show de-06-done:src/pipeline/checks.py > src/pipeline/checks.py
@@ -147,34 +144,15 @@ def row_checks(contract):
         if "min" in rule:
             checks.append((f"{column}_in_range", action, f"SELECT * FROM {{t}} WHERE {column} NOT BETWEEN {rule['min']} AND {rule['max']}"))
     return checks + [(rule["name"], rule["on_fail"], rule["bad_rows"]) for rule in contract.get("rules", [])]
-
-
-def table_checks(contract, as_of):
-    """Rules about a whole table: how new its newest line is and how many lines each day holds."""
-    hours, per_day = contract["freshness_hours"], contract["lines_per_day"]
-    return [
-        ("fresh", "warn", f"SELECT max(updated_at) AS newest FROM {{t}} HAVING max(updated_at) < TIMESTAMP '{as_of}' - INTERVAL {hours} HOUR"),
-        (
-            "lines_per_day",
-            "warn",
-            f"""
-            SELECT g.day, count(t.order_item_id) AS lines
-            FROM (SELECT unnest(generate_series(min(ordered_at)::DATE, max(ordered_at)::DATE, INTERVAL 1 DAY))::DATE AS day FROM {{t}}) g
-            LEFT JOIN {{t}} t ON t.ordered_at::DATE = g.day
-            GROUP BY g.day
-            HAVING count(t.order_item_id) NOT BETWEEN {per_day['min']} AND {per_day['max']}
-            """,
-        ),
-    ]
 ```
 
-The rest of the file reads the contract and prints a report. The data ends on June 30, so the clock for `fresh` is set with `--as-of`; without it the check measures from now.
+`table_checks`, the other function, adds two checks about the whole table: `fresh` (the newest `updated_at` must be within `freshness_hours` of the clock) and `lines_per_day` (each day, even an empty one, must hold an allowed number of lines). The rest of the file reads the contract and prints a report. The data ends on June 30, so the clock for `fresh` is set with `--as-of`; without it the check measures from now.
 
 ```bash
 uv run python -m pipeline.checks data/staging/order_lines.parquet --as-of "2026-07-01 08:00:00"
 ```
 
-**Predict:** How many checks does the contract make, and how many pass on the real file? Count the rules against the loops of `row_checks` and `table_checks`.
+**Predict:** How many checks does the contract make, and how many pass on the real file? Count the rules against the loop of `row_checks`, then add the two table checks.
 
 <details>
 <summary>Reveal the result</summary>
@@ -187,7 +165,7 @@ data/staging/order_lines.parquet
 
 </details>
 
-*Why:* 17 is one uniqueness check, ten not-null checks (twelve columns, two of them allowed to be empty), three accepted-value checks, one range check and the two table checks. The two columns that may be empty really are: one walk-in line has no `customer_id`, and 1,940 lines have no `channel`, because the API added it from May 1. A not-null check on them would fail on every run, and people stop reading a check that fails every run. The last two checks, `fresh` and `lines_per_day`, watch the table and not one line.
+*Why:* 17 is one uniqueness check, ten not-null checks (twelve columns, two of them allowed to be empty), three accepted-value checks, one range check and the two table checks. The two columns that may be empty really are: one walk-in line has no `customer_id`, and 1,940 lines have no `channel`, because the API added it from May 1. A not-null check on them would fail on every run, and people stop reading a check that fails every run. The ranges are wide on purpose: the largest quantity in the file is 3, and a day holds 6 to 38 lines.
 
 ### 2. Break the data on purpose
 
@@ -233,7 +211,7 @@ data/broken/silent_day.parquet
 
 </details>
 
-*Why:* each copy trips one check and the other sixteen stay quiet, so a check that fires says where to look. The two table checks carry `warn`: a day with no lines does not make any line wrong, so it is a signal for a person and not a reason to refuse a load. A sixth fault is not in any file: the source stopped delivering. Run the clean file with the clock four days later:
+*Why:* each copy trips one check and the other sixteen stay quiet, so a check that fires says where to look. The two table checks carry `warn`: a day with no lines does not make any line wrong, so it is a signal for a person and not a reason to refuse a load (dbt's source freshness has the same two levels, `warn_after` and `error_after`). A sixth fault is not in any file: the source stopped delivering. Run the clean file with the clock four days later:
 
 ```bash
 uv run python -m pipeline.checks data/staging/order_lines.parquet --as-of "2026-07-05 08:00:00"
@@ -246,142 +224,11 @@ data/staging/order_lines.parquet
   16 of 17 checks passed
 ```
 
-### 3. Stop or quarantine
-
-**Idea.** A failed rule does one of two kinds of damage. If it protects the merge (a key that is empty or repeated), loading anything is unsafe, so the run **stops**. If it makes one line suspect, the line goes to a **quarantine** table with the name of the rule, and the rest loads. Too many held lines is a signal of its own: above the share the contract allows, the run stops, because that many bad lines point at the rule or the source, not at the lines.
-
-**Try it.** The gate is a given file, `src/pipeline/gate.py`. Fetch it and read its two halves: the first stops the run before anything is written, the second sets lines aside and checks the share:
-
-```bash
-git show de-06-done:src/pipeline/gate.py > src/pipeline/gate.py
-```
-
-```python
-    for name, action, sql in checks:  # stop rules first, before anything is written
-        bad = con.execute(f"SELECT count(*) FROM ({sql.format(t='batch')})").fetchall()[0][0]
-        if bad and action == "stop":
-            raise CheckFailed(f"{name}: {bad} bad lines, the run stops")
-```
-
-```python
-    clean = con.sql("""
-        SELECT b.* FROM batch b
-        ANTI JOIN held h ON h.order_item_id = b.order_item_id AND h.updated_at = b.updated_at
-    """)
-    read = con.execute("SELECT count(*) FROM batch").fetchall()[0][0]
-    kept = clean.count("*").fetchall()[0][0]
-    if read - kept > contract["max_quarantine_share"] * read:
-        raise CheckFailed(f"{read - kept} of {read} lines would be quarantined, over the share the contract allows: look at the rule before the data")
-```
-
-The anti join keeps the lines of the batch that have no match in `held`, the table of lines the quarantine rules caught (the DuckDB documentation: an anti join returns the rows of the left table with no match in the right one). The held lines are written to the `quarantine` table only after the share check has passed, so a stopped run leaves nothing behind.
-
-In `src/pipeline/load.py`, add the import under the `pipeline.config` line, and wrap the staged lines in the gate. The two changes:
-
-```python
-from pipeline.gate import gate
-```
-
-```python
-    gate(con, staged_lines(con, str(pages))).create_view("incoming", replace=True)
-```
-
-The second replaces the line `staged_lines(con, str(pages)).create_view("incoming", replace=True)` in `run`. Now load the world as of May 2 into a folder of its own, so that nothing you built is touched:
-
-```bash
-DATA_DIR=data_x uv run python -m pipeline.load --until "2026-05-02 23:59:59"
-```
-
-**Predict:** The API corrects line 6952 on May 3. How many lines does this run read, pass and hold?
-
-<details>
-<summary>Reveal the result</summary>
-
-```console
-$ DATA_DIR=data_x uv run python -m pipeline.load --until "2026-05-02 23:59:59"
-WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
-WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
-WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
-INFO landed 20 pages in since=start_until=2026-05-02T23-59-59
-INFO 1990 records read, 1989 lines kept
-INFO 1989 lines read, 1988 clean, 1 quarantined
-INFO window since=None: 1988 inserted, 0 updated, 0 unchanged
-INFO order_lines now: 1988 rows, quantity 3085, fingerprint c277fb7c
-```
-
-</details>
-
-*Why:* line 6952, the order with the extra zero, arrived with a quantity of 20, the range rule held it, and 1,988 lines loaded. Now run the plain load, which asks for what changed since, and look at the quarantine next to the table. The listing script is a given file:
-
-```bash
-DATA_DIR=data_x uv run python -m pipeline.load
-git show de-06-done:scripts/quarantined.py > scripts/quarantined.py
-DATA_DIR=data_x uv run python scripts/quarantined.py
-```
-
-```console
-$ DATA_DIR=data_x uv run python -m pipeline.load
-WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
-INFO landed 14 pages in since=2026-05-02T16-20-00_until=now
-INFO 1306 records read, 1305 lines kept
-INFO 1305 lines read, 1305 clean, 0 quarantined
-INFO window since=2026-05-02 16:20:00: 1299 inserted, 0 updated, 6 unchanged
-INFO order_lines now: 3287 rows, quantity 5155, fingerprint 8c3ca150
-$ DATA_DIR=data_x uv run python scripts/quarantined.py
-┌───────────────────┬───────────────┬─────────────────────┬─────────────────────┬────────────────┐
-│    check_name     │ order_item_id │    held_version     │    table_version    │ table_quantity │
-│      varchar      │     int64     │      timestamp      │      timestamp      │     int64      │
-├───────────────────┼───────────────┼─────────────────────┼─────────────────────┼────────────────┤
-│ quantity_in_range │          6952 │ 2026-05-01 13:30:00 │ 2026-05-03 13:30:00 │              2 │
-└───────────────────┴───────────────┴─────────────────────┴─────────────────────┴────────────────┘
-```
-
-The table holds 3,287 lines with the fingerprint of DE4, and the quarantine keeps the held version beside the corrected one that arrived two days later. It records what was set aside; this time the source fixed the line itself.
-
-### 4. Counts that add up
-
-**Idea.** A check can only catch what a run reports. Every run says how many lines it read, passed and held, and how many it inserted, updated and left unchanged. Two sums must hold: lines read equal clean plus held, and clean lines equal inserted plus updated plus unchanged. The failure that must never be silent is a line that was read and is nowhere: not in `order_lines` and not in quarantine. A test can assert the log line, as in DE5.
-
-**Try it.** The tests of the gate are a given file. Fetch it and read its first test, which asserts the log line, as in DE5:
-
-```bash
-git show de-06-done:tests/test_gate.py > tests/test_gate.py
-```
-
-```python
-def test_a_line_with_a_wild_quantity_is_held_back_and_counted(con, caplog):
-    with caplog.at_level(logging.INFO, logger="pipeline.gate"):
-        clean = gate(con, batch(con, line(1), line(2, quantity=20), line(3, quantity=1), line(4), line(5)))
-    assert sorted(key for (key,) in clean.project("order_item_id").fetchall()) == [1, 3, 4, 5]
-    assert con.execute("SELECT check_name, order_item_id FROM quarantine").fetchall() == [("quantity_in_range", 2)]
-    assert "5 lines read, 4 clean, 1 quarantined" in caplog.text
-```
-
-```bash
-uv run pytest -q --tb=short
-```
-
-**Predict:** DE5 ended with 17 passing tests. How many pass now?
-
-<details>
-<summary>Reveal the result</summary>
-
-```console
-$ uv run pytest -q --tb=short
-....................                                                     [100%]
-20 passed in 1.56s
-```
-
-</details>
-
-*Why:* 17 and the three of the gate. Add up the first run of unit 3 the same way: 1,989 read are 1,988 clean and 1 held, and the 1,988 clean are 1,988 inserted, 0 updated and 0 unchanged. When a sum fails, the data changed, the code lost a line or the rule is wrong, and *Backfills, reruns and recovering from failure* (DE8) teaches how to tell which. A person can read these counts, the size of the quarantine and the table checks of unit 1 without opening a row.
-
 <Aside type="tip" title="Remember">
 
 - A contract is written before the checks; the checks come from it.
 - A check is a query for the bad lines: none, and it passes. Break the data on purpose and watch the right check fire.
-- Rules that protect the merge stop the run; a rule about one line quarantines it; too many held lines stop the run.
-- Lines read equal clean plus held, and clean equal inserted plus updated plus unchanged.
+- Each rule carries an action, and the report names it; the table checks (freshness, lines a day) carry `warn`.
 
 **Common trap:** a not-null check on a column that is empty on purpose, such as `channel` before May. It fails on every run until nobody reads it.
 
@@ -391,7 +238,7 @@ $ uv run pytest -q --tb=short
 
 <Exercise id="data-engineer-data-quality-checks-1">
 
-**A rule the contract does not state yet.** From May 1 the API sends a `channel` on every version, so a line updated from May 1 with no channel is a fault. Add that rule to a copy of the contract, as a rule of its own, and stop the run when it fails. The copy and the start of the rule are given; write the `WHERE`. Expected: the real file passes all 18 checks, and the copy `channel_gone`, which loses the channel of the lines updated from June 15, fails the new rule.
+**A rule the contract does not state yet.** From May 1 the API sends a `channel` on every version, so a line updated from May 1 with no channel is a fault. Add that rule to a copy of the contract, as a rule of its own, with the action `stop`. The copy and the start of the rule are given; write the `WHERE`. Expected: the real file passes all 18 checks, and the copy `channel_gone`, which loses the channel of the lines updated from June 15, fails the new rule.
 
 ```bash
 mkdir -p exercises
@@ -457,7 +304,7 @@ The rule is a condition on two columns, which is why it is a rule of its own and
 
 <Exercise id="data-engineer-data-quality-checks-2">
 
-**A line for a store that does not exist.** Before you start, say in one sentence what the report will look like. Then, from a blank file `exercises/de06_ex2.py`, write the two things the check needs: a broken copy `data/broken/unknown_store.parquet` in which line 5500 is sold in store 9, and a copy of the contract, `exercises/de06_ex2_contract.json`, with a rule that finds lines whose `store_id` is not in `data/staging/stores.parquet`. Choose `stop` or `quarantine` for it and give the reason in a comment. Run the checks on the broken copy with your contract. Expected: one check fails, and it names line 5500.
+**A line updated before it was ordered.** Before you start, say in one sentence what the report will look like. Then, from a blank file `exercises/de06_ex2.py`, write the two things the check needs: a broken copy `data/broken/updated_early.parquet` in which line 5500 was updated a day before it was ordered, and a copy of the contract, `exercises/de06_ex2_contract.json`, with a rule that returns the lines whose `updated_at` is earlier than their `ordered_at`. Give it the action `stop`. Run the checks on the broken copy with your contract. Expected: one check fails, and it names line 5500.
 
 <details>
 <summary>Hint</summary>
@@ -469,10 +316,10 @@ Write the contract copy from Python: `json.loads` the original, set `contract["r
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"One line of the broken copy fails my rule, the report shows the name of the rule, the action I chose and order_item_id 5500, and the other 17 checks pass."*
+Expected output in words: *"One line of the broken copy fails my rule, the report shows the name of the rule, `stop` and order_item_id 5500, and the other 17 checks pass."*
 
 ```python
-contract["rules"] = [{"name": "store_known", "on_fail": ..., "bad_rows": "SELECT * FROM {t} WHERE ..."}]
+contract["rules"] = [{"name": "updated_after_ordered", "on_fail": "stop", "bad_rows": "SELECT * FROM {t} WHERE ..."}]
 ```
 
 </details>
@@ -485,36 +332,31 @@ from pathlib import Path
 
 import duckdb
 
-# The broken copy: line 5500 is sold in store 9, which is not in the stores file.
+# The broken copy: line 5500 was updated a day before it was ordered.
 duckdb.sql("""
     COPY (
-        SELECT * REPLACE (CASE WHEN order_item_id = 5500 THEN 9 ELSE store_id END AS store_id)
+        SELECT * REPLACE (CASE WHEN order_item_id = 5500 THEN ordered_at - INTERVAL 1 DAY ELSE updated_at END AS updated_at)
         FROM read_parquet('data/staging/order_lines.parquet')
-    ) TO 'data/broken/unknown_store.parquet' (FORMAT parquet)
+    ) TO 'data/broken/updated_early.parquet' (FORMAT parquet)
 """)
 
-# The rule. One line with an unknown store does not make the others wrong, so it is quarantined; if many lines
-# have unknown stores, the share rule of the contract stops the run.
+# The rule, as a copy of the contract. Nothing downstream should read a line with an impossible history, so it stops the run.
 contract = json.loads(Path("contracts/order_lines.json").read_text())
 contract["rules"] = [
-    {
-        "name": "store_known",
-        "on_fail": "quarantine",
-        "bad_rows": "SELECT * FROM {t} WHERE store_id NOT IN (SELECT store_id FROM read_parquet('data/staging/stores.parquet'))",
-    }
+    {"name": "updated_after_ordered", "on_fail": "stop", "bad_rows": "SELECT * FROM {t} WHERE updated_at < ordered_at"}
 ]
 Path("exercises/de06_ex2_contract.json").write_text(json.dumps(contract, indent=2))
 ```
 
 ```console
 $ uv run python exercises/de06_ex2.py
-$ uv run python -m pipeline.checks data/broken/unknown_store.parquet --contract exercises/de06_ex2_contract.json --as-of "2026-07-01 08:00:00"
-data/broken/unknown_store.parquet
-  FAIL store_known (quarantine): 1 bad rows, order_item_id 5500
+$ uv run python -m pipeline.checks data/broken/updated_early.parquet --contract exercises/de06_ex2_contract.json --as-of "2026-07-01 08:00:00"
+data/broken/updated_early.parquet
+  FAIL updated_after_ordered (stop): 1 bad rows, order_item_id 5500
   17 of 18 checks passed
 ```
 
-Quarantine fits one stray line. If the stores file were out of date and a whole new store sold, thousands of lines would fail the rule, and the share of held lines would stop the run instead, which is what you want: that is a fault in the file or the rule, not in the lines.
+A rule that compares two columns of one row needs no new code in `checks.py`: any query that returns the bad rows is a check.
 
 </Solution>
 
@@ -522,12 +364,12 @@ Quarantine fits one stray line. If the stores file were out of date and a whole 
 
 ## Check yourself
 
-1. Without looking back: what do a failed `stop` rule and a failed `quarantine` rule each do to the rest of the batch?
+1. Without looking back: name the two table checks of the contract and say what each one watches.
 
    <details>
    <summary>answer</summary>
 
-   A stop rule loads nothing from the batch and raises. A quarantine rule holds only its own lines, and the rest of the batch loads.
+   `fresh` watches how new the newest line is, and `lines_per_day` watches how many lines each day holds, empty days included.
 
    </details>
 
@@ -558,7 +400,7 @@ for table in ("lines", "store_gap"):
 <details>
 <summary>Hint</summary>
 
-Ask yourself what a week without a store looks like to a check that looks at the whole file at once. Then list the days since each store opened. Store 3 opened on April 1, so the days before that are not missing.
+Ask what a week without a store looks like to a check of the whole file. Then list the days since each store opened. Store 3 opened on April 1, so the days before that are not missing.
 
 </details>
 
@@ -611,7 +453,7 @@ Without the `opened_on` condition the real file would show 90 days for store 3, 
 
 </Exercise>
 
-**Can you do it?** *I can write a contract, let it make the checks, break the data on purpose to see them fire, decide between stopping a run and quarantining a line, and show that the counts of a run add up.*
+**Can you do it?** *I can write a contract, let it make the checks, and break the data on purpose to see them fire.*
 Test: Exercise data-engineer-data-quality-checks-2, done without opening the hints.
 
-The pattern to remember: **write down what the data must be, make the checks from that, and let a bad line stop the run or sit in quarantine with a name and a count, never pass quietly.** The next lesson runs the pipeline on a schedule, so these checks run without you.
+The pattern to remember: **write down what the data must be, make the checks from that, and break the data on purpose to see the right check fire.** The next lesson decides what a failed check does to a run.

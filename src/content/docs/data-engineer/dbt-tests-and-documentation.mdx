@@ -15,6 +15,7 @@ objectives:
 prerequisites:
   - data-engineer-dbt-project-and-first-model
   - data-engineer-data-quality-checks
+  - data-engineer-quality-gates-stop-or-quarantine
 datasets:
   - cafe-sales
 reviewed: 2026-11-16
@@ -25,10 +26,12 @@ sources:
     url: https://docs.getdbt.com/docs/build/documentation
   - title: 'dbt documentation: SQL models, ref (accessed 2026-11-24)'
     url: https://docs.getdbt.com/docs/build/sql-models
+  - title: 'dbt documentation: build command, skipping on failures (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/reference/commands/build
 status: draft
 ---
 
-TODO(owner): Team draft (D24), same run and pins as DE9 (dbt-core 1.12.6, dbt-duckdb 1.11.1, DuckDB 2.0.0); checkpoint tags `de-10-start` and `de-10-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). The Data tests page puts test inputs under `arguments` from dbt 1.10.5, which the lesson uses. The Documentation page describes `dbt docs generate` and `dbt docs serve` for dbt v2 (a static site that the browser queries with DuckDB-WASM); on the pinned 1.12.6 `dbt docs generate` printed "Catalog written to .../target/catalog.json" and wrote `index.html`, `manifest.json` and `catalog.json` in `target/`. `dbt docs serve` and the lineage graph in a browser were not opened here: the lesson reads the lineage with `dbt ls` and says so. The six faults of `scripts/break_staging.py`, the `STAGING_DIR` variable of `sources.yml` and the `scratch` target of `profiles.yml` are this lesson's; the checks of DE6 and the tests here are two tools for the same rules, not one the other's source. Not run: Windows, macOS, Codespaces. Stub changes: dataset stays `cafe-sales`; objectives rewritten around break-the-data and reconciliation; prerequisites add the data-quality lesson.
+TODO(owner): Team draft (D24), same run and pins as DE9 (dbt-core 1.12.6, dbt-duckdb 1.11.1, DuckDB 2.0.0); checkpoint tags `de-10-start` and `de-10-done`; needs these tags pushed to the `de-pipeline-starter` repository (it exists; the tags from `de-06-start` on are built, not pushed). The Data tests page puts test inputs under `arguments` from dbt 1.10.5, which the lesson uses. The Documentation page describes `dbt docs generate` and `dbt docs serve` for dbt v2 (a static site that the browser queries with DuckDB-WASM); on the pinned 1.12.6 `dbt docs generate` printed "Catalog written to .../target/catalog.json" and wrote `index.html`, `manifest.json` and `catalog.json` in `target/`. `dbt docs serve` and the lineage graph in a browser were not opened here: the lesson reads the lineage with `dbt ls` and says so. The six faults of `scripts/break_staging.py`, the `STAGING_DIR` variable of `sources.yml` and the `scratch` target of `profiles.yml` are this lesson's; the checks of DE6 and the tests here are two tools for the same rules, not one the other's source. The `build` page marks its section on skipping after a failed test "dbt v2.0 and later"; the pinned 1.12.6 skipped the two models in the run of unit 1, as shown. The checkpoint `de-10-done` keeps the `category` test of Exercise 1 (its `dbt build` runs 20 nodes). Not run: Windows, macOS, Codespaces. Stub changes: dataset stays `cafe-sales`; objectives rewritten around break-the-data and reconciliation; prerequisites add the data-quality lesson.
 
 ## The question
 
@@ -42,7 +45,7 @@ Both questions have the same answer: the project says, in files, what must hold 
 
 **Match.** *Data quality checks that fail loudly* (DE6) wrote each rule as a query for the bad lines and broke the data on purpose. A dbt test is the same idea: a `select` for failing rows, zero rows to pass.
 
-**Diverge.** The checks of DE6 sat in front of the load. These sit on the models, after they are built, and `dbt build` skips what depends on a model whose test failed.
+**Diverge.** The gate of DE6b sat in front of the load. These run on the models, after they are built.
 
 </Aside>
 
@@ -55,7 +58,7 @@ From memory first, then click to check.
    <details>
    <summary>answer</summary>
 
-   The dependency: dbt builds `stg_stores` first and knows the model that calls it depends on it.
+   The dependency: the dbt documentation says dbt uses `ref` to determine the order to run the models, by building a graph of them, so `stg_stores` is built first.
 
    </details>
 
@@ -116,18 +119,18 @@ models:
                 to: ref('stg_stores')
                 field: store_id
 
-  - name: stg_products
-    description: One row for each product on the menu.
-    columns:
-      - name: product_id
-        data_tests:
-          - unique
-          - not_null
-
   - name: stg_stores
     description: One row for each store.
     columns:
       - name: store_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_products
+    description: One row for each product on the menu.
+    columns:
+      - name: product_id
         data_tests:
           - unique
           - not_null
@@ -185,7 +188,7 @@ $ STAGING_DIR=../data/broken_staging/repeated_key uv run dbt build --target scra
 
 </details>
 
-*Why:* the `unique` test of the key fails with one bad row, and `build` skips the two models that come after `stg_order_lines`, so a table made from a repeated line is never built. That is the stop of DE6, done by the order of the graph. The tests of the other columns still pass, as in DE6: one fault trips one test.
+*Why:* the `unique` test of the key fails with one bad row, and `build` skips the two models that come after `stg_order_lines`, so a table made from a repeated line is never built. The `build` page of the dbt documentation says the same rule: a failing test on an upstream resource makes the resources downstream of it skip. That is the stop of DE6b, done by the order of the graph. The tests of the other columns still pass, as in DE6: one fault trips one test.
 
 ### 2. Tests of your own
 
