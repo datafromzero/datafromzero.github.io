@@ -94,19 +94,20 @@ def ds15(out):
     ns = run_notebook(NOTEBOOK_FILES["ds15"])
     th = ns["take_home"]
     scores = {col: ns["alone"](col) for col in ns["CHECKED"]}
-    assert [round(scores[c], 3) for c in ("has_reason", "plus_uses", "active_events", "plus_uses_14d", "annual_now", "days_to_buy")] == [0.892, 0.856, 0.594, 0.579, 0.52, 0.511]
+    assert [round(scores[c], 3) for c in ("has_reason", "plus_uses", "active_events", "plus_uses_14d", "annual_now", "days_to_buy")] == [0.891, 0.849, 0.577, 0.568, 0.519, 0.516]
+    assert len(ns["train"]) == 1344 and len(ns["test"]) == 448
     assert ns["held_out_auc"](ns["HONEST"]) == 0.618 and len(th) == 1792
     known = set(ns["HONEST"])                       # the columns known by day 14
     rows = sorted(scores.items(), key=lambda kv: -kv[1])
     assert len(rows) == 9 and sum(c in known for c, _ in rows) == 5
-    desc = ("A bar chart of nine columns of the take-home file. Each bar is the ROC AUC that the column reaches alone as a score, in either direction, on all 1,792 people, from 0.5, which knows nothing, to 1.0. "
+    desc = ("A bar chart of nine columns of the take-home file. Each bar is the ROC AUC that the column reaches alone as a score, in either direction, on the 1,344 training people, from 0.5, which knows nothing, to 1.0. "
             + "; ".join(f"{c} {v:.3f}" for c, v in rows)
             + ". Five columns, drawn in blue, are known by day 14: days_to_buy, activity_before, visits_14d, expenses_14d and plus_uses_14d. Four columns, drawn in purple, are known only after day 14: "
-            "has_reason, plus_uses, active_events and annual_now. The two highest bars are purple; active_events, at 0.594, sits just above the highest blue bar, 0.579, and annual_now, at 0.520, is close to the lowest.")
+            "has_reason, plus_uses, active_events and annual_now. The two highest bars are purple; active_events, at 0.577, sits just above the highest blue bar, 0.568, and annual_now, at 0.519, is close to the lowest.")
     s = Svg("ds15-columns", "Score of each column alone: known by day 14, or known only after it", desc)
     X0, X1 = 124, 322
     A = Axis(0.5, 1.0, X0, X1)
-    title_line(s, "ROC AUC of each column alone (all 1,792 people)", 8, 10)
+    title_line(s, "ROC AUC of each column alone (1,344 training people)", 8, 10)
     square(s, 124, 22, BLUE)
     s.text(136, 29.5, "known by day 14", size=9.5)
     square(s, 226, 22, PURPLE)
@@ -143,12 +144,12 @@ def ds16(out):
         point, low, high = ns["value_gain"](rule, None, yt)
         rows.append((name, point, low, high))
     assert [round(r[1]) for r in rows] == [81, 81, -367] and (rows[0][2], rows[0][3]) == (62.2, 99.2) and (rows[1][2], rows[1][3]) == (63.5, 99.2)
-    desc = ("A dot chart with intervals of what an offer rule earns, in dollars for every 1,000 of the 4,454 held-out people, against sending nobody, from minus 400 to plus 100, under the assumptions "
+    desc = ("A dot chart with intervals of what an offer rule earns, in dollars for every 1,000 of the 4,454 held-out people, against sending nobody, from minus 450 to plus 100, under the assumptions "
             "of lesson DS4: a $2 offer, a return rate of 0.25, a return worth $12. "
             + "; ".join(f"{n}: {money(p)}, 95 percent interval {money(lo)} to {money(hi)}" for n, p, lo, hi in rows)
             + ". The model rule and the paid-social rule are level, with intervals that overlap almost completely; offering everybody loses money, far below zero.")
     s = Svg("ds16-rules", "What each offer rule earns for every 1,000 people, against sending nobody", desc)
-    X = Axis(-400, 100, 128, 318)
+    X = Axis(-450, 100, 128, 318)
     title_line(s, "Earned for every 1,000 people, 95% intervals", 8, 10)
     for i, (name, p, lo, hi) in enumerate(rows):
         yy = 44 + i * 36
@@ -158,7 +159,7 @@ def ds16(out):
         s.circle(X(p), yy, 5, col)
         s.text(X(p), yy - 11, money(p), anchor="middle", weight=600, size=9.5)
     base = 44 + 3 * 36 - 10
-    s.line(X(-400), base, X(100), base)
+    s.line(X(-450), base, X(100), base)
     for v in (-400, -300, -200, -100, 0, 100):
         s.line(X(v), base, X(v), base + 4)
         s.text(X(v), base + 16, str(v), anchor="middle", opacity=0.8)
