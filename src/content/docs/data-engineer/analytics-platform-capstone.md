@@ -80,7 +80,7 @@ From memory first, then click to check.
 **Hand in eight things,** each as short as honesty allows:
 
 1. **A clean-clone run.** Commit everything, then run `bash scripts/clean_clone_check.sh`. Say before you run what you expect it to print; hand in what it printed and, if it failed, which file was missing from Git.
-2. **A README** with five sections: what the repository builds and how to run it; the grain and the key of every dimension, fact and mart, in a table; why these keys; a backfill story; a cost note; and the known limits.
+2. **A README** with six sections: what the repository builds and how to run it; the grain and the key of every table, with the kind of question each answers, in a table; why these keys; a backfill story; a cost note; and the known limits.
 3. **Tests and CI.** Count your tests by kind (grain, reconciliation, rule), name the CI workflow, and show one deliberate change to a model that the CI catches, with the failing test and the exit status.
 4. **A backfill story**, in the README: the command, the range, how many runs at once and why, a number that proves a rerun changed nothing, and what you do when one run fails.
 5. **A cost note**, in the README: for each model, what a run reads, what it writes and when a full rebuild is needed, a count from a run, and one cheaper rewrite.
@@ -90,7 +90,7 @@ From memory first, then click to check.
 
 | AI output | Checks run | Verdict | Reason |
 |---|---|---|---|
-| A README that says a table "is updated in real time" | read the schedule of the job that builds it (check 4) | revise | it is rebuilt once a night; the README now says so |
+| A README that says a table "is updated in real time" | read the schedule of the job that builds it (check 4, confirm in the source) | revise | it is rebuilt once a night; the README now says so |
 
 ## Rubric
 
@@ -166,7 +166,7 @@ $ bash scripts/clean_clone_check.sh
 clean clone: exit status 0
 ```
 
-The first `Done` is the snapshot of the partner's first file, the second the build of all 46 nodes. It took about 20 seconds. The check clones only what Git holds, so a missing file shows here and not on a colleague's laptop.
+The first `Done` is the snapshot of the partner's first file, the second the build of all 46 nodes. The median of 7 runs here was 14 seconds (12 to 15). The check clones only what Git holds, so a missing file shows here and not on a colleague's laptop.
 
 ### The README
 
@@ -180,14 +180,18 @@ Parquet, build a star schema with dbt, test every model, and rebuild everything 
 
 ## The grain of each table
 
-| Table | One row is | Key |
-| --- | --- | --- |
-| `stg_order_lines` | the newest version of one order line | `order_line_id` |
-| `int_order_lines_priced` | one order line, with its product's price and its amount | `order_line_id` |
-| `dim_product` | one version of a product (type 2) | `product_key` |
-| `dim_store` | one store as it is now (type 1) | `store_key` |
-| `fct_order_lines` | one order line, with the keys that were true when it was ordered | `order_line_id` |
-| `fct_store_daily_sales` | one store and one day with a sale | `store_id` and `order_date` |
+| Table | One row is | Key | Answers questions about |
+| --- | --- | --- | --- |
+| `stg_order_lines` | the newest version of one order line | `order_line_id` | nothing a reader asks: it renames and types the staged file |
+| `stg_products` | one product on the menu | `product_id` | nothing a reader asks: a renamed copy of the staged products |
+| `stg_stores` | one store | `store_id` | nothing a reader asks: a renamed copy of the staged stores |
+| `int_order_lines_priced` | one order line, with its product's price and its amount | `order_line_id` | nothing a reader asks: the amount of each line, for the marts that sum it |
+| `dim_product` | one version of a product (type 2) | `product_key` | what a product was and cost, and its category on a given date |
+| `dim_store` | one store as it is now (type 1) | `store_key` | where a store is and when it opened |
+| `fct_order_lines` | one order line, with the keys that were true when it was ordered | `order_line_id` | any question about lines: sales by store or by category as sold, by status |
+| `fct_store_daily_sales` | one store and one day with a sale | `store_id` and `order_date` | sales by store and day, and how they trend |
+| `fct_store_status_amounts` | one store | `store_id` | completed against canceled dollars of a store |
+| `fct_store_discounts` | one store | `store_id` | list price, discounts and net amount of a store's completed lines |
 
 ## Why these keys
 
@@ -200,21 +204,43 @@ two-part key because its grain is two things.
 To rebuild a past range, from `airflow/`: `uv run airflow backfill create --dag-id cafe_pipeline --from-date 2026-05-01 --to-date 2026-05-05 --max-active-runs 1`.
 One run at a time, because DuckDB lets one process write. Every run loads by key, so a rerun changes nothing; prove it with
 `uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05` before and after, and the two fingerprints must be equal.
+If one run fails, read the last line of its error first, fix the cause, and run the same command with `--reprocess-behavior failed`:
+it creates runs again only for the days that failed. Afterwards the fingerprint of the range must equal the one that a single
+incremental load of the same days gives.
 
 ## Cost
 
-`fct_store_daily_sales` is a table rebuilt in full. It reads 5 of the 10 columns of `int_order_lines_priced`, 167,636 bytes counted with
-BigQuery's type sizes (not run on BigQuery), and writes one row for each store and day. `int_order_lines_priced` is an incremental
-merge on `order_line_id`: each run reads the lines posted since the newest one it holds. Here the cost is a laptop; on a warehouse
-partition by `order_date` first.
+The counts come from the CI build of 2026-11-24 (`bash ci/dbt_ci.sh`). A view stores nothing; a table is rebuilt in full on every run.
+
+| Model | A run reads | A run writes | Needs a full rebuild when |
+| --- | --- | --- | --- |
+| `stg_order_lines` (view) | the staged file, 62,362 bytes, when something reads the view | nothing | never |
+| `stg_products` (view) | the staged file of 16 products | nothing | never |
+| `stg_stores` (view) | the staged file of 3 stores | nothing | never |
+| `int_order_lines_priced` (incremental, merge on `order_line_id`) | the lines posted since the newest one it holds, and the 16 products | those lines: 3,287 on the first build | what a row means changes (`--full-refresh`) |
+| `products_snapshot` (snapshot) | the partner's file | a row for each product that changed: 18 rows | never: a rebuilt snapshot loses its history |
+| `dim_product` (table) | the 18 rows of the snapshot | 18 rows | every run |
+| `dim_store` (table) | the 3 stores | 3 rows | every run |
+| `fct_order_lines` (table) | 3,287 lines, 18 product versions, 3 stores | 3,287 rows | every run |
+| `fct_store_daily_sales` (table) | 5 of the 10 columns of `int_order_lines_priced`, 167,636 bytes for 3,287 lines, and the 3 stores | 453 rows, one for each store and day | every run |
+| `fct_store_status_amounts` (table) | 3 columns of the 3,287 lines of `int_order_lines_priced` | 3 rows | every run |
+| `fct_store_discounts` (table) | 3,287 lines and 16 products | 3 rows | every run |
+
+The bytes are DuckDB's, counted with BigQuery's type sizes, and BigQuery was not run. No price is used. The cheaper rewrite is for
+`fct_store_daily_sales`: on a warehouse partition it by `order_date` and rebuild only the days a run changes.
 
 ## Known limits
 
-Airflow needs Linux or WSL2. The backfill was run in DE8 and not again here. The products come from one partner file. A line that
-reaches the API with a time before the newest one is loaded only because the load overlaps (DE4).
+- One writer: DuckDB lets one process write, so a backfill of 5 days is 5 runs in a row, never at once.
+- A line is loaded late only because the load overlaps by one hour (DE4): a line posted with a time more than an hour before the
+  newest line loaded is missed by the nightly load, and only a full replay finds it.
+- The products come from one partner file whose history is invented (3 versions, 2 category moves), and the dollars are reconciled
+  between two tables of this repository (3,286 completed lines, $22,625.75), not with the API.
+- The star has no customer: a question about what a customer bought cannot be answered from it.
+- Airflow needs Linux or WSL2, and the backfill was run in DE8, not again here.
 ````
 
-It scores 2 on items 2, 4 and 5: the grain and key of every table with a reason for the keys, a backfill with its proof, and a cost line with a count and a rewrite. The dbt page on project structure describes the same three layers, staging, intermediate and marts, that the table follows. Item 5 also wants a line on what was not run: here, BigQuery.
+It scores 2 on items 2, 4 and 5, and on the limits half of item 7 (the run book is below). Item 2: the grain and key of all ten models, a reason for the keys, and the kind of question each table answers. Item 4: the command and range, one run at a time with its reason, the fingerprint before and after, and what to do when one run fails. Item 5: a cost line for each model and the snapshot with its reads, writes and rebuild rule, counts from the CI build, one cheaper rewrite, no price, and a line that says BigQuery was not run. Item 7: five known limits, each tied to a count or a rule. The dbt page on project structure describes the same three layers, staging, intermediate and marts, that the table follows.
 
 ### Tests and CI
 
@@ -296,7 +322,7 @@ staged_lines | fact_lines | mart_lines | fact_net_usd | mart_net_usd
 3286         | 3286       | 3286       | 22625.75     | 22625.75
 ```
 
-The lines are the same on three routes, 3,286, and the money on two, $22,625.75; the stores add up to it ($9,017.75 + $4,611.25 + $8,996.75) and so do the categories. That reconciles the star with the store-day table, which both read the same prices: it does not check the dollars against the API, which the staged file has no prices to do. The models cannot say what a customer bought: the star has no customer.
+The lines are the same on three routes, 3,286, and the money on two, $22,625.75; the stores add up to it ($9,017.75 + $4,611.25 + $8,996.75) and so do the categories. That reconciles the star with the store-day table, which both read the same prices: it does not check the dollars against the API, because the staged file has no prices to check them with. The models cannot say what a customer bought: the star has no customer.
 
 ### The run book
 
@@ -308,10 +334,10 @@ The pack, in order: the schema (the models and their columns); the grain (the ta
 
 | AI output | Checks run | Verdict | Reason |
 |---|---|---|---|
-| A category query that joins `dim_product` on `product_id` and keeps the current row | ran it: bakery 606 lines and $4,383.25, food 525 and $4,179.25, against 631 and $3,866.25, 500 and $4,696.25 as sold (check 3) | revise | the current category moves 25 lines and $517 between bakery and food; the question asks for the category when sold, so the join is on `product_key` |
-| "Run the five days of the backfill in parallel to save time" | looked for what the store allows: DuckDB lets one process write (check 4) | reject | the README says one run at a time |
-| A mart written as `select *` "to keep it simple" | counted bytes: all ten columns are 306,437, the five it needs 167,636 (check 3) | revise | the mart names its columns; the cost line says why |
-| A cost note that quotes a monthly dollar figure | looked for a price page and a date in the prompt and the output: neither was given (check 4) | reject | no dated price is sourced, so the note gives bytes and no dollars |
+| A category query that starts from the staged lines, joins `dim_product` on `product_id` and keeps the current row | ran it: bakery 606 lines and $4,383.25, food 525 and $4,179.25, against 631 and $3,866.25, 500 and $4,696.25 as sold from the fact (check 3, reconcile) | revise | the current category moves 25 lines and $517 between bakery and food; the question asks for the category when sold, so the join is on the fact's `product_key` |
+| "Run the five days of the backfill in parallel to save time" | looked for what the store allows: DuckDB lets one process write (check 4, confirm in the source) | reject | the README says one run at a time |
+| A mart written as `select *` "to keep it simple" | counted bytes: all ten columns are 306,437, the five it needs 167,636 (check 3, reconcile) | revise | the mart names its columns; the cost line says why |
+| A cost note that quotes a monthly dollar figure | looked for a price page and a date in the prompt and the output: neither was given (check 4, confirm in the source) | reject | no dated price is sourced, so the note gives bytes and no dollars |
 
 *Signed: your name, the date. Not checked: the backfill in this repository, and any run on GitHub Actions.*
 

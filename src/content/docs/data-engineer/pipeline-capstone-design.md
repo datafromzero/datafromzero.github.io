@@ -14,6 +14,7 @@ objectives:
   - Draw the architecture with failure points marked and estimate what breaks first at 100 times the volume
   - Score your own answer against the printed rubric
 prerequisites:
+  - sql-window-functions
   - data-engineer-backfills-and-failure-recovery
   - data-engineer-spark-distributed-processing
   - data-engineer-data-quality-checks
@@ -32,7 +33,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), run with DuckDB 2.0.0 on Linux; tags `de-17-start` and `de-17-done` need pushing to `de-pipeline-starter`. The reference SQL is in `sql/sql_test_reference.sql` of `de-17-done` (the learner opens it after the test), and every answer printed here comes from running it on the `app-events` file of release tag `v0.2.0`. The scale probe's times vary by machine (three runs: 0.05 to 0.08 s and 0.16 to 0.18 s). The 100-times figures are arithmetic from those runs, labeled as not run. The AWS and Google Cloud certification pages of the stub were not opened and are dropped; the stub's sources are replaced by the three pages the reference quotes. Decide: the case and its stakeholder are invented; the reference's AI log rows are written for the lesson, in the style of an assistant, as in DS16. Not run: Windows, macOS, Codespaces. Stub changes: description kept; prerequisites unchanged; `short_title` added.
+TODO(owner): Team draft (D24), run with DuckDB 2.0.0 on Linux; tags `de-17-start` and `de-17-done` need pushing to `de-pipeline-starter`. The reference SQL is in `sql/sql_test_reference.sql` of `de-17-done` (the learner opens it after the test), and every answer printed here comes from running it on the `app-events` file of release tag `v0.2.0`. The scale probe's times vary by machine (seven runs: medians 0.06 s and 0.16 s). The 100-times figures are arithmetic from those runs, labeled as not run. The AWS and Google Cloud certification pages of the stub were not opened and are dropped; the stub's sources are replaced by the three pages the reference quotes. Decide: the case and its stakeholder are invented; the reference's AI log rows are written for the lesson, in the style of an assistant, as in DS16. Not run: Windows, macOS, Codespaces. Stub changes: description kept; prerequisites unchanged; `short_title` added.
 
 ## The question
 
@@ -64,7 +65,7 @@ From memory first, then click to check.
 
 ## How this simulation works
 
-**Time.** 90 minutes: the SQL test 30, the contract 10, the choices 10, the architecture 10, the 100-times estimate 15, scoring yourself 15. Use a timer, not this page.
+**Time.** 90 minutes: the SQL test 30; the design 45, split as the contract 8, the choices 7, the architecture 10, the 100-times estimate 12, the trade-off note 5 and the AI log 3 (write each row as you use an output); scoring yourself 15. Use a timer, not this page.
 
 **Tools.** The events file is the one of the Spark lesson (DE16): run `uv run python scripts/fetch_app_events.py` in `de-pipeline-starter` if you do not have it, then `uv run python scripts/sql.py "..."` for each question. Draw on paper or in any tool. Fetch the one script the estimate uses: `git show de-17-done:scripts/scale_probe.py > scripts/scale_probe.py`.
 
@@ -88,7 +89,7 @@ Five questions on `data/raw/app-events/events.csv`, 177,379 events with the colu
 
 ### Part B: the design case (45 minutes)
 
-**The need.** One table, built every morning, with a row for each day and platform: the people who signed up that day and how many of them were active in their first week. The app sends the events as one file for each day.
+**The need.** One table, built every morning, with a row for each day and platform: the people who signed up that day and how many of them were active in their first week, which means at least one `session_start` from the signup up to 7 days later. The app sends the events as one file for each day.
 
 **Hand in six things,** each as short as honesty allows:
 
@@ -101,7 +102,7 @@ Five questions on `data/raw/app-events/events.csv`, 177,379 events with the colu
 
 | AI output | Checks run | Verdict | Reason |
 |---|---|---|---|
-| A query that joins the orders to the customers and sums the totals | counted the rows before and after the join (check 3) | revise | each order appeared twice; I grouped before joining |
+| A query that joins the orders to the customers and sums the totals | counted the rows before and after the join (check 2, count rows) | revise | each order appeared twice; I grouped before joining |
 
 ## Rubric
 
@@ -257,7 +258,7 @@ over_a_day | latest
 608        | 2 days, 23:52:23
 ```
 
-The answers are 2,849 and 2,905; hour 14 with 9,534; 2,865 and 1,419; June 3, 2026 with 1,307; 608 and 2 days 23:52:23. In question 4 the frame counts the six rows before, which are the six days before because all 181 days have signups; a table with a missing day would need a calendar to join first.
+The answers are 2,849 and 2,905; hour 14 with 9,534; 2,865 and 1,419; June 3, 2026 with 1,307; 608 and 2 days 23:52:23. In question 4 the frame counts the six rows before, which are the six days before because all 181 days have signups; a table with a missing day would need a calendar to join first. The same two columns have the opposite oddity: 30 events have `received_at` before `event_ts`, by up to 4.95 hours (the dataset README says the phone clock ran ahead), so a check on the delay needs a rule for a negative one.
 
 ### A contract that earns full marks
 
@@ -292,11 +293,11 @@ The measurement: `uv run python scripts/scale_probe.py 10` reads the daily query
 
 ```console
 $ uv run python scripts/scale_probe.py 10
-events.csv: 13,041,745 bytes, 181 days, 0.05 s
+events.csv: 13,041,745 bytes, 181 days, 0.06 s
 events_x10.csv: 132,190,718 bytes, 181 days, 0.16 s
 ```
 
-Three runs gave 0.05 to 0.08 s for the file and 0.16 to 0.18 s for ten copies: ten times the data took about two to three times as long, on this machine. The file is 13,041,745 bytes for 177,379 events, 73.5 bytes each; at 100 times that is 17,737,900 events and about 1.3 GB (13,041,745 times 100, not run). A query that reads the history takes seconds, not hours, so the **first thing to break is not the 6 a.m. deadline**. It is the guarantee: if 0.34 percent of events arrive more than a day late (question 5), then 100 times as many, about 60,800 (608 times 100, not run), change days the dashboard has already shown. The second thing is the bill on a warehouse that reads the whole history every day (DE15), where bytes scale with the data. The change: recompute only the last 10 days and keep the older days, with the provisional flag. Not run: any volume above ten copies, any warehouse.
+Seven runs gave a median of 0.06 s for the file (0.06 to 0.07) and 0.16 s for ten copies (0.15 to 0.19): ten times the data took 2.1 to 2.8 times as long, run by run, on this machine. The file is 13,041,745 bytes for 177,379 events, 73.5 bytes each; at 100 times that is 17,737,900 events and about 1.3 GB (13,041,745 times 100, not run). A query that reads the history takes seconds, not hours, so the **first thing to break is not the 6 a.m. deadline**. It is the guarantee: if 0.34 percent of events arrive more than a day late (question 5), then 100 times as many, about 60,800 (608 times 100, not run), change days the dashboard has already shown. The second thing is the bill on a warehouse that reads the whole history every day (DE15), where bytes scale with the data. The change: recompute only the last 10 days and keep the older days, with the provisional flag. Not run: any volume above ten copies, any warehouse.
 
 ### The trade-off note
 
@@ -310,10 +311,10 @@ The context pack, in order: the schema (the six columns); the grain (one row is 
 
 | AI output | Checks run | Verdict | Reason |
 |---|---|---|---|
-| "2,905 people made a purchase" | counted distinct `user_id` as well as rows (check 3) | revise | 2,905 is the number of events; 2,849 people made them |
-| A contract that promises "exactly-once delivery" of the daily file | looked for what the app guarantees: nothing in the case says it (check 4) | reject | the pipeline cannot promise what the source does not; the contract promises a load by key instead |
-| "Use Kafka and Spark Streaming for the 6 a.m. table" | compared with the need's tolerance for age (check 5) | reject | nothing in the need acts within minutes; a daily batch meets it |
-| "A hundred times the data will not fit in memory" | ran `scale_probe.py 10`: 0.16 to 0.18 s (check 3) | revise | ten copies were quick; the 100-times figure is not run, so the note says so |
+| "2,905 people made a purchase" | counted distinct `user_id` as well as rows, a second way to count (check 3, reconcile) | revise | 2,905 is the number of events; 2,849 people made them |
+| A contract that promises "exactly-once delivery" of the daily file | looked in the case for what the app guarantees: nothing says it (check 4, confirm in the source) | reject | the pipeline cannot promise what the source does not; the contract promises a load by key instead |
+| "Use Kafka and Spark Streaming for the 6 a.m. table" | wrote down the need's tolerance for age (hours) before reading it, then compared (check 1, predict) | reject | nothing in the need acts within minutes; a daily batch meets it |
+| "A hundred times the data will not fit in memory" | ran `scale_probe.py 10`, a measurement of the claim (check 3, reconcile) | revise | ten copies were quick; the 100-times figure is not run, so the note says so |
 
 *Signed: your name, the date. Not checked: how the dashboard tool refreshes at 6 a.m.*
 

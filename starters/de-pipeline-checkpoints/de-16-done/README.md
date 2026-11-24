@@ -18,7 +18,10 @@ uv run pytest -q
 ```
 
 In a codespace: open the repository on GitHub, choose Code, then Codespaces, then create one. The dev container
-installs uv and runs `uv sync` for you. A stopped codespace is deleted after 30 days, so push your work.
+installs uv and runs `uv sync` for you; from lesson 16 on it also installs Java 21, which the Spark lesson needs. A codespace
+created before that has no Java: fetch the new file with
+`git show de-16-done:.devcontainer/devcontainer.json > .devcontainer/devcontainer.json`, open the Command Palette
+and choose Codespaces: Rebuild Container. A stopped codespace is deleted after 30 days, so push your work.
 
 Start the mock API in its own terminal and leave it running while you work:
 
@@ -54,7 +57,7 @@ light and works on Windows. Set it up with `cd airflow`, `uv sync`, `source env.
 Airflow does not run natively on Windows: its documentation says it runs on POSIX-compliant operating systems and that on
 Windows you can run it through WSL2 or Linux containers, so on Windows use a codespace or WSL2 for the Airflow lessons.
 dbt (dbt-core with dbt-duckdb) is in the main environment: run it from the `dbt/` folder with `uv run dbt build`.
-PySpark is in `spark/`, with its own `pyproject.toml` and `uv.lock`: it needs Java 17, 21 or 25 on your path, and `uv sync` there builds it from a source archive. Run its jobs from that folder, with `uv run python NAME.py`.
+PySpark is in `spark/`, with its own `pyproject.toml` and `uv.lock`: it needs Java 17, 21 or 25 on your path (the dev container of lesson 16 installs 21), and `uv sync` there builds it from a source archive. Run its jobs from that folder, with `uv run python NAME.py`.
 
 ## Checkpoints
 

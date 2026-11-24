@@ -48,7 +48,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Team draft (D24), run with DuckDB 2.0.0, dbt-core 1.12.6, dbt-duckdb 1.11.1; tags `de-15-start` and `de-15-done` need pushing to `de-pipeline-starter`. **Nothing was run on BigQuery or dbt-bigquery** (no account; dbt-bigquery is not in the starter): every number is DuckDB's, a row group standing in for a warehouse block, and the `bq` and DDL lines come from the pages opened. The sandbox page does not say whether `CREATE TABLE ... AS SELECT` with `PARTITION BY` is allowed, so the lesson names the console route; that the sandbox cannot run an incremental model is a reading of two pages. A decimal is counted as NUMERIC (16 bytes), from the Parquet page. Stub changes: objectives rewritten (loading is a step, not an objective); duration 30 became 31; prerequisites add DE3 and DE12; nine sources added. Not run: Windows, macOS, Codespaces.
+TODO(owner): Team draft (D24), run with DuckDB 2.0.0, dbt-core 1.12.6, dbt-duckdb 1.11.1; tags `de-15-start` and `de-15-done` need pushing to `de-pipeline-starter`. **Nothing was run on BigQuery or dbt-bigquery** (no account; dbt-bigquery is not in the starter): every number is DuckDB's, a row group standing in for a warehouse block, and the `bq` and DDL lines come from the pages opened. The sandbox page does not say whether `CREATE TABLE ... AS SELECT` with `PARTITION BY` is allowed, so the lesson names the console route; that the sandbox cannot run an incremental model is a reading of two pages. A decimal is counted as NUMERIC (16 bytes) when it fits: the Parquet page converts a decimal to NUMERIC, BIGNUMERIC or STRING by its precision and scale. The mart references `int_order_lines_priced` and `stg_stores`: whether a view over a table counts for the 10 MB minimum was not checked. Stub changes: objectives rewritten (loading is a step, not an objective); duration 30 became 31; prerequisites add DE3 and DE12; nine sources added. Not run: Windows, macOS, Codespaces.
 
 ## The question
 
@@ -134,11 +134,11 @@ columns order_item_id,store_id,status,quantity,order_date: 10,567,606 bytes read
 
 </details>
 
-*Why:* the unsorted copy reads everything; the sorted one reads two blocks, about a quarter, although the week is 2.3 percent of the lines, because a block is read whole and the week sits across the edge of two. Two columns instead of five cut the sorted read from 10,567,606 to 3,932,160 bytes: bytes follow columns as well as blocks. A `LIMIT` is neither lever: the cost page says that on a table that is not clustered it does not reduce the cost.
+*Why:* the unsorted copy reads everything; the sorted one reads two blocks, about a quarter, although the week is 2.3 percent of the lines, because a block is read whole and the week sits across the edge of two. Two columns instead of five cut the sorted read from 10,567,606 to 3,932,160 bytes: bytes follow columns as well as blocks. A `LIMIT` is neither lever: the cost page says that on a table that is not clustered it does not reduce the cost. Your last count can differ by a byte: rows of one day and store have no fixed order.
 
-### 2. Partition, cluster, and the order of the columns
+### 2. Partition and cluster
 
-**Idea.** The partitioning page says a partitioned table is divided into segments, and that a filter on the partitioning column lets BigQuery scan the matching partitions and skip the rest; because of that metadata a dry run can estimate the cost before the query runs. The clustering page says a clustered table sorts its blocks by up to four columns, that a filter or an aggregate on them scans only the relevant blocks, and that the order of the cluster columns affects performance. A partition is the folder of DE3; a cluster is the sort order of DE12.
+**Idea.** The partitioning page says a partitioned table is divided into segments, and that a filter on the partitioning column lets BigQuery scan the matching partitions and skip the rest, so a dry run can give a cost before the run, an upper bound that the cost page says can exceed the bytes billed. The clustering page says a clustered table sorts its blocks by up to four columns, that a filter or an aggregate on them scans only the relevant blocks, so BigQuery may not estimate its bytes accurately, and that the order of the cluster columns affects performance. A partition is the folder of DE3; a cluster is the sort order of DE12.
 
 **Try it.** Two more copies of the same lines are given: sorted by date and then store, and by store and then date. Ask three filters of each, and keep the first line of each answer:
 
@@ -169,7 +169,7 @@ lines_by_date_store: 2 of 9 blocks read (245,760 rows); engine: 2 of 9
 lines_by_date_store: 9 of 9 blocks read (986,100 rows); engine: 9 of 9
 lines_by_date_store: 2 of 9 blocks read (245,760 rows); engine: 2 of 9
 lines_by_store_date: 5 of 9 blocks read (614,400 rows); engine: 5 of 9
-lines_by_store_date: 3 of 9 blocks read (368,640 rows); engine: 3 of 9
+lines_by_store_date: 3 of 9 blocks read (248,820 rows); engine: 3 of 9
 lines_by_store_date: 2 of 9 blocks read (245,760 rows); engine: 2 of 9
 ```
 
@@ -177,10 +177,10 @@ lines_by_store_date: 2 of 9 blocks read (245,760 rows); engine: 2 of 9
 
 *Why:* the first column of the sort decides. Sorted by date first, a store filter alone reads every block, because every stretch of dates holds every store. Sorted by store first, the week sits in three blocks, and two more blocks hold the end of one store's dates and the start of the next, so their smallest and largest dates reach the week: five blocks. The clustering page gives the same rule with its own example: a table clustered by order date, country and status is optimized for a filter on date and country, and not for one on only country and status.
 
-Now read the pages against the size of this table. The clustering page says unpartitioned tables over 64 MB are likely to benefit and that smaller ones usually gain little; the 986,100 lines are 42,402,000 logical bytes. So on the cafes' data a warehouse would show little gain, and DuckDB's blocks are not BigQuery's. The layout below is for a table that has grown. The file is not run:
+Now read the pages against this table's size. The clustering page says unpartitioned tables over 64 MB are likely to benefit and smaller ones usually gain little; the 986,100 lines are 42,402,000 logical bytes, so a warehouse would show little gain here, and DuckDB's blocks are not BigQuery's. The layout below is for a table that has grown. The file is not run:
 
 ```sql
--- BigQuery, for the free sandbox. NOT RUN by the author of the lesson: no BigQuery account was available.
+-- BigQuery, for the free sandbox. Not run: no account was used.
 -- The shapes follow the Google Cloud pages named in the lesson. Load lines_arrival.parquet first (see the lesson), then:
 CREATE TABLE cafe.lines
 PARTITION BY DATE_TRUNC(order_date, MONTH)
@@ -188,7 +188,7 @@ CLUSTER BY store_id
 AS (SELECT * FROM cafe.lines_arrival);
 ```
 
-To try it in the sandbox, write the lines to a file, load it into a dataset you created (`cafe` here), make the partitioned copy, and compare two dry runs, which report the bytes a query would process without running it (the batch loading and cost pages give both commands). The sandbox has 10 GiB of storage and tables expire after 60 days. If the statement is refused, the partitioning page describes **Partition by field** in the Create table form.
+To try it in the sandbox, write the lines to a file, load it into a dataset you created (`cafe` here), make the partitioned copy, and compare two dry runs, which report an upper bound on the bytes a query would process without running it (the batch loading and cost pages give both commands). The second should report less: its filter is on the partitioning column. A filter on `store_id` would not show its gain in a dry run; that shows in the bytes billed after the run. The sandbox has 10 GiB of storage and tables expire after 60 days. If the statement is refused, the partitioning page describes **Partition by field** in the Create table form.
 
 ```bash
 uv run python scripts/sql.py "COPY lines_arrival TO 'data/serving/lines_arrival.parquet' (FORMAT parquet)"
@@ -199,9 +199,9 @@ bq query --use_legacy_sql=false --dry_run "SELECT store_id, quantity FROM cafe.l
 
 ### 3. The cost line of a model on a warehouse
 
-**Idea.** The dbt page for BigQuery sets partitioning and clustering in a model's config: `partition_by`, `cluster_by`, and optionally `require_partition_filter`, which makes any query on the model fail without a partition filter. It says the `merge` strategy of an incremental model scans all the source tables of the model and the destination, and that `insert_overwrite` replaces whole partitions and needs a `partition_by`. Both write with a `merge` statement, which the DML page lists as DML, and the sandbox page lists DML as unsupported: a model like the DE11 one needs a project with billing enabled (a reading, not a run).
+**Idea.** The dbt page for BigQuery sets partitioning and clustering in a model's config: `partition_by`, `cluster_by`, and optionally `require_partition_filter`, which makes any query on the model fail without a partition filter. It says the `merge` strategy of an incremental model scans all the source tables of the model and the destination, and that `insert_overwrite` replaces whole partitions and needs a `partition_by`. By default both write with a `merge` statement (the page's `copy_partitions` option copies partitions instead), which the DML page lists as DML, and the sandbox page lists DML as unsupported: a model like the DE11 one needs a project with billing enabled (a reading, not a run).
 
-**Try it.** First count what the sales mart reads: five columns of `int_order_lines_priced`, 3,287 lines in `analytics.duckdb`, with the decimal counted as `NUMERIC`, 16 bytes:
+**Try it.** First count what the sales mart reads: five columns of `int_order_lines_priced`, 3,287 lines in `analytics.duckdb`, with the decimal counted as `NUMERIC`, 16 bytes, when it fits (the Parquet page maps decimals to `NUMERIC`, `BIGNUMERIC` or `STRING`):
 
 ```bash
 uv run python scripts/blocks.py int_order_lines_priced store_id,order_date,status,units,line_amount_usd --db data/serving/analytics.duckdb
@@ -236,13 +236,13 @@ lines_by_date      602 rows matched, 1 of 9 row groups scanned
 
 *Why:* DuckDB computes the subquery first and prunes with its value. The dbt page says BigQuery does not: pruning there works only when partitions are filtered with literal values, and a subquery does not help. This stand-in is kinder than the warehouse, so a model that passes here can read every partition there. The page's remedies are a static list of partitions for `insert_overwrite`, which it calls the fastest and cheapest way to update a table with dbt, and the variable `_dbt_max_partition`. Neither was run.
 
-Now put the answer for finance in the model. The mart reads all of history on every run; the cheaper rewrite is a table partitioned by `order_date` that rebuilds only the days a run changes. Save the description with its new cost line and build:
+Now put the answer for finance in the model. The mart reads all of history on every run; the cheaper rewrite is a table partitioned by `order_date` that rebuilds only the days a run changes. The given `schema.yml` already holds this description and its cost line. Fetch it and build:
 
 ```yaml
       Cost line: a table, rebuilt in full on every run. It reads every line of int_order_lines_priced
       and writes one row for each store and day. On a warehouse it reads 5 of the 10 columns of that table,
-      167,636 bytes for 3,287 lines (BigQuery logical bytes), and is billed the 10 MB minimum for each table
-      it references. Cheaper once history is large: partition by order_date and rebuild only the days a run changes.
+      167,636 bytes for 3,287 lines (BigQuery logical bytes), and is billed at least 10 MB for each of the
+      two tables it references, 20 MB in all. Cheaper once history is large: partition by order_date and rebuild only the days a run changes.
 ```
 
 ```bash
@@ -260,12 +260,11 @@ The line names no price: a price is a dated row of a pricing page, so look it up
 
 <Aside type="tip" title="Remember">
 
-- A warehouse bills the bytes of the columns a query reads, in the blocks it scans, with a minimum of 10 MB.
-- A partition is a segment a filter on its column can skip, with an estimate before the run; a cluster sorts blocks, and its first column decides which filters gain.
-- The pages say tables under 64 MB gain little from clustering: lay out a table that has grown.
+- A warehouse bills the bytes of the columns a query reads, in the blocks it scans, with a minimum of 10 MB for each table referenced.
+- A partition is a segment a filter on its column can skip, with an upper-bound estimate before the run; a cluster sorts the blocks inside it, and its gain shows in the bytes billed.
 - A stand-in can prune where the warehouse does not: say what was not run.
 
-**Common trap:** putting first the column that only some of your filters use.
+**Common trap:** adding a `LIMIT` to cut the bill: on a table that is not clustered it does not reduce the bytes read.
 
 </Aside>
 
@@ -373,25 +372,24 @@ Cluster by store first (`CLUSTER BY store_id, order_date`): the daily report B d
 
 <Exercise id="data-engineer-cloud-warehouse-in-practice-3">
 
-**Spot the flaw.** A colleague proposes partitioning the 986,100 lines by day, 2026-01-01 to 2027-04-25. Her note: "A week query reads 7 partitions, 2.3 percent of the bytes, so the bill falls by 97 percent." Check what the partitions would hold: the days and the fewest, average and most lines for a day; the logical bytes of all five columns; and of the September week. Expected: three outputs. What is wrong with the note?
+**Spot the flaw.** A colleague proposes partitioning the 986,100 lines by day, 2026-01-01 to 2027-04-25. Her note: "A week query reads 7 partitions, 2.3 percent of the bytes, so partitioning by day is the right layout for this table." Check what the partitions would hold: the days, and the fewest, average and most lines for a day; and the logical bytes of all five columns. Expected: two outputs. What is wrong with the note?
 
 ```bash
 uv run python scripts/sql.py "SELECT count(*) AS days, min(n) AS fewest, round(avg(n)) AS average, max(n) AS most FROM (SELECT order_date, count(*) AS n FROM lines_by_date GROUP BY order_date)"
 uv run python scripts/blocks.py lines_by_date order_item_id,store_id,status,quantity,order_date
-uv run python scripts/sql.py "SELECT sum(8 * 4 + 2 + strlen(status)) AS week_bytes FROM lines_by_date WHERE order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
 ```
 
 <details>
 <summary>Hint</summary>
 
-The 2.3 percent is right. Compare the week's bytes with the smallest amount the pricing page bills, and a day's bytes with the sizes the partitioning page has in mind.
+The 2.3 percent is right. Divide the table's bytes by the number of days, and compare one day with the partition size the partitioning page has in mind.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Ask what the full scan and the week would each be billed, and whether a day is a partition size the page recommends.
+Ask how many partitions there would be, and how many bytes each would hold.
 
 </details>
 
@@ -410,14 +408,7 @@ lines_by_date: 9 of 9 blocks read (986,100 rows); engine: 9 of 9
 columns order_item_id,store_id,status,quantity,order_date: 42,402,000 bytes read of 42,402,000 (100.0 percent)
 ```
 
-```console
-$ uv run python scripts/sql.py "SELECT sum(8 * 4 + 2 + strlen(status)) AS week_bytes FROM lines_by_date WHERE order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-07'"
-week_bytes
-----------
-989380
-```
-
-The week is 989,380 bytes, 2.3 percent of 42,402,000, so the share is right. The bill is not: the pricing page bills at least 10 MB for each table a query references, so the week is billed the minimum and the full scan about 42 MB. The bill falls by about three quarters, not 97 percent. The partitions are also tiny, 480 of about 88,000 bytes, where the partitioning page suggests clustering instead for partitions under about 10 GB, because many small partitions increase the table's metadata.
+The pruning is real: a week reads 7 of the 480 partitions. The flaw is their size: 42,402,000 bytes over 480 days is about 88,000 bytes a partition, where the partitioning page suggests clustering instead when partitioning leaves under about 10 GB for each, because many small partitions increase the table's metadata. Partitioning pays for a table that has grown; at this size the pages point to clustering by date.
 
 </Solution>
 

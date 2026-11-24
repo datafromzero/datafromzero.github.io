@@ -2,23 +2,21 @@
 id: data-engineer-spark-distributed-processing
 title: 'Beyond one machine: Spark, and streaming when it pays'
 short_title: Spark and streaming
-description: Write a PySpark job, read its plan and a hot key, count late events in a stream with a watermark, and decide batch or streaming for a stated need.
+description: Write a PySpark job, read its plan and the size of its partitions, count late events in a stream with a watermark, and decide batch or streaming for a need.
 stage: data-engineer
 order: 160
 level: advanced
 duration: 35
 objectives:
-  - Say what Spark costs on one machine, and why it is built for data that no longer fits one
+  - Say what Spark costs on one machine against DuckDB on the same file, and that the pages name no size where that flips
   - Write a PySpark DataFrame transformation and an action, and read the plan Spark builds for them
   - Explain lazy evaluation and the shuffle, and recognize data skew from the size of the partitions
   - Describe event time, windows and late data in a stream, and what a watermark drops
   - Decide batch versus streaming for a stated business need
 prerequisites:
-  - data-engineer-role-and-lifecycle
   - data-engineer-file-formats-and-partitioning
   - data-engineer-incremental-loads-idempotency
   - python-pandas-groupby-aggregate
-  - sql-window-functions
 datasets:
   - app-events
 reviewed: 2026-11-16
@@ -39,10 +37,14 @@ sources:
     url: https://spark.apache.org/docs/latest/streaming/apis-on-dataframes-and-datasets.html
   - title: 'Apache Kafka documentation: Introduction (accessed 2026-11-24)'
     url: https://kafka.apache.org/intro
+  - title: 'Dev Containers: the Java feature, README (accessed 2026-11-24)'
+    url: https://github.com/devcontainers/features/tree/main/src/java
+  - title: 'GitHub Docs: Rebuilding the container in a codespace (accessed 2026-11-24)'
+    url: https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace
 status: draft
 ---
 
-TODO(owner): Team draft (D24), run with PySpark 4.3.0 (py4j 0.10.9.9), OpenJDK 21.0.12, Python 3.13, uv 0.11.32, DuckDB 2.0.0, on Linux; tags `de-16-start` and `de-16-done` need pushing to `de-pipeline-starter`. PySpark is a new dependency in its own `spark/` folder with its own `uv.lock`, like `airflow/`; PyPI ships it as a source archive that uv builds in about 16 seconds, about 480 MB installed. **Not run: Windows** (the overview page says Spark runs on Windows with Java), macOS, Codespaces (the dev container has no Java, and was not changed), Kafka, any cluster. Nothing in the pages gives a size at which one machine stops being enough, so the lesson gives measured costs and no threshold. The stream is a file source with `availableNow`: 1 hour gave 177,220 twice, 1 day 177,376, 3 days 177,379. Times vary by machine. Stub changes: the merged note of 2026-11-23 stays (Spark 8 of 27 postings, streaming 9 of 27, issue 118); objective 1 reworded; prerequisites add DE3 and DE4; sources are the pages opened.
+TODO(owner): Team draft (D24), run with PySpark 4.3.0 (py4j 0.10.9.9), OpenJDK 21.0.12, Python 3.13, uv 0.11.32, DuckDB 2.0.0, on Linux; tags `de-16-start` and `de-16-done` need pushing to `de-pipeline-starter`. PySpark is a new dependency in its own `spark/` folder with its own `uv.lock`, like `airflow/`; PyPI ships it as a source archive that uv builds in about 16 seconds, about 480 MB installed. **Not run: Windows** (the overview page says Spark runs on Windows with Java), macOS, Codespaces, Kafka, any cluster. Owner decision, 2026-11-24: `de-16-done` carries a new `.devcontainer/devcontainer.json` that installs Java 21 with the Dev Containers Java feature (`ghcr.io/devcontainers/features/java:1`, option `version`, both from the feature's README); earlier checkpoints keep the old file. **It was written from the README and the GitHub Docs page and was not built or tested in a codespace (the owner will test it)**; the lesson tells a learner whose codespace is older to fetch the file and choose Codespaces: Rebuild Container. Nothing in the pages gives a size at which one machine stops being enough, so the lesson gives measured costs and no threshold. The stream is a file source with `availableNow`: 1 hour gave 177,220 in all 7 runs, 1 day 177,376, 3 days 177,379 in all 7. Times are medians of 7 runs on this machine (the Spark `collect` 2.1 s, DuckDB 0.12 s) and vary by machine. Stub changes: the merged note of 2026-11-23 stays (Spark 8 of 27 postings, streaming 9 of 27, issue 118); objective 1 reworded; prerequisites add DE3 and DE4; sources are the pages opened.
 
 ## The question
 
@@ -88,7 +90,21 @@ Spark splits the work into pieces that run apart and moves rows between them onl
 
 ## Learn by doing
 
-About 35 minutes, 3 new ideas: a plan against a run, the shuffle and a hot key, and event time with a watermark. Work in `de-pipeline-starter` with Java 17, 21 or 25 on your path (the overview page lists them). To catch up, run `git checkout de-16-start`. Spark writes its log to the error stream, so each command ends with `2>/dev/null` to keep the output short: if a command prints nothing, run it again without it. Python commands run from the repository root unless a block says `cd spark`.
+About 35 minutes, 3 new ideas: a plan against a run, the shuffle and partition sizes, and event time with a watermark. Work in `de-pipeline-starter` with Java 17, 21 or 25 on your path (the overview page lists them); `java -version` shows yours. To catch up, run `git checkout de-16-start`. Spark writes its log to the error stream, so each command ends with `2>/dev/null` to keep the output short: if a command prints nothing, run it again without it. Python commands run from the repository root unless a block says `cd spark`.
+
+**Java.** On a laptop, install one of those versions. A codespace made from the starter after lesson 16 was published has Java 21: its dev container file adds the Dev Containers Java feature, whose README names the `version` option.
+
+```json
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": { "version": "21" }
+  },
+```
+
+A codespace made earlier has no Java. Fetch the file, then open the Command Palette (Ctrl+Shift+P, or Shift+Command+P on a Mac), start typing "Rebuild" and select Codespaces: Rebuild Container, as the GitHub Docs page on rebuilding says, and choose Rebuild in the dialog that opens.
+
+```bash
+git show de-16-done:.devcontainer/devcontainer.json > .devcontainer/devcontainer.json
+```
 
 ### 1. A plan is not a run
 
@@ -169,7 +185,7 @@ $ uv run python events_by_name.py 2>/dev/null
 after the transformations: 0 jobs
 plan: AdaptiveSparkPlan > Sort > Exchange > HashAggregate > Exchange > HashAggregate > FileScan
 after explain: 0 jobs
-after collect: 4 jobs, 2.3 s
+after collect: 4 jobs, 2.1 s
 add_expense            63,453
 session_start          34,328
 signup_complete        21,871
@@ -184,6 +200,8 @@ cancel_subscription       699
 
 </details>
 
+Ten names, nine events: the dataset's README says `paywall_viewed` (1,303) is `view_paywall` (11,142) under its new name in the iOS app from 2026-05-18, and Spark counts names, not meanings.
+
 *Why:* the RDD guide says all transformations are lazy: they remember what to do to the base dataset and compute only when an action needs a result. Nothing ran until `collect`, and `explain` only prints the plan. Read the plan from the bottom: scan the file, start the count, shuffle (`Exchange`), finish the count, shuffle again, sort. One action ran four jobs, Spark's own split of the work. Ask DuckDB for the same count of the same file:
 
 ```bash
@@ -193,14 +211,14 @@ uv run python -c "import duckdb, time; t = time.time(); rows = duckdb.sql(\"SELE
 
 ```console
 $ uv run python -c "import duckdb, time; t = time.time(); rows = duckdb.sql(\"SELECT event_name, count(*) AS events FROM 'data/raw/app-events/events.csv' GROUP BY 1 ORDER BY 2 DESC\").fetchall(); print(len(rows), 'names,', round(time.time() - t, 2), 's')"
-10 names, 0.14 s
+10 names, 0.12 s
 ```
 
-The same ten counts took 0.14 s in DuckDB, which reads the file too, against 2.3 s for Spark's `collect` alone, without the seconds the JVM takes to start. Your times will differ; the order will not. On a 13 MB file Spark pays for machinery that has nothing to spread.
+Over 7 runs here the median was 0.12 s in DuckDB (0.10 to 0.13), which reads the file too, against 2.1 s for Spark's `collect` alone (1.9 to 2.2), without the seconds the JVM takes to start. Your times will differ; the order should not. On a 13 MB file Spark pays for machinery that has nothing to spread.
 
-### 2. The shuffle and a hot key
+### 2. The shuffle and partition sizes
 
-**Idea.** The RDD guide calls the **shuffle** Spark's mechanism for re-distributing data so that it is grouped differently across partitions, and a complex and costly operation. The PySpark page says `repartition` with columns returns a DataFrame that is hash partitioned by them. A **hot key** is a key with far more rows than the others.
+**Idea.** The RDD guide calls the **shuffle** Spark's mechanism for re-distributing data so that it is grouped differently across partitions, and a complex and costly operation. The PySpark page says `repartition` with columns returns a DataFrame that is hash partitioned by them.
 
 **Try it.** Save this as `spark/partition_sizes.py`. It shuffles the events into four partitions by each column you name, and by dealing the rows out one by one for comparison, and prints the rows in each partition:
 
@@ -263,11 +281,11 @@ round robin: [44344, 44345, 44345, 44345], the biggest holds 25.0%
 
 </details>
 
-*Why:* `event_name` has ten values, and one of them, `add_expense`, has 63,453 rows, 35.8 percent of all. The biggest partition holds it together with `onboarding_complete`: 78,535 rows. `user_id` has 21,871 values, so the hash spreads them evenly, and dealing rows out one by one is even by construction. That lopsided partition is data skew. The performance page says skew can severely downgrade join queries and that, when adaptive query execution (on by default since Spark 3.2.0) and its skew-join setting are enabled, Spark splits skewed tasks of a sort-merge join into roughly even ones. It names no such fix for a plain `groupBy`, and nothing was run to test one.
+*Why:* `event_name` has ten values, and one of them, `add_expense`, has 63,453 rows, 35.8 percent of all. The biggest partition holds it together with `onboarding_complete`: 78,535 rows. `user_id` has 21,871 values, so the hash spreads them evenly, and dealing rows out one by one is even by construction. A key with far more rows than the others, as `add_expense` is here, is a **hot key**, and the lopsided partition it makes is **data skew**. The performance page says skew can severely downgrade join queries and that, when adaptive query execution (on by default since Spark 3.2.0) and its skew-join setting are enabled, Spark splits skewed tasks of a sort-merge join into roughly even ones. It names no such fix for a plain `groupBy`, and nothing was run to test one.
 
 ### 3. Event time, a window and a watermark
 
-**Idea.** The events have two times: `event_ts`, when the thing happened in the app, and `received_at`, when the server got it. **Event time** is the first. Structured Streaming runs a batch-style query on files or messages as they arrive, in small batches, and keeps a count for each **window** of event time a row falls into. A **watermark** states how late data is expected to be in event time: the engine tracks the newest event time it has seen and holds a window's count until that time minus the threshold passes the window's end. The Kafka page defines event streaming as capturing data from event sources in real time and storing it durably for later retrieval; the lesson does not run Kafka.
+**Idea.** The events have two times: `event_ts`, when the thing happened in the app, and `received_at`, when the server got it. **Event time** is the first. Structured Streaming runs a batch-style query on files or messages as they arrive, in small batches, and keeps a count for each **window** of event time a row falls into. A **watermark** states how late data is expected to be in event time: the engine tracks the newest event time it has seen, and the watermark is that time minus the threshold. Here, in update mode, the engine keeps updating a window's count until the watermark passes the window's end, then drops the window's state, and later data for it is ignored. The Kafka page defines event streaming as capturing data from event sources in real time and storing it durably for later retrieval; the lesson does not run Kafka.
 
 **Try it.** Check the events against DuckDB, write them as a stream of 181 files, one for each day of `received_at` in arrival order, and save the query as `spark/stream_windows.py`. A file is one trigger. The query counts the events in daily windows of `event_ts`, with the watermark you name, and `availableNow` makes it run through the files and stop:
 
@@ -329,7 +347,7 @@ query.awaitTermination()
 print(f"watermark {watermark}: {len(latest)} windows, {sum(latest.values()):,} events counted, {time.time() - started:.0f} s")
 ```
 
-Each run takes about a minute. Run it with a watermark of one hour and of three days:
+Each run takes about a minute (the median of 7 runs here was 55 s for both, and the counts repeated). Run it with a watermark of one hour and of three days:
 
 ```bash
 cd spark
@@ -344,23 +362,23 @@ uv run python stream_windows.py 3 days 2>/dev/null
 
 ```console
 $ uv run python stream_windows.py 1 hour 2>/dev/null
-watermark 1 hour: 181 windows, 177,220 events counted, 63 s
+watermark 1 hour: 181 windows, 177,220 events counted, 55 s
 $ uv run python stream_windows.py 3 days 2>/dev/null
-watermark 3 days: 181 windows, 177,379 events counted, 62 s
+watermark 3 days: 181 windows, 177,379 events counted, 55 s
 ```
 
 </details>
 
-*Why:* the page says late data within the threshold is aggregated and data later than it starts to be dropped. With one hour, 159 events came later than the watermark allowed and were left out; with three days every event was counted. Both runs have 181 windows, so the number of windows says nothing about what was dropped. A watermark trades completeness against how long the engine must keep state, and the file of arrival times is what lets you choose it.
+*Why:* the page guarantees that data less than the threshold behind the newest is aggregated; the guarantee is strict in one direction only, so data later than the threshold may or may not be. With one hour, 159 events (177,379 less 177,220) were not counted; with three days every event was. Both runs have 181 windows, so the number of windows says nothing about what was dropped. A watermark trades completeness against how long the engine must keep state, and the file of arrival times is what lets you choose it.
 
-Streaming pays when a decision loses its value while it waits: Kafka's page lists payments and tracking in real time. For a report read in the morning it adds state, watermarks and a service that must stay up, and Spark's own pages give micro-batch latencies as low as 100 milliseconds with exactly-once guarantees, and a continuous mode as low as 1 millisecond with at-least-once ones. A batch job every few minutes (DE7) meets a need that tolerates minutes.
+Streaming pays when a decision loses its value while it waits: Kafka's page lists payments and tracking in real time. For a report read in the morning it adds state, watermarks and a service that must stay up, and Spark's own pages give micro-batch latencies as low as 100 milliseconds with exactly-once guarantees, and a continuous mode as low as 1 millisecond with at-least-once ones. A batch job every few minutes (*Scheduling a pipeline with Airflow*, DE7) meets a need that tolerates minutes.
 
 <Aside type="tip" title="Remember">
 
 - A transformation builds the plan and an action runs it; `explain` shows the plan, with an `Exchange` for each shuffle.
-- A shuffle moves rows so that a key meets its rows; a hot key makes one partition much bigger than the rest.
+- A shuffle moves rows so that a key meets its rows; a hot key makes one partition much bigger than the rest, which is skew.
 - Event time is when it happened, arrival time when you heard; a watermark says how late is still counted.
-- Spark on one machine costs more than DuckDB on a file of this size; its value starts where the data stops fitting.
+- On this 13 MB file Spark cost more than DuckDB; the pages name no size where that flips.
 
 **Common trap:** reading a count of windows as proof that nothing was dropped.
 

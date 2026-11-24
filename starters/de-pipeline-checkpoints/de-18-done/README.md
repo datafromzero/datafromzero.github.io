@@ -18,7 +18,10 @@ uv run pytest -q
 ```
 
 In a codespace: open the repository on GitHub, choose Code, then Codespaces, then create one. The dev container
-installs uv and runs `uv sync` for you. A stopped codespace is deleted after 30 days, so push your work.
+installs uv and runs `uv sync` for you; from lesson 16 on it also installs Java 21, which the Spark lesson needs. A codespace
+created before that has no Java: fetch the new file with
+`git show de-16-done:.devcontainer/devcontainer.json > .devcontainer/devcontainer.json`, open the Command Palette
+and choose Codespaces: Rebuild Container. A stopped codespace is deleted after 30 days, so push your work.
 
 Start the mock API in its own terminal and leave it running while you work:
 
@@ -54,7 +57,7 @@ light and works on Windows. Set it up with `cd airflow`, `uv sync`, `source env.
 Airflow does not run natively on Windows: its documentation says it runs on POSIX-compliant operating systems and that on
 Windows you can run it through WSL2 or Linux containers, so on Windows use a codespace or WSL2 for the Airflow lessons.
 dbt (dbt-core with dbt-duckdb) is in the main environment: run it from the `dbt/` folder with `uv run dbt build`.
-PySpark is in `spark/`, with its own `pyproject.toml` and `uv.lock`: it needs Java 17, 21 or 25 on your path, and `uv sync` there builds it from a source archive. Run its jobs from that folder, with `uv run python NAME.py`.
+PySpark is in `spark/`, with its own `pyproject.toml` and `uv.lock`: it needs Java 17, 21 or 25 on your path (the dev container of lesson 16 installs 21), and `uv sync` there builds it from a source archive. Run its jobs from that folder, with `uv run python NAME.py`.
 
 ## Checkpoints
 
@@ -152,14 +155,18 @@ Parquet, build a star schema with dbt, test every model, and rebuild everything 
 
 ## The grain of each table
 
-| Table | One row is | Key |
-| --- | --- | --- |
-| `stg_order_lines` | the newest version of one order line | `order_line_id` |
-| `int_order_lines_priced` | one order line, with its product's price and its amount | `order_line_id` |
-| `dim_product` | one version of a product (type 2) | `product_key` |
-| `dim_store` | one store as it is now (type 1) | `store_key` |
-| `fct_order_lines` | one order line, with the keys that were true when it was ordered | `order_line_id` |
-| `fct_store_daily_sales` | one store and one day with a sale | `store_id` and `order_date` |
+| Table | One row is | Key | Answers questions about |
+| --- | --- | --- | --- |
+| `stg_order_lines` | the newest version of one order line | `order_line_id` | nothing a reader asks: it renames and types the staged file |
+| `stg_products` | one product on the menu | `product_id` | nothing a reader asks: a renamed copy of the staged products |
+| `stg_stores` | one store | `store_id` | nothing a reader asks: a renamed copy of the staged stores |
+| `int_order_lines_priced` | one order line, with its product's price and its amount | `order_line_id` | nothing a reader asks: the amount of each line, for the marts that sum it |
+| `dim_product` | one version of a product (type 2) | `product_key` | what a product was and cost, and its category on a given date |
+| `dim_store` | one store as it is now (type 1) | `store_key` | where a store is and when it opened |
+| `fct_order_lines` | one order line, with the keys that were true when it was ordered | `order_line_id` | any question about lines: sales by store or by category as sold, by status |
+| `fct_store_daily_sales` | one store and one day with a sale | `store_id` and `order_date` | sales by store and day, and how they trend |
+| `fct_store_status_amounts` | one store | `store_id` | completed against canceled dollars of a store |
+| `fct_store_discounts` | one store | `store_id` | list price, discounts and net amount of a store's completed lines |
 
 ## Why these keys
 
@@ -172,15 +179,37 @@ two-part key because its grain is two things.
 To rebuild a past range, from `airflow/`: `uv run airflow backfill create --dag-id cafe_pipeline --from-date 2026-05-01 --to-date 2026-05-05 --max-active-runs 1`.
 One run at a time, because DuckDB lets one process write. Every run loads by key, so a rerun changes nothing; prove it with
 `uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05` before and after, and the two fingerprints must be equal.
+If one run fails, read the last line of its error first, fix the cause, and run the same command with `--reprocess-behavior failed`:
+it creates runs again only for the days that failed. Afterwards the fingerprint of the range must equal the one that a single
+incremental load of the same days gives.
 
 ## Cost
 
-`fct_store_daily_sales` is a table rebuilt in full. It reads 5 of the 10 columns of `int_order_lines_priced`, 167,636 bytes counted with
-BigQuery's type sizes (not run on BigQuery), and writes one row for each store and day. `int_order_lines_priced` is an incremental
-merge on `order_line_id`: each run reads the lines posted since the newest one it holds. Here the cost is a laptop; on a warehouse
-partition by `order_date` first.
+The counts come from the CI build of 2026-11-24 (`bash ci/dbt_ci.sh`). A view stores nothing; a table is rebuilt in full on every run.
+
+| Model | A run reads | A run writes | Needs a full rebuild when |
+| --- | --- | --- | --- |
+| `stg_order_lines` (view) | the staged file, 62,362 bytes, when something reads the view | nothing | never |
+| `stg_products` (view) | the staged file of 16 products | nothing | never |
+| `stg_stores` (view) | the staged file of 3 stores | nothing | never |
+| `int_order_lines_priced` (incremental, merge on `order_line_id`) | the lines posted since the newest one it holds, and the 16 products | those lines: 3,287 on the first build | what a row means changes (`--full-refresh`) |
+| `products_snapshot` (snapshot) | the partner's file | a row for each product that changed: 18 rows | never: a rebuilt snapshot loses its history |
+| `dim_product` (table) | the 18 rows of the snapshot | 18 rows | every run |
+| `dim_store` (table) | the 3 stores | 3 rows | every run |
+| `fct_order_lines` (table) | 3,287 lines, 18 product versions, 3 stores | 3,287 rows | every run |
+| `fct_store_daily_sales` (table) | 5 of the 10 columns of `int_order_lines_priced`, 167,636 bytes for 3,287 lines, and the 3 stores | 453 rows, one for each store and day | every run |
+| `fct_store_status_amounts` (table) | 3 columns of the 3,287 lines of `int_order_lines_priced` | 3 rows | every run |
+| `fct_store_discounts` (table) | 3,287 lines and 16 products | 3 rows | every run |
+
+The bytes are DuckDB's, counted with BigQuery's type sizes, and BigQuery was not run. No price is used. The cheaper rewrite is for
+`fct_store_daily_sales`: on a warehouse partition it by `order_date` and rebuild only the days a run changes.
 
 ## Known limits
 
-Airflow needs Linux or WSL2. The backfill was run in DE8 and not again here. The products come from one partner file. A line that
-reaches the API with a time before the newest one is loaded only because the load overlaps (DE4).
+- One writer: DuckDB lets one process write, so a backfill of 5 days is 5 runs in a row, never at once.
+- A line is loaded late only because the load overlaps by one hour (DE4): a line posted with a time more than an hour before the
+  newest line loaded is missed by the nightly load, and only a full replay finds it.
+- The products come from one partner file whose history is invented (3 versions, 2 category moves), and the dollars are reconciled
+  between two tables of this repository (3,286 completed lines, $22,625.75), not with the API.
+- The star has no customer: a question about what a customer bought cannot be answered from it.
+- Airflow needs Linux or WSL2, and the backfill was run in DE8, not again here.
