@@ -1,0 +1,496 @@
+---
+id: data-engineer-write-skew-and-serializable
+title: 'When transactions are not enough: write skew'
+short_title: Write skew
+description: Break a business rule with two transactions that each look correct, at Read Committed and at Repeatable Read, then let Serializable abort one.
+stage: data-engineer
+order: 250
+level: advanced
+duration: 25
+objectives:
+  - Reproduce write skew in two sessions, at Read Committed and at Repeatable Read
+  - Explain why a snapshot lets a rule across several rows break
+  - Retry a transaction that Serializable aborts, or protect the rule with a lock instead
+prerequisites:
+  - data-engineer-transactions-and-isolation
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: Transaction isolation (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/transaction-iso.html
+  - title: 'PostgreSQL 16 documentation: Explicit locking (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/explicit-locking.html
+  - title: 'Berenson, Bernstein, Gray, Melton, O''Neil and O''Neil: A Critique of ANSI SQL Isolation Levels (1995), arXiv cs/0701157 (accessed 2026-11-24)'
+    url: https://arxiv.org/abs/cs/0701157
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15 on Linux; that lesson's TODO lists what must be pinned and what was not run). Every transcript comes from real `psql` sessions driven one command at a time by a small script (prompts set as in *Transactions: what ACID actually promises*; the trailing spaces and the empty line psql prints after a result are removed). The `registers` table is made for this lesson from the three cafe-sales stores (two registers each); it is not part of the dataset. The error text, the `SIReadLock` rows and the moment of the failure (at B's `COMMIT`) are from one run each; the documentation says which transaction fails is hard to predict, so another run may fail elsewhere. Not run: Windows, macOS, a second server version. Stub changes: renamed to `.mdx` (interleaved shape, the stub's seven headings replaced); objectives reworded (objective 3 adds the lock fix of Exercise 2); sources move from `/docs/current/` to `/docs/16/` and add the explicit-locking page (Exercise 2) and the Berenson et al. paper, which names write skew (the PostgreSQL pages do not use the term). The lab is the one built by `scripts/de-internals/lab.py`, which the first lesson fetches from the tag `de-internals-v1`: after merge, create tag de-internals-v1 on main (Releases → new tag) so that URL resolves. The owner writes `reviewed`.
+
+## The question
+
+The owner of the three cafes asks:
+
+> Harbor must always keep at least one register open. Each barista checks the open registers before closing one. Is a check enough when two baristas close at the same moment?
+
+The lesson's table, `registers`, has two registers for each cafe. Harbor's rows:
+
+| store_id | store_name | register_no | is_open |
+|---:|---|---:|---|
+| 3 | Harbor | 1 | true |
+| 3 | Harbor | 2 | true |
+
+By the end you can say when a check like this holds, what the isolation levels of the previous lesson do about it, and how to protect the rule in two ways.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Transactions: what ACID actually promises* a Repeatable Read transaction read one snapshot from start to end.
+
+**Diverge.** There one session wrote and the other only read. Here both sessions read, and both write.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. Write the line that starts a transaction at Repeatable Read.
+
+   <details>
+   <summary>answer</summary>
+
+   `BEGIN ISOLATION LEVEL REPEATABLE READ;`
+
+   </details>
+
+2. At Read Committed, does a second `SELECT` in the same transaction see a change that another session committed in between?
+
+   <details>
+   <summary>answer</summary>
+
+   Yes. Each query sees what was committed before it began.
+
+   </details>
+
+## The big idea
+
+A rule that spans several rows is a question about two transactions at once: each can read the same rows, then change a different one.
+
+## Learn by doing
+
+About 25 minutes, 3 new ideas: a rule checked by two transactions at once, the same check under a snapshot, and what Serializable adds. Open two terminals with `psql -d lab`, and set the prompt and footer in each as in the previous lesson (`\set PROMPT1 'A> '` or `'B> '`, then `\pset footer off`). In terminal A, make the table:
+
+```sql
+CREATE TABLE registers AS
+SELECT s.store_id, s.store_name, r AS register_no, true AS is_open
+FROM stores AS s, generate_series(1, 2) AS r;
+ALTER TABLE registers ADD PRIMARY KEY (store_id, register_no);
+```
+
+Before each new run, put it back: `DROP TABLE registers;`, then the two statements again.
+
+### 1. Two careful baristas
+
+**Idea.** The rule lives in the application: a barista may close a register only if the count of open registers at the store is at least 2. Each barista runs the check and the close inside one transaction, at the default level, Read Committed.
+
+**Try it.** Type the lines in this order, switching terminals as the comments say:
+
+```sql
+-- in A, then in B
+BEGIN;
+-- in A, then in B
+SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+-- in A
+UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+-- in B
+UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 2;
+-- in A, then in B
+COMMIT;
+-- in A
+SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+```
+
+**Predict:** What count does each barista see, and how many Harbor registers are open at the end?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN;
+BEGIN
+B> BEGIN;
+BEGIN
+A> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+A> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+UPDATE 1
+B> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 2;
+UPDATE 1
+A> COMMIT;
+COMMIT
+B> COMMIT;
+COMMIT
+A> SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+ register_no | is_open
+-------------+---------
+           1 | f
+           2 | f
+```
+
+</details>
+
+*Why:* both counts ran before either barista committed, so both saw 2 and both closed. Each transaction on its own kept the rule; together they broke it, and nobody waited, because they changed different rows. Berenson and colleagues named this anomaly **write skew**: two transactions read the same data, then each writes a different part of it, and a rule that ties the parts together is broken.
+
+### 2. The same run at Repeatable Read
+
+**Idea.** Repeatable Read gives each transaction one snapshot for its whole life. The PostgreSQL documentation says the level is implemented with a technique known as Snapshot Isolation.
+
+**Try it.** Reset the table, then run unit 1 again with `BEGIN ISOLATION LEVEL REPEATABLE READ;` in both terminals instead of `BEGIN;`.
+
+**Predict:** Does anything change: the counts, an error, the registers open at the end?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+B> BEGIN ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+A> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+A> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+UPDATE 1
+B> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 2;
+UPDATE 1
+A> COMMIT;
+COMMIT
+B> COMMIT;
+COMMIT
+A> SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+ register_no | is_open
+-------------+---------
+           1 | f
+           2 | f
+```
+
+</details>
+
+*Why:* nothing changed. A snapshot protects what a transaction reads from later commits, but here the danger is the reverse: each transaction acts on a snapshot that is already out of date when the other commits. Repeatable Read refuses an update only when another transaction changed the same row first (the documentation's error `could not serialize access due to concurrent update`); here the rows differ. The paper says write skew can occur under Snapshot Isolation, and the documentation warns that business rules enforced at this level are not likely to work correctly without careful use of explicit locks.
+
+### 3. The same run at Serializable
+
+**Idea.** At Serializable, the documentation says PostgreSQL works exactly as at Repeatable Read and also monitors for conditions that would make the result differ from every one-at-a-time order. To see what it reads, it keeps **predicate locks**, which appear in `pg_locks` with the mode `SIReadLock` and block nobody. Open a third terminal C for one look.
+
+**Try it.** Reset the table and run unit 1 with `BEGIN ISOLATION LEVEL SERIALIZABLE;` in A and B. After both counts, in C:
+
+```sql
+SELECT locktype, relation::regclass AS rel, mode, granted FROM pg_locks WHERE mode = 'SIReadLock';
+```
+
+**Predict:** Which statement fails, if any, and how many registers are open at the end?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+B> BEGIN ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+A> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+C> SELECT locktype, relation::regclass AS rel, mode, granted FROM pg_locks WHERE mode = 'SIReadLock';
+ locktype |    rel    |    mode    | granted
+----------+-----------+------------+---------
+ relation | registers | SIReadLock | t
+ relation | registers | SIReadLock | t
+A> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+UPDATE 1
+B> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 2;
+UPDATE 1
+A> COMMIT;
+COMMIT
+B> COMMIT;
+ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.
+HINT:  The transaction might succeed if retried.
+A> SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+ register_no | is_open
+-------------+---------
+           1 | f
+           2 | t
+```
+
+</details>
+
+*Why:* each session holds a predicate lock on the whole table, because each read it with a sequential scan. Both updates ran without waiting; then A committed, and B's `COMMIT` failed, because no one-at-a-time order of the two gives the result they would have made together. B's work was rolled back, so register 2 stays open. The documentation says a serialization failure always returns the SQLSTATE `40001`, and that applications must be prepared to retry: run the whole transaction again from `BEGIN`, never only the failed statement.
+
+<figure>
+<svg viewBox="0 0 360 190" width="360" role="img" aria-labelledby="dd6-skew-t dd6-skew-d">
+<title id="dd6-skew-t">The two COMMITs and Harbor's registers afterwards, when two baristas each check and close a register at three isolation levels</title>
+<desc id="dd6-skew-d">Three rows, one per isolation level. Read Committed: A's COMMIT printed COMMIT, B's COMMIT printed COMMIT, and 0 of Harbor's 2 registers stayed open. Repeatable Read: A's COMMIT printed COMMIT, B's COMMIT printed COMMIT, and 0 of Harbor's 2 registers stayed open. Serializable: A's COMMIT printed COMMIT, B's COMMIT printed ERROR 40001, and 1 of Harbor's 2 registers stayed open.</desc>
+<g fill="currentColor">
+<text x="21.9" y="22.4" font-size="10.5" font-weight="600">Both baristas check, then close a different register</text>
+<text x="109.9" y="44.4" font-size="10" fill-opacity="0.85">A's COMMIT</text>
+<text x="175.9" y="44.4" font-size="10" fill-opacity="0.85">B's COMMIT</text>
+<text x="261.9" y="44.4" font-size="10" fill-opacity="0.85">open registers</text>
+<text x="21.9" y="71.4" font-size="10" font-weight="600">Read Committed</text>
+<rect x="109.9" y="58.4" width="56" height="20" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="115.9" y="72.4" font-size="10">COMMIT</text>
+<rect x="175.9" y="58.4" width="56" height="20" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="181.9" y="72.4" font-size="10">COMMIT</text>
+<rect x="261.9" y="59.4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="283.9" y="59.4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="309.9" y="72.4" font-size="10" font-weight="600">0 of 2</text>
+<text x="21.9" y="105.4" font-size="10" font-weight="600">Repeatable Read</text>
+<rect x="109.9" y="92.4" width="56" height="20" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="115.9" y="106.4" font-size="10">COMMIT</text>
+<rect x="175.9" y="92.4" width="56" height="20" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="181.9" y="106.4" font-size="10">COMMIT</text>
+<rect x="261.9" y="93.4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="283.9" y="93.4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="309.9" y="106.4" font-size="10" font-weight="600">0 of 2</text>
+<text x="21.9" y="139.4" font-size="10" font-weight="600">Serializable</text>
+<rect x="109.9" y="126.4" width="56" height="20" rx="3" fill="currentColor" fill-opacity="0.12" />
+<text x="115.9" y="140.4" font-size="10">COMMIT</text>
+<rect x="175.9" y="126.4" width="76" height="20" rx="3" fill="#9a6be0" fill-opacity="0.9" />
+<text x="181.9" y="140.4" font-size="10" font-weight="600" fill="#ffffff">ERROR 40001</text>
+<rect x="261.9" y="127.4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+<rect x="283.9" y="127.4" width="16" height="16" rx="3" fill="#00a07a" />
+<text x="309.9" y="140.4" font-size="10" font-weight="600">1 of 2</text>
+<rect x="109.9" y="164.4" width="10" height="10" rx="2" fill="#00a07a" />
+<text x="123.9" y="173.4" font-size="10">open register</text>
+<rect x="203.9" y="164.4" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="217.9" y="173.4" font-size="10">closed register</text>
+</g>
+</svg>
+</figure>
+
+<Aside type="tip" title="Remember">
+
+- A rule across several rows ("at least one open") is checked by reading those rows; at Read Committed and Repeatable Read, two transactions can both pass the check.
+- Write skew: two transactions read the same rows, and each writes a different one.
+- Repeatable Read stops two writers of the same row, not two writers of different rows.
+- Serializable lets one transaction commit and fails the other with SQLSTATE `40001`; the application runs the whole transaction again.
+
+**Common trap:** thinking that a check inside a transaction keeps a rule. The check reads a moment that the other transaction is about to change.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-write-skew-and-serializable-1">
+
+**The retry.** B's `COMMIT` failed in unit 3. A program would now run B's whole transaction again. Do it by hand in terminal B, at Serializable, with the same check, and close register 2 only if the rule allows it. Expected: the count B sees and what `COMMIT` prints.
+
+```sql
+-- in B, after the failed COMMIT
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+-- the check again, then decide
+```
+
+<details>
+<summary>Hint</summary>
+
+The check is the same `SELECT count(*)` as before. If it is less than 2, skip the `UPDATE`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+-- 2 or more: UPDATE ... register_no = 2; otherwise go straight to COMMIT
+COMMIT;
+```
+
+</details>
+
+<Solution>
+
+```console
+B> BEGIN ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     1
+B> COMMIT;
+COMMIT
+```
+
+The retry starts a new transaction with a new snapshot, which already holds A's committed close, so the count is 1 and the rule says no. Nothing was updated and the commit succeeded. That is what the documentation means by retrying the whole transaction: the check runs again, not only the failed write.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-write-skew-and-serializable-2">
+
+**A lock instead of a level.** Some teams keep Read Committed and make the two baristas take turns. Both sessions first lock Harbor's row of `stores` with `SELECT ... FOR UPDATE`, then check and close as in unit 1. Before you run it, say in one sentence what B sees when it reaches its lock, and what B's count prints. Then reset the table and run it: A locks, B tries to lock, A checks, closes and commits, then B checks. Expected: B's count and Harbor's registers at the end.
+
+<details>
+<summary>Hint</summary>
+
+The lock line is `SELECT store_id FROM stores WHERE store_id = 3 FOR UPDATE;`, typed right after `BEGIN;` in each terminal. Watch terminal B after you type it there.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"B's lock line waits until A commits; B's count then shows the register A closed, so B does not close."*
+
+```sql
+-- in A, then in B
+BEGIN;
+SELECT store_id FROM stores WHERE store_id = 3 FOR UPDATE;
+-- in A: the count, the close of register 1, COMMIT; then in B: the count
+```
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+B> BEGIN;
+BEGIN
+A> SELECT store_id FROM stores WHERE store_id = 3 FOR UPDATE;
+ store_id
+----------
+        3
+B> SELECT store_id FROM stores WHERE store_id = 3 FOR UPDATE;
+(B waits)
+A> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+A> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+UPDATE 1
+A> COMMIT;
+COMMIT
+(B goes on)
+ store_id
+----------
+        3
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     1
+B> COMMIT;
+COMMIT
+A> SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+ register_no | is_open
+-------------+---------
+           1 | f
+           2 | t
+```
+
+Lines in parentheses are notes: "(B waits)" means terminal B printed nothing yet, and "(B goes on)" marks where its result appeared. The documentation says `FOR UPDATE` locks the rows a `SELECT` returns, so other transactions that try to lock them are blocked until the current transaction ends. B waited on the lock, and its count ran after A's commit: at Read Committed each query sees what was committed before it began, so B counted 1 and left register 2 open. The lock makes the two baristas take turns at the price of a wait; Serializable lets them run side by side at the price of a retry. *Locks, waits and MVCC* looks at waits like this one.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does SQLSTATE `40001` tell a program, and what should it do next?
+
+   <details>
+   <summary>answer</summary>
+
+   A serialization failure: the transaction was rolled back. Run the whole transaction again from the start.
+
+   </details>
+
+<Exercise id="data-engineer-write-skew-and-serializable-3">
+
+**Spot the flaw.** After unit 3, a colleague changes only the new closing job to `BEGIN ISOLATION LEVEL SERIALIZABLE;`. The old till app, which closes registers too, keeps its plain `BEGIN;`. "One Serializable side is enough to catch the conflict." Reset the table and run unit 1 with plain `BEGIN;` in A (the till app) and the Serializable line in B (the job). Expected: the two `COMMIT` results and Harbor's registers. What went wrong?
+
+```sql
+-- in A
+BEGIN;
+-- in B
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+-- then the counts, the two closes and the two COMMITs as in unit 1
+```
+
+<details>
+<summary>Hint</summary>
+
+Read what the documentation promises Serializable transactions, and count how many of the two transactions are Serializable.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Compare the two `COMMIT` lines with unit 3, where one of them failed.
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+B> BEGIN ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+A> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+B> SELECT count(*) FROM registers WHERE store_id = 3 AND is_open;
+ count
+-------
+     2
+A> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 1;
+UPDATE 1
+B> UPDATE registers SET is_open = false WHERE store_id = 3 AND register_no = 2;
+UPDATE 1
+A> COMMIT;
+COMMIT
+B> COMMIT;
+COMMIT
+A> SELECT register_no, is_open FROM registers WHERE store_id = 3 ORDER BY register_no;
+ register_no | is_open
+-------------+---------
+           1 | f
+           2 | f
+```
+
+Both commits succeeded and both registers are closed. The documentation's promise is about a set of Serializable transactions: any set of them that commits has the same effect as running them one at a time. A Read Committed transaction is outside that set, so the monitoring has nothing to compare B's read with. Every transaction that checks the rule must run at Serializable, or all of them must take the lock of Exercise 2.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can make two transactions break a rule across rows at Read Committed and at Repeatable Read, say why a snapshot allows it, and protect the rule with Serializable and a retry, or with a lock.*
+Test: Exercise data-engineer-write-skew-and-serializable-2, done without opening the hints.
+
+The pattern to remember: **a check and a write in one transaction are safe only if no other transaction can change what the check read; Serializable notices, a lock prevents.** Next comes *MVCC: row versions and vacuum*, which looks under the snapshot at the stored versions of a row.

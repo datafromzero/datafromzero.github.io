@@ -1,0 +1,470 @@
+---
+id: data-engineer-procedures-and-triggers
+title: 'Ghosts in the source system: procedures and triggers'
+short_title: Procedures and triggers
+description: Read a trigger, predict whether it fires per row or per statement, find hidden triggers in the catalog, and see where procedures live now.
+stage: data-engineer
+order: 290
+level: advanced
+duration: 25
+objectives:
+  - Predict row-level and statement-level trigger firing, including an update that matches no rows
+  - Find every trigger on a source table in the catalog, including the internal ones
+  - Say where stored procedures live in a modern stack and what warehouses use to react to changes
+prerequisites:
+  - data-engineer-architectures-and-trade-offs
+  - data-engineer-incremental-loads-idempotency
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: Overview of trigger behavior (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/trigger-definition.html
+  - title: 'PostgreSQL 16 documentation: CREATE TRIGGER (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-createtrigger.html
+  - title: 'PostgreSQL 16 documentation: information_schema.triggers (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/infoschema-triggers.html
+  - title: 'PostgreSQL 16 documentation: pg_trigger (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/catalog-pg-trigger.html
+  - title: 'PostgreSQL 16 documentation: Client connection defaults (session_replication_role) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/runtime-config-client.html
+  - title: 'PostgreSQL 16 documentation: CREATE PROCEDURE (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-createprocedure.html
+  - title: 'Snowflake documentation: Stored procedures overview (accessed 2026-11-24)'
+    url: https://docs.snowflake.com/en/developer-guide/stored-procedure/stored-procedures-overview
+  - title: 'Snowflake documentation: Introduction to tasks (accessed 2026-11-24)'
+    url: https://docs.snowflake.com/en/user-guide/tasks-intro
+  - title: 'Snowflake documentation: Introduction to streams (accessed 2026-11-24)'
+    url: https://docs.snowflake.com/en/user-guide/streams-intro
+  - title: 'dbt documentation: Snapshots (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/snapshots
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15 on Linux). Transcripts come from real `psql` sessions driven one command at a time, as in the previous lessons; a block of several statements prints its results after the whole block, as `psql` does when it reads them together. The internal trigger names (`RI_ConstraintTrigger_a_16692` and so on) carry object ids that differ on every machine; the lesson says so. That `information_schema.triggers` leaves out internal triggers is shown by Exercise 1's run (count 0), not by a sentence of its page. Snowflake and dbt are not run: unit 4 only reports what their pages say. Issue #89 quotes a Snowflake migration page saying that triggers are not supported in Snowflake; that page was not opened, so the lesson does not say it. Not run: Windows, macOS. Stub changes: renamed to `.mdx` (interleaved shape); prerequisite `data-engineer-incremental-loads-idempotency` added (Exercises 2 and 3 use its watermark; it is DE4, "Incremental loads and idempotent reruns"); objective 2 adds the internal triggers and objective 3 says "react to changes" instead of "what replaced triggers"; sources move to `/docs/16/` and add the `CREATE TRIGGER`, `information_schema.triggers`, `pg_trigger`, `session_replication_role`, `CREATE PROCEDURE` and Snowflake streams pages. The lab is the one built by `scripts/de-internals/lab.py`, which the first lesson fetches from the tag `de-internals-v1`: after merge, create tag de-internals-v1 on main (Releases → new tag) so that URL resolves. The owner writes `reviewed`.
+
+## The question
+
+A data engineer takes over the extract from the cafes' till database and asks:
+
+> Some tables seem to change by themselves: an audit table fills up and an `updated_at` column moves although no job writes it. What else runs in that database, and can I trust `updated_at` for my incremental loads?
+
+By the end you can predict when a trigger runs, list every trigger on a table, and say where the procedural code of a modern stack lives.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Incremental loads and idempotent reruns* (DE4) the load picked up only the rows whose `updated_at` was later than the watermark, the largest `updated_at` already loaded.
+
+**Diverge.** There `updated_at` came with the data. Here you see what keeps it moving in a source system, and what happens when that stops.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. What does `UPDATE 0` in `psql` tell you?
+
+   <details>
+   <summary>answer</summary>
+
+   The statement ran and changed no rows: its `WHERE` matched nothing.
+
+   </details>
+
+2. In DE4, what is a watermark, and which rows does the next incremental load pick up?
+
+   <details>
+   <summary>answer</summary>
+
+   The largest `updated_at` already loaded; the next load picks up the rows whose `updated_at` is later.
+
+   </details>
+
+## The big idea
+
+A trigger is code that the database runs by itself when a table changes, so part of what a statement does is written in the table's definition, not in the statement.
+
+## Learn by doing
+
+About 25 minutes, 4 new ideas: row and statement triggers, a statement that matches nothing, triggers in the catalog, and where procedures live now. Work in `psql -d lab` (with `\pset footer off`), on a fresh `orders_tx` (`DROP TABLE IF EXISTS orders_tx;` and the two statements of *Locks, waits and MVCC*).
+
+### 1. Once per row, or once per statement
+
+**Idea.** The documentation defines a trigger as a specification that the database should automatically execute a function whenever a certain type of operation is performed. `FOR EACH ROW` or `FOR EACH STATEMENT` sets how often. The setup below gives `orders_tx` one trigger of each kind: one writes an audit row, the other logs the statement.
+
+**Try it.** Create the two log tables, the two functions and the two triggers:
+
+```sql
+CREATE TABLE order_audit (order_id integer, old_status text, new_status text);
+CREATE TABLE statement_log (op text);
+CREATE FUNCTION audit_status() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO order_audit VALUES (OLD.order_id, OLD.status, NEW.status);
+  RETURN NULL;
+END $$;
+CREATE FUNCTION log_statement() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO statement_log VALUES (TG_OP);
+  RETURN NULL;
+END $$;
+CREATE TRIGGER orders_audit AFTER UPDATE ON orders_tx
+  FOR EACH ROW EXECUTE FUNCTION audit_status();
+CREATE TRIGGER orders_log AFTER UPDATE ON orders_tx
+  FOR EACH STATEMENT EXECUTE FUNCTION log_statement();
+```
+
+`psql` prints `CREATE TABLE` twice, `CREATE FUNCTION` twice and `CREATE TRIGGER` twice. Inside a trigger function, `OLD` and `NEW` are the row before and after the change, and `TG_OP` is the operation's name. Now cancel five orders and count both logs:
+
+```sql
+UPDATE orders_tx SET status = 'canceled' WHERE order_id BETWEEN 1001 AND 1005;
+SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+```
+
+**Predict:** How many rows does each log hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> UPDATE orders_tx SET status = 'canceled' WHERE order_id BETWEEN 1001 AND 1005;
+UPDATE 5
+A> SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+ audit_rows | statement_rows
+------------+----------------
+          5 |              1
+```
+
+</details>
+
+*Why:* the `CREATE TRIGGER` page says a trigger marked `FOR EACH ROW` is called once for every row that the operation modifies, so five audit rows; the statement-level trigger ran once for the one statement. Your `UPDATE` wrote five rows to `orders_tx` and five plus one more to tables it never named.
+
+### 2. A statement that matches nothing
+
+**Idea.** A statement can run and modify no rows, for example when its `WHERE` matches no row. Order 9999 does not exist.
+
+**Try it.**
+
+```sql
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 9999;
+SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+```
+
+**Predict:** Do the two counts change?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 9999;
+UPDATE 0
+A> SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+ audit_rows | statement_rows
+------------+----------------
+          5 |              2
+```
+
+</details>
+
+*Why:* no row changed, so no audit row; but the statement log grew by one. The documentation says it plainly: a statement that affects zero rows will still result in the execution of any applicable per-statement triggers. A statement-level "the table was loaded at…" log therefore records runs, not changes.
+
+<figure>
+<svg viewBox="0 0 360 122" width="360" role="img" aria-labelledby="dd10-firing-t dd10-firing-d">
+<title id="dd10-firing-t">How many times each trigger ran for an UPDATE of five rows and an UPDATE of no rows</title>
+<desc id="dd10-firing-d">Two rows. UPDATE 5: the row-level audit trigger ran 5 times and the statement-level trigger ran 1 time. UPDATE 0: the row-level audit trigger ran 0 times and the statement-level trigger ran 1 time.</desc>
+<g fill="currentColor">
+<text x="18.8" y="22.4" font-size="10.5" font-weight="600">Trigger runs for one statement</text>
+<text x="102.8" y="44.4" font-size="10" fill-opacity="0.85">row-level (audit)</text>
+<text x="266.8" y="44.4" font-size="10" fill-opacity="0.85">statement-level</text>
+<text x="18.8" y="69.4" font-size="10" font-weight="600">UPDATE 5</text>
+<rect x="102.8" y="56.4" width="20" height="20" rx="3" fill="#0072b2" />
+<rect x="128.8" y="56.4" width="20" height="20" rx="3" fill="#0072b2" />
+<rect x="154.8" y="56.4" width="20" height="20" rx="3" fill="#0072b2" />
+<rect x="180.8" y="56.4" width="20" height="20" rx="3" fill="#0072b2" />
+<rect x="206.8" y="56.4" width="20" height="20" rx="3" fill="#0072b2" />
+<text x="240.8" y="70.4" font-size="10" font-weight="600">5</text>
+<rect x="266.8" y="56.4" width="20" height="20" rx="3" fill="#00a07a" />
+<text x="294.8" y="70.4" font-size="10" font-weight="600">1</text>
+<text x="18.8" y="101.4" font-size="10" font-weight="600">UPDATE 0</text>
+<rect x="102.8" y="88.4" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<rect x="128.8" y="88.4" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<rect x="154.8" y="88.4" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<rect x="180.8" y="88.4" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<rect x="206.8" y="88.4" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="240.8" y="102.4" font-size="10" font-weight="600">0</text>
+<rect x="266.8" y="88.4" width="20" height="20" rx="3" fill="#00a07a" />
+<text x="294.8" y="102.4" font-size="10" font-weight="600">1</text>
+</g>
+</svg>
+</figure>
+
+### 3. Triggers in the catalog
+
+**Idea.** Before you extract from a source table, list what runs on it. The view `information_schema.triggers` has one row for each trigger and event, with its timing (`BEFORE` or `AFTER`), its event and its `action_orientation`, which the documentation describes as whether the trigger fires once for each processed row or once for each statement.
+
+**Try it.**
+
+```sql
+SELECT trigger_name, action_timing, event_manipulation, action_orientation
+FROM information_schema.triggers
+WHERE event_object_table = 'orders_tx' ORDER BY trigger_name;
+```
+
+**Predict:** How many rows, and what does each say?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> SELECT trigger_name, action_timing, event_manipulation, action_orientation
+FROM information_schema.triggers
+WHERE event_object_table = 'orders_tx' ORDER BY trigger_name;
+ trigger_name | action_timing | event_manipulation | action_orientation
+--------------+---------------+--------------------+--------------------
+ orders_audit | AFTER         | UPDATE             | ROW
+ orders_log   | AFTER         | UPDATE             | STATEMENT
+```
+
+</details>
+
+*Why:* the two triggers of unit 1, with the level you gave each. In a real source system this query is the first thing to run on every table you extract from: a trigger's writes are part of what every change to the table does, and a `BEFORE` trigger can change the row itself on its way in.
+
+### 4. Where procedures live now
+
+**Idea.** A **procedure** is a named piece of code that you run with `CALL`. Unlike a trigger, nothing runs it by itself.
+
+**Try it.**
+
+```sql
+CREATE PROCEDURE cancel_order(p_order integer) LANGUAGE sql AS $$
+  UPDATE orders_tx SET status = 'canceled' WHERE order_id = p_order;
+$$;
+CALL cancel_order(1580);
+SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+```
+
+**Predict:** The logs held 5 and 2 rows after unit 2. What do they hold after the `CALL`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> CREATE PROCEDURE cancel_order(p_order integer) LANGUAGE sql AS $$
+  UPDATE orders_tx SET status = 'canceled' WHERE order_id = p_order;
+$$;
+CREATE PROCEDURE
+A> CALL cancel_order(1580);
+CALL
+A> SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+ audit_rows | statement_rows
+------------+----------------
+          6 |              3
+```
+
+</details>
+
+*Why:* the procedure's `UPDATE` is an update like any other, so both triggers ran. In cloud warehouses, procedures are alive and called from outside. Snowflake's documentation describes stored procedures as reusable procedural code with branching and looping, and **tasks** that run SQL or procedures on a schedule, or when an event such as new data in a **stream** occurs; a stream records the inserts, updates and deletes made to a table, which the page calls change data capture. The transformation logic itself lives in version-controlled SQL, such as a dbt project, and dbt's **snapshots** keep the history of a changing table, with a timestamp strategy that uses an `updated_at` field to decide whether a row changed. That field is often kept by a trigger in the source system.
+
+<Aside type="tip" title="Remember">
+
+- A row-level trigger runs once for every row a statement modifies; a statement-level trigger runs once per statement, even when no row is modified.
+- `information_schema.triggers` lists the triggers on a table, with their timing, event and level.
+- A procedure runs only when called (`CALL`); in warehouses, tasks or an orchestrator call it.
+- dbt snapshots and incremental loads trust `updated_at`: find out what keeps it moving.
+
+**Common trap:** reading `UPDATE 0` as "nothing happened". The statement-level trigger still ran.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-procedures-and-triggers-1">
+
+**The triggers nobody wrote.** Add a foreign key from the cafe `order_items` to `orders`, then list the triggers on both tables from the catalog table `pg_trigger`, which the documentation says marks internally generated triggers with `tgisinternal`. Then count the same tables' triggers in `information_schema.triggers`, and drop the key again. Expected: the trigger rows, then one count.
+
+```sql
+ALTER TABLE order_items ADD FOREIGN KEY (order_id) REFERENCES orders;
+SELECT tgrelid::regclass AS on_table, tgname, tgisinternal
+FROM pg_trigger
+-- finish: keep the two tables, order by table and name; then the count; then
+-- ALTER TABLE order_items DROP CONSTRAINT order_items_order_id_fkey;
+```
+
+<details>
+<summary>Hint</summary>
+
+`'orders'::regclass` turns a table name into the id that `tgrelid` holds. In `information_schema.triggers` the table is `event_object_table`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+WHERE tgrelid IN ('orders'::regclass, 'order_items'::regclass) ORDER BY on_table, tgname;
+SELECT count(*) FROM information_schema.triggers
+WHERE event_object_table IN ('orders', 'order_items');
+```
+
+</details>
+
+<Solution>
+
+```console
+A> ALTER TABLE order_items ADD FOREIGN KEY (order_id) REFERENCES orders;
+ALTER TABLE
+A> SELECT tgrelid::regclass AS on_table, tgname, tgisinternal
+FROM pg_trigger
+WHERE tgrelid IN ('orders'::regclass, 'order_items'::regclass) ORDER BY on_table, tgname;
+  on_table   |            tgname            | tgisinternal
+-------------+------------------------------+--------------
+ orders      | RI_ConstraintTrigger_a_16723 | t
+ orders      | RI_ConstraintTrigger_a_16724 | t
+ order_items | RI_ConstraintTrigger_c_16725 | t
+ order_items | RI_ConstraintTrigger_c_16726 | t
+A> SELECT count(*) FROM information_schema.triggers
+WHERE event_object_table IN ('orders', 'order_items');
+ count
+-------
+     0
+A> ALTER TABLE order_items DROP CONSTRAINT order_items_order_id_fkey;
+ALTER TABLE
+```
+
+The numbers in the names are object ids and will differ on your machine. The foreign key added four internal triggers, two on each table (the documentation says such triggers usually enforce a constraint), and `information_schema.triggers` showed none of them. So a source table can carry triggers that the standard view never lists; for a full audit, read `pg_trigger` and decide about the internal ones knowingly.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-procedures-and-triggers-2">
+
+**A watermark that moves by itself.** The till's developers keep `updated_at` with a trigger. Add it to `orders_tx`:
+
+```sql
+ALTER TABLE orders_tx ADD COLUMN updated_at timestamp NOT NULL DEFAULT '2026-07-01 00:00';
+CREATE FUNCTION touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := clock_timestamp();
+  RETURN NEW;
+END $$;
+CREATE TRIGGER orders_touch BEFORE UPDATE ON orders_tx
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+```
+
+A nightly cleanup job on the till runs `UPDATE orders_tx SET status = status WHERE store_id = 3;`, which writes every Harbor status back unchanged. Before you run it, write in one sentence how many rows your next incremental extract will pick up. Then store the watermark, run the job, and count the rows changed since the watermark. Expected: one count.
+
+<details>
+<summary>Hint</summary>
+
+`SELECT max(updated_at) AS mark FROM orders_tx \gset` stores the watermark in `:'mark'`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Every Harbor order, although no value changed."*
+
+```sql
+SELECT count(*) AS changed_since_mark FROM orders_tx WHERE updated_at > :'mark';
+```
+
+</details>
+
+<Solution>
+
+```console
+A> SELECT max(updated_at) AS mark FROM orders_tx \gset
+A> UPDATE orders_tx SET status = status WHERE store_id = 3;
+UPDATE 355
+A> SELECT count(*) AS changed_since_mark FROM orders_tx WHERE updated_at > :'mark';
+ changed_since_mark
+--------------------
+                355
+```
+
+All 355 Harbor orders look changed. The row-level trigger runs for every row the statement modifies, and an `UPDATE` that writes the same value still modifies the row (it writes a new version). The extract will copy 355 rows that hold nothing new, and the audit table of unit 1 got 355 rows too. It is harmless for correctness when the load is idempotent, as in DE4, but it costs a full re-read of a store each night; ask the source team to skip rows that do not change (`WHERE status IS DISTINCT FROM ...`), or compare values in your load.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a `FOR EACH ROW` trigger and a `FOR EACH STATEMENT` trigger are on the same table. An `UPDATE` modifies 12 rows. How many times does each run?
+
+   <details>
+   <summary>answer</summary>
+
+   12 times and once.
+
+   </details>
+
+<Exercise id="data-engineer-procedures-and-triggers-3">
+
+**Spot the flaw.** A colleague must correct five orders (1006 to 1010) to `refunded`, and finds the audit trigger slow. "Our replication tool switches triggers off with one setting; I'll do the same for my fix." Run the steps after Exercise 2, then run the incremental extract's count and the two log counts. Expected: the extract's count and the log counts. What went wrong?
+
+```sql
+SELECT max(updated_at) AS mark FROM orders_tx \gset
+SET session_replication_role = replica;
+UPDATE orders_tx SET status = 'refunded' WHERE order_id BETWEEN 1006 AND 1010;
+RESET session_replication_role;
+SELECT count(*) AS changed_since_mark FROM orders_tx WHERE updated_at > :'mark';
+SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+```
+
+<details>
+<summary>Hint</summary>
+
+Which of the three triggers on `orders_tx` did the setting switch off? Read what `session_replication_role` is for.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Compare the extract's count with the five rows the `UPDATE` reported, and look at which trigger keeps `updated_at`.
+
+</details>
+
+<Solution>
+
+```console
+A> SELECT max(updated_at) AS mark FROM orders_tx \gset
+A> SET session_replication_role = replica;
+SET
+A> UPDATE orders_tx SET status = 'refunded' WHERE order_id BETWEEN 1006 AND 1010;
+UPDATE 5
+A> RESET session_replication_role;
+RESET
+A> SELECT count(*) AS changed_since_mark FROM orders_tx WHERE updated_at > :'mark';
+ changed_since_mark
+--------------------
+                  0
+A> SELECT (SELECT count(*) FROM order_audit) AS audit_rows,
+       (SELECT count(*) FROM statement_log) AS statement_rows;
+ audit_rows | statement_rows
+------------+----------------
+        361 |              4
+```
+
+Five orders changed, and the extract sees none of them; the audit and statement logs did not move either. The documentation says logical replication systems set `session_replication_role` to `replica` when they apply replicated changes, so that triggers do not fire. That is right for a replica, whose rows were already processed by the source's triggers; on the source itself it switched off `orders_touch` too, so `updated_at` kept its old value and the five refunds will never reach the warehouse. Run the fix with the triggers on. If the audit trigger is really too slow, change it with its owners, and if a change has already slipped past the watermark, reload the affected rows by key.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can predict how often a row-level and a statement-level trigger run, including for a statement that modifies nothing, list every trigger on a source table including the internal ones, and say where procedures and change reactions live in a warehouse stack.*
+Test: Exercise data-engineer-procedures-and-triggers-2, done without opening the hints.
+
+The pattern to remember: **before you trust a source column, find out what writes it, including what the database writes by itself.** This is the last lesson of the database internals deep dive.

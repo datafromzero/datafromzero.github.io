@@ -1,0 +1,522 @@
+---
+id: data-engineer-architectures-and-trade-offs
+title: 'The platform layer: replication, partitioning and trade-offs'
+short_title: Architecture trade-offs
+description: Tell replication from backup, see partition pruning in a plan, read OLTP and OLAP as workload shapes, and meet CAP and sharding as interview ideas.
+stage: data-engineer
+order: 280
+level: advanced
+duration: 30
+objectives:
+  - Say why a replica copies a mistaken DELETE, and restore from a backup instead
+  - Show a date filter reading fewer partitions in the plan
+  - Describe OLTP and OLAP as shapes of workload
+  - Explain the CAP theorem and sharding at interview depth, labeled as such
+prerequisites:
+  - data-engineer-wal-and-recovery
+datasets:
+  - cafe-sales
+reviewed: 2026-11-20
+sources:
+  - title: 'PostgreSQL 16 documentation: Comparison of different solutions (replication) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/different-replication-solutions.html
+  - title: 'PostgreSQL 16 documentation: pg_basebackup (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/app-pgbasebackup.html
+  - title: 'PostgreSQL 16 documentation: Hot standby (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/hot-standby.html
+  - title: 'PostgreSQL 16 documentation: SQL dump (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/backup-dump.html
+  - title: 'PostgreSQL 16 documentation: Continuous archiving and point-in-time recovery (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/continuous-archiving.html
+  - title: 'PostgreSQL 16 documentation: Table partitioning (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/ddl-partitioning.html
+  - title: 'Gilbert and Lynch: Perspectives on the CAP Theorem (accessed 2026-11-24)'
+    url: https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf
+  - title: 'Kleppmann: A Critique of the CAP Theorem (2015), arXiv 1509.05393 (accessed 2026-11-24)'
+    url: https://arxiv.org/abs/1509.05393
+status: draft
+---
+
+TODO(owner): Team draft (D24), same lab and versions as *Reading the machine: plans and operators* (PostgreSQL 16.15 on Linux). Unit 1 and Exercise 1 run on the throwaway server of *WAL and recovery: the contract*, by a script as the `postgres` user in a folder that holds the lab's `lab/cafe/orders.csv`; the replica's count was read one second after the `DELETE` (one run). The `psql` transcripts of units 2 and 3 and Exercises 2 and 3 come from real sessions driven one command at a time, as in the previous lessons. `\gexec` (unit 2) is shown by its result; the `psql` reference page was not opened. Unit 3 defines OLTP and OLAP in the lesson's own words, with two plans as evidence; no source is cited for the terms. Unit 4 is interview depth: CAP rests on Gilbert and Lynch (statement and the choice during a partition) and Kleppmann (what a partition is), and sharding on the PostgreSQL page's "data partitioning" paragraph, which does not use the word "sharding"; the link between sharding and unit 2 is the lesson's own reading. Not run: Windows, macOS, the Docker route (as in the previous lesson), a replica on another machine. Stub changes: renamed to `.mdx` (interleaved shape); objective 1 adds the restore, and "labelled" is spelled "labeled"; sources move to `/docs/16/`, replace the high-availability overview with its comparison page and add `pg_basebackup`, hot standby, SQL dump, continuous archiving, Gilbert and Lynch, and Kleppmann; the DuckDB Hive-partitioning page is dropped, because *File formats and partitioning* already covers partitioned files and this lesson partitions a PostgreSQL table. The lab is the one built by `scripts/de-internals/lab.py`, which the first lesson fetches from the tag `de-internals-v1`: after merge, create tag de-internals-v1 on main (Releases → new tag) so that URL resolves. The owner writes `reviewed`.
+
+## The question
+
+The data engineer's manager asks four questions in one meeting:
+
+> We have a replica, so we are covered if someone deletes the wrong rows, right? Would splitting the orders table by month make the monthly report faster? Why does the warehouse team want a different database for reports? And the interviewer asked me about CAP: what do I say?
+
+By the end you can answer each one with something you ran or a source you can name.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *WAL and recovery: the contract* the server replayed its own log after a crash, and in *File formats and partitioning* (DE3) a query skipped the files of the stores it did not need.
+
+**Diverge.** Here a second server replays the first server's log, and a PostgreSQL table, not a folder of files, is cut into pieces.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In the previous lesson, where did recovery start replaying the log?
+
+   <details>
+   <summary>answer</summary>
+
+   At the redo point of the latest checkpoint.
+
+   </details>
+
+2. In *Reading the machine: plans and operators*, write the line that shows a query's plan together with the rows each node really produced.
+
+   <details>
+   <summary>answer</summary>
+
+   `EXPLAIN ANALYZE` followed by the query (the lessons add `(ANALYZE, TIMING OFF, SUMMARY OFF)` to drop the times).
+
+   </details>
+
+## The big idea
+
+Every way of spreading data over more copies or more pieces buys one thing and pays with another, and the plan or the log shows which.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a replica, partitions, two shapes of work, and two interview ideas. Unit 1 uses the throwaway server of the previous lesson; units 2 and 3 run in `psql -d lab` (with `\pset footer off`).
+
+### 1. A second server from the log
+
+**Idea.** The PostgreSQL documentation says standby servers can be kept current by reading a stream of WAL records, and that this can only be done for the entire database server. `pg_basebackup` copies a running server, and with `-R` it writes the settings that make the copy a standby that follows the original. A **hot standby** answers read-only queries. A **backup** is different: the documentation describes `pg_dump` as writing SQL commands that recreate the database in the state it had at the time of the dump.
+
+**Try it.** In the folder of the previous lesson (it must also hold `lab/cafe/orders.csv` from the first lesson of this module), start the throwaway server, give it the cafe orders, take a dump, and start a replica on port 5434:
+
+```bash
+pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+psql -p 5433 -d postgres -c "CREATE TABLE orders (order_id integer PRIMARY KEY, customer_id integer, store_id integer, ordered_at timestamp, status text, payment_method text);"
+psql -p 5433 -d postgres -c "\copy orders FROM 'lab/cafe/orders.csv' CSV HEADER"
+pg_dump -p 5433 -d postgres -t orders -f orders_backup.sql
+pg_basebackup -p 5433 -D replica -R
+pg_ctl -D replica -o "-p 5434" -l replica.log start
+```
+
+The first line prints `server started`; the run of the other lines printed:
+
+```console
+$ psql -p 5433 -d postgres -c "CREATE TABLE orders (order_id integer PRIMARY KEY, customer_id integer, store_id integer, ordered_at timestamp, status text, payment_method text);"
+CREATE TABLE
+$ psql -p 5433 -d postgres -c "\copy orders FROM 'lab/cafe/orders.csv' CSV HEADER"
+COPY 1800
+$ pg_dump -p 5433 -d postgres -t orders -f orders_backup.sql
+$ pg_basebackup -p 5433 -D replica -R
+$ pg_ctl -D replica -o "-p 5434" -l replica.log start
+waiting for server to start.... done
+server started
+```
+
+Now count Harbor's orders on the replica, delete them by mistake on the primary, wait a second, count again on the replica, and try to delete on the replica:
+
+```bash
+psql -p 5434 -d postgres -c "SELECT count(*) FROM orders WHERE store_id = 3;"
+psql -p 5433 -d postgres -c "DELETE FROM orders WHERE store_id = 3;"
+psql -p 5434 -d postgres -c "SELECT count(*) FROM orders WHERE store_id = 3;"
+psql -p 5434 -d postgres -c "DELETE FROM orders WHERE store_id = 1;"
+```
+
+**Predict:** What is the replica's second count? What does the `DELETE` on the replica print?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ psql -p 5434 -d postgres -c "SELECT count(*) FROM orders WHERE store_id = 3;"
+ count
+-------
+   355
+(1 row)
+$ psql -p 5433 -d postgres -c "DELETE FROM orders WHERE store_id = 3;"
+DELETE 355
+$ psql -p 5434 -d postgres -c "SELECT count(*) FROM orders WHERE store_id = 3;"
+ count
+-------
+     0
+(1 row)
+$ psql -p 5434 -d postgres -c "DELETE FROM orders WHERE store_id = 1;"
+ERROR:  cannot execute DELETE in a read-only transaction
+```
+
+</details>
+
+*Why:* the replica replayed the primary's WAL, and the mistaken `DELETE` was in it, so the replica lost Harbor's orders within a second, as faithfully as it copies good work. It refuses writes of its own, because a hot standby runs read-only queries. A replica protects against losing a server; it does nothing against a wrong statement. That is the job of a backup, a copy of a past moment: Exercise 1 uses the dump.
+
+### 2. Partitions the planner can skip
+
+**Idea.** A partitioned table is one name over several tables, its **partitions**, each holding a range of a key column. The documentation calls **partition pruning** the planner's proof, from each partition's definition, that a partition cannot contain any row that meets the `WHERE` clause; such partitions are left out of the plan.
+
+**Try it.** Partition the 1,800 cafe orders by month of `ordered_at`. The second statement writes one `CREATE TABLE` for each month, and `\gexec` runs each line of its result as a statement:
+
+```sql
+CREATE TABLE orders_part (LIKE orders) PARTITION BY RANGE (ordered_at);
+SELECT format('CREATE TABLE orders_part_%s PARTITION OF orders_part FOR VALUES FROM (%L) TO (%L)',
+              to_char(m, 'MM'), m, m + interval '1 month')
+FROM generate_series(timestamp '2026-01-01', timestamp '2026-06-01', interval '1 month') AS m \gexec
+INSERT INTO orders_part SELECT * FROM orders;
+ANALYZE orders_part;
+```
+
+```console
+A> CREATE TABLE orders_part (LIKE orders) PARTITION BY RANGE (ordered_at);
+CREATE TABLE
+A> SELECT format('CREATE TABLE orders_part_%s PARTITION OF orders_part FOR VALUES FROM (%L) TO (%L)',
+              to_char(m, 'MM'), m, m + interval '1 month')
+FROM generate_series(timestamp '2026-01-01', timestamp '2026-06-01', interval '1 month') AS m \gexec
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+A> INSERT INTO orders_part SELECT * FROM orders;
+INSERT 0 1800
+A> ANALYZE orders_part;
+ANALYZE
+```
+
+Then read two plans: March's orders, and Harbor's orders.
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part
+WHERE ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01';
+EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part WHERE store_id = 3;
+```
+
+**Predict:** Which partitions does each plan scan?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part
+WHERE ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01';
+                                                                         QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Seq Scan on orders_part_03 orders_part
+         Filter: ((ordered_at >= '2026-03-01 00:00:00'::timestamp without time zone) AND (ordered_at < '2026-04-01 00:00:00'::timestamp without time zone))
+A> EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part WHERE store_id = 3;
+                      QUERY PLAN
+------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Seq Scan on orders_part_01 orders_part_1
+               Filter: (store_id = 3)
+         ->  Seq Scan on orders_part_02 orders_part_2
+               Filter: (store_id = 3)
+         ->  Seq Scan on orders_part_03 orders_part_3
+               Filter: (store_id = 3)
+         ->  Seq Scan on orders_part_04 orders_part_4
+               Filter: (store_id = 3)
+         ->  Seq Scan on orders_part_05 orders_part_5
+               Filter: (store_id = 3)
+         ->  Seq Scan on orders_part_06 orders_part_6
+               Filter: (store_id = 3)
+```
+
+</details>
+
+*Why:* the March filter names the partition key, and only March's bounds can match it, so the plan scans one partition out of six. The store filter says nothing about dates, so every partition might hold Harbor orders: the plan appends all six scans. Partitioning by month helps the questions that filter by month.
+
+<figure>
+<svg viewBox="0 0 360 146" width="360" role="img" aria-labelledby="dd9-pruning-t dd9-pruning-d">
+<title id="dd9-pruning-t">Which of the six monthly partitions of orders&#95;part each plan scans</title>
+<desc id="dd9-pruning-d">Two rows of six boxes, January to June. For the filter on ordered&#95;at in March, only the March partition is scanned and the other five are pruned. For the filter store&#95;id = 3, all six partitions are scanned.</desc>
+<g fill="currentColor">
+<text x="17" y="22.4" font-size="10.5" font-weight="600">Partitions in the plan (blue: scanned)</text>
+<text x="17" y="48.4" font-size="10" font-weight="600">WHERE ordered&#95;at in March: 1 of 6 scanned</text>
+<rect x="17" y="56.4" width="51" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="42.5" y="72.4" font-size="10" text-anchor="middle" fill-opacity="0.7">Jan</text>
+<rect x="72" y="56.4" width="51" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="97.5" y="72.4" font-size="10" text-anchor="middle" fill-opacity="0.7">Feb</text>
+<rect x="127" y="56.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="152.5" y="72.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Mar</text>
+<rect x="182" y="56.4" width="51" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="207.5" y="72.4" font-size="10" text-anchor="middle" fill-opacity="0.7">Apr</text>
+<rect x="237" y="56.4" width="51" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="262.5" y="72.4" font-size="10" text-anchor="middle" fill-opacity="0.7">May</text>
+<rect x="292" y="56.4" width="51" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 2" />
+<text x="317.5" y="72.4" font-size="10" text-anchor="middle" fill-opacity="0.7">Jun</text>
+<text x="17" y="100.4" font-size="10" font-weight="600">WHERE store&#95;id = 3: 6 of 6 scanned</text>
+<rect x="17" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="42.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Jan</text>
+<rect x="72" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="97.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Feb</text>
+<rect x="127" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="152.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Mar</text>
+<rect x="182" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="207.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Apr</text>
+<rect x="237" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="262.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">May</text>
+<rect x="292" y="108.4" width="51" height="24" rx="3" fill="#0072b2" fill-opacity="0.9" />
+<text x="317.5" y="124.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">Jun</text>
+</g>
+</svg>
+</figure>
+
+### 3. Two shapes of work
+
+**Idea.** A till writes and reads single orders by their key, thousands of times a day: many small statements, each touching a few rows. This shape is called **OLTP** (online transaction processing). A report reads many rows, often only a few columns, and returns a short summary: few statements, each touching much of the table. This is **OLAP** (online analytical processing).
+
+**Try it.** Read how many rows each of two typical statements touches:
+
+```sql
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT status FROM orders WHERE order_id = 1580;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT store_id, count(*) FROM orders GROUP BY store_id;
+```
+
+**Predict:** How many rows does each scan read, and how many rows come out at the top?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT status FROM orders WHERE order_id = 1580;
+                           QUERY PLAN
+----------------------------------------------------------------
+ Index Scan using orders_pkey on orders (actual rows=1 loops=1)
+   Index Cond: (order_id = 1580)
+A> EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT store_id, count(*) FROM orders GROUP BY store_id;
+                     QUERY PLAN
+-----------------------------------------------------
+ HashAggregate (actual rows=3 loops=1)
+   Group Key: store_id
+   Batches: 1  Memory Usage: 24kB
+   ->  Seq Scan on orders (actual rows=1800 loops=1)
+```
+
+</details>
+
+*Why:* the till's lookup went through the index and read 1 row to return 1; the report read all 1,800 to return 3. Indexes, row storage and small transactions serve the first shape; column storage and scans serve the second, as *Storage shapes: rows, columns and files* measured. That is why teams copy the sales from the OLTP database into a separate analytical one: neither layout serves both shapes well, and the reports should not slow the tills.
+
+### 4. Interview depth: CAP and sharding
+
+This unit is the vocabulary interviewers ask for. You will rarely set these trade-offs yourself on a managed warehouse, but you should be able to explain them.
+
+**Idea.** Kleppmann describes a **network partition** as a fault that splits the network into groups of nodes that cannot communicate. Gilbert and Lynch state the **CAP theorem** as: in a network subject to communication failures, it is impossible for any web service to implement an atomic read/write shared memory that guarantees a response to every request. **C** is consistency (every response is correct, as if there were one copy), **A** is availability (every request eventually gets a response), and **P** is the partition.
+
+**Predict:** Imagine that the replica of unit 1 sits in another city, and the network between the two servers breaks. A manager asks the replica for Harbor's orders. What are the replica's two possible behaviors?
+
+<details>
+<summary>Reveal the answer</summary>
+
+Answer with the data it has, which may be missing the latest changes (available, not consistent), or refuse or wait until the network is back (consistent, not available).
+
+</details>
+
+*Why:* Gilbert and Lynch draw the practical consequence: since both cannot be guaranteed in an unreliable system, a system must give up one of them during a partition, and systems differ in which. **Sharding** is the related idea of splitting the rows of one table across servers by a key. The PostgreSQL documentation describes it as data partitioning, where each set of data can be modified by only one server, for example one server per office. Read it like unit 2: a query that names the key goes to one server, a query that does not must ask them all.
+
+<Aside type="tip" title="Remember">
+
+- A replica replays the primary's WAL, mistakes included: it protects against losing a server, not against a wrong statement. A backup is a copy of a past moment.
+- Partition pruning leaves out the partitions whose bounds cannot match the `WHERE` clause; a filter that says nothing about the key scans every partition.
+- OLTP: many small statements, few rows each, by key. OLAP: few statements, many rows each, few columns.
+- (Interview depth.) CAP: during a network partition, a system chooses between answering every request and answering only with correct data. Sharding splits rows across servers by a key.
+
+**Common trap:** "we have a replica, so we have a backup." The replica deleted Harbor's orders a second after the primary did.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-architectures-and-trade-offs-1">
+
+**Back from the dump.** The dump of unit 1 was taken before the mistake. Restore it into a new database on the throwaway server and count Harbor's orders there. Expected: one count.
+
+```bash
+createdb -p 5433 restore_check
+# then load orders_backup.sql into restore_check, and count
+```
+
+<details>
+<summary>Hint</summary>
+
+`psql -f FILE` runs a file of SQL; `-q` hides the lines it would print for each statement.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+psql -p 5433 -d restore_check -q -f orders_backup.sql
+```
+
+</details>
+
+<Solution>
+
+```console
+$ createdb -p 5433 restore_check
+$ psql -p 5433 -d restore_check -q -f orders_backup.sql
+ set_config
+------------
+
+(1 row)
+$ psql -p 5433 -d restore_check -c "SELECT count(*) FROM orders WHERE store_id = 3;"
+ count
+-------
+   355
+(1 row)
+```
+
+The `set_config` lines are printed by a statement at the top of the dump. The restored copy has Harbor's 355 orders, as the table was at the time of the dump; from here they can be copied back into the primary. A dump is one moment. Continuous archiving of the WAL goes further: its documentation says it supports point-in-time recovery, restoring the database to its state at any time since the base backup, for example one second before the `DELETE`. When you are done: `pg_ctl -D replica stop` and `pg_ctl -D crashlab stop`, then delete the folders `crashlab` and `replica`.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-architectures-and-trade-offs-2">
+
+**The big table.** Partition `orders_big` (500,000 orders) by month, as unit 2 did for the cafe orders, into a new table `orders_big_part`, and load it. Before you start, write in one sentence what the load prints if every order falls between January 1 and June 30. Then run it, and make the load succeed without losing an order. Expected: the number of orders in each partition.
+
+<details>
+<summary>Hint</summary>
+
+Read the error's `DETAIL` line, then look the order up in `orders_big`. A partition created with `PARTITION OF orders_big_part DEFAULT` takes every row that no other partition takes.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"`INSERT 0 500000` and six partitions that add up to 500,000."* Then group by the partition each row is in:
+
+```sql
+SELECT tableoid::regclass AS part, count(*) FROM orders_big_part
+GROUP BY part ORDER BY part;
+```
+
+</details>
+
+<Solution>
+
+```console
+A> CREATE TABLE orders_big_part (LIKE orders_big) PARTITION BY RANGE (ordered_at);
+CREATE TABLE
+A> SELECT format('CREATE TABLE orders_big_part_%s PARTITION OF orders_big_part FOR VALUES FROM (%L) TO (%L)',
+              to_char(m, 'MM'), m, m + interval '1 month')
+FROM generate_series(timestamp '2026-01-01', timestamp '2026-06-01', interval '1 month') AS m \gexec
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+A> INSERT INTO orders_big_part SELECT * FROM orders_big;
+ERROR:  no partition of relation "orders_big_part" found for row
+DETAIL:  Partition key of the failing row contains (ordered_at) = (2026-07-01 00:00:00).
+A> SELECT order_id, ordered_at FROM orders_big WHERE ordered_at >= '2026-07-01';
+ order_id |     ordered_at
+----------+---------------------
+   500000 | 2026-07-01 00:00:00
+A> CREATE TABLE orders_big_part_other PARTITION OF orders_big_part DEFAULT;
+CREATE TABLE
+A> INSERT INTO orders_big_part SELECT * FROM orders_big;
+INSERT 0 500000
+A> SELECT tableoid::regclass AS part, count(*) FROM orders_big_part
+GROUP BY part ORDER BY part;
+         part          | count
+-----------------------+-------
+ orders_big_part_01    | 85635
+ orders_big_part_02    | 77348
+ orders_big_part_03    | 85635
+ orders_big_part_04    | 82873
+ orders_big_part_05    | 85636
+ orders_big_part_06    | 82872
+ orders_big_part_other |     1
+```
+
+The first load failed: one order, the last of the 500,000, is at exactly midnight on July 1, and the June partition ends just before that moment (the documentation says each range's bounds are inclusive at the lower end and exclusive at the upper end). Nothing was loaded, because the `INSERT` is one statement. A default partition caught the one row and the load worked. Before loading a partitioned table, check the smallest and largest key against the partitions' bounds, or give it a default partition and watch what lands there.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why can a replica not refuse to copy a mistaken `DELETE`?
+
+   <details>
+   <summary>answer</summary>
+
+   It replays the primary's WAL, and the `DELETE` is a committed change in that log like any other.
+
+   </details>
+
+<Exercise id="data-engineer-architectures-and-trade-offs-3">
+
+**Spot the flaw.** A colleague writes the March report on `orders_part` "by month, the readable way". Run its plan. Expected: the partitions it scans. What went wrong, and how would you write the filter?
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part
+WHERE date_trunc('month', ordered_at) = '2026-03-01';
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare the `Filter` line with the bounds of each partition. What must the planner know about `date_trunc` to prove that January cannot match?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Count the `Seq Scan` lines, and compare them with unit 2's March plan.
+
+</details>
+
+<Solution>
+
+```console
+A> EXPLAIN (COSTS OFF)
+SELECT count(*) FROM orders_part
+WHERE date_trunc('month', ordered_at) = '2026-03-01';
+                                                     QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Seq Scan on orders_part_01 orders_part_1
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+         ->  Seq Scan on orders_part_02 orders_part_2
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+         ->  Seq Scan on orders_part_03 orders_part_3
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+         ->  Seq Scan on orders_part_04 orders_part_4
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+         ->  Seq Scan on orders_part_05 orders_part_5
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+         ->  Seq Scan on orders_part_06 orders_part_6
+               Filter: (date_trunc('month'::text, ordered_at) = '2026-03-01 00:00:00'::timestamp without time zone)
+```
+
+All six partitions are scanned. The query returns the same count as unit 2's March query, but the planner could not prove from the partitions' bounds that `date_trunc('month', ordered_at)` misses them, so it pruned nothing. Write the filter on the key itself, as a range: `ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01'`. On a table of millions of rows, the readable version reads six months to report one.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can show that a replica copies a mistake and restore from a backup instead, show pruning in a plan and a filter that defeats it, tell OLTP from OLAP by the rows a statement touches, and explain CAP and sharding at interview depth.*
+Test: Exercise data-engineer-architectures-and-trade-offs-2, done without opening the hints.
+
+The pattern to remember: **every copy and every split answers one question well; ask which question, and check it in the plan or the log.** Next comes *Ghosts in the source system: procedures and triggers*, about code that runs inside the database when nobody calls it.
