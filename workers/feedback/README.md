@@ -44,8 +44,8 @@ The Worker `datafromzero-feedback` already exists on the owner's Cloudflare acco
 5. Turn the stored logs off. New Workers have Workers Logs on by default, and Cloudflare's invocation logs keep "the
    Request, Response, and related metadata" of every call without saying which request headers (see
    <https://developers.cloudflare.com/workers/observability/logs/workers-logs/>). Open the Worker's Settings,
-   Observability and switch Workers Logs off if it is on. If the dashboard shows no such switch, use the wrangler path
-   below, whose `wrangler.toml` turns invocation logs off. Live logs (see "See what happens") store nothing.
+   Observability (Production) and switch Logs and Traces off. The wrangler path below does the same
+   (`[observability] enabled = false` in `wrangler.toml`). Live logs (see "See what happens") store nothing.
 6. No binding is needed. The Worker's own in-memory rate limit is on by default. Cloudflare's Rate Limiting binding is
    optional and only set up with wrangler (see below).
 7. Open `https://datafromzero-feedback.johnha0912.workers.dev` in a browser: "Method not allowed" is the right answer
