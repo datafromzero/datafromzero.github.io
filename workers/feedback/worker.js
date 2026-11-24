@@ -1,7 +1,8 @@
 // Feedback Worker (SPEC D58): turns the lesson footer's form post into a GitHub issue and redirects to a thank-you
 // page. One self-contained module, no imports and no build step, so it can be pasted into the Cloudflare dashboard
 // editor (README.md). The GitHub token is the secret GITHUB_TOKEN. Nothing about the sender (IP address, user agent)
-// is stored, logged or put into the issue; the IP is only the key of the rate limiter.
+// is put into the issue or logged; the IP is used only as a salted hash, held in memory for at most 10 minutes, as the
+// key of the rate limiter.
 
 const SITE_ORIGIN = 'https://datafromzero.github.io';
 const DEFAULT_REPO = 'datafromzero/datafromzero.github.io';
@@ -40,27 +41,28 @@ function oneLine(text, max) {
 	return Array.from(clean(text).replace(/\s+/g, ' ').trim()).slice(0, max).join('');
 }
 
-/** Makes text safe for an issue body: no mention, no issue reference, no HTML or Markdown link or code syntax. */
-function neutralize(text) {
+/**
+ * Makes one line of text safe for an issue title, which is not a code block: no mention, no issue reference, no
+ * backslash escape, no github.com address (those make cross-reference events on other repositories).
+ */
+function neutralizeTitle(text) {
 	return text
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/\[/g, '\\[')
-		.replace(/\]/g, '\\]')
-		.replace(/`/g, '\\`')
+		.replace(/\\/g, '/')
 		.replace(/@/g, '@' + ZWSP)
 		.split(FULLWIDTH_AT).join(FULLWIDTH_AT + ZWSP)
 		.replace(/#(?=\d)/g, '#' + ZWSP)
-		.replace(/\b(GH)-(?=\d)/gi, '$1-' + ZWSP);
+		.replace(/github\.com/gi, (m) => m.slice(0, 6) + ZWSP + m.slice(6));
 }
 
-/** The message as a Markdown quote, so it can never open a heading, list or code block. */
-function quote(message) {
-	return neutralize(message)
-		.split('\n')
-		.map((line) => (line.trim() === '' ? '>' : '> ' + line))
-		.join('\n');
+/**
+ * The message as a fenced code block whose fence is longer than the longest run of backticks in the message, so the
+ * message cannot close it. GitHub does not render Markdown or HTML, notify @ mentions, link #123 or turn web addresses
+ * (github.com issue addresses included) into cross-references inside a code block.
+ */
+function fence(message) {
+	const longest = Math.max(0, ...(message.match(/`+/g) ?? []).map((run) => run.length));
+	const ticks = '`'.repeat(Math.max(3, longest + 1));
+	return ticks + 'text\n' + message + '\n' + ticks;
 }
 
 /** A path of this site such as /sql/joins/: lowercase letters, digits, dash, slash. */
@@ -96,11 +98,11 @@ function parseForm(form) {
 	};
 }
 
-/** The issue: title `[feedback] <category>: <lesson title>`, quoted message, page, reviewed date, label `feedback`. */
+/** The issue: title `[feedback] <category>: <lesson title>`, the message in a code block, page, reviewed date, label `feedback`. */
 function buildIssue(f) {
-	const safeTitle = f.lessonTitle.replace(/@/g, '@' + ZWSP).replace(/#(?=\d)/g, '#' + ZWSP);
+	const safeTitle = neutralizeTitle(f.lessonTitle);
 	const lines = [
-		quote(f.message),
+		fence(f.message),
 		'',
 		'Page: ' + f.pageUrl,
 		f.lessonId ? 'Lesson: `' + f.lessonId + '`' : '',
@@ -121,20 +123,39 @@ function fromSite(origin, referer, site = SITE_ORIGIN) {
 	return referer !== null && referer.startsWith(site + '/');
 }
 
-/** Best-effort memory limit for one Worker instance: at most `max` hits per key within `windowMs`. */
+/**
+ * Best-effort memory limit for one Worker instance: at most `max` hits per key within `windowMs`. Expired keys are
+ * dropped on every call, so a key is held for at most `windowMs`. Callers pass a hash, never the address itself.
+ */
 function makeLimiter(max, windowMs) {
 	const hits = new Map();
-	return (key, now = Date.now()) => {
-		const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
-		if (recent.length >= max) {
-			hits.set(key, recent);
-			return false;
+	const limiter = (key, now = Date.now()) => {
+		for (const [k, times] of hits) {
+			const recent = times.filter((t) => now - t < windowMs);
+			if (recent.length === 0) hits.delete(k);
+			else hits.set(k, recent);
 		}
-		recent.push(now);
-		hits.set(key, recent);
-		if (hits.size > 5000) for (const [k, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k);
+		const recent = hits.get(key) ?? [];
+		if (recent.length >= max) return false;
+		hits.set(key, [...recent, now]);
 		return true;
 	};
+	limiter.size = () => hits.size;
+	return limiter;
+}
+
+// A random salt per Worker instance: the same address gets a different key in every instance and after every restart,
+// and the address cannot be read back from the key.
+const SALT = crypto.getRandomValues(new Uint8Array(16));
+
+/** SHA-256 of the salt and the address, as hex. */
+async function hashIp(ip, salt = SALT) {
+	const bytes = new TextEncoder().encode(ip);
+	const data = new Uint8Array(salt.length + bytes.length);
+	data.set(salt);
+	data.set(bytes, salt.length);
+	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+	return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Per Worker instance, in memory: instances come and go, so this is best effort (README).
@@ -161,10 +182,11 @@ export default {
 		// A bot that filled the hidden field is told it worked, so it does not retry.
 		if (!parsed.ok) return redirect(parsed.reason === 'honeypot' ? SENT : NOT_SENT);
 
-		const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-		if (!memoryLimit(ip)) return redirect(NOT_SENT);
+		// Only a salted one-way hash of the address is used from here on, never the address.
+		const key = await hashIp(request.headers.get('CF-Connecting-IP') ?? 'unknown');
+		if (!memoryLimit(key)) return redirect(NOT_SENT);
 		// Optional Cloudflare Rate Limiting binding named RATE_LIMITER (wrangler.toml); absent when pasted in the dashboard.
-		if (env.RATE_LIMITER && !(await env.RATE_LIMITER.limit({ key: ip })).success) return redirect(NOT_SENT);
+		if (env.RATE_LIMITER && !(await env.RATE_LIMITER.limit({ key })).success) return redirect(NOT_SENT);
 
 		try {
 			const res = await fetch('https://api.github.com/repos/' + (env.GITHUB_REPO || DEFAULT_REPO) + '/issues', {
@@ -190,5 +212,5 @@ export default {
 		}
 	},
 	// Exposed for tests/feedback-worker.test.ts; Cloudflare ignores extra properties.
-	logic: { clean, oneLine, neutralize, quote, safePath, parseForm, buildIssue, fromSite, makeLimiter },
+	logic: { clean, oneLine, neutralizeTitle, fence, safePath, parseForm, buildIssue, fromSite, makeLimiter, hashIp },
 };
