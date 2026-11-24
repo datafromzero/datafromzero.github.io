@@ -10,6 +10,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { remarkContentRules } from './src/lib/remark-content-rules.ts';
 import { rehypeMathErrors } from './src/lib/rehype-math-errors.ts';
+import { rehypeNoTranslate } from './src/lib/rehype-no-translate.ts';
 import { redirects } from './src/redirects.ts';
 import { NOINDEX_PAGES, OG_IMAGE, SITE_NAME, SITE_URL, VI_ENABLED } from './src/site.ts';
 import { SPECULATION_RULES } from './src/lib/speculation-rules.ts';
@@ -36,7 +37,7 @@ export default defineConfig({
 		// `unified()` keeps the remark/rehype pipeline that these plugins need.
 		processor: unified({
 			remarkPlugins: [[remarkMath, { singleDollarTextMath: false }], remarkContentRules],
-			rehypePlugins: [[rehypeKatex, { output: 'mathml' }], rehypeMathErrors],
+			rehypePlugins: [[rehypeKatex, { output: 'mathml' }], rehypeMathErrors, rehypeNoTranslate],
 		}),
 	},
 	integrations: [
@@ -80,6 +81,7 @@ export default defineConfig({
 				'./src/styles/print.css',
 			],
 			// Code blocks follow the site theme only (never the OS scheme), on gray backgrounds.
+			// Code blocks carry translate="no" (SPEC D59): that plugin lives in ec.config.mjs, because the <Code> component needs plugins outside this file.
 			expressiveCode: {
 				useDarkModeMediaQuery: false,
 				styleOverrides: {

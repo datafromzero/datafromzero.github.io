@@ -75,6 +75,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 				{ label: 'Cite', link: '/cite/' },
 				{ label: 'License', link: '/license/' },
 				{ label: 'Privacy', link: '/privacy/' },
+				{ label: 'Read in your language', link: '/translate/' },
 			],
 		},
 	];

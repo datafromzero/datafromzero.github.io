@@ -57,6 +57,51 @@ describe('valid fixtures', () => {
 		assert.equal((excelBody.match(/<svg class="csf/g) ?? []).length, 3);
 		assert.match(excelBody, /class="cs-next"/);
 	});
+
+	// SPEC D59: code is never machine-translated. Block code, inline code, kbd and the SQL runner carry translate="no";
+	// prose and Term links do not.
+	test('code carries translate="no" and prose does not', () => {
+		useDocs(sandbox, valid);
+		const r = build(sandbox);
+		assert.ok(r.ok, r.output);
+		const html = read(join(sandbox, 'dist', 'sql', 'sql-joins', 'index.html'));
+		assert.match(html, /<figure class="frame[^"]*"[^>]*translate="no"/); // a fenced block (Expressive Code frame)
+		assert.match(html, /<code[^>]*translate="no"[^>]*>ON o\.customer_id/); // inline code
+		assert.match(html, /<kbd[^>]*translate="no"[^>]*>Ctrl<\/kbd>/);
+		assert.match(html, /<textarea translate="no"/); // the RunSQL editor
+		assert.match(html, /class="dfz-sql-out"[^>]*translate="no"/); // its output box, where column names appear
+		assert.match(html, /<p>A join combines rows/); // prose is not marked
+		assert.doesNotMatch(html, /<a class="term"[^>]*translate=/); // nor is the Term link
+		// Every pre, code, kbd and samp on every built page is marked, itself or through an ancestor (the attribute is inherited).
+		const unmarked = [];
+		const check = (file) => {
+			const raw = read(file);
+			if (raw.includes('http-equiv="refresh"')) return; // Astro's own redirect stubs (the old /vi/ URLs)
+			const page = raw.replace(/<(script|style)\b[\s\S]*?<\/\1>|<!--[\s\S]*?-->/g, '');
+			const marks = []; // open elements that carry translate="no": { tag, depth of same-tag nesting }
+			for (const m of page.matchAll(/<(\/?)([a-z][a-z0-9-]*)\b([^>]*)>/g)) {
+				const [, close, tag, attrs] = m;
+				const top = marks.at(-1);
+				if (close) {
+					if (top && top.tag === tag && --top.depth === 0) marks.pop();
+					continue;
+				}
+				const marked = /\btranslate="no"/.test(attrs);
+				if (/^(pre|code|kbd|samp)$/.test(tag) && !marked && !marks.length) unmarked.push(`${file.slice(sandbox.length)}: <${tag}${attrs}>`);
+				if (top && top.tag === tag) top.depth++;
+				else if (marked) marks.push({ tag, depth: 1 });
+			}
+		};
+		const walk = (dir) => {
+			for (const e of readdirSync(dir, { withFileTypes: true })) {
+				const f = join(dir, e.name);
+				if (e.isDirectory()) walk(f);
+				else if (e.name.endsWith('.html')) check(f);
+			}
+		};
+		walk(join(sandbox, 'dist'));
+		assert.deepEqual(unmarked, []);
+	});
 });
 
 describe('invalid fixtures', () => {

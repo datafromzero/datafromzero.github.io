@@ -7,6 +7,8 @@ datafromzero is a free, open roadmap for people who only know Microsoft Office. 
 Excel and Google Sheets to SQL, then Python, then an advanced core, and finally four data careers.
 The site is still being written, so lessons appear stage by stage.
 
+Not an English reader yet? [Read in your language](/translate/) shows how to translate the pages with Chrome.
+
 ## Follow the order
 
 Study the stages in this order:
