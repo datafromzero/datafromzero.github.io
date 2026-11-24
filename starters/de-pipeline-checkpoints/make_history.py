@@ -29,7 +29,7 @@ STARTER = HERE.parent / "de-pipeline"
 LESSONS = 18
 AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
 DATE = "2026-11-24T12:00:00+0000"
-# The commits whose files never change again, by lesson (the starter commit is key 0): the published repository (0 to 14) and
+# The commits whose files never change again, by lesson (the starter commit is key 0): the published repository (0 to 18) and
 # the checkpoints that later lessons build on. Add a lesson's hash once it is pushed or once a later lesson depends on it.
 PUBLISHED = {
     0: "ed98dbedbf5966caf13110923c46286bb75f87b1",
@@ -38,7 +38,7 @@ PUBLISHED = {
     3: "7af7bf670106158f72239fd5a1f2b535cabdb548",
     4: "eee98d78a11e1ed56dd8700c8691835537250cee",
     5: "b939cb4a99553af143065b5e0036761ea7c591e3",
-    # Lessons 6 to 14 were pushed on 2026-11-24.
+    # Lessons 6 to 18 were pushed on 2026-11-24.
     6: "393a8204144975196963cd5733efbada34853e54",
     7: "ccb3b7940c2fbcada9680cc923194ae3f215a26d",
     8: "fa0a03b75ec474aaa1bc65627815e62d1162f646",
@@ -48,6 +48,10 @@ PUBLISHED = {
     12: "af653e095585ed8606dda3742d83e845bc584749",
     13: "6dfaac147563c57ced42545b6af5be7916c10a49",
     14: "8cb985842fcedca1703c198ce6197214a7eb5b01",
+    15: "0d8c02509c3d52df232b4df615d76a8a1892c421",
+    16: "46e8461398e304bbba161d586c70c1e814e5dd9d",
+    17: "aa9c4ce3b60437aa4b5a9fbb92c001ace08e621d",
+    18: "773a05e06b8b8a2206dc68b89200ef8c439056c2",
 }
 IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc")
 
