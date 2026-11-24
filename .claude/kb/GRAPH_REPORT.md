@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1566 nodes, 1878 edges, 201 communities (658 isolated nodes).
+- 1566 nodes, 1881 edges, 201 communities (657 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 229, content-type 5, decision 58, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 184, skill 1, spec-section 25, starlight-component 6, style 7, symbol 311, template 2, token 12.
-- Edges: defines 311, imports 51, mentions 973, overrides 6, references 30, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
+- Edges: defines 311, imports 51, mentions 976, overrides 6, references 30, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C84 to C81, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C100 to C74, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C127 to C25, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C71, src/scripts/run-sql.ts:2)
+- `ctype:career` -specified-by-> `S5.4` (C85 to C82, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C101 to C75, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C128 to C25, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C72, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C187 to C184, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C75 to C11, src/styles/math.css:17)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C76 to C11, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C20, .claude/skills/kb/SKILL.md:3)
-- `M8` -mentions-> `D24` (C78 to C20, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C178 to C2, scripts/check-placeholders.mjs:2)
-- `M6` -mentions-> `D26` (C2 to C73, CLAUDE.md:62)
-- `scripts/check-lessons.mjs` -mentions-> `D47` (C176 to C2, scripts/check-lessons.mjs:10)
-- `scripts/check-sitemap.mjs` -mentions-> `D58` (C179 to C56, scripts/check-sitemap.mjs:2)
+- `M8` -mentions-> `D24` (C79 to C20, CLAUDE.md:66)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C179 to C2, scripts/check-placeholders.mjs:2)
+- `D16` -mentions-> `D58` (C61 to C56, SPEC.md:43)
+- `M6` -mentions-> `D26` (C2 to C74, CLAUDE.md:62)
+- `scripts/check-lessons.mjs` -mentions-> `D47` (C177 to C2, scripts/check-lessons.mjs:10)
 
 ## Decisions (SPEC §1)
 

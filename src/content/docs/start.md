@@ -52,9 +52,9 @@ it down yourself.
 
 ## Report a problem
 
-Every lesson ends with **Suggest an edit** and **Report an issue** links. You can also open an issue in
-the [project repository](https://github.com/datafromzero/datafromzero.github.io/issues). Small fixes
-such as typos are welcome as pull requests.
+Every lesson ends with a **Report an issue** form: write what is wrong or unclear and send it, no account
+needed. If you use GitHub, you can also open an issue in the
+[project repository](https://github.com/datafromzero/datafromzero.github.io/issues).
 
 ## The roadmap map
 

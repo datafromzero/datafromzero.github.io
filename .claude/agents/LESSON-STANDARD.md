@@ -474,7 +474,7 @@ Written 2026-11-24 by the second DS batch; the later batches keep these on top o
 - No links to other lessons' URLs while they are drafts: name them by title.
 - American English (gray, color, canceled). Frontmatter: change only `sources`, `datasets` and the body unless the
   brief says otherwise; keep `status: draft`.
-- A title too wide for one sidebar line gets a `short_title` of at most 24 (D47; `check:lessons` sums measured Geist glyph widths, the line holds 175 px;
+- A title too wide for one sidebar line gets a `short_title` of at most 24 (D47; `check:lessons` sums measured Geist glyph widths, the line holds 185 px;
   prefer words to long runs of capitals): the one-line sidebar name, 2–4 words,
   naming the tool or idea (`Files and tables`, `LAG, LEAD, moving avg`), never a different meaning from the title.
 

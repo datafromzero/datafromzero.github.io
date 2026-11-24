@@ -18,7 +18,7 @@ const STAGES = ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer
 const DOCS = 'src/content/docs';
 // Advance widths in px of Geist at 14 px, the sidebar label font, measured in Chromium (2026-11-24); other characters 8.5.
 const GLYPH_PX = {"0":9.28,"1":5.38,"2":8.67,"3":8.58,"4":8.61,"5":8.76,"6":8.3,"7":7.34,"8":8.46,"9":8.3," ":3.5,"!":2.98,"\"":4.84,"#":6.69,"$":8.81,"%":11.23,"&":8.68,"'":2.49,"(":3.84,")":3.84,"*":6.02,"+":7.81,",":2.81,"-":5.87,".":2.81,"/":6.72,":":4.16,";":4.16,"<":7.62,"=":7.56,">":7.62,"?":7.83,"@":12.68,"A":9.35,"B":9.52,"C":9.84,"D":9.72,"E":8.44,"F":8.26,"G":9.8,"H":9.98,"I":3.78,"J":8.36,"K":8.96,"L":8.12,"M":12.28,"N":10.4,"O":10.35,"P":9.1,"Q":10.26,"R":9.41,"S":8.96,"T":7.73,"U":9.65,"V":9.34,"W":13.23,"X":8.48,"Y":8.06,"Z":7.62,"[":4.86,"\\":6.37,"]":4.86,"^":5.96,"_":7.8,"`":3.47,"a":7.71,"b":8.33,"c":7.64,"d":8.33,"e":7.85,"f":5.53,"g":8.32,"h":8.13,"i":3.42,"j":3.64,"k":8.26,"l":3.74,"m":12.28,"n":8.13,"o":8.02,"p":8.33,"q":8.33,"r":5.31,"s":7.28,"t":5.49,"u":8.05,"v":7.5,"w":11.47,"x":8.19,"y":7.52,"z":7.52,"{":5.45,"|":3.7,"}":5.45,"~":7.32};
-const SIDEBAR_LINE_PX = 175;
+const SIDEBAR_LINE_PX = 185;
 
 const BRITISH = /\b(grey(ed|s)?|colour(s|ed|ful)?|favour(s|ite)?|behaviour(s)?|centre(s|d)?|licence|cancelled|cancelling|organis(e|ed|es|ing|ation)|analys(e|ed|es|ing)|summaris(e|ed|es|ing)|recognis(e|ed|es|ing)|optimis(e|ed|es|ing))\b/i;
 const FIRST_PERSON = /\bI (could not|couldn't|did not|didn't|was not able|wasn't able|have not|haven't) (find|verify|run|test|open|confirm|check)\b|\bchecked as SQL\b/i;
@@ -40,8 +40,8 @@ for (const stage of STAGES) {
 		if (fm) {
 			if (/url:\s*https:\/\/github\.com\/datafromzero\/datafromzero\.github\.io\/issues\//.test(fm[1]))
 				report(file, 1, 'a source cites a GitHub issue of this site; cite the primary source instead (owner rule, 2026-11-20)');
-			// The sidebar label is Geist 14px; a line holds about 170 px (measured 2026-11-24: "Filtering rows with WHERE",
-			// 169.6 px, fits; "NULL: unknown is not zero", 171.8 px, wraps). Widths are Geist's advance widths at 14 px (D47).
+			// The sidebar label is Geist 14px. With the 20rem sidebar a line holds at least 182.9 px of text (measured 2026-11-24;
+			// summed advance widths run about 2 percent over the kerned width, so the limit is 185). Widths: Geist at 14 px (D47).
 			const width = (t) => [...t].reduce((w, c) => w + (GLYPH_PX[c] ?? 8.5), 0);
 			const unquote = (t) => (t ?? '').trim().replace(/^(['"])(.*)\1$/, '$2');
 			const title = unquote(fm[1].match(/^title:\s*(.+)$/m)?.[1]);

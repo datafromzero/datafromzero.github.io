@@ -21,7 +21,6 @@ const uiStrings = [
 	'lesson.sources',
 	'lesson.cite',
 	'lesson.citeNote',
-	'lesson.suggestEdit',
 	'lesson.reportIssue',
 	'lesson.issueTitle',
 	'lesson.issueBody',
