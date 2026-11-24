@@ -56,7 +56,7 @@ def run_notebook(key):
             src = "".join(cell["source"])
             if cell["cell_type"] == "markdown" and src.startswith("## Finish it"):
                 break
-            if cell["cell_type"] == "code":
+            if cell["cell_type"] == "code" and not src.startswith("# Optional"):       # an optional cell (DS6's twenty other pilots) is not needed by a chart
                 with contextlib.redirect_stdout(io.StringIO()):
                     exec(compile(src, f"<{key}>", "exec"), ns)
     finally:
@@ -86,6 +86,7 @@ def charts(only=None):
         tc = ns["table_cv"]
         Cs, ridge, lasso = list(tc["C"]), list(tc["ridge"]), list(tc["lasso"])
         assert (ridge[0], lasso[0], max(ridge), max(lasso)) == (0.6833, 0.6465, 0.6918, 0.692), (ridge[0], lasso[0], max(ridge), max(lasso))
+        assert int(np.argmax(ridge)) == int(np.argmax(lasso))        # both are best at the same C, so one label serves both
         s = Svg("ds6-cv", "Mean ROC AUC of ridge and lasso on the five folds, by C",
                 f"A line chart of the mean ROC AUC on the five folds of the training part, from 0.64 to 0.70, for ten values of C from 0.001 to 100 on a log scale. "
                 f"The ridge rises from {ridge[0]:.3f} at C = 0.001 to {max(ridge):.4f} at C = 0.03 and stays within 0.0003 of that from there to C = 100. "
@@ -104,7 +105,8 @@ def charts(only=None):
             s.circle(X(np.log10(c)), Y(a), 3, BLUE)
             s.circle(X(np.log10(c)), Y(b), 3, GREEN, opacity=1)
         i = int(np.argmax(ridge))
-        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) - 8, f"best C = {Cs[i]:g}: {max(ridge):.4f}", size=9.5, weight=600)
+        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) - 20, f"best C = {Cs[i]:g}", size=9.5, weight=600)
+        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) - 8, f"ridge {max(ridge):.4f}, lasso {max(lasso):.4f}", size=9.5, weight=600)
         for c in (0.001, 0.01, 0.1, 1, 10, 100):
             s.line(X(np.log10(c)), Y(0.64), X(np.log10(c)), Y(0.64) + 4)
             s.text(X(np.log10(c)), Y(0.64) + 16, f"{c:g}", anchor="middle", opacity=0.8, size=9.5)
@@ -119,22 +121,22 @@ def charts(only=None):
         leaves = [(1, BLUE, "min leaf 1"), (50, GREEN, "min leaf 50"), (400, PURPLE, "min leaf 400")]
         assert (round(cv.loc[10, 1], 3), round(cv.loc[10, 400], 3), round(cv.loc[6, 400], 3)) == (0.645, 0.688, 0.688), (cv.loc[10, 1], cv.loc[10, 400])
         s = Svg("ds7-leaf", "Mean ROC AUC of a decision tree on the five folds, by depth, for three leaf sizes",
-                "A line chart of the mean ROC AUC on the five folds, from 0.64 to 0.70, for trees of depth " + ", ".join(str(d) for d in depths)
+                "A line chart of the mean ROC AUC on the five folds, from 0.64 to 0.70, for trees of depth " + ", ".join(str(d) for d in depths) + " (the depth axis is to scale)"
                 + ". With leaves of one person the AUC rises to " + f"{cv.loc[4, 1]:.3f} at depth 4 and falls to {cv.loc[10, 1]:.3f} at depth 10. "
                 + f"With at least 50 people in each leaf it peaks near {cv[50].max():.3f} and ends at {cv.loc[10, 50]:.3f}. "
                 + f"With at least 400 people in each leaf it rises to {cv.loc[6, 400]:.3f} at depth 6 and stays there to depth 10, {cv.loc[10, 400]:.3f}.")
-        X, Y = Axis(0, len(depths) - 1, 46, 186), Axis(0.64, 0.70, 160, 40)
+        X, Y = Axis(depths[0], depths[-1], 46, 186), Axis(0.64, 0.70, 160, 40)        # the depth axis is to scale: 2, 3, 4, 5, 6, 8, 10
         s.text(8, 10, "Mean ROC AUC on the five folds, by depth", size=10.5, weight=600)
-        axis_ticks_y(s, X(0), X(len(depths) - 1), Y, [0.64, 0.66, 0.68, 0.70], lambda v: f"{v:.2f}")
+        axis_ticks_y(s, X(depths[0]), X(depths[-1]), Y, [0.64, 0.66, 0.68, 0.70], lambda v: f"{v:.2f}")
         for leaf, col, lab in leaves:
             vals = [float(cv.loc[d, leaf]) for d in depths]
-            s.poly([(X(i), Y(v)) for i, v in enumerate(vals)], col, w=2)
-            for i, v in enumerate(vals):
-                s.circle(X(i), Y(v), 3, col)
-            s.text(X(len(depths) - 1) + 8, Y(vals[-1]) + 3.5, f"{lab} {vals[-1]:.3f}", size=9.5, weight=600)
-        for i, d in enumerate(depths):
-            s.text(X(i), Y(0.64) + 14, str(d), anchor="middle", opacity=0.8, size=9.5)
-        s.text(X(len(depths) - 1) + 40, Y(0.64) + 28, "max depth of the tree", anchor="end", opacity=0.8)
+            s.poly([(X(d), Y(v)) for d, v in zip(depths, vals)], col, w=2)
+            for d, v in zip(depths, vals):
+                s.circle(X(d), Y(v), 3, col)
+            s.text(X(depths[-1]) + 8, Y(vals[-1]) + 3.5, f"{lab} {vals[-1]:.3f}", size=9.5, weight=600)
+        for d in depths:
+            s.text(X(d), Y(0.64) + 14, str(d), anchor="middle", opacity=0.8, size=9.5)
+        s.text(X(depths[-1]) + 40, Y(0.64) + 28, "max depth of the tree", anchor="end", opacity=0.8)
         out["ds7-leaf"] = s.render()
 
         built_in, perm = ns["built_in_by"][1], ns["perm"]
@@ -213,10 +215,10 @@ def charts(only=None):
                   ("Cohort share (755 groups)", PURPLE, [("computed before the folds", leaky_g), ("learned inside the folds", honest_g)])]
         desc_rows = "; ".join(f"{lab} {g[0]:+.4f} (folds {g[1]:+.4f} to {g[2]:+.4f})" for _, _, items in groups for lab, g in items)
         s = Svg("ds9-gains", "Paired gain in ROC AUC over the day-7 model, by change, on the same five folds",
-                "A dot chart on a scale from -0.05 to +0.04 of the mean of the five fold-by-fold differences in ROC AUC from the day-7 model, with a line from the lowest to the highest difference. "
+                "A dot chart on a scale from -0.06 to +0.04 of the mean of the five fold-by-fold differences in ROC AUC from the day-7 model, with a line from the lowest to the highest difference. "
                 + desc_rows + ". The five simple changes sit at zero with ranges that cross it; the ordinal codes fall by about 0.03; the cohort share looks like a gain of 0.03 when it is computed before the folds "
                 "and is a loss of 0.04 when it is learned inside them.")
-        X = Axis(-0.05, 0.04, 176, 292)
+        X = Axis(-0.06, 0.04, 176, 292)
         s.text(8, 10, "Gain in ROC AUC over the day-7 model, on five folds", size=9.5, weight=600)
         yy = 28
         for gname, col, items in groups:
@@ -230,7 +232,7 @@ def charts(only=None):
                 yy += 14
             yy += 3
         s.line(X(0), 40, X(0), yy - 3, w=1, opacity=0.5, dash="3 3")
-        s.line(X(-0.05), yy, X(0.04), yy)
+        s.line(X(-0.06), yy, X(0.04), yy)
         for v in (-0.04, 0, 0.04):
             s.line(X(v), yy, X(v), yy + 4)
             s.text(X(v), yy + 16, f"{v:+.2f}" if v else "0", anchor="middle", opacity=0.8)
@@ -246,7 +248,7 @@ def charts(only=None):
         s = Svg("ds10-silhouette", "Silhouette by number of groups, for the people and for made-up data with three real groups",
                 "A line chart of the silhouette from 0 to 0.9 for k from 2 to 6 groups. For the made-up data with three real groups it is " + ", ".join(f"{v:.3f}" for v in made)
                 + ", a sharp peak at k = 3 and a fall after it. For the people it is " + ", ".join(f"{v:.3f}" for v in people)
-                + ", a narrow band between 0.448 and 0.522 with no peak: the data do not choose k.")
+                + ", a narrow band between 0.448 and 0.522 with no sharp peak: the data do not choose k.")
         X, Y = Axis(2, 6, 48, 220), Axis(0, 0.9, 150, 40)
         s.text(8, 10, "Silhouette by number of groups (k-means)", size=10.5, weight=600)
         axis_ticks_y(s, X(2), X(6), Y, [0, 0.3, 0.6, 0.9], lambda v: f"{v:.1f}")
