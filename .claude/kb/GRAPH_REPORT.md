@@ -5,7 +5,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1567 nodes, 1883 edges, 201 communities (656 isolated nodes).
+- 1567 nodes, 1883 edges, 202 communities (656 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 229, content-type 5, decision 58, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 185, skill 1, spec-section 25, starlight-component 6, style 7, symbol 311, template 2, token 12.
 - Edges: defines 311, imports 51, mentions 976, overrides 6, references 30, runs 15, specified-by 4, uses 453, uses-token 32, validated-by 5.
 
@@ -18,7 +18,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 3 | `D41` Lesson step-by-step figures | decision | 100 | SPEC.md:68 |
 | 4 | `src/components/content/RunSQL.astro` | component | 71 | src/components/content/RunSQL.astro:1 |
 | 5 | `src/components/content/OpenInColab.astro` | component | 67 | src/components/content/OpenInColab.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 59 | .claude/HANDOFF.md:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 61 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
 | 8 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 9 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
@@ -51,17 +51,17 @@ Label propagation; each community is named by its top-degree node.
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
 - `ctype:career` -specified-by-> `S5.4` (C85 to C82, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C101 to C75, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C101 to C73, scripts/animations/concept-columnar-scan.mjs:2)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C128 to C25, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C72, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C187 to C184, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C76 to C11, src/styles/math.css:17)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C26 to C70, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C188 to C185, src/layouts/HomeLayout.astro:39)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C11, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C20, .claude/skills/kb/SKILL.md:3)
-- `M8` -mentions-> `D24` (C79 to C20, CLAUDE.md:66)
+- `M8` -mentions-> `D24` (C78 to C20, CLAUDE.md:66)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C179 to C2, scripts/check-placeholders.mjs:2)
-- `D16` -mentions-> `D58` (C61 to C56, SPEC.md:43)
-- `M6` -mentions-> `D26` (C2 to C74, CLAUDE.md:62)
+- `M6` -mentions-> `D26` (C2 to C72, CLAUDE.md:62)
 - `scripts/check-lessons.mjs` -mentions-> `D47` (C177 to C2, scripts/check-lessons.mjs:10)
+- `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C193 to C53, src/lib/repo-files.ts:4)
 
 ## Decisions (SPEC §1)
 

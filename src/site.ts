@@ -26,7 +26,7 @@ export const CURRICULUM_VERSION: string = pkg.version;
 export const FIRST_YEAR = 2026;
 /**
  * Google Analytics 4 Measurement ID (SPEC §11, D8). Empty = analytics off: no banner, no GA code,
- * no "Cookie settings" link and no added JavaScript anywhere. Set to `G-XXXXXXXXXX` to turn it on.
+ * no "Cookie settings" button on /privacy/ and no added JavaScript anywhere. Set to `G-XXXXXXXXXX` to turn it on.
  */
 export const GA_ID = 'G-0TNDBK1ZJX'; // cspell:disable-line
 /** Event-data retention configured in GA4 (e.g. '14 months'); required before GA_ID is set. */

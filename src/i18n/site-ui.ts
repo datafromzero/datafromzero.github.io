@@ -1,4 +1,4 @@
-// Small UI strings shared by the docs footer and the homepage footer: project page links and the
+// Small UI strings shared by the taskbar and the homepage footer: project page links and the
 // consent banner (SPEC §11). English is the default; Vietnamese pages fall back to English for any page
 // that is not translated yet, but these labels are always localized.
 export type UiLang = 'en' | 'vi';

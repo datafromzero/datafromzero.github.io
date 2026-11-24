@@ -45,6 +45,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-24 — The taskbar hid the project links from 50rem up on every docs page, assuming the sidebar was on screen; Starlight `splash` pages (the playground and the 404) have no sidebar at any width, so Privacy and Cookie settings were unreachable there. → **Never treat "50rem or wider" as "the sidebar is on screen"; use `starlightRoute.hasSidebar`, and screenshot a splash page at 1280 px.**
 - 2026-11-24 — The feedback Worker quoted the message with `> ` and escaped a few characters; review found that `\[x](url)` and `!\[` still render links and images and that a github.com issue URL makes a cross-reference on another repository. → **Any text the site sends on to GitHub goes in a code block (fence longer than any backtick run in it), or is escaped and tested against `\`, mentions, `#n` and full github.com issue URLs: a quote alone still renders links and cross-references.**
 - 2026-11-24 — The rate limiter kept raw IPs in memory while `/privacy/` said they were not stored, and invocation logs were left on by default. → **Before writing "we do not store X", trace every place X can be held (memory, logs, the platform's defaults) and test or switch each one off.**
 - 2026-11-24 — A page marked `noindex` was still in the sitemap. → **Every `noindex` page is excluded from the sitemap; `npm run check:sitemap` fails otherwise.**
