@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1560 nodes, 1859 edges, 200 communities (659 isolated nodes).
+- 1560 nodes, 1860 edges, 200 communities (659 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 228, content-type 5, decision 57, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 25, npm-script 26, page 5, research-section 500, rule 10, script 184, skill 1, spec-section 25, starlight-component 6, style 7, symbol 309, template 2, token 12.
-- Edges: defines 309, imports 51, mentions 957, overrides 6, references 29, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
+- Edges: defines 309, imports 51, mentions 958, overrides 6, references 29, runs 15, specified-by 4, uses 451, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
