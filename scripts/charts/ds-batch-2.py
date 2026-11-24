@@ -105,8 +105,9 @@ def charts(only=None):
             s.circle(X(np.log10(c)), Y(a), 3, BLUE)
             s.circle(X(np.log10(c)), Y(b), 3, GREEN, opacity=1)
         i = int(np.argmax(ridge))
-        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) - 20, f"best C = {Cs[i]:g}", size=9.5, weight=600)
-        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) - 8, f"ridge {max(ridge):.4f}, lasso {max(lasso):.4f}", size=9.5, weight=600)
+        # The label sits below the flat part of the lines, clear of the legend above them.
+        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) + 20, f"best C = {Cs[i]:g}", size=9.5, weight=600)
+        s.text(X(np.log10(Cs[i])) + 6, Y(max(ridge)) + 32, f"ridge {max(ridge):.4f}, lasso {max(lasso):.4f}", size=9.5, weight=600)
         for c in (0.001, 0.01, 0.1, 1, 10, 100):
             s.line(X(np.log10(c)), Y(0.64), X(np.log10(c)), Y(0.64) + 4)
             s.text(X(np.log10(c)), Y(0.64) + 16, f"{c:g}", anchor="middle", opacity=0.8, size=9.5)
