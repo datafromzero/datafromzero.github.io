@@ -2,7 +2,7 @@
 
     python3 starters/de-pipeline-checkpoints/check_lessons.py
 
-It covers three things, for each of the lessons DE1 to DE14 (DE6b and DE11b are the second halves of DE6 and DE11):
+It covers three things, for each of the lessons DE1 to DE18 (DE6b and DE11b are the second halves of DE6 and DE11):
 
 1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json` or `toml` block outside an `<Exercise>` must equal a file of
    the checkpoints (or the starter) or be a contiguous piece of one (a replacement the lesson asks for). A block that
@@ -12,7 +12,7 @@ It covers three things, for each of the lessons DE1 to DE14 (DE6b and DE11b are 
    and listed when they cannot: that list is for a person to read, and it holds exercise code only.
 3. Every `bash` block is read for the files it names: `git show de-NN-done:PATH` needs PATH in that checkpoint,
    `uv run python -m pipeline.NAME` needs `src/pipeline/NAME.py` in the starter or in a checkpoint up to the lesson's,
-   and `uv run python scripts/NAME.py` (or `NAME.py` inside `airflow/`) needs that script.
+   and `uv run python scripts/NAME.py` (or `NAME.py` inside `airflow/` or `spark/`) needs that script.
 
 Shown output (`console` blocks) is compared with a run only by hand, in a clean clone built by `make_history.py`; this script
 only refuses the signs of a capture that went wrong (see `check_console`): a parse error, or a path with `//` in it (a shell
@@ -42,11 +42,15 @@ NAMES = [  # (label, checkpoint number, lesson file); DE6 and DE11 are each two 
     ("DE12", 12, "logical-to-physical-design"),
     ("DE13", 13, "dimensional-models-and-scd"),
     ("DE14", 14, "ci-and-deployment-for-dbt"),
+    ("DE15", 15, "cloud-warehouse-in-practice"),
+    ("DE16", 16, "spark-distributed-processing"),
+    ("DE17", 17, "pipeline-capstone-design"),
+    ("DE18", 18, "analytics-platform-capstone"),
 ]
 FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
 FILE_NAMES = {".gitignore"}
 CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml"}
-FENCE = re.compile(r"^```(\w+)\n(.*?)^```$", re.S | re.M)
+FENCE = re.compile(r"^(`{3,})(\w+)\n(.*?)^\1$", re.S | re.M)  # a fence of four backticks may hold fences of three
 BAD_CONSOLE = re.compile(r"Parser Error|ParserException|(?<![:/\s])//(?![/\s])")
 # Signs that a lesson teaches on purpose, by lesson: DE11b leaves an argument out of a macro call so that the database
 # reports a parse error on the compiled file. A new entry needs a unit or an exercise that is about that error.
@@ -86,7 +90,7 @@ def check_bash(number, block, files):
     for script in SCRIPT.findall(block):
         if script.startswith("exercises/"):
             continue  # a file the learner writes in an exercise
-        if script not in paths and f"airflow/{script}" not in paths:
+        if script not in paths and f"airflow/{script}" not in paths and f"spark/{script}" not in paths:
             problems.append(f"{script}: no such script in the starter or a checkpoint")
     return problems
 
@@ -104,12 +108,13 @@ def check_console(label, block):
 def main():
     errors = 0
     for label, number, name in NAMES:
-        text = (LESSONS / f"{name}.mdx").read_text()
+        page = LESSONS / f"{name}.mdx"
+        text = (page if page.exists() else LESSONS / f"{name}.md").read_text()
         files = checkpoint_files(number)
         spans = exercise_spans(text)
         matched = in_exercise = bash = 0
         for fence in FENCE.finditer(text):
-            language, block = fence.group(1), fence.group(2).rstrip("\n")
+            language, block = fence.group(2), fence.group(3).rstrip("\n")
             inside = any(start <= fence.start() < end for start, end in spans)
             if language == "console":
                 for problem in check_console(label, block):

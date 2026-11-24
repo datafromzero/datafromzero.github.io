@@ -26,7 +26,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STARTER = HERE.parent / "de-pipeline"
-LESSONS = 14
+LESSONS = 18
 AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
 DATE = "2026-11-24T12:00:00+0000"
 # The commits whose files never change again, by lesson (the starter commit is key 0): the published repository (0 to 14) and

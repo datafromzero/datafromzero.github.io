@@ -1,0 +1,493 @@
+---
+id: data-engineer-spark-distributed-processing
+title: 'Beyond one machine: Spark, and streaming when it pays'
+short_title: Spark and streaming
+description: Write a PySpark job, read its plan and a hot key, count late events in a stream with a watermark, and decide batch or streaming for a stated need.
+stage: data-engineer
+order: 160
+level: advanced
+duration: 35
+objectives:
+  - Say what Spark costs on one machine, and why it is built for data that no longer fits one
+  - Write a PySpark DataFrame transformation and an action, and read the plan Spark builds for them
+  - Explain lazy evaluation and the shuffle, and recognize data skew from the size of the partitions
+  - Describe event time, windows and late data in a stream, and what a watermark drops
+  - Decide batch versus streaming for a stated business need
+prerequisites:
+  - data-engineer-role-and-lifecycle
+  - data-engineer-file-formats-and-partitioning
+  - data-engineer-incremental-loads-idempotency
+  - python-pandas-groupby-aggregate
+  - sql-window-functions
+datasets:
+  - app-events
+reviewed: 2026-11-16
+sources:
+  - title: 'Apache Spark documentation: Overview (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/
+  - title: 'Apache Spark documentation: Cluster mode overview (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/cluster-overview.html
+  - title: 'Apache Spark documentation: RDD programming guide, transformations and shuffle operations (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/rdd-programming-guide.html
+  - title: 'Apache Spark documentation: Performance tuning, adaptive query execution (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/sql-performance-tuning.html
+  - title: 'PySpark documentation: DataFrame.repartition (4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.repartition.html
+  - title: 'Apache Spark documentation: Structured Streaming overview (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/streaming/index.html
+  - title: 'Apache Spark documentation: Structured Streaming, APIs on DataFrames and Datasets (Spark 4.3.0, accessed 2026-11-24)'
+    url: https://spark.apache.org/docs/latest/streaming/apis-on-dataframes-and-datasets.html
+  - title: 'Apache Kafka documentation: Introduction (accessed 2026-11-24)'
+    url: https://kafka.apache.org/intro
+status: draft
+---
+
+TODO(owner): Team draft (D24), run with PySpark 4.3.0 (py4j 0.10.9.9), OpenJDK 21.0.12, Python 3.13, uv 0.11.32, DuckDB 2.0.0, on Linux; tags `de-16-start` and `de-16-done` need pushing to `de-pipeline-starter`. PySpark is a new dependency in its own `spark/` folder with its own `uv.lock`, like `airflow/`; PyPI ships it as a source archive that uv builds in about 16 seconds, about 480 MB installed. **Not run: Windows** (the overview page says Spark runs on Windows with Java), macOS, Codespaces (the dev container has no Java, and was not changed), Kafka, any cluster. Nothing in the pages gives a size at which one machine stops being enough, so the lesson gives measured costs and no threshold. The stream is a file source with `availableNow`: 1 hour gave 177,220 twice, 1 day 177,376, 3 days 177,379. Times vary by machine. Stub changes: the merged note of 2026-11-23 stays (Spark 8 of 27 postings, streaming 9 of 27, issue 118); objective 1 reworded; prerequisites add DE3 and DE4; sources are the pages opened.
+
+## The question
+
+The owner of the cafes writes:
+
+> The app sends us about 177,000 events in six months and the product team wants them counted within the hour. A candidate told me we need Spark and Kafka for that. Do we?
+
+By the end you can read a Spark job's plan, tell when a shuffle is lopsided, count a stream with a watermark, and answer the owner with numbers from your own machine.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Grouping and aggregating*](/python/pandas-groupby-aggregate/) in pandas and SQL `GROUP BY` split rows by a key and count each group. A Spark `groupBy` does the same.
+
+**Diverge.** pandas and DuckDB run the group on one machine. Spark splits the data into partitions that tasks work on separately, so rows of a key must first travel to one place.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Incremental loads and idempotent reruns* (DE4), what did the overlap before the saved time protect against?
+
+   <details>
+   <summary>answer</summary>
+
+   A line that reached the source late, with a time earlier than the newest one already loaded: without an overlap, the next run would skip it.
+
+   </details>
+
+2. In *File formats and partitioning* (DE3), why did partitioning a small table by day make reads slower?
+
+   <details>
+   <summary>answer</summary>
+
+   Every file costs something to open and carries its own metadata, so many tiny files cost more than the data they skip.
+
+   </details>
+
+## The big idea
+
+Spark splits the work into pieces that run apart and moves rows between them only when it must, so a job is a plan first and a run second, and a stream is the same plan fed by time.
+
+## Learn by doing
+
+About 35 minutes, 3 new ideas: a plan against a run, the shuffle and a hot key, and event time with a watermark. Work in `de-pipeline-starter` with Java 17, 21 or 25 on your path (the overview page lists them). To catch up, run `git checkout de-16-start`. Spark writes its log to the error stream, so each command ends with `2>/dev/null` to keep the output short: if a command prints nothing, run it again without it. Python commands run from the repository root unless a block says `cd spark`.
+
+### 1. A plan is not a run
+
+**Idea.** A **DataFrame** is a table Spark spreads over partitions. A **transformation** (`filter`, `groupBy`) returns a new DataFrame; an **action** (`collect`, `count`) returns a result to your program, the **driver**. The cluster page says an application's driver connects to executors, processes that run the work, and sends them tasks. Here everything runs on one machine, with `local[2]`, which runs Spark on two cores (the RDD guide runs `local[4]` on exactly four).
+
+**Try it.** Fetch the events of the app-events dataset from its release tag, set up PySpark in its own folder, and save this as `spark/events_by_name.py`. It counts the events of each name, prints how many jobs have run at three moments, and the operators of the plan:
+
+```bash
+git show de-16-done:scripts/fetch_app_events.py > scripts/fetch_app_events.py
+uv run python scripts/fetch_app_events.py
+mkdir -p spark
+git show de-16-done:spark/pyproject.toml > spark/pyproject.toml
+git show de-16-done:spark/uv.lock > spark/uv.lock
+cd spark
+uv sync
+```
+
+```console
+$ uv run python scripts/fetch_app_events.py
+data/raw/app-events/events.csv: 13,041,745 bytes, 177,379 events
+```
+
+```python
+"""Count the events of each name: transformations build a plan, and an action runs it."""
+
+import contextlib
+import io
+import re
+import time
+
+from pyspark.sql import SparkSession, functions as F
+
+spark = (
+    SparkSession.builder.master("local[2]").appName("events").config("spark.ui.enabled", "false")
+    .config("spark.ui.showConsoleProgress", "false").config("spark.sql.shuffle.partitions", "4").getOrCreate()
+)
+spark.sparkContext.setLogLevel("ERROR")
+SCHEMA = "event_id long, user_id long, event_ts timestamp, event_name string, platform string, received_at timestamp"
+
+
+def jobs_run():
+    """How many Spark jobs this program has run so far."""
+    return len(spark.sparkContext.statusTracker().getJobIdsForGroup())
+
+
+def operators(df):
+    """The operators of the physical plan, from the top one down, without their details."""
+    text = io.StringIO()
+    with contextlib.redirect_stdout(text):
+        df.explain()
+    lines = [line for line in text.getvalue().splitlines() if line.strip() and not line.startswith("==")]
+    return " > ".join(re.match(r"[ +:\-|]*(\w+)", line).group(1) for line in lines)
+
+
+events = spark.read.csv("../data/raw/app-events/events.csv", header=True, schema=SCHEMA)
+by_name = events.groupBy("event_name").agg(F.count("*").alias("events")).orderBy(F.desc("events"))
+print("after the transformations:", jobs_run(), "jobs")
+print("plan:", operators(by_name))
+print("after explain:", jobs_run(), "jobs")
+started = time.time()
+rows = by_name.collect()
+print(f"after collect: {jobs_run()} jobs, {time.time() - started:.1f} s")
+for row in rows:
+    print(f"{row['event_name']:<22}{row['events']:>7,}")
+```
+
+```bash
+uv run python events_by_name.py 2>/dev/null
+```
+
+**Predict:** How many jobs have run after the transformations, after `explain`, and after `collect`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python events_by_name.py 2>/dev/null
+after the transformations: 0 jobs
+plan: AdaptiveSparkPlan > Sort > Exchange > HashAggregate > Exchange > HashAggregate > FileScan
+after explain: 0 jobs
+after collect: 4 jobs, 2.3 s
+add_expense            63,453
+session_start          34,328
+signup_complete        21,871
+plus_feature_used      21,839
+onboarding_complete    15,082
+view_paywall           11,142
+start_checkout          4,757
+purchase                2,905
+paywall_viewed          1,303
+cancel_subscription       699
+```
+
+</details>
+
+*Why:* the RDD guide says all transformations are lazy: they remember what to do to the base dataset and compute only when an action needs a result. Nothing ran until `collect`, and `explain` only prints the plan. Read the plan from the bottom: scan the file, start the count, shuffle (`Exchange`), finish the count, shuffle again, sort. One action ran four jobs, Spark's own split of the work. Ask DuckDB for the same count of the same file:
+
+```bash
+cd ..
+uv run python -c "import duckdb, time; t = time.time(); rows = duckdb.sql(\"SELECT event_name, count(*) AS events FROM 'data/raw/app-events/events.csv' GROUP BY 1 ORDER BY 2 DESC\").fetchall(); print(len(rows), 'names,', round(time.time() - t, 2), 's')"
+```
+
+```console
+$ uv run python -c "import duckdb, time; t = time.time(); rows = duckdb.sql(\"SELECT event_name, count(*) AS events FROM 'data/raw/app-events/events.csv' GROUP BY 1 ORDER BY 2 DESC\").fetchall(); print(len(rows), 'names,', round(time.time() - t, 2), 's')"
+10 names, 0.14 s
+```
+
+The same ten counts took 0.14 s in DuckDB, which reads the file too, against 2.3 s for Spark's `collect` alone, without the seconds the JVM takes to start. Your times will differ; the order will not. On a 13 MB file Spark pays for machinery that has nothing to spread.
+
+### 2. The shuffle and a hot key
+
+**Idea.** The RDD guide calls the **shuffle** Spark's mechanism for re-distributing data so that it is grouped differently across partitions, and a complex and costly operation. The PySpark page says `repartition` with columns returns a DataFrame that is hash partitioned by them. A **hot key** is a key with far more rows than the others.
+
+**Try it.** Save this as `spark/partition_sizes.py`. It shuffles the events into four partitions by each column you name, and by dealing the rows out one by one for comparison, and prints the rows in each partition:
+
+```python
+"""How many rows land in each partition when the rows are shuffled by a key.
+
+    uv run python partition_sizes.py 4 event_name user_id
+
+The first argument is the number of partitions, the others are the columns to shuffle by. The line "round robin" deals the
+rows out one by one, without a key.
+"""
+
+import sys
+
+from pyspark.sql import SparkSession, functions as F
+
+partitions, columns = int(sys.argv[1]), sys.argv[2:]
+spark = (
+    SparkSession.builder.master("local[2]").appName("events").config("spark.ui.enabled", "false")
+    .config("spark.ui.showConsoleProgress", "false").getOrCreate()
+)
+spark.sparkContext.setLogLevel("ERROR")
+SCHEMA = "event_id long, user_id long, event_ts timestamp, event_name string, platform string, received_at timestamp"
+events = spark.read.csv("../data/raw/app-events/events.csv", header=True, schema=SCHEMA)
+
+
+def sizes(df):
+    """The rows in each partition of df, in order of partition number."""
+    counts = {row["partition"]: row["count"] for row in df.groupBy(F.spark_partition_id().alias("partition")).count().collect()}
+    return [counts.get(number, 0) for number in range(partitions)]
+
+
+def report(name, rows):
+    """One line: the sizes when there are few partitions, else how many are not empty, and the share of the biggest."""
+    shown = rows if partitions <= 8 else f"{sum(1 for n in rows if n)} of {partitions} partitions hold rows"
+    print(f"{name}: {shown}, the biggest holds {max(rows) / sum(rows):.1%}")
+
+
+for column in columns:
+    report(f"by {column}", sizes(events.repartition(partitions, column)))
+report("round robin", sizes(events.repartition(partitions)))
+```
+
+```bash
+cd spark
+uv run python partition_sizes.py 4 event_name user_id 2>/dev/null
+```
+
+**Predict:** Is the biggest partition about a quarter of the 177,379 rows when the key is `event_name`? When it is `user_id`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python partition_sizes.py 4 event_name user_id 2>/dev/null
+by event_name: [41990, 78535, 32981, 23873], the biggest holds 44.3%
+by user_id: [44967, 45042, 42936, 44434], the biggest holds 25.4%
+round robin: [44344, 44345, 44345, 44345], the biggest holds 25.0%
+```
+
+</details>
+
+*Why:* `event_name` has ten values, and one of them, `add_expense`, has 63,453 rows, 35.8 percent of all. The biggest partition holds it together with `onboarding_complete`: 78,535 rows. `user_id` has 21,871 values, so the hash spreads them evenly, and dealing rows out one by one is even by construction. That lopsided partition is data skew. The performance page says skew can severely downgrade join queries and that, when adaptive query execution (on by default since Spark 3.2.0) and its skew-join setting are enabled, Spark splits skewed tasks of a sort-merge join into roughly even ones. It names no such fix for a plain `groupBy`, and nothing was run to test one.
+
+### 3. Event time, a window and a watermark
+
+**Idea.** The events have two times: `event_ts`, when the thing happened in the app, and `received_at`, when the server got it. **Event time** is the first. Structured Streaming runs a batch-style query on files or messages as they arrive, in small batches, and keeps a count for each **window** of event time a row falls into. A **watermark** states how late data is expected to be in event time: the engine tracks the newest event time it has seen and holds a window's count until that time minus the threshold passes the window's end. The Kafka page defines event streaming as capturing data from event sources in real time and storing it durably for later retrieval; the lesson does not run Kafka.
+
+**Try it.** Check the events against DuckDB, write them as a stream of 181 files, one for each day of `received_at` in arrival order, and save the query as `spark/stream_windows.py`. A file is one trigger. The query counts the events in daily windows of `event_ts`, with the watermark you name, and `availableNow` makes it run through the files and stop:
+
+```bash
+cd ..
+uv run python scripts/sql.py "SELECT count(*) AS events, count(DISTINCT CAST(event_ts AS DATE)) AS days FROM 'data/raw/app-events/events.csv'"
+git show de-16-done:scripts/stream_files.py > scripts/stream_files.py
+uv run python scripts/stream_files.py
+```
+
+```console
+$ uv run python scripts/sql.py "SELECT count(*) AS events, count(DISTINCT CAST(event_ts AS DATE)) AS days FROM 'data/raw/app-events/events.csv'"
+events | days
+-------+-----
+177379 | 181
+```
+
+```console
+$ uv run python scripts/stream_files.py
+181 files of events, from 2026-01-01 to 2026-06-30, in data/raw/app-events/stream
+```
+
+```python
+"""Count events in daily event-time windows from a stream of daily files, with a watermark.
+
+    uv run python stream_windows.py 1 hour
+
+The words after the script name are the watermark: how late an event may be, in event time, and still be counted.
+"""
+
+import sys
+import time
+
+from pyspark.sql import SparkSession, functions as F
+
+watermark = " ".join(sys.argv[1:])
+spark = (
+    SparkSession.builder.master("local[2]").appName("windows").config("spark.ui.enabled", "false")
+    .config("spark.ui.showConsoleProgress", "false").config("spark.sql.shuffle.partitions", "2").getOrCreate()
+)
+spark.sparkContext.setLogLevel("ERROR")
+SCHEMA = "event_id long, user_id long, event_ts timestamp, event_name string, platform string, received_at timestamp"
+
+# One file at a time, in the order the files were written: each file is one trigger of the query.
+stream = spark.readStream.schema(SCHEMA).option("maxFilesPerTrigger", 1).parquet("../data/raw/app-events/stream")
+counts = stream.withWatermark("event_ts", watermark).groupBy(F.window("event_ts", "1 day").alias("day")).count()
+latest = {}
+
+
+def keep(batch, batch_id):
+    """Remember the newest count of each window that this trigger updated."""
+    for row in batch.collect():
+        latest[row["day"]["start"]] = row["count"]
+
+
+started = time.time()
+query = counts.writeStream.outputMode("update").foreachBatch(keep).trigger(availableNow=True).start()
+query.awaitTermination()
+print(f"watermark {watermark}: {len(latest)} windows, {sum(latest.values()):,} events counted, {time.time() - started:.0f} s")
+```
+
+Each run takes about a minute. Run it with a watermark of one hour and of three days:
+
+```bash
+cd spark
+uv run python stream_windows.py 1 hour 2>/dev/null
+uv run python stream_windows.py 3 days 2>/dev/null
+```
+
+**Predict:** How many events does each run count, against the 177,379 of the file? And how many windows?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python stream_windows.py 1 hour 2>/dev/null
+watermark 1 hour: 181 windows, 177,220 events counted, 63 s
+$ uv run python stream_windows.py 3 days 2>/dev/null
+watermark 3 days: 181 windows, 177,379 events counted, 62 s
+```
+
+</details>
+
+*Why:* the page says late data within the threshold is aggregated and data later than it starts to be dropped. With one hour, 159 events came later than the watermark allowed and were left out; with three days every event was counted. Both runs have 181 windows, so the number of windows says nothing about what was dropped. A watermark trades completeness against how long the engine must keep state, and the file of arrival times is what lets you choose it.
+
+Streaming pays when a decision loses its value while it waits: Kafka's page lists payments and tracking in real time. For a report read in the morning it adds state, watermarks and a service that must stay up, and Spark's own pages give micro-batch latencies as low as 100 milliseconds with exactly-once guarantees, and a continuous mode as low as 1 millisecond with at-least-once ones. A batch job every few minutes (DE7) meets a need that tolerates minutes.
+
+<Aside type="tip" title="Remember">
+
+- A transformation builds the plan and an action runs it; `explain` shows the plan, with an `Exchange` for each shuffle.
+- A shuffle moves rows so that a key meets its rows; a hot key makes one partition much bigger than the rest.
+- Event time is when it happened, arrival time when you heard; a watermark says how late is still counted.
+- Spark on one machine costs more than DuckDB on a file of this size; its value starts where the data stops fitting.
+
+**Common trap:** reading a count of windows as proof that nothing was dropped.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-spark-distributed-processing-1">
+
+**Another key.** The events have a `platform` column. From `spark`, shuffle them into four partitions by it and read the sizes. The start is given; fill in the column. Expected: two lines, the second the round robin.
+
+```bash
+uv run python partition_sizes.py 4 ___ 2>/dev/null
+```
+
+<details>
+<summary>Hint</summary>
+
+The column is in the schema of the script: `event_id`, `user_id`, `event_ts`, `event_name`, `platform`, `received_at`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+uv run python partition_sizes.py 4 plat... 2>/dev/null
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python partition_sizes.py 4 platform 2>/dev/null
+by platform: [129597, 0, 0, 47782], the biggest holds 73.1%
+round robin: [44344, 44345, 44345, 44345], the biggest holds 25.0%
+```
+
+`platform` has three values: web 68,853 rows, ios 60,744, android 47,782. The hash puts web and ios into one partition (129,597 rows), android into another, and leaves two partitions empty. A key with fewer values than partitions cannot fill them.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-spark-distributed-processing-2">
+
+**Batch or streaming?** Decide for each need, in one line, and give the reason in the words of the need. Before you start, say which of the three you expect to be streaming. Expected: three decisions, each with a reason.
+
+1. Finance wants yesterday's sales in a sheet by 8 a.m. every morning.
+2. A card payment must be checked for fraud before the terminal shows "approved", in under a second.
+3. The support lead wants a wall screen with the signups of the last hour; a few minutes old is fine.
+
+<details>
+<summary>Hint</summary>
+
+Ask how old the answer may be when someone acts on it, and what a wrong or late answer costs. A need can be met by a faster batch.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One need is streaming, one is a morning batch, and one is a batch that runs every few minutes."*
+
+</details>
+
+<Solution>
+
+1. **Batch.** The sheet is read once, at 8 a.m.; nothing is lost by waiting for the day to end, and a daily job (DE7) is the simplest thing that works.
+2. **Streaming.** The answer must exist before the payment completes, so waiting is the failure. Spark's micro-batches give latencies as low as 100 milliseconds with exactly-once guarantees, and its continuous mode 1 millisecond with at-least-once ones: the choice is a question of what a repeated check costs.
+3. **A batch every few minutes.** "A few minutes old" is the tolerance, and a job every five minutes meets it with no state or watermark. A stream would also revise old counts as late events arrive, which a wall screen would show as numbers that move.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what is the difference between a transformation and an action, and what does `explain` run?
+
+   <details>
+   <summary>answer</summary>
+
+   A transformation builds the plan and returns a new DataFrame; an action runs it and returns a result to the driver. `explain` prints the plan and runs no job.
+
+   </details>
+
+<Exercise id="data-engineer-spark-distributed-processing-3">
+
+**Spot the flaw.** A colleague reads unit 2: one partition holds 44.3 percent of the rows. "The partitions are too few," she says. "With 40 of them the work spreads out." She runs it. Do the same and read both lines. Expected: the biggest partition shrinks, she says. What does it do, and why?
+
+```bash
+uv run python partition_sizes.py 40 event_name 2>/dev/null
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare the share of the biggest partition with the share of `add_expense` in unit 2, and count how many of the 40 partitions hold rows.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Ask where the 63,453 rows of one value of `event_name` can go when the shuffle is by that column.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python partition_sizes.py 40 event_name 2>/dev/null
+by event_name: 9 of 40 partitions hold rows, the biggest holds 35.8%
+round robin: 40 of 40 partitions hold rows, the biggest holds 2.5%
+```
+
+The biggest partition did shrink, from 44.3 percent to 35.8, and that is the share of `add_expense` alone: 63,453 of 177,379 rows. A shuffle by a column sends every row of a value to one partition, so more partitions only stop other names from sharing it. Nine of the 40 hold rows, because ten names share nine partitions. The count of partitions does not split a value: the page's remedy for a join splits skewed tasks, and none was run for a `groupBy`. Dealing rows out evenly, the round robin, does spread them, but it gives up the grouping by name.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a PySpark transformation and action and read the plan, spot a lopsided shuffle from partition sizes, count a stream with a watermark and say what it dropped, and choose batch or streaming for a stated need with a reason.*
+Test: Exercise data-engineer-spark-distributed-processing-2, done without opening the hints.
+
+The pattern to remember: **a plan first, a run second, and measure on your own data before you add a cluster.** The next lesson, *Simulation: design a pipeline and defend it* (DE17), puts the whole track on the clock.
