@@ -5,8 +5,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1576 nodes, 1944 edges, 190 communities (636 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 232, content-type 5, decision 58, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 191, skill 1, spec-section 25, starlight-component 6, style 7, symbol 311, template 2, token 12.
+- 1577 nodes, 1944 edges, 190 communities (637 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 232, content-type 5, decision 59, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 191, skill 1, spec-section 25, starlight-component 6, style 7, symbol 311, template 2, token 12.
 - Edges: defines 311, imports 51, mentions 978, overrides 6, references 30, runs 15, specified-by 4, uses 512, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
@@ -23,7 +23,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 8 | `agent:LESSON-STANDARD` | agent | 33 | .claude/agents/LESSON-STANDARD.md:1 |
 | 9 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 10 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
-| 11 | `S6` Authoring components | spec-section | 31 | SPEC.md:280 |
+| 11 | `S6` Authoring components | spec-section | 31 | SPEC.md:281 |
 | 12 | `.claude/MISTAKES.md` | doc | 30 | .claude/MISTAKES.md:1 |
 | 13 | `scripts/sync-research-issues.mjs` | script | 26 | scripts/sync-research-issues.mjs:1 |
 | 14 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
@@ -125,23 +125,24 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D57 | Derived teaching files beside caf… | `datasets/cafe-sales/v1/extras/` holds two derived, teaching-only fil… | SPEC.md:83 §7 |
 | D58 | Feedback form | The lesson footer's "Report an issue" becomes a plain HTML form (a `<… | SPEC.md:84 §15 |
 | D59 | Translate guide and untranslated… | A project page `/translate/` explains how to read the site in another… | SPEC.md:85 |
+| D60 | ML Engineer track: where learners… | Colab notebooks for modeling, deep learning, NLP and the deep dives;… | SPEC.md:86 |
 
 ## CONTRACT sections
 
-- §3 URL contract — SPEC.md:104-157 (includes §3.1, §3.2, §3.3, §3.4)
-- §5 Content model — SPEC.md:181-279 (includes §5.1, §5.2, §5.3, §5.4)
-- §6 Authoring components — SPEC.md:280-318 (includes §6.4)
-- §7 Datasets — SPEC.md:319-352
+- §3 URL contract — SPEC.md:105-158 (includes §3.1, §3.2, §3.3, §3.4)
+- §5 Content model — SPEC.md:182-280 (includes §5.1, §5.2, §5.3, §5.4)
+- §6 Authoring components — SPEC.md:281-319 (includes §6.4)
+- §7 Datasets — SPEC.md:320-353
 
 ## Where is…
 
 term: id — file:line
 
 - draft: `R:issues/29-a-short-history-of-data-homepage-slider#method-and-verdict-on-the-draft` — research/issues/29-a-short-history-of-data-homepage-slider.md:18
-- prerequisites: `S5.1` — SPEC.md:195
+- prerequisites: `S5.1` — SPEC.md:196
 - redirect: `src/redirects.ts` — src/redirects.ts:1
 - trailing slash: `scripts/animations/concept-claim-trail.mjs` — scripts/animations/concept-claim-trail.mjs:1
-- slug: `S3.2` — SPEC.md:138
+- slug: `S3.2` — SPEC.md:139
 - glossary: `ctype:glossary` — src/lib/content-schemas.ts:98
 - dataset: `R:issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy#7-planted-error-exercises-on-the-caf-dataset-recommendation` — research/issues/88-working-with-ai-in-data-work-capability-map-failure-taxonomy.md:117
 - citation: `src/lib/citation.ts#Citation` — src/lib/citation.ts:20
@@ -150,7 +151,7 @@ term: id — file:line
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R5` — CLAUDE.md:27
 - gsap: `pkg:gsap` — package.json:56
-- scroll: `S12` — SPEC.md:418
+- scroll: `S12` — SPEC.md:419
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:53
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
@@ -174,10 +175,10 @@ term: id — file:line
 - quality gates: `M6` — CLAUDE.md:56
 - cspell: `pkg:cspell` — package.json:63
 - markdownlint: `pkg:markdownlint-cli2` — package.json:29
-- migration: `S14` — SPEC.md:489
+- migration: `S14` — SPEC.md:490
 - license: `R:issues/52-sql-core-academic-depth-interleaved-with-query-practice#5-citation-and-license-rules-for-whoever-builds-this` — research/issues/52-sql-core-academic-depth-interleaved-with-query-practice.md:71
 - changelog: `scripts/check-changelog.ts` — scripts/check-changelog.ts:1
-- zenodo: `S9` — SPEC.md:369
+- zenodo: `S9` — SPEC.md:370
 - reduced motion: `src/scripts/home/motion.ts` — src/scripts/home/motion.ts:1
 - nav: `src/components/home/Nav.astro` — src/components/home/Nav.astro:1
 - hero: `src/components/home/Hero.astro` — src/components/home/Hero.astro:1
