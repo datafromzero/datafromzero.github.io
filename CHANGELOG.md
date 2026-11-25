@@ -8,6 +8,7 @@ plain words (SPEC D54); the site's "What's new" page shows only those summaries,
 ## [Unreleased]
 
 ### Added
+- **2026-11-25: A draft Python lesson on interactive charts with Plotly is added; it is not on the site yet.** Python stage, `charts-plotly` (P22b, order 225, 30 minutes, SPEC D61, owner decision 2026-11-25), between *Charts with seaborn* and *Data from an API and from a database*: a Plotly Express chart as a `Figure` of traces, a fixed color and order for each store, the hover label, and saving to an HTML file and a picture. The page shows static pictures of the charts; the learner points at the real ones in the notebook. The closing box and last line of *Charts with seaborn* now point to it. Counts: Python 28 lessons, curriculum 221, the four core stages 133.
 - **2026-11-25: The curriculum has a DOI: cite version 1.0.0 as 10.5281/zenodo.24523881.** Release 1.0.0 is archived on Zenodo. The concept DOI 10.5281/zenodo.24523880 always resolves to the latest version. `/cite/` lists both, its APA and BibTeX cite the version's DOI, `CITATION.cff` carries both, and the homepage footer links the concept DOI.
 
 ### Changed
