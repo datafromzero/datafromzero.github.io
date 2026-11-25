@@ -78,5 +78,5 @@ You don't need the "right" background. You need a first step.
 
 ## Contact
 
-To report a mistake, ask a question or suggest an improvement,
-[open an issue](https://github.com/datafromzero/datafromzero.github.io/issues).
+To report a mistake, ask a question or suggest an improvement, use the **Report a problem** button in the bar at the
+bottom of any page, or the **Report an issue** form at the end of a lesson. No account is needed.

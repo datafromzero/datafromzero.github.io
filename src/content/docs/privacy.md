@@ -22,13 +22,13 @@ privacy policies.
 
 ## The feedback form
 
-Each lesson ends with a "Report an issue" form. (While the form is not switched on, that link opens GitHub's own
-issue form instead, and GitHub's privacy statement applies.) When you send the form, we receive three things you give us: the kind of
-message you chose, your message, and the lesson page you were on (with the date it was last reviewed). Nothing
-else is asked for or kept: no name, no email, no account.
+Each lesson ends with a "Report an issue" form, and the "Report a problem" button in the bar at the bottom of every
+page opens the same kind of form. When you send it, we receive three things you give us: the kind of message you
+chose, your message, and the page you were on (its address and title; on a lesson also its id, and from the
+form at the end of a lesson the date it was last reviewed). Nothing else is
+asked for or kept: no name, no email, no account.
 
-- **It becomes public.** The message is posted as an issue in the
-  [project's GitHub repository](https://github.com/datafromzero/datafromzero.github.io/issues?q=label%3Afeedback),
+- **It becomes public.** The message is posted as an issue in the project's GitHub repository,
   where anyone can read it, and GitHub's own privacy statement applies to it. Do not write your name, email or
   other personal details in it. We cannot make it private once it is posted.
 - **A small service in between.** The form is sent to a Cloudflare Worker that creates the issue for us. Cloudflare

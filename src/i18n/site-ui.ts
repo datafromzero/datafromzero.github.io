@@ -37,10 +37,12 @@ export interface SiteUi {
 		roadmapAll: string;
 		report: string;
 		reportKind: string;
-		reportKinds: [string, string, string];
+		/** The four categories the feedback Worker accepts (D58), as [value, label]. */
+		reportKinds: [string, string][];
+		reportSent: string;
 		reportDetails: string;
 		reportHint: string;
-		reportGo: string;
+		reportOff: string;
 		reportNote: string;
 		home: string;
 		start: string;
@@ -84,11 +86,17 @@ const en: SiteUi = {
 		roadmapAll: 'See the whole roadmap',
 		report: 'Report a problem',
 		reportKind: 'Kind',
-		reportKinds: ['Bug on the page', 'Feedback', 'Content error'],
+		reportKinds: [
+			['mistake', 'A mistake on the page'],
+			['unclear', 'Something is unclear'],
+			['broken', 'Something does not work'],
+			['idea', 'An idea'],
+		],
+		reportSent: 'Send',
 		reportDetails: 'What happened?',
-		reportHint: 'Tell us what happened. On the GitHub page you can also attach a screenshot.',
-		reportGo: 'Continue on GitHub',
-		reportNote: 'You need a GitHub account to send this. You can paste a screenshot there.',
+		reportHint: 'Tell us what happened and where on the page.',
+		reportOff: 'Reporting is switched off for now.',
+		reportNote: 'Your message becomes a public issue on GitHub. Do not include your name, email or other personal details.',
 		home: 'Home',
 		start: 'Start here',
 		quiz: 'Career quiz',
@@ -131,11 +139,17 @@ const vi: SiteUi = {
 		roadmapAll: 'Xem toàn bộ lộ trình',
 		report: 'Báo lỗi',
 		reportKind: 'Loại',
-		reportKinds: ['Lỗi trên trang', 'Góp ý', 'Sai nội dung'],
+		reportKinds: [
+			['mistake', 'Sai trên trang'],
+			['unclear', 'Chỗ chưa rõ'],
+			['broken', 'Có thứ không chạy'],
+			['idea', 'Góp ý'],
+		],
+		reportSent: 'Gửi',
 		reportDetails: 'Chuyện gì đã xảy ra?',
-		reportHint: 'Hãy cho chúng tôi biết chuyện gì đã xảy ra. Trên trang GitHub bạn cũng có thể đính kèm ảnh chụp màn hình.',
-		reportGo: 'Tiếp tục trên GitHub',
-		reportNote: 'Bạn cần tài khoản GitHub để gửi. Bạn có thể dán ảnh chụp màn hình ở đó.',
+		reportHint: 'Hãy cho chúng tôi biết chuyện gì đã xảy ra và ở chỗ nào trên trang.',
+		reportOff: 'Tạm thời chưa gửi báo lỗi được.',
+		reportNote: 'Tin nhắn của bạn thành một issue công khai trên GitHub. Đừng ghi tên, email hay thông tin cá nhân.',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',
 		quiz: 'Trắc nghiệm nghề',
