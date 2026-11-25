@@ -18,13 +18,13 @@ prerequisites:
   - sql-ctes
 datasets:
   - cafe-sales
-reviewed: 2026-11-23
+reviewed: 2026-11-25
 sources:
-  - title: 'Google Cloud: BigQuery sandbox (accessed 2026-11-23; page updated 2026-11-10)'
+  - title: 'Google Cloud: BigQuery sandbox (accessed 2026-11-25; page updated 2026-11-24)'
     url: https://docs.cloud.google.com/bigquery/docs/sandbox
-  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-23)'
+  - title: 'Google Cloud: BigQuery pricing, on-demand compute (accessed 2026-11-25)'
     url: https://cloud.google.com/bigquery/pricing
-  - title: 'Google Cloud: Estimate and control costs in BigQuery (accessed 2026-11-23; page updated 2026-11-10)'
+  - title: 'Google Cloud: Estimate and control costs in BigQuery (accessed 2026-11-25; page updated 2026-11-10)'
     url: https://docs.cloud.google.com/bigquery/docs/best-practices-costs
   - title: 'Google Cloud: GoogleSQL data types, data type sizes (accessed 2026-11-23)'
     url: https://docs.cloud.google.com/bigquery/docs/reference/standard-sql/data-types
@@ -42,6 +42,10 @@ sources:
     url: https://docs.cloud.google.com/bigquery/docs/creating-partitioned-tables
   - title: 'Google Cloud: Query partitioned tables (accessed 2026-11-23; page updated 2026-11-10)'
     url: https://docs.cloud.google.com/bigquery/docs/querying-partitioned-tables
+  - title: 'Google Cloud: Manage partitioned tables (accessed 2026-11-25; page updated 2026-11-10)'
+    url: https://docs.cloud.google.com/bigquery/docs/managing-partitioned-tables
+  - title: 'Google Cloud: Introduction to clustered tables (accessed 2026-11-25; page updated 2026-11-10)'
+    url: https://docs.cloud.google.com/bigquery/docs/clustered-tables
   - title: 'DuckDB documentation: Date functions (accessed 2026-11-23)'
     url: https://duckdb.org/docs/stable/sql/functions/date
 status: published
@@ -68,7 +72,7 @@ From memory first, then click to check.
    <details>
    <summary>answer</summary>
 
-   The logical (uncompressed) bytes of the columns the query reads: 8 for a whole number, a date or a timestamp, 2 plus the UTF-8 size for text, and 0 for a null.
+   The logical (uncompressed) bytes of every column the query references, in `SELECT`, `WHERE`, `JOIN` or `GROUP BY`: 8 for a whole number, a date or a timestamp, 2 plus the UTF-8 size for text, and 0 for a null.
 
    </details>
 
@@ -83,7 +87,7 @@ From memory first, then click to check.
 
 ## The big idea
 
-A warehouse bills for the columns a query reads, so every query gets a cost line: the bytes it reads, the price on a date, and one cheaper way to ask.
+A warehouse bills for the columns a query references, so every query gets a cost line: the bytes of those columns, the price on a date, and one cheaper way to ask.
 
 ## Learn by doing
 
@@ -91,7 +95,7 @@ About 30 minutes, 5 ideas: the sandbox, the dialect, the cost line, the export, 
 
 ### 1. Set up the sandbox
 
-**Idea.** The BigQuery sandbox lets you use BigQuery without a credit card or a billing account. Its limits are those of the free tier: 1 TiB of query data processed each month and 10 GiB of storage, and tables, views and partitions expire after 60 days. Among the features it does not support are streaming data, DML statements and the Data Transfer Service, so the track's queries use `SELECT` and `WITH` only; the partitioned copy of Exercise 3 is optional.
+**Idea.** The BigQuery sandbox lets you use BigQuery without a credit card or a billing account. Its limits are those of the free tier: 1 TiB of query data processed each month and 10 GiB of storage, and tables, views and partitions expire after 60 days. Among the features it does not support are streaming data, DML statements and the Data Transfer Service, so the track's queries use `SELECT` and `WITH` only; the partitioned copy of Exercise 3 is optional, and its old dates may expire.
 
 1. Open BigQuery Studio in the Google Cloud console, sign in, accept the terms, and create a project. That enables the sandbox.
 2. Create a dataset in the project; the lesson calls it `cafe`.
@@ -138,9 +142,13 @@ Expected: the columns `month`, `category` and `revenue`.
 
 ### 3. Put a cost line under every query
 
-**Idea.** A *cost line* has three parts: the bytes the query reads, the price with its date, and one cheaper rewrite. BigQuery shows the estimate before you run: the query validator in the console says "This query will process … when run.", and a dry run with `bq query --use_legacy_sql=false --dry_run` reports the bytes it would process. The best-practices page calls the estimate an upper bound. You can also work it out from the column types.
+**Idea.** A *cost line* has three parts: the bytes of the columns the query references, the price with its date, and one cheaper rewrite.
 
-**Try it:** count the bytes of the columns the query above reads, in each table, with BigQuery's sizes.
+A query is billed for every column it references: the clustering page counts the bytes of each column the query references in the blocks it scans, and a sandbox dry run on 2026-11-25 counted a column used only in `WHERE` (a query that selected two 8-byte columns and filtered on a third was counted at 24 bytes for each row; the lesson [*Cloud warehouse in practice*](/data-engineer/cloud-warehouse-in-practice/) (DE15) shows the run). A column in a `JOIN` or a `GROUP BY` is referenced too, in each table it sits in; no page lists the clauses, so this is the same reading of the word.
+
+BigQuery shows the estimate before you run: the query validator in the console says "This query will process … when run.", and a dry run with `bq query --use_legacy_sql=false --dry_run` reports the bytes it would process. The best-practices page calls the estimate an upper bound. You can also work it out from the column types.
+
+**Try it:** count the bytes of the columns the query above references, in each table, with BigQuery's sizes. It references `order_id` (`JOIN`), `ordered_at` (`SELECT`, `GROUP BY`) and `status` (`WHERE`) of `orders`; `order_id` and `product_id` (both `JOIN`), `quantity` and `discount_usd` (`SELECT`) of `order_items`; and `product_id` (`JOIN`), `category` (`SELECT`, `GROUP BY`) and `unit_price_usd` (`SELECT`) of `products`.
 
 <RunSQL query={`SELECT 'orders' AS tbl,
        8 * COUNT(order_id) + 8 * COUNT(ordered_at) + SUM(2 + strlen(status)) AS bytes
@@ -161,13 +169,13 @@ Expected: 3 rows, 2 columns.
 <details>
 <summary>Reveal the result</summary>
 
-The three counts add up to 154,152 bytes. The pricing page says charges are rounded up with a minimum of 10 MB processed for each table a query references, so this query is billed at least 30 MB.
+The three counts add up to 154,152 bytes. The pricing page says charges are rounded up, with a minimum of 10 MB processed for each table a query references and a minimum of 10 MB for the query. The sandbox runs of 2026-11-25 (one project, location US) showed what that means: billing was in whole MiB, 1,048,576 bytes each, and the minimum was 10 MiB, 10,485,760 bytes. A query that processed 23,666,400 bytes was billed 24,117,248, which is 23 MiB (22.6 rounded up); a view over one table joined to a second table processed 26,320 bytes and was billed 20,971,520, two minimums. By the same rule this query, which references 3 tables, is billed at least 30 MiB, 31,457,280 bytes (it was not run).
 
 </details>
 
-*Why:* the page does not say whether MB means 10^6 or 2^20 bytes; at \$6.25 per TiB, 30 MB is about 170 to 179 millionths of a dollar. The first 1 TiB each month is free.
+*Why:* a TiB is 1,048,576 MiB, so at \$6.25 per TiB, 30 MiB costs 30 ÷ 1,048,576 × 6.25, about \$0.000179, 179 millionths of a dollar. The first 1 TiB each month is free.
 
-> **Cost line.** Reads about 154,152 bytes (estimate from types), billed at least 30 MB: 10 MB for each of 3 tables, about 0.00017 to 0.00018 dollars at \$6.25 per TiB (pricing page, read 2026-11-23), and free inside the first TiB of the month. **Cheaper:** run it once and export the 24 rows; the chart reads the file, not three tables.
+> **Cost line.** References about 154,152 bytes (estimate from types), billed at least 30 MiB: 10 MiB for each of 3 tables, about 0.000179 dollars at \$6.25 per TiB (pricing page, read 2026-11-25), and free inside the first TiB of the month. **Cheaper:** run it once and export the 24 rows; the chart reads the file, not three tables.
 
 The same cost line for the query most people write first, a preview:
 
@@ -176,14 +184,14 @@ The same cost line for the query most people write first, a preview:
 SELECT * FROM `PROJECT.cafe.orders` LIMIT 10;
 ```
 
-> **Cost line.** Reads about 89,283 bytes (all six columns; on a table that is not clustered, as ours are, a `LIMIT` does not lower it), billed at least 10 MB, about 57 to 60 millionths of a dollar (pricing page, read 2026-11-23). **Cheaper:** name `order_id`, `ordered_at` and `status`: about 48,599 bytes, 46 percent fewer; or open the table's **Preview** tab, which the best-practices page says shows data at no charge.
+> **Cost line.** References about 89,283 bytes (all six columns; on a table that is not clustered, as ours are, a `LIMIT` does not lower it), billed at least 10 MiB, about 0.00006 dollars: 10 ÷ 1,048,576 × 6.25 (pricing page, read 2026-11-25). **Cheaper:** name `order_id`, `ordered_at` and `status`: about 48,599 bytes, 46 percent fewer; or open the table's **Preview** tab, which the best-practices page says shows data at no charge.
 
 <figure>
 <svg viewBox="0 0 360 171" width="360" role="img" aria-labelledby="da2-bytes-t da2-bytes-d">
-<title id="da2-bytes-t">Logical bytes the preview query reads: all six columns of orders against three</title>
-<desc id="da2-bytes-d">Two horizontal bars on a scale from 0 to 100,000 bytes. SELECT star FROM orders reads about 89,283 bytes. Naming order&#95;id, ordered&#95;at and status reads about 48,599 bytes, 46 percent fewer. Both are estimates from the BigQuery data type sizes, and on a table that is not clustered a LIMIT clause does not change them.</desc>
+<title id="da2-bytes-t">Logical bytes the preview query references: all six columns of orders against three</title>
+<desc id="da2-bytes-d">Two horizontal bars on a scale from 0 to 100,000 bytes. SELECT star FROM orders references about 89,283 bytes. Naming order&#95;id, ordered&#95;at and status references about 48,599 bytes, 46 percent fewer. Both are estimates from the BigQuery data type sizes, and on a table that is not clustered a LIMIT clause does not change them.</desc>
 <g fill="currentColor">
-<text x="23" y="22.4" font-size="10.5" font-weight="600">Bytes read by the preview query (estimate)</text>
+<text x="23" y="22.4" font-size="10.5" font-weight="600">Bytes referenced by the preview query (estimate)</text>
 <text x="23" y="61.4" font-size="10">SELECT &#42; (6 columns)</text>
 <rect x="127" y="48.4" width="167.9" height="18" rx="3" fill="#ad9100" />
 <text x="302.9" y="61.4" font-size="10" font-weight="600">89,283</text>
@@ -202,20 +210,20 @@ SELECT * FROM `PROJECT.cafe.orders` LIMIT 10;
 </svg>
 </figure>
 
-At this size both versions are billed the same minimum: only the bytes fall. A table a hundred thousand times bigger would read about 8.9 GB against 4.9 GB, and past the free terabyte each run would cost about \$0.05 against \$0.03.
+At this size both versions are billed the same minimum: only the bytes fall. A table a hundred thousand times bigger would read about 8.9 billion bytes against 4.9 billion, and past the free terabyte each run would cost about \$0.05 against \$0.03.
 
 <figure>
 <svg viewBox="0 0 360 171" width="360" role="img" aria-labelledby="da2-billed-t da2-billed-d">
-<title id="da2-billed-t">Bytes read against the 10 MB minimum per table, for a three-table query and its five-table first draft</title>
-<desc id="da2-billed-d">Two horizontal bars on a scale from 0 to 60 MB. The three-table query reads about 154,152 bytes but is billed at least 30 MB, 10 MB for each table it references. The first draft joins two more tables it does not need, reads about 185,364 bytes (a join key counts in both tables) and is billed at least 50 MB. The bytes actually read are too small to see on this scale.</desc>
+<title id="da2-billed-t">Bytes referenced against the 10 MiB minimum per table, for a three-table query and its five-table first draft</title>
+<desc id="da2-billed-d">Two horizontal bars on a scale from 0 to 60 MiB (mebibytes). The three-table query references about 154,152 bytes but is billed at least 30 MiB, 10 MiB for each table it references. The first draft joins two more tables it does not need, references about 185,364 bytes (a join key counts in both tables) and is billed at least 50 MiB. The bytes themselves are too small to see on this scale.</desc>
 <g fill="currentColor">
-<text x="29.8" y="22.4" font-size="10.5" font-weight="600">Billed minimum, MB (10 MB per table referenced)</text>
+<text x="29.8" y="22.4" font-size="10.5" font-weight="600">Billed minimum, MiB (10 MiB per table referenced)</text>
 <text x="29.8" y="61.4" font-size="10">3 tables</text>
 <rect x="133.8" y="48.4" width="94" height="18" rx="3" fill="#0072b2" />
-<text x="235.8" y="61.4" font-size="10" font-weight="600">30 MB</text>
+<text x="235.8" y="61.4" font-size="10" font-weight="600">30 MiB</text>
 <text x="29.8" y="101.4" font-size="10">5 tables (first draft)</text>
 <rect x="133.8" y="88.4" width="156.7" height="18" rx="3" fill="#ad9100" />
-<text x="298.5" y="101.4" font-size="10" font-weight="600">50 MB</text>
+<text x="298.5" y="101.4" font-size="10" font-weight="600">50 MiB</text>
 <path d="M133.8 120.4 L321.8 120.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <path d="M133.8 120.4 L133.8 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <text x="133.8" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">0</text>
@@ -225,12 +233,12 @@ At this size both versions are billed the same minimum: only the bytes fall. A t
 <text x="259.1" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">40</text>
 <path d="M321.8 120.4 L321.8 124.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.4" />
 <text x="321.8" y="137.4" font-size="10" text-anchor="middle" fill-opacity="0.8">60</text>
-<text x="321.8" y="154.4" font-size="10" text-anchor="end" fill-opacity="0.8">megabytes (MB)</text>
+<text x="321.8" y="154.4" font-size="10" text-anchor="end" fill-opacity="0.8">mebibytes (MiB)</text>
 </g>
 </svg>
 </figure>
 
-The second figure shows where the bill comes from at this size: the minimum for each table a query references, not the bytes it reads. It compares the category query with a first draft that also joined `stores` and `customers`, which it did not need: 2 more tables, 20 MB more, for about 31,200 more bytes, 28,792 of them the join keys on `orders` (`store_id` and `customer_id`), because a join key counts in both tables.
+The second figure shows where the bill comes from at this size: the minimum for each table a query references, not the bytes it references. It compares the category query with a first draft that also joined `stores` and `customers` to show `store_name` and `loyalty_tier`, which the report did not need: 2 more tables, 20 MiB more, for 31,212 more bytes. Of these, 28,792 are the join keys on `orders` (`store_id` 14,400 and `customer_id` 14,392), 1,224 the join keys of the two new tables (24 and 1,200) and 1,196 the two columns shown (26 and 1,170): a join key counts in both tables.
 
 ### 4. Export one result for the BI tool
 
@@ -244,16 +252,16 @@ The accountant gets one page, in the format of C15.
 
 > **Decision:** run the track's SQL in the BigQuery sandbox, and put a cost line under every query.
 > **Context:** the accountant asked what a monthly category report costs on the warehouse; the sandbox needs no card.
-> **Tension:** the data is so small that the bill is the 10 MB minimum for each table, not the bytes, so a rewrite shows in the bytes and not in the dollars until the tables grow.
-> **Evidence:** the category query reads about 154,152 bytes from 3 tables and is billed at least 30 MB, under 0.0002 dollars, free inside the first terabyte.
+> **Tension:** the data is so small that the bill is the 10 MiB minimum for each table, not the bytes, so a rewrite shows in the bytes and not in the dollars until the tables grow.
+> **Evidence:** the category query references about 154,152 bytes in 3 tables and is billed at least 30 MiB, about 0.000179 dollars, free inside the first terabyte.
 > **Recommendation:** use the sandbox, name columns, join only the tables you need, export the 24 rows once, and rerun the dry run when a table grows or after 60 days, when the sandbox tables expire.
 
 <Aside type="tip" title="Remember">
 
 - The sandbox needs no card and allows `SELECT` and `WITH`; tables expire after 60 days.
 - Edits to port the SQL: date function order, unquoted date parts, backticked table names.
-- Bytes read come from the types of the columns a query reads; on a table that is not clustered, a `LIMIT` does not lower them.
-- Each table a query references is billed at least 10 MB, so at this size the bill is the minimum.
+- The bytes come from the types of every column a query references (`SELECT`, `WHERE`, `JOIN`, `GROUP BY`); on a table that is not clustered, a `LIMIT` does not lower them.
+- Billing rounds up to a whole MiB, with at least 10 MiB for each table a query references, so at this size the bill is the minimum.
 - Put a cost line under each query: bytes, dated price, one cheaper rewrite.
 
 **Common trap:** adding `LIMIT 10` to save money on a table that is not clustered.
@@ -291,7 +299,7 @@ FROM products;`} />
 <details>
 <summary>Hint</summary>
 
-`orders` is read for `order_id`, `store_id`, `ordered_at` and `status`; `stores` for `store_id` and `store_name`. Whole numbers and timestamps are 8 bytes each; text is `2 + strlen(...)`.
+`orders` is referenced for `order_id`, `store_id`, `ordered_at` and `status`; `stores` for `store_id` and `store_name`. Whole numbers and timestamps are 8 bytes each; text is `2 + strlen(...)`.
 
 </details>
 
@@ -320,9 +328,9 @@ SELECT 'products', 8 * COUNT(product_id) + 8 * COUNT(unit_price_usd) FROM produc
 
 The four counts are 62,999, 50, 105,184 and 256 bytes.
 
-> **Cost line.** Reads about 168,489 bytes (estimate from types), billed at least 40 MB: 10 MB for each of 4 tables, about 0.00023 to 0.00024 dollars at \$6.25 per TiB (pricing page, read 2026-11-23). **Cheaper:** group by `o.store_id` and name the stores in the sheet: 3 tables, at least 30 MB, 25 percent less.
+> **Cost line.** References about 168,489 bytes (estimate from types), billed at least 40 MiB: 10 MiB for each of 4 tables, about 0.000238 dollars at \$6.25 per TiB: 40 ÷ 1,048,576 × 6.25 (pricing page, read 2026-11-25). **Cheaper:** group by `o.store_id` and name the stores in the sheet: 3 tables, at least 30 MiB, 25 percent less.
 
-The `WHERE` reads `ordered_at` and `status`, so both are counted in full.
+The `WHERE` references `ordered_at` and `status`, so both are counted in full, and so are the join keys, in both tables of each join.
 
 </Solution>
 
@@ -332,24 +340,24 @@ The `WHERE` reads `ordered_at` and `status`, so both are counted in full.
 
 <Exercise id="data-analyst-querying-a-cloud-warehouse-2">
 
-**How many runs fit in the free terabyte?** The sandbox gives 1 TiB of processed query data a month, and the category query of unit 2 is billed at least 30 MB. How many runs fit in a month at that floor? Write the query in the empty editor, and give the answer for 30 MB as 30 times 2^20 bytes and as 30 times 10^6 bytes. Expected: 1 row, 2 columns.
+**How many runs fit in the free terabyte?** The sandbox gives 1 TiB of processed query data a month, and the category query of unit 2 is billed at least 30 MiB. How many whole runs fit in a month at that floor, and how many for each day of a 30-day month? Write the query in the empty editor. Expected: 1 row, 2 columns.
 
 <RunSQL query={`-- Write your query here, then press Run.`} />
 
 <details>
 <summary>Hint</summary>
 
-A TiB is 2^40 bytes: `POWER(2, 40)`. Divide it by the bytes billed for one run.
+A TiB is 2^40 bytes: `POWER(2, 40)`, and a MiB is 2^20. Divide the TiB by the bytes billed for one run, and round down.
 
 </details>
 
 <details>
 <summary>Half-solution</summary>
 
-Expected output in words: *"Two numbers, one for each meaning of MB."*
+Expected output in words: *"Two whole numbers: runs in the month, and runs for each day."*
 
 ```sql
-SELECT POWER(2, 40) / (30 * POWER(2, 20)) AS runs_if_mib, ...
+SELECT CAST(FLOOR(POWER(2, 40) / (30 * POWER(2, 20))) AS BIGINT) AS runs, ...
 ```
 
 </details>
@@ -357,11 +365,11 @@ SELECT POWER(2, 40) / (30 * POWER(2, 20)) AS runs_if_mib, ...
 <Solution>
 
 ```sql
-SELECT POWER(2, 40) / (30 * POWER(2, 20)) AS runs_if_mib,
-       POWER(2, 40) / (30 * 1000000) AS runs_if_mb;
+SELECT CAST(FLOOR(POWER(2, 40) / (30 * POWER(2, 20))) AS BIGINT) AS runs,
+       CAST(FLOOR(POWER(2, 40) / (30 * POWER(2, 20)) / 30) AS BIGINT) AS runs_per_day;
 ```
 
-It gives 34,952.53 and 36,650.39: about 35,000 runs at the floor. The monthly free terabyte is not what limits a learner here; the 60-day expiry of the tables is.
+It gives 34,952 and 1,165 (34,952.53 before rounding down): about 35,000 runs at the floor. The monthly free terabyte is not what limits a learner here; the 60-day expiry of the tables is.
 
 </Solution>
 
@@ -374,7 +382,7 @@ Without looking back: what are the three parts of a cost line, and which one doe
 <details>
 <summary>answer</summary>
 
-The bytes read, the dated price and one cheaper rewrite. On a table that is not clustered, `LIMIT` changes none of them: the bytes read stay the same.
+The bytes of the columns referenced, the dated price and one cheaper rewrite. On a table that is not clustered, `LIMIT` changes none of them: the bytes stay the same.
 
 </details>
 
@@ -390,12 +398,20 @@ Expected: 1 row, 2 columns. The share is right. What is wrong with the cost line
 
 <Solution>
 
-The query returns `380 | 1800`, so the share is right. The cost line is wrong because it counts rows, while the pricing page says the charge follows the data processed in the columns a query selects, even with a `LIMIT`. The pages name partitioning and clustering as ways to lower that data: the best-practices page says a `LIMIT` can cut the bytes scanned on a clustered table, where scanning stops once enough blocks are read, and the partitioning page says a filter on the partitioning column prunes partitions. If your sandbox allows it, load a second copy of `orders` with **Partition by field** set to `ordered_at` in the Create table form, filter on that column, and compare two dry runs. Do the same with a filter on the table as loaded.
+The query returns `380 | 1800`, so the share is right. The cost line is wrong because it counts rows, while the charge follows the data processed in every column the query references (`SELECT`, `WHERE`, `JOIN` and `GROUP BY`), even with a `LIMIT`; the pricing page says "select" for these columns, and unit 3 shows why "references" is the right word. The pages name partitioning and clustering as ways to lower that data: the best-practices page says a `LIMIT` can cut the bytes scanned on a clustered table, where scanning stops once enough blocks are read, and the partitioning page says a filter on the partitioning column prunes partitions. If your sandbox allows it, load a second copy of `orders` with **Partition by field** set to `ordered_at` in the Create table form, filter on that column, and compare two dry runs. Do the same with a filter on the table as loaded.
+
+<Aside type="caution" title="Expect rows to vanish">
+
+The sandbox page says partitions expire after 60 days, and the managing page says a partition's expiration time is calculated from its boundary in UTC. In one run on 2026-11-25 (a `CREATE TABLE ... PARTITION BY DATE_TRUNC(order_date, MONTH) AS SELECT` of 986,100 rows, shown in DE15) the sandbox accepted the table but dropped at once the partitions whose period had ended more than 60 days earlier: 514,317 rows were left. So a partition seems to go about 60 days after its period ends. That reading was not tested, and a load from the **Create table** form was not run at all.
+
+What a copy keeps depends on the day you make it. The orders run from 1 January to 30 June 2026, so by that reading a copy made from September 2026 on keeps none of them, and one made earlier loses the oldest months first. Before you compare anything, count the rows of the copy with ``SELECT COUNT(*) FROM `PROJECT.cafe.orders_partitioned` ``. It should say 1,800. If it says less, skip the comparison, because the dry runs would compare a table that lost its orders; the pages named above are the answer.
+
+</Aside>
 
 </Solution>
 
 </Exercise>
 
-**Can you do it?** *I can port a track query to BigQuery, estimate the bytes it reads from its column types, and write a cost line with a dated price and one cheaper rewrite.* Test: Exercise data-analyst-querying-a-cloud-warehouse-1, done without opening the hints.
+**Can you do it?** *I can port a track query to BigQuery, estimate the bytes it references from its column types, and write a cost line with a dated price and one cheaper rewrite.* Test: Exercise data-analyst-querying-a-cloud-warehouse-1, done without opening the hints.
 
 The pattern to remember: **name the columns, count the tables, and write the cost line before you run the query.**
