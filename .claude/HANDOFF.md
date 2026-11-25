@@ -81,7 +81,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    "Runnable SQL"). **Planned next step:** Correct / Wrong self-checking on exercises, built on this runner (compare the
    learner's result with the stored expected result of each exercise). It needs its own SPEC decision (a stored expected
    result per exercise, and what "same result" means for row order) before it is built.
-6. **Release `v1.0.0`** when the four core stages (128 lessons, D40, D45, D49) are published; then enable Zenodo (SPEC §9, §14).
+6. **Release `v1.0.0`** (owner decision 2026-11-25: the four foundation stages are published): version 1.0.0 in `package.json` and `CITATION.cff`, `[1.0.0] - 2026-11-25` in the changelog. After the merge the owner enables the GitHub integration on Zenodo, creates the GitHub Release `v1.0.0` at the merge commit, and sends the concept DOI; then add `doi:` to `CITATION.cff`, the DOI line on `/cite/` and the footer badge (SPEC §9, §14).
 
 - **Python stage restructure (D45, 2026-11-19, from issue #61):** 27 lessons in `src/content/docs/python/` (all `.mdx`, all draft), in the new order of
   `research/curriculum/06-curriculum-map.yaml` (origin tag per lesson, the 2 awareness boxes, the draft-to-new compression). Cut `comprehensions`; renamed
