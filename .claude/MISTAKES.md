@@ -630,6 +630,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 - 2026-11-25 — The first DA8b draft put weighted sums (`0.2126 * lin(...)` on several lines, `255 * (1.055 * POWER(...))`) inside a `<RunSQL>`; markdownlint reads the template string as prose and MD037 (spaces inside emphasis) failed on every pair of `*`. → **In a `RunSQL` keep one `*` in each paragraph (a macro such as `part(hex, start, weight)` holds the product, and a blank line splits two macros that each multiply); run `npm run lint:md` right after pasting a query.**
 
+- 2026-11-25 — Review of the DA8b draft: the lesson gave 4.5:1 as the only text threshold and 3:1 for bars, although the WCAG pages it cites also give 3:1 for large text (18 point, or 14 point bold) and exempt bars whose values text labels carry (the label text then falls under 1.4.3); it said Microsoft's list did not say whether green and blue is on it, when the list names it; and it tested only the dashboard's hero colors, not its small gray axis and caption labels. → **A lesson that states a WCAG threshold also gives the exceptions its cited page names (large text, labels in place of non-text contrast); before writing "the list does not say", read the cited list again; test the real artifact's small gray text, not only its hero colors, or say in the lesson that it was not measured.**
+
 ## Agents and reviews
 
 - 2026-11-21 — `node scripts/refresh-concept-figures.mjs` rewrote `src/content/docs/sql/inner-join.mdx`, a lesson the batch did not own (a figure stale on `main`), and it would have gone into the commit. → **After the
