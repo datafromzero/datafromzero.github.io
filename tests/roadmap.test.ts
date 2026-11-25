@@ -22,7 +22,9 @@ describe('lessonCode', () => {
 		assert.equal(lessonCode('ml-engineer', 120), 'MLE12');
 	});
 	test('an inserted lesson keeps its neighbors codes', () => {
-		assert.equal(lessonCode('excel', 25), 'E2.5');
+		assert.equal(lessonCode('excel', 25), 'E2b');
+		assert.equal(lessonCode('data-engineer', 255), 'DE25b');
+		assert.equal(lessonCode('excel', 33), 'E3.3');
 	});
 	test('unknown stage has no code', () => {
 		assert.equal(lessonCode('nope', 10), undefined);

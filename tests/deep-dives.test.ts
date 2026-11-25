@@ -85,7 +85,7 @@ describe('deep dives in the real content and the sidebar', () => {
 
 	test('the sidebar nests the deep dive as a collapsed, labeled group after the main path', () => {
 		for (const [label, id, codes] of [
-			['Data Engineer', 'data-engineer', /^DE2\d(\.5)?$/],
+			['Data Engineer', 'data-engineer', /^DE2\db?$/],
 			['ML / AI Engineer', 'ml-engineer', /^MLE2\d$/],
 		] as const) {
 			const items = buildSidebar(true).find((g) => g.label === label)!.items;
