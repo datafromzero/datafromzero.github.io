@@ -1,0 +1,426 @@
+---
+id: ml-engineer-llm-apis-and-structured-output
+title: Calling LLM APIs and getting structured output
+short_title: LLM APIs and JSON
+description: Send a request to a language model, control temperature, require JSON, validate it, version a prompt like code and keep a measured cost and latency budget.
+stage: ml-engineer
+order: 80
+level: advanced
+duration: 38
+objectives:
+  - Send a request and read the response and token counts
+  - Require and validate structured JSON output
+  - Version a prompt like code and test it on examples
+  - Keep a cost and latency budget per request
+prerequisites:
+  - ml-engineer-text-embeddings-and-transformers
+  - ml-engineer-validating-model-data
+  - core-ai-literacy-rag-and-agents
+  - python-apis-and-web-data
+notebook: notebooks/ml-engineer/ml-engineer-llm-apis-and-structured-output.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Model card: Qwen/Qwen2.5-1.5B-Instruct (accessed 2026-11-25)'
+    url: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct
+  - title: 'Qwen2.5-1.5B-Instruct: generation_config.json (accessed 2026-11-25)'
+    url: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/generation_config.json
+  - title: 'Hugging Face documentation: Text generation, generation parameters (accessed 2026-11-25)'
+    url: https://huggingface.co/docs/transformers/main_classes/text_generation
+  - title: 'Hugging Face documentation: Generation strategies (accessed 2026-11-25)'
+    url: https://huggingface.co/docs/transformers/generation_strategies
+  - title: 'Pydantic documentation: JSON, parsing with model_validate_json (accessed 2026-11-25)'
+    url: https://pydantic.dev/docs/validation/latest/concepts/json/
+  - title: 'Pydantic documentation: Validation errors, error types (accessed 2026-11-25)'
+    url: https://pydantic.dev/docs/validation/latest/errors/validation_errors/
+  - title: 'Requests documentation: Quickstart, JSON response content (accessed 2026-11-25)'
+    url: https://requests.readthedocs.io/en/latest/user/quickstart/
+status: draft
+---
+
+TODO(owner): Environment: a Colab notebook with no key and no cost (D60); the optional box for a hosted API is a cell that does nothing until the learner fills three variables, and it is not run here (no key); which provider to name is still your question (the map says so), so the lesson names none. Model: `Qwen/Qwen2.5-1.5B-Instruct`, Apache 2.0 (model card metadata), 1.54 billion numbers, about 3.1 GB to download (bfloat16 files, loaded as float32, 6.2 GB of memory), pinned to revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306`, with `transformers` 5.24.1 and `pydantic` 2.14.4 pinned in the setup cell. It runs on a free CPU runtime (two threads) and on a free GPU; I tried 0.5B first and it failed the JSON and refusal tests too often to teach with. Run on Linux with Python 3.13.18 and PyTorch 2.15.0 (CPU build), with two threads, twice with the same text except the seconds; not run on Colab or a GPU, where a token may move. The seconds in unit 4 depend on the machine. The prices and the budget are assumptions, said so in the lesson. Stub changes: the NIST page is dropped (no claim rests on it), `ml-engineer-validating-model-data` is a prerequisite (the schema is a pydantic model), and "version a prompt like code" is a dictionary and a test here, not a registry tool. Set `reviewed` when you publish.
+
+## The question
+
+The help box of the site should send each question to the lesson that answers it. A model can do that in one request, if its reply is something code can read and trust. *How do you send the request, get JSON that code can check, and know what each request costs?* Four of the 16 questions, with the lesson that answers each:
+
+| question | lesson |
+|---|---|
+| Why does WHERE customer_id = NULL never return a row? | null-handling |
+| What is the difference between WHERE and HAVING? | group-by-having |
+| Can I filter on the result of a window function in WHERE? | window-functions |
+| Which WHEN wins when two tests are both true? | case-expressions |
+
+By the end you can read the counts a reply carries, set the temperature, require and validate JSON, keep prompts as versioned code with a test, and say whether a prompt fits a budget.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Data from an API and from a database*](/python/apis-and-web-data/) a request went out and a status code and JSON came back. A request to a model is the same shape: messages and settings go out, and text and token counts come back.
+
+**Diverge.** A weather API gives the same answer to the same request. A model may not, and a reply that looks like JSON may not be JSON. Units 2 and 3 are about that.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE7, what does a model read, and what does a limit or a price count?
+
+   <details>
+   <summary>answer</summary>
+
+   Tokens, not words: pieces of text from a fixed list. A rare word or a line of code becomes several of them.
+
+   </details>
+
+2. In the API lesson of the Python stage, what comes back first with a response, before the data?
+
+   <details>
+   <summary>answer</summary>
+
+   A status code. Check it before you read the JSON.
+
+   </details>
+
+## The big idea
+
+A request to a model is messages and settings out, text and token counts back, and the reply is only usable once code has checked it against a schema.
+
+## Learn by doing
+
+About 38 minutes, 4 new ideas: a request with its token counts, temperature, validated JSON, a prompt as code with a budget. No key is needed: the model runs in the notebook. The setup cells loaded `Qwen2.5-1.5B-Instruct`, defined `chat`, the one function that sends a request and returns the reply with its prompt tokens, completion tokens and seconds, and listed the 16 questions with their lessons. The cells of units 3 and 4 ask the model 16 questions each: about 3 minutes on a free CPU, under 1 on a free GPU.
+
+<OpenInColab />
+
+### 1. A request and its reply
+
+**Idea.** A request is a list of *messages*, each with a role (`system` for the rules, `user` for the question, `assistant` for earlier replies) and a text, plus settings such as the longest reply allowed. The reply carries two counts: the *prompt tokens* the model read and the *completion tokens* it wrote. A hosted API returns the same two counts and prices them separately.
+
+**Try it:** send one question, then print the tokens of the message alone, the prompt tokens of the request and the completion tokens, and the text the model really reads.
+
+```python
+messages = [{"role": "user", "content": "In one sentence, what does COALESCE do in SQL?"}]
+reply = chat(messages, max_new_tokens=60)
+print(reply["text"])
+print(len(tok(messages[0]["content"])["input_ids"]), reply["prompt_tokens"], reply["completion_tokens"])
+print(tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True))
+```
+
+**Predict:** The message below is a number of tokens. How many tokens will the request count, and how many will the model write? Will the request be more or less than the message?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+The COALESCE function in SQL returns the first non-null value in a list of expressions.
+13 42 19
+<|im_start|>system
+You are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>
+<|im_start|>user
+In one sentence, what does COALESCE do in SQL?<|im_end|>
+<|im_start|>assistant
+```
+
+</details>
+
+*Why:* The second line is the tokens of the message alone, the prompt tokens of the request, and the completion tokens: 13, 42 and 19. The request is three times the message. The model reads the text printed below it, where the chat template of the model has wrapped each message in markers, and, because the request had no system message, added a default one: the model card's template uses "You are Qwen, created by Alibaba Cloud. You are a helpful assistant." Tokens that you did not type are still counted, and still paid for with a hosted API.
+
+### 2. Temperature
+
+**Idea.** The model scores every token that could come next. At *temperature* 0 it takes the highest one every time, which the Hugging Face docs call greedy decoding. Above 0 it samples from the scores, and a higher temperature spreads the choice; `do_sample` switches sampling on. The model's repository ships defaults for these settings (its `generation_config.json` says temperature 0.7, top_p 0.8, top_k 20 and a repetition penalty of 1.1), so `chat` passes its own.
+
+**Try it:** ask for the name of a cafe five times with five seeds, at temperature 0 and at 1.0.
+
+```python
+request = [{"role": "user", "content": "Suggest a name for a small cafe that sells coffee and SQL books. Reply with the name only."}]
+for temperature in [0.0, 1.0]:
+    names = [chat(request, max_new_tokens=12, temperature=temperature, seed=seed)["text"].strip() for seed in range(5)]
+    print(temperature, len(set(names)), names)
+```
+
+**Predict:** How many different replies will each set of five hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.0 1 ['"SQLpresso"', '"SQLpresso"', '"SQLpresso"', '"SQLpresso"', '"SQLpresso"']
+1.0 5 ['"BStone\'s SQL Latte"', '"SqlCup & Co."', '"SQLionary Beans"', '"SQL Grind & Brew"', '"CoffeeSQL: A Book and Brew"']
+```
+
+</details>
+
+*Why:* The columns are the temperature, the number of different replies, and the five replies. At 0 all five are the same name; at 1.0 the five seeds gave five different names. The temperature did not change what the model knows, only how much its choice varies. Use 0 when code or a test depends on the reply being the same next time, and a higher value only when variety is the point.
+
+### 3. Ask for JSON, then check it
+
+**Idea.** Code needs a reply it can parse, so there are two steps: ask for JSON in the prompt, and check the reply against a *schema*, a description of the fields and the values allowed. Pydantic's `model_validate_json` parses and checks a JSON string in one call; a failure raises a `ValidationError`, and each error has a type: its page lists `json_invalid`, `literal_error` and `missing`. A reply can fail in two ways: it is not JSON, or it is JSON with a wrong value. After a failure, `repair` sends the model its own reply and the type of the error once. The Qwen model card lists generating structured outputs, especially JSON, among the improvements of the series.
+
+**Try it:** route the 16 questions with two versions of the prompt, check every reply with `Route`, and then give each failed reply of v2 one more try.
+
+```python
+class Route(BaseModel):
+    lesson: Literal[tuple(LESSONS)]                                           # one of the eight names, nothing else
+    reason: str
+
+
+PROMPTS = {
+    "v1": "Reply with JSON only, with the keys lesson and reason. The lesson is the name of the SQL lesson that answers the question.",
+    "v2": "You route learner questions to lessons. Reply with JSON only, like {\"lesson\": \"ctes\", \"reason\": \"one short sentence\"}. "
+          "The value of lesson must be exactly one of: " + ", ".join(LESSONS) + ".",
+}
+
+
+def checked(reply):
+    """The reply with the lesson it names, or the type of its error."""
+    try:
+        return {**reply, "lesson": Route.model_validate_json(reply["text"]).lesson, "error": None}
+    except ValidationError as problem:
+        return {**reply, "lesson": None, "error": problem.errors()[0]["type"]}
+
+
+def ask(version, question, temperature=0.0):
+    """One routing request with the prompt of a version."""
+    return checked(chat([{"role": "system", "content": PROMPTS[version]}, {"role": "user", "content": question}], max_new_tokens=80, temperature=temperature))
+
+
+def repair(version, question, first):
+    """One more try for a reply that failed: the model sees its own reply and the type of the error."""
+    messages = [{"role": "system", "content": PROMPTS[version]}, {"role": "user", "content": question}, {"role": "assistant", "content": first["text"]},
+                {"role": "user", "content": f"That reply failed the check ({first['error']}). Reply again with the JSON only."}]
+    return checked(chat(messages, max_new_tokens=80))
+
+
+runs = {version: [ask(version, question) for question in QUESTIONS] for version in ["v1", "v2"]}
+for version, rows in runs.items():
+    print(version, sum(r["error"] is None for r in rows), "pass,", sum(r["lesson"] == e for r, e in zip(rows, EXPECTED)), "right lesson,", sorted({r["error"] for r in rows if r["error"]}))
+print(repr(runs["v1"][0]["text"][:40]))
+failed = [i for i, row in enumerate(runs["v2"]) if row["error"]]
+fixes = {i: repair("v2", QUESTIONS[i], runs["v2"][i]) for i in failed}                # one more try for each failed reply
+for i, second in fixes.items():
+    print(runs["v2"][i]["error"], "->", second["error"], second["lesson"] == EXPECTED[i])
+```
+
+**Predict:** How many of the 16 replies will pass the `Route` check for each version, and how many will name the right lesson?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+v1 0 pass, 0 right lesson, ['json_invalid']
+v2 15 pass, 8 right lesson, ['literal_error']
+'```json\n{\n  "lesson": "SQL WHERE Clause"'
+literal_error -> literal_error False
+```
+
+</details>
+
+*Why:* The first two lines give the version, the replies that pass, the replies that name the right lesson, and the error types. Version v1 passes none of its 16 replies, with the type `json_invalid`; the third line shows why for the first one: it starts with a code fence, so it is not JSON for the parser. Version v2, which lists the eight names and shows the shape, passes 15; its one failure has the type `literal_error`, a name that is not on the list, and the last line shows that one more try with `repair` left it a `literal_error` with a wrong lesson. A reply that passes is not yet a right one: 15 pass and 8 name the right lesson. For reference, the TF-IDF baseline of lesson MLE7 named the right lesson for 15 of these 16 questions. It learned from the lesson paragraphs and the model only reads the prompt, but a baseline belongs beside an LLM score.
+
+### 4. Prompts as code, tests and a budget
+
+**Idea.** A prompt is code: keep each version under a name (a dictionary here, a file in a repository), run the same test on every change and keep the numbers. The test is the 16 questions with the lesson that answers each. A budget is set before the measurement: a help box that handles 400,000 questions a month, with $90 a month for routing, allows $0.225 for 1,000 requests. The prices in the cell are assumed, $1.00 per million prompt tokens and $5.00 per million completion tokens, not any provider's: replace them with the row of your provider's pricing page and check it again before you rely on it.
+
+**Try it:** change one phrase of v2, so that the reason has at most 8 words, run the test on the new version, and print for v2 and v3 the replies that pass, the right lessons, the mean tokens, the cost of 1,000 requests, whether it fits the budget and the median seconds.
+
+```python
+PROMPTS["v3"] = PROMPTS["v2"].replace("one short sentence", "at most 8 words")         # the change under test
+runs["v3"] = [ask("v3", question) for question in QUESTIONS]
+
+PRICE_IN, PRICE_OUT = 1.00, 5.00                                           # dollars per million tokens: assumed for this lesson, not any provider's price
+BUDGET = 90 / 400_000 * 1000                                               # dollars for 1,000 requests
+for version in ["v2", "v3"]:
+    rows = runs[version]
+    prompt_mean = statistics.mean(r["prompt_tokens"] for r in rows)
+    completion_mean = statistics.mean(r["completion_tokens"] for r in rows)
+    cost = (prompt_mean * PRICE_IN + completion_mean * PRICE_OUT) / 1_000_000 * 1000
+    print(version, sum(r["error"] is None for r in rows), sum(r["lesson"] == e for r, e in zip(rows, EXPECTED)), round(prompt_mean), round(completion_mean),
+          round(cost, 3), cost <= BUDGET, round(statistics.median(r["seconds"] for r in rows), 1))
+```
+
+**Predict:** Which of v2 and v3 fits the budget, and does v3 still name the right lesson as often as v2?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+v2 15 8 100 32 0.259 False 9.1
+v3 16 7 102 20 0.201 True 6.2
+```
+
+</details>
+
+*Why:* The columns are the version, the replies that pass, the right lessons, the mean prompt tokens, the mean completion tokens, the dollars for 1,000 requests, whether that fits the budget, and the median seconds. Version v2 passes 15, names 8 lessons right, uses about 100 prompt tokens and 32 completion tokens, and costs $0.259, over the $0.225. Version v3 passes all 16 and names 7 right, uses 102 and 20 tokens, costs $0.201, within the budget, and its median request takes 6.2 seconds against 10.3 for v2 on this machine (yours will differ, which is the reason to measure). The shorter reason cut the completion tokens by more than a third and cost one right lesson; the counts do not say which question was lost. The cost is for the first request of each question.
+
+A hosted API takes the same three things: the messages, the settings and a key. The last cell of the notebook shows where they go for any provider whose address, headers and field names you copy from its documentation; it does nothing until you fill them in, and no exercise needs it. Read the status of the response before its body: the Requests documentation says that a successful `r.json()` does not show that the response succeeded.
+
+<Aside type="tip" title="Remember">
+
+- A request is messages and settings; the reply carries the prompt tokens and the completion tokens, and the model reads more than you typed.
+- Temperature 0 repeats; a higher temperature varies. Tests and parsers want 0.
+- Validate every reply against a schema, and count a reply as passing only when it does; a valid reply is not yet a right one.
+- Keep prompts as named versions, run the same test on each change, and read passes, right answers and cost together.
+- A budget is set from the product (volume and allowance) before the measurement; seconds depend on the machine.
+
+**Common trap:** a model that was asked for JSON returns JSON. The first version passed none of its 16 replies, and the first of them starts with a code fence.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-llm-apis-and-structured-output-1">
+
+**Read the error types.** Five replies are written for this exercise, not by the model. Check each with `Route.model_validate_json` and put the type of its first error in the list `answer_1`, in order, with `None` for a reply that passes. The type is `problem.errors()[0]["type"]` for the `ValidationError` named `problem`. Expected: `answer_1` is a list of five items, each `None` or a short text.
+
+```python
+FENCE = "`" * 3                                                          # three backticks: the marks of a code block
+replies = ['{"lesson": "ctes", "reason": "a CTE names a step"}',
+           FENCE + 'json\n{"lesson": "ctes", "reason": "a CTE names a step"}\n' + FENCE,
+           '{"lesson": "CTE", "reason": "names a step"}',
+           '{"lesson": "ctes"}',
+           '{"lesson": "ctes", "reason": "names a step']
+answer_1 = []
+for text in replies:
+    try:
+        Route.model_validate_json(text)
+        answer_1.append(None)
+    except ValidationError as problem:
+        pass  # add the type of the first error to answer_1
+```
+
+<details>
+<summary>Hint</summary>
+
+In the `except` branch, append `problem.errors()[0]["type"]`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    except ValidationError as problem:
+        answer_1.append(...)
+```
+
+</details>
+
+<Solution>
+
+```python
+FENCE = "`" * 3
+replies = ['{"lesson": "ctes", "reason": "a CTE names a step"}',
+           FENCE + 'json\n{"lesson": "ctes", "reason": "a CTE names a step"}\n' + FENCE,
+           '{"lesson": "CTE", "reason": "names a step"}',
+           '{"lesson": "ctes"}',
+           '{"lesson": "ctes", "reason": "names a step']
+answer_1 = []
+for text in replies:
+    try:
+        Route.model_validate_json(text)
+        answer_1.append(None)
+    except ValidationError as problem:
+        answer_1.append(problem.errors()[0]["type"])
+```
+
+[None, 'json_invalid', 'literal_error', 'missing', 'json_invalid']: the first reply passes. The fenced one is not JSON. `CTE` is JSON but not one of the eight names. The fourth has no `reason`. The last stops in the middle of a string, which is how a reply looks when it reaches the limit of `max_new_tokens`.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-llm-apis-and-structured-output-2">
+
+**A bill from the rows.** Before you start, say in one sentence what you expect: the prompt tokens of v2 outnumber its completion tokens, and the new prices charge completion tokens eight times as much as prompt tokens. Which side of the bill is bigger? Then write the cell yourself, in the empty cell of the notebook: from the 16 requests of `runs["v2"]`, take the mean of the prompt tokens and the mean of the completion tokens, and put the cost of 1,000 requests at $0.25 per million prompt tokens and $2.00 per million completion tokens (assumed prices) in dollars, rounded to 4 decimals, in `answer_2`. Expected: `answer_2` is a number below 0.2.
+
+<details>
+<summary>Hint</summary>
+
+The cost of a request is its prompt tokens times the price of one prompt token plus its completion tokens times the price of one completion token. Prices are per million tokens, and the question asks for 1,000 requests.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+rows = runs["v2"]
+prompt_mean = statistics.mean(r["prompt_tokens"] for r in rows)
+...
+```
+
+</details>
+
+<Solution>
+
+```python
+rows = runs["v2"]
+prompt_mean = statistics.mean(r["prompt_tokens"] for r in rows)
+completion_mean = statistics.mean(r["completion_tokens"] for r in rows)
+answer_2 = round((prompt_mean * 0.25 + completion_mean * 2.00) / 1_000_000 * 1000, 4)
+```
+
+0.0886. Version v2 averages about 100 prompt tokens and 32 completion tokens, so at these prices the prompt side costs about 100 x 0.25 = 25 and the completion side 32 x 2.00 = 64, in millionths of a dollar for one request: the smaller count is the bigger part of the bill. For 1,000 requests that is $0.0886.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a prompt change makes replies cheaper and your test shows the same number of passes. What else do you check before you ship it, and where do you read it?
+
+   <details>
+   <summary>answer</summary>
+
+   Which questions changed, not only how many: the same count can hide one gained and one lost. Compare the two runs question by question, and look at the cost and the seconds beside them.
+
+   </details>
+
+<Exercise id="ml-engineer-llm-apis-and-structured-output-3">
+
+**Spot the flaw.** A colleague reports the tokens that version v2 used for the 16 questions as the sum of the prompt tokens and completion tokens of the 16 requests in `runs["v2"]`. Change the code so that it counts every request that was sent for those 16 questions, and put the total in `answer_3`. Expected: `answer_3` is a whole number.
+
+```python
+total_tokens = sum(r["prompt_tokens"] + r["completion_tokens"] for r in runs["v2"])        # colleague: "16 questions, 16 requests"
+answer_3 = total_tokens
+# change the code so that it counts every request that was sent for the 16 questions
+```
+
+<details>
+<summary>Hint</summary>
+
+Unit 3 made one more request for a reply that failed the check. Its tokens are in `fixes`, a dictionary of replies.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+total_tokens = sum(r["prompt_tokens"] + r["completion_tokens"] for r in runs["v2"])
+answer_3 = total_tokens + ...
+```
+
+</details>
+
+<Solution>
+
+```python
+total_tokens = sum(r["prompt_tokens"] + r["completion_tokens"] for r in runs["v2"])
+total_tokens += sum(r["prompt_tokens"] + r["completion_tokens"] for r in fixes.values())
+answer_3 = total_tokens
+```
+
+The answer is 2269. The 16 first requests used 2,103 tokens. The retry of unit 3 is a seventeenth request of 166 tokens, and its prompt holds the failed reply and the error as well as the question. A retry costs like any request.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can send a request to a model and read its token counts, require JSON and validate it against a schema, keep a prompt as a named version with a test, and say whether it fits a cost budget.*
+Test: Exercise ml-engineer-llm-apis-and-structured-output-2, done from the notebook without opening the hints.
+
+The pattern to remember: **messages and settings out, text and counts back; ask for JSON, check it against a schema, and test every prompt change against a budget.** The next lesson, *A retrieval pipeline: chunk, embed, search, answer with citations* (MLE9), gives the model text to answer from.

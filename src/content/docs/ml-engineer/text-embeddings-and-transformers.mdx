@@ -1,0 +1,375 @@
+---
+id: ml-engineer-text-embeddings-and-transformers
+title: 'Text as numbers: tokens, embeddings and transformers'
+short_title: Text as numbers
+description: Turn text into tokens and embeddings, compare meaning with cosine similarity, see what attention does and fit a TF-IDF baseline first.
+stage: ml-engineer
+order: 70
+level: advanced
+duration: 34
+objectives:
+  - Explain tokens, not words, as the unit a model reads
+  - Compute and compare embeddings with cosine similarity
+  - Describe attention and the encoder-decoder idea in plain words
+  - Run a pretrained model for classification
+  - Fit a TF-IDF and logistic baseline first
+prerequisites:
+  - ml-engineer-neural-networks-and-training-loop
+  - ml-engineer-deep-learning-training-practice
+  - data-scientist-logistic-regression-in-practice
+notebook: notebooks/ml-engineer/ml-engineer-text-embeddings-and-transformers.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Sentence Transformers documentation (accessed 2026-11-25)'
+    url: https://www.sbert.net/
+  - title: 'Model card: sentence-transformers/all-MiniLM-L6-v2 (accessed 2026-11-25)'
+    url: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+  - title: 'Hugging Face documentation: Tokenizers, summary of the algorithms (accessed 2026-11-25)'
+    url: https://huggingface.co/docs/transformers/tokenizer_summary
+  - title: 'Vaswani et al., Attention Is All You Need (arXiv, accessed 2026-11-25)'
+    url: https://arxiv.org/abs/1706.03762
+  - title: 'scikit-learn documentation: Feature extraction, text, tf-idf (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/feature_extraction.html
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: a Colab notebook (D60); a CPU runtime is enough. The text is the site's own lessons, as you decided: eight published SQL lessons read from the release tag `v1.0.0` (identical to the files in the repository), cleaned in the notebook, 220 paragraphs. Model: `sentence-transformers/all-MiniLM-L6-v2`, Apache 2.0 (model card metadata), 22.7 million numbers, about 90 MB, pinned to revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`; `transformers` 5.24.1 and `sentence-transformers` 6.3.0 are pinned in the setup cell. Run twice with the same text on Linux with Python 3.13.18, PyTorch 2.15.0 (CPU build), scikit-learn 1.9.1 and NumPy 2.5.3; not run on Colab or a GPU. The 16 questions and their lesson labels are written for this lesson (they are the dev questions of the retrieval lesson too); a count of 15 or 14 of 16 is one question apart, so the lesson reads them as a tie. Stub changes: "Run a pretrained model for classification" is a pretrained encoder with a logistic regression on top (the pattern of MLE6), not a fine-tuned classifier; the picture of a 2-D embedding map is not drawn; the Hugging Face Transformers home page gives way to the tokenizer page that holds the claim. Set `reviewed` when you publish.
+
+## The question
+
+A learner types a question into the help box of the site: *How do I keep rows that have no match?* The site has hundreds of paragraphs of lessons, and the words of the question are not the words of the answer. *How does a model turn text into numbers that compare by meaning, and is that better than counting words?* Three of the 220 paragraphs, with the lesson each comes from:
+
+| lesson | one of its paragraphs |
+|---|---|
+| left-join-anti-join | A join pairs rows by key, and the join type decides what happens to a row that finds no partner. |
+| null-handling | COALESCE(x, d) returns the first of its arguments that is not NULL, so it gives d when x is missing. |
+| window-functions | GROUP BY squeezes rows together. A window function does the same sums and counts but keeps every row: it writes the answer in a new column beside them. |
+
+By the end you can say what a token is, compare two texts by cosine, say what a layer of attention does to a word's vector, and test a pretrained encoder against a baseline that counts words.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Training deep models well* (MLE6) a frozen ResNet-18 turned a photo into 512 numbers, and a small new layer learned on them. Unit 4 does the same with text: a frozen encoder, and a logistic regression of [*Logistic regression: predicting yes or no*](/data-scientist/logistic-regression-in-practice/) (DS4) on top.
+
+**Diverge.** A photo already is numbers. Text has to become numbers first, and units 1 to 3 are about how.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE6, when a new last layer was put on ResNet-18, which numbers were frozen and which learned?
+
+   <details>
+   <summary>answer</summary>
+
+   The 11,176,512 numbers of the backbone stayed as they were, and only the 3,078 numbers of the new last layer learned.
+
+   </details>
+
+2. Write the line that splits `texts` and `labels` into 75 percent for training and 25 percent held out, with the track's seed and the same share of each label in both parts.
+
+   <details>
+   <summary>answer</summary>
+
+   `train_test_split(texts, labels, test_size=0.25, random_state=SEED, stratify=labels)`
+
+   </details>
+
+## The big idea
+
+A model reads numbered pieces of text and gives each text a list of numbers, an embedding, where texts about the same thing end up pointing the same way.
+
+## Learn by doing
+
+About 34 minutes, 4 new ideas: tokens, embeddings with cosine similarity, attention, a baseline before a pretrained encoder. The setup cells read eight published lessons of the SQL stage from the release tag `v1.0.0`, kept the prose (220 paragraphs, 7,548 words) and paired each paragraph with its lesson. They also hold 16 questions written for this lesson, two for each lesson, which fit nothing. The model is `all-MiniLM-L6-v2`, a small pretrained encoder.
+
+<OpenInColab />
+
+### 1. Tokens, not words
+
+**Idea.** A model cannot read letters. A *tokenizer* cuts text into *tokens*, pieces from a fixed list, and the model works with the number of each piece. Hugging Face's tokenizer summary says that common words stay whole as single tokens and that rare or unknown words decompose into subwords. This model uses WordPiece, the algorithm of the BERT family; in the output below, a piece that continues the word before it starts with `##`.
+
+**Try it:** cut three sentences into tokens and print the words, the tokens and the pieces.
+
+```python
+tokenizer = model.tokenizer
+for sentence in ["How many orders did store 2 take?", "COALESCE replaces a NULL with a default.", "date_trunc('month', ordered_at)"]:
+    pieces = tokenizer.tokenize(sentence)
+    print(len(sentence.split()), len(pieces), pieces)
+```
+
+**Predict:** How many tokens will the tokenizer make of each sentence, and which sentence gets the most tokens for its words?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+7 8 ['how', 'many', 'orders', 'did', 'store', '2', 'take', '?']
+7 10 ['coal', '##es', '##ce', 'replaces', 'a', 'null', 'with', 'a', 'default', '.']
+2 14 ['date', '_', 'tr', '##un', '##c', '(', "'", 'month', "'", ',', 'ordered', '_', 'at', ')']
+```
+
+</details>
+
+*Why:* The columns are the words (split on spaces), the tokens, and the pieces. The question has 7 words and 8 tokens: the `?` is a token of its own, and the tokenizer wrote everything in lowercase. The sentence with `COALESCE` has 7 words and 10 tokens, because that rare word is cut into `coal`, `##es` and `##ce`. The line of code has 2 words and 14 tokens, 7 for each word, the most: underscores, brackets and quotes are tokens, and `date_trunc` and `ordered_at` break into pieces. What a model reads, and what its limits and prices count, is tokens, not words.
+
+### 2. Embeddings and cosine similarity
+
+**Idea.** An *embedding* is the list of numbers that a model gives a text; here there are 384. The model card says the model was trained on 1 billion sentence pairs with a contrastive objective: given one sentence of a pair, pick out the sentence it was paired with from a set of others. So texts that go together get vectors that point the same way. *Cosine similarity* measures how close two directions are: 1 for the same direction, 0 for a right angle, negative for opposite ones.
+
+**Try it:** embed four sentences and print the cosine of the first with each of the others.
+
+```python
+sentences = ["How do I keep rows that have no match?", "Which join keeps unmatched rows?", "How do I keep my phone from losing its match history?", "What is the capital of Australia?"]
+vectors = model.encode(sentences)
+print(vectors.shape, [round(float(np.linalg.norm(v)), 3) for v in vectors])
+print([round(float(score), 3) for score in vectors[0] @ vectors[1:].T])
+```
+
+**Predict:** Which of the other three sentences will be closest to the first, and will the one that shares the most words with it come first?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+(4, 384) [1.0, 1.0, 1.0, 1.0]
+[0.62, 0.342, 0.012]
+```
+
+</details>
+
+*Why:* The first line holds the shape of the result, 4 vectors of 384 numbers, and their lengths, all 1.0: the last step of this model scales every vector to length 1. The second line holds the cosines with the first sentence: 0.62 for the question in other words, 0.342 for the phone question that shares *how do I keep* and *match* with it, and 0.012 for the capital of Australia. The closest sentence shares one word, *rows*, with the first, and the one that shares most words is far less close. With vectors of length 1 the dot product `@` is the cosine; in general:
+
+$$
+\cos(a, b) = \frac{a \cdot b}{\text{length}(a) \times \text{length}(b)}
+$$
+
+### 3. What attention does to a word
+
+**Idea.** A *transformer* is built from layers of *attention*. The paper that introduced it describes an attention function as mapping a query and a set of key-value pairs to an output, a weighted sum of the values, where each weight comes from a compatibility function of the query with the matching key. In plain words, every token builds its next vector as a mix of the vectors of the tokens around it, and takes more from the tokens that matter to it. The paper's transformer has two parts: an *encoder* that reads the whole input and gives a vector for each token, and a *decoder* that writes the output one element at a time, using what it has already written. The model here keeps only the reading side: it returns vectors and writes no text.
+
+**Try it:** put the word `key` in two sentences at the same place, and compare its vectors at the input of the model and after each layer. Then print where `key` looks in the last layer.
+
+```python
+encoder = AutoModel.from_pretrained(MODEL_NAME, revision=REVISION, attn_implementation="eager").eval()    # the same network, set to report its attention
+pair = ["A table needs a primary key.", "To run it press the key."]
+batch = tokenizer(pair, return_tensors="pt", padding=True)
+with torch.no_grad():
+    result = encoder(**batch, output_hidden_states=True, output_attentions=True)
+tokens = tokenizer.convert_ids_to_tokens(batch["input_ids"][0])
+where = tokens.index("key")                                                   # the place of `key`: the same in both sentences
+print(tokens, where, encoder.config.num_hidden_layers, encoder.config.num_attention_heads)
+print([round(float(torch.cosine_similarity(layer[0, where], layer[1, where], dim=0)), 3) for layer in result.hidden_states])
+looks = result.attentions[-1][0].mean(0)[where]                              # last layer, mean of the 12 heads: how much `key` looks at each token
+print(round(float(looks.sum()), 3), [(t, round(float(w), 3)) for t, w in sorted(zip(tokens, looks.tolist()), key=lambda item: -item[1])[:3]])
+```
+
+**Predict:** How similar, by cosine, are the two vectors of `key` at the input and after each of the six layers? And which tokens does `key` look at most in the last layer?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+['[CLS]', 'a', 'table', 'needs', 'a', 'primary', 'key', '.', '[SEP]'] 6 6 12
+[1.0, 0.925, 0.866, 0.842, 0.848, 0.824, 0.678]
+1.0 [('[CLS]', 0.474), ('primary', 0.155), ('key', 0.105)]
+```
+
+</details>
+
+*Why:* The first line shows the tokens, `key` at place 6, then 6 layers and 12 heads (a head is one attention that runs in parallel with the others). The second line has 7 cosines, the input and then the output of each layer: 1.0 at the input, because it is the same token at the same place, falling to 0.678 after layer 6. The two `key`s started as one vector and ended as two, because each took something from its own sentence. The third line is the attention of `key` in the last layer, the mean of the 12 heads: the weights add up to 1.0, and the largest are `[CLS]`, the marker the tokenizer puts first (0.474), `primary` (0.155) and `key` itself (0.105). That is one run on one sentence, not a rule about attention.
+
+### 4. A baseline first, then a pretrained encoder
+
+**Idea.** Before a pretrained model, fit the cheap baseline. *TF-IDF* gives each paragraph one number for each word or pair of words: the count of the term in the paragraph times a weight that is smaller the more paragraphs hold the term (scikit-learn: tf-idf(t, d) = tf(t, d) × idf(t)). The pretrained encoder is used as in lesson MLE6: each paragraph becomes 384 numbers once, and a logistic regression learns on top. Each head picks its `C` by 5-fold cross-validation on the training paragraphs only. The flat guess always names the most common lesson.
+
+**Try it:** split the 220 paragraphs 75 to 25, fit both heads on the training paragraphs, and score them on the held-out paragraphs and on the 16 questions.
+
+```python
+train_text, test_text, train_lesson, test_lesson = train_test_split(texts, labels, test_size=0.25, random_state=SEED, stratify=labels)
+questions, question_lesson = [q for q, _ in PROBE], [lesson for _, lesson in PROBE]
+grid = {"C": [1, 10, 100]}                                                    # each head picks its C by 5-fold cross-validation on the training paragraphs
+
+tfidf = TfidfVectorizer(sublinear_tf=True, ngram_range=(1, 2)).fit(train_text)
+baseline = GridSearchCV(LogisticRegression(max_iter=3000), grid, cv=5).fit(tfidf.transform(train_text), train_lesson)
+vectors_train, vectors_test, vectors_q = model.encode(train_text), model.encode(test_text), model.encode(questions)
+encoder_head = GridSearchCV(LogisticRegression(max_iter=3000), grid, cv=5).fit(vectors_train, train_lesson)
+
+flat = max(sorted(set(train_lesson)), key=train_lesson.count)       # ties go to the first name in alphabetical order
+print(len(train_text), len(test_text), flat)
+for kind, on_test, on_questions in [("flat guess", [flat] * len(test_text), [flat] * len(questions)),
+                                    ("TF-IDF and logistic regression", baseline.predict(tfidf.transform(test_text)), baseline.predict(tfidf.transform(questions))),
+                                    ("encoder and logistic regression", encoder_head.predict(vectors_test), encoder_head.predict(vectors_q))]:
+    print(kind, round(float(np.mean(np.array(on_test) == np.array(test_lesson))), 3), int(np.sum(np.array(on_questions) == np.array(question_lesson))), "of", len(questions))
+```
+
+**Predict:** On the held-out paragraphs and on the 16 questions, which scores higher, the TF-IDF baseline or the encoder with a logistic regression?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+165 55 left-join-anti-join
+flat guess 0.145 2 of 16
+TF-IDF and logistic regression 0.691 15 of 16
+encoder and logistic regression 0.691 14 of 16
+```
+
+</details>
+
+*Why:* The first line is the training and held-out paragraphs (165 and 55) and the most common lesson of the training part, which the flat guess names. The flat guess is right for 0.145 of the paragraphs (8 of 55) and 2 of the 16 questions. TF-IDF and the encoder both get 0.691 of the paragraphs (38 of 55), and 15 and 14 of the 16 questions: a tie, one question apart. Over 20 other splits of the paragraphs (the optional cell) both heads have a median of 0.727 on the held-out paragraphs, 0.655 to 0.782 for TF-IDF and 0.655 to 0.818 for the encoder, and a median of 14 of 16 questions; the encoder was higher in 12 splits and lower in 7. A tie means that the baseline, which needs no download and runs in a blink, is the one to keep until something beats it by more than the splits move. Unit 2 showed the encoder close a paraphrase that shares one word; unit 4 shows that, for naming the lesson of a paragraph, the words are enough. Whether embeddings win at finding the paragraph that answers a question is a test for the retrieval lesson.
+
+<Aside type="tip" title="Remember">
+
+- A model reads tokens, not words: a rare word or a number is cut into several pieces, and a line of code costs many.
+- An embedding is a list of numbers for a text; cosine similarity compares two of them, and with vectors of length 1 it is the dot product.
+- Attention lets every token mix in the vectors of the others, so one word gets different vectors in different sentences.
+- Fit the cheap baseline first; a pretrained encoder with a head is worth its download only if it beats the baseline on held-out text.
+- Keep text the model never fitted (the 16 questions) for the last look, and read a one-question gap as a tie.
+
+**Common trap:** a pretrained model is always better than counting words. On these 220 paragraphs it tied.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-text-embeddings-and-transformers-1">
+
+**Finish it** Count the pieces of a SQL sentence. Take the sentence below, make its tokens with the tokenizer of unit 1, and put two numbers in the list `answer_1`: how many tokens it has, and how many of them are continuation pieces, the ones that start with `##`. Expected: `answer_1` is a list of two whole numbers.
+
+```python
+sentence = "Customer 141 placed orders 2673 and 2744."
+pieces = tokenizer.tokenize(sentence)                                        # given
+answer_1 = None  # replace None with [number of tokens, number of pieces that start with ##]
+```
+
+<details>
+<summary>Hint</summary>
+
+A continuation piece is a string that starts with the two characters `##`. Count them with a loop or with `str.startswith`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [len(pieces), sum(piece.startswith("##") for piece in ...)]
+```
+
+</details>
+
+<Solution>
+
+```python
+sentence ="Customer 141 placed orders 2673 and 2744."
+pieces = tokenizer.tokenize(sentence)
+answer_1 = [len(pieces), sum(piece.startswith("##") for piece in pieces)]
+```
+
+[10, 2]: the sentence has 7 words and 10 tokens. The tokenizer keeps `customer`, `placed` and `orders` whole and cuts the numbers `2673` and `2744` into `267`, `##3` and `274`, `##4`, so two pieces start with `##`. A long number costs several tokens.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-text-embeddings-and-transformers-2">
+
+**On your own** Before you start, say in one sentence what you expect: does a question land next to a paragraph of its own lesson more often than the 1 in 8 of a blind guess? Then write the cell yourself, in the empty cell of the notebook, a nearest-neighbor rule: embed every training paragraph (`vectors_train`) and every question (`vectors_q`) as in unit 4, give each question the lesson of the training paragraph with the highest cosine, and give each held-out paragraph (`vectors_test`) the lesson of its nearest training paragraph. Put two numbers in the list `answer_2`: the questions it gets right, out of 16, and its accuracy on the held-out paragraphs, rounded to 3 decimals. Expected: `answer_2` is a list of two numbers, a whole number up to 16 and a share between 0 and 1.
+
+<details>
+<summary>Hint</summary>
+
+The vectors have length 1, so `vectors_q @ vectors_train.T` holds the cosine of every question with every training paragraph. `argmax(axis=1)` gives the number of the closest one, and `train_lesson` turns it back into a lesson.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+nearest_q = (vectors_q @ vectors_train.T).argmax(axis=1)
+...
+```
+
+</details>
+
+<Solution>
+
+```python
+nearest_q = (vectors_q @ vectors_train.T).argmax(axis=1)
+nearest_t = (vectors_test @ vectors_train.T).argmax(axis=1)
+answer_2 = [int(sum(train_lesson[i] == lesson for i, lesson in zip(nearest_q, question_lesson))),
+            round(float(np.mean([train_lesson[i] for i in nearest_t] == np.array(test_lesson))), 3)]
+```
+
+[15, 0.655]: the nearest training paragraph names the right lesson for 15 of the 16 questions and for 0.655 of the 55 held-out paragraphs (36 of them). The rule fits nothing, and it lands close to the two logistic heads of unit 4: 0.691 on the paragraphs for both, and 15 and 14 of 16 on the questions.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a colleague's model scores 0.69 on held-out paragraphs, and a TF-IDF with a logistic regression scores 0.69 on the same paragraphs. Which do you ship, and what would change your mind?
+
+   <details>
+   <summary>answer</summary>
+
+   The baseline: it costs less and ties. A gap larger than the one between splits, or a held-out set of questions the baseline gets wrong in a way that matters, would change the choice.
+
+   </details>
+
+<Exercise id="ml-engineer-text-embeddings-and-transformers-3">
+
+**Spot the flaw** A colleague wants one vector for each lesson, to send a question to the nearest lesson. The code below encodes the whole text of each lesson in one call. Change it so that a lesson's vector is the mean of the vectors of its paragraphs, scaled back to length 1, and put the number of the 16 questions whose nearest lesson vector is the right lesson in `answer_3`. Expected: `answer_3` is a whole number from 0 to 16.
+
+```python
+lesson_vectors = model.encode([" ".join(text for slug, text in paras if slug == lesson) for lesson in LESSONS])
+nearest = (vectors_q @ lesson_vectors.T).argmax(axis=1)
+answer_3 = int(sum(LESSONS[i] == lesson for i, lesson in zip(nearest, question_lesson)))
+# change how lesson_vectors is made: the mean of the paragraph vectors, scaled back to length 1
+```
+
+<details>
+<summary>Hint</summary>
+
+How many word pieces can the model read in one call? Print `model.max_seq_length` and compare it with the number of tokens of a whole lesson.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+vectors_paras = model.encode(texts)
+lesson_vectors = ...                                                         # one row for each lesson: the mean of its paragraphs' vectors
+lesson_vectors = lesson_vectors / np.linalg.norm(lesson_vectors, axis=1, keepdims=True)
+```
+
+</details>
+
+<Solution>
+
+```python
+vectors_paras = model.encode(texts)
+lesson_vectors = np.stack([vectors_paras[[i for i, slug in enumerate(labels) if slug == lesson]].mean(axis=0) for lesson in LESSONS])
+lesson_vectors = lesson_vectors / np.linalg.norm(lesson_vectors, axis=1, keepdims=True)
+nearest = (vectors_q @ lesson_vectors.T).argmax(axis=1)
+answer_3 = int(sum(LESSONS[i] == lesson for i, lesson in zip(nearest, question_lesson)))
+```
+
+The answer is 13, and the flawed code gets 10. The model card says "By default, input text longer than 256 word pieces is truncated", and a lesson holds about 900 words, so the vector of each lesson describes only its first paragraphs. The mean of the paragraph vectors uses every paragraph and puts 13 of the 16 questions next to the right lesson.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what a token is, compare two texts by cosine similarity, say what attention does to a word's vector, and test a pretrained encoder against a TF-IDF baseline on held-out text.*
+Test: Exercise ml-engineer-text-embeddings-and-transformers-2, done from the notebook without opening the hints.
+
+The pattern to remember: **text becomes tokens, tokens become vectors, and vectors that point the same way mean the same thing; always beat a word-count baseline before you believe an embedding.** The next lesson, *Calling LLM APIs and getting structured output* (MLE8), uses a model that writes text instead of reading it.

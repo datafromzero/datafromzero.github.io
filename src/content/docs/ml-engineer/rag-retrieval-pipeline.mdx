@@ -1,0 +1,419 @@
+---
+id: ml-engineer-rag-retrieval-pipeline
+title: 'A retrieval pipeline: chunk, embed, search, answer with citations'
+short_title: Retrieval pipeline
+description: 'Build a small retrieval-augmented system: chunk documents, embed them, search, and answer with citations or abstain.'
+stage: ml-engineer
+order: 90
+level: advanced
+duration: 38
+objectives:
+  - Chunk documents and explain the size trade-off
+  - Embed chunks and run a similarity search
+  - Pass retrieved text to a model and return an answer with citations
+  - Make the system abstain when nothing relevant is found
+prerequisites:
+  - ml-engineer-text-embeddings-and-transformers
+  - ml-engineer-llm-apis-and-structured-output
+notebook: notebooks/ml-engineer/ml-engineer-rag-retrieval-pipeline.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: Lewis et al., Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (arXiv, accessed 2026-11-25)
+    url: https://arxiv.org/abs/2005.11401
+  - title: 'Model card: sentence-transformers/all-MiniLM-L6-v2 (accessed 2026-11-25)'
+    url: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+  - title: 'OWASP Gen AI Security Project: LLM01:2025 Prompt Injection (accessed 2026-11-25)'
+    url: https://genai.owasp.org/llmrisk/llm01-prompt-injection/
+status: draft
+---
+
+TODO(owner): Environment: a Colab notebook with no key and no cost (D60). Models, both open and pinned to a revision: `sentence-transformers/all-MiniLM-L6-v2` (Apache 2.0, 22.7 million numbers) and `Qwen/Qwen2.5-1.5B-Instruct` (Apache 2.0, 1.54 billion numbers, about 3.1 GB to download), with `transformers` 5.24.1, `sentence-transformers` 6.3.0 and `pydantic` 2.14.4 pinned in the setup cell. The corpus is the site's own lessons, as you decided: eight published SQL lessons from the release tag `v1.0.0`. Run on Linux with Python 3.13.18 and PyTorch 2.15.0 (CPU build), two threads, twice with the same text; not run on Colab or a GPU, where a token may move. The 16 questions, their answer phrases and the patterns that a correct answer must match are written for the lesson (a string check misses a right answer in other words and passes a wrong one that uses the words; lesson MLE10 says so). Stub changes: the OWASP project page, which holds no claim, gives way to its LLM01 page; the stub's picture of artifacts at each stage is not drawn; the Sentence Transformers home page is replaced by the model card that holds the 256-token claim. Set `reviewed` when you publish.
+
+## The question
+
+A learner types a question into the help box of the site, and the answer is somewhere in eight lessons. A model that has never read them will guess; a model that is given the right paragraphs can answer from them and say where it read them. *How do you cut the lessons into pieces, find the right pieces, answer with citations, and refuse when the lessons do not say?* Four of the 16 questions the notebook uses, and two it must refuse:
+
+| question | answered by |
+|---|---|
+| What is a CTE? | ctes |
+| Why does BETWEEN miss orders placed on the last day of a month? | dates-and-time |
+| What does CASE return when no WHEN is true and there is no ELSE? | case-expressions |
+| How do I find customers who never placed an order? | left-join-anti-join |
+| What is the capital of Australia? | no lesson |
+| What is a self join? | no lesson |
+
+By the end you can say how chunk size changes what a search finds and what it costs, run a similarity search, check an answer's citations, and stop a question that nothing in the corpus matches.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Calling LLM APIs and getting structured output* (MLE8) a prompt asked for JSON and a schema checked the reply. Unit 3 does the same for an answer and its citations. In *Text as numbers* (MLE7) the encoder turned paragraphs into 384 numbers and cosine compared them; unit 2 searches with exactly that.
+
+**Diverge.** There the model decided from the question alone. Here it is handed text it did not choose, and that text is the part of the prompt you cannot trust.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE7, the encoder reads at most how many tokens of a text, and what happens to the rest?
+
+   <details>
+   <summary>answer</summary>
+
+   256 word pieces; the rest is cut off and the vector does not describe it.
+
+   </details>
+
+2. In lesson MLE8, what does `Route.model_validate_json(text)` do with a reply that is not JSON?
+
+   <details>
+   <summary>answer</summary>
+
+   It raises a `ValidationError` whose first error has the type `json_invalid`.
+
+   </details>
+
+## The big idea
+
+Retrieval-augmented generation finds the few paragraphs that match a question, gives them to a model as numbered sources, and checks that the answer and its citations stay inside them.
+
+## Learn by doing
+
+About 38 minutes, 4 new ideas: chunk size, search, an answer with citations, a refusal. The setup cells read eight published lessons of the SQL stage from the release tag `v1.0.0` (the corpus of lesson MLE7: 220 paragraphs), loaded the encoder `all-MiniLM-L6-v2` and the model `Qwen2.5-1.5B-Instruct` with its `chat` function, and listed 16 questions and 8 traps. Each question holds the lesson that answers it, phrases of the paragraph that holds the answer (a chunk with one of them has the answer) and patterns that a correct answer must match. A helper `make_chunks` joins whole paragraphs into chunks, and `hits` counts the questions whose answer phrase is among the top `k` chunks. The cell of unit 3 asks the model 8 questions: about 2 minutes on a free CPU.
+
+<OpenInColab />
+
+### 1. Chunk size
+
+**Idea.** A *chunk* is the piece of a document that is embedded and retrieved whole. The retrieval-augmented generation of Lewis et al. pairs a language model with a store of documents that it can look up, which the abstract calls non-parametric memory. How big the pieces are is your choice. The encoder reads at most 256 tokens of a text; the model card says that longer input is truncated.
+
+**Try it:** cut the eight lessons into chunks of about 40, 120 and 400 words and print, for each size, the number of chunks, the mean tokens of a chunk, how many chunks are longer than 256 tokens, how many of the 16 questions find the phrase of their answer in the top 3 chunks, and the mean tokens of those 3 chunks together.
+
+```python
+for target in [40, 120, 400]:
+    chunks = make_chunks(target)
+    vectors = emb.encode([chunk[2] for chunk in chunks])
+    sizes = [len(emb.tokenizer.tokenize(chunk[2])) for chunk in chunks]
+    top3 = np.argsort(-(emb.encode(QUESTIONS) @ vectors.T), axis=1)[:, :3]
+    context = statistics.mean(sum(sizes[i] for i in row) for row in top3)
+    print(target, len(chunks), round(statistics.mean(sizes)), sum(size > emb.max_seq_length for size in sizes), hits(chunks, vectors), round(context))
+```
+
+**Predict:** Which size finds the most answers, and what does it cost?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+40 199 51 0 8 164
+120 80 127 0 12 375
+400 22 461 21 11 1364
+```
+
+</details>
+
+*Why:* The columns are the target words, the chunks, the mean tokens of a chunk, the chunks over 256 tokens, the questions found, and the tokens of the top 3. Chunks of 40 words find 8 of the 16, because the answer is often split across two small pieces. Chunks of 120 words find 12 and cost 375 tokens of context. Chunks of 400 words find 11, fewer although each holds more text, because 21 of the 22 are longer than 256 tokens, so the encoder never reads the end of them, and they cost 1,364 tokens of context, 3.6 times as much. The middle size wins here; the numbers are for these 16 questions and these lessons, not a rule.
+
+### 2. Embed and search
+
+**Idea.** Embed every chunk once and keep the matrix of vectors. To search, embed the question and take the cosine with every chunk, which for vectors of length 1 is one matrix product, and keep the `k` largest. The cosine is the score that unit 4 will use.
+
+**Try it:** with chunks of 120 words, print the 3 best chunks for one question with their cosines, then count over all 16 questions how often the best chunk comes from the lesson that answers and how often the top 3 hold the phrase.
+
+```python
+CHUNKS = make_chunks(120)
+VECTORS = emb.encode([chunk[2] for chunk in CHUNKS])                          # one row of 384 numbers for each chunk, computed once
+
+
+def search(question, k=3):
+    """The k chunks most similar to the question, as (cosine, number of the chunk)."""
+    scores = VECTORS @ emb.encode([question])[0]
+    return [(round(float(scores[i]), 3), int(i)) for i in np.argsort(-scores)[:k]]
+
+
+for score, i in search("How do I find customers who never placed an order?"):
+    print(score, CHUNKS[i][0], "|", CHUNKS[i][1], "|", CHUNKS[i][2][:60])
+first_right = sum(CHUNKS[search(question, 1)[0][1]][0] == lesson for question, lesson, _, _ in DEV)
+print(first_right, hits(CHUNKS, VECTORS))
+```
+
+**Predict:** What is the cosine of the best chunk, and from which lesson is it? Over the 16 questions, how often is the best chunk from the right lesson, and how often does the top 3 hold the phrase of the answer?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.589 left-join-anti-join |  | An inner join (S20) drops the rows that found no pair, and s
+0.519 left-join-anti-join | 1. LEFT JOIN keeps the left table's lonely rows | Try it: first what an inner join keeps. Expected: 1 row, 2 c
+0.477 left-join-anti-join | 3. Where the condition goes: ON or WHERE | ON decides which rows pair. WHERE runs afterward, on the fin
+15 12
+```
+
+</details>
+
+*Why:* The three lines are the cosine, the lesson, the section and the start of a chunk: the best chunk, 0.589, is the paragraph of the left-join lesson that says an inner join drops the rows with no partner, and all three come from that lesson. The last line is two counts. The best chunk is from the right lesson for 15 of the 16 questions, but a chunk of that lesson holds the phrase of the answer for only 12 of them in the top 3: finding the right lesson is easier than finding the right paragraph.
+
+### 3. Answer from the chunks, with citations
+
+**Idea.** Give the model the best chunks as numbered sources, tell it to answer only from them, and ask for JSON with the answer and the numbers of the sources it used, so that code can check the reply as in lesson MLE8. The retrieved text comes from outside the prompt: OWASP's page on prompt injection says that indirect injections occur when a model accepts input from external sources, such as websites or files, that RAG does not fully mitigate prompt injection, and that expected output formats should be defined and validated. So the prompt names the sources as the only material, and the code checks the JSON and the cited numbers.
+
+**Try it:** run the pipeline on one question for each lesson, 8 in all, and print for each answer whether the JSON is valid with cited numbers among the sources shown, the cited numbers, and whether the answer matches the patterns; then print the answers that do not.
+
+```python
+class Cited(BaseModel):
+    answer: str | None                                                        # null when the sources do not hold the answer
+    sources: list[int]
+
+
+SYSTEM = ("Answer the question using only the numbered sources. Reply with JSON only, like {\"answer\": \"one or two sentences\", \"sources\": [1]}, "
+          "where sources lists the numbers of the sources you used. If the sources do not contain the answer, reply {\"answer\": null, \"sources\": []}.")
+
+
+def answer(question, k=3):
+    """Search, build the prompt from the k best chunks, ask the model, and check what comes back."""
+    found = search(question, k)
+    sources = "\n".join(f"[{n}] {CHUNKS[i][2]}" for n, (score, i) in enumerate(found, start=1))
+    reply = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": f"Sources:\n{sources}\n\nQuestion: {question}"}], max_new_tokens=100)
+    try:
+        parsed = Cited.model_validate_json(reply["text"])
+        ok = all(1 <= n <= k for n in parsed.sources)                         # every cited number is one of the numbers shown
+        return {**reply, "found": found, "answer": parsed.answer, "sources": parsed.sources, "valid": ok}
+    except ValidationError:
+        return {**reply, "found": found, "answer": None, "sources": [], "valid": False}
+
+
+chosen = list(range(0, 16, 2))                                                # the first question of each lesson
+results = [answer(DEV[i][0]) for i in chosen]
+
+
+def matches(i, result):
+    """True when the answer holds the words that a correct answer must match."""
+    return result["answer"] is not None and all(re.search(pattern, result["answer"], re.I) for pattern in DEV[i][3])
+
+
+for i, r in zip(chosen, results):
+    print(r["valid"], r["sources"], matches(i, r))
+print(sum(r["valid"] for r in results), sum(matches(i, r) for i, r in zip(chosen, results)))
+for i, r in zip(chosen, results):
+    if not matches(i, r):
+        print(DEV[i][0], "->", r["answer"])
+```
+
+**Predict:** How many of the 8 replies will be valid JSON whose cited numbers are among the sources shown, and how many will contain the words that a correct answer must match?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+True [1] True
+True [1] True
+True [1] True
+True [1] False
+True [1, 2, 3] False
+True [1] True
+True [1] True
+True [1] True
+8 6
+How do I find customers who never placed an order? -> An inner join (S20) drops the rows that found no pair, and says nothing: the walk-in order 1335, the unsold Pumpkin Spice Latte. Sometimes those rows are exactly what you are looking for.
+How can I add a total beside every row without losing rows? -> Each small step in the process ensures that no rows are lost and that the numbers add back up correctly.
+```
+
+</details>
+
+*Why:* The first 8 lines give, for each question, whether the JSON is valid with cited numbers among the sources shown, the cited numbers, and whether the answer matches the patterns; the 9th line sums the first two columns: all 8 replies are valid and 6 match. The two that do not are the question about customers who never placed an order, answered with a sentence of the inner-join lesson that says unpaired rows disappear, and the question about a total beside every row, answered with a sentence about checking that the numbers add up, citing all three sources. A small model answers from the text it is given, and the text can be the wrong paragraph.
+
+### 4. Abstain when nothing is relevant
+
+**Idea.** A system that answers every question will answer the ones it should not. The search already holds a signal: the cosine of the best chunk. When even the best chunk scores below a threshold, the system refuses without calling the model. The threshold is chosen on the 16 real questions and the rule is stated first: the lowest best-chunk cosine among them, rounded down to 0.05, so that no real question is refused.
+
+**Try it:** print the threshold, the lowest and highest best-chunk cosines of the 16 questions, and the best-chunk cosine of each of the 8 trap questions, from the lowest, with whether the threshold stops it.
+
+```python
+best_dev = [search(question, 1)[0][0] for question in QUESTIONS]
+best_trap = [(search(question, 1)[0][0], question, kind) for question, kind in TRAPS]
+THRESHOLD = math.floor(min(best_dev) * 20) / 20                               # the lowest cosine of a real question, rounded down to 0.05
+print(THRESHOLD, round(min(best_dev), 3), round(max(best_dev), 3))
+for score, question, kind in sorted(best_trap):
+    print(score, kind, score < THRESHOLD, question)
+
+
+def answer_or_abstain(question, k=3):
+    """Refuse without calling the model when even the best chunk is a poor match."""
+    if search(question, 1)[0][0] < THRESHOLD:
+        return {"answer": None, "sources": [], "abstained": True}
+    return {**answer(question, k), "abstained": False}
+
+
+print(sum(score < THRESHOLD for score, _, _ in best_trap), "of", len(best_trap), "traps refused")
+```
+
+**Predict:** At that threshold, how many of the 8 trap questions are refused before the model is called, and which get through?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.4 0.409 0.724
+0.132 far True How do I install pandas?
+0.153 far True What is the capital of Australia?
+0.205 far True How do I schedule a pipeline to run every night?
+0.251 near True What is the difference between UNION and UNION ALL?
+0.295 near True How do I create an index on a column?
+0.307 far True What does a p-value of 0.03 mean?
+0.345 near True How do I rank rows with RANK()?
+0.437 near False What is a self join?
+7 of 8 traps refused
+```
+
+</details>
+
+*Why:* The threshold is 0.40, from a lowest cosine of 0.409 among the real questions (the highest is 0.724). Seven of the 8 traps score below it and are refused with no call to the model, the four far from SQL and three of the four that use SQL words. The one that gets through is *What is a self join?* at 0.437: it uses the words of the join lessons, and no lesson of the eight is about self joins. A cosine cannot tell a question about a missing topic from a question about a present one when they share words. Whether the model then refuses by itself is what lesson MLE10 measures.
+
+<Aside type="tip" title="Remember">
+
+- Chunk size is a trade: small chunks split answers, large chunks are cut by the encoder and cost many tokens; measure it on questions with known answers.
+- A search is the cosine of the question with every chunk, keeping the `k` largest; the right lesson is easier to find than the right paragraph.
+- The retrieved text is outside input: tell the model to use only the sources, and validate the JSON and the citations in code.
+- A refusal threshold is chosen on real questions first, and a trap that uses the corpus's words can still pass it.
+
+**Common trap:** the biggest chunks hold the most text, so they find the most answers. Here they found fewer than the middle size, at 3.6 times the tokens.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-rag-retrieval-pipeline-1">
+
+**A smaller chunk.** Cut the corpus into chunks of about 80 words with `make_chunks(80)` and embed them as in unit 1. Put two numbers in the list `answer_1`: the number of chunks, and how many of the 16 questions have the phrase of the answer among their top 3 chunks. Expected: `answer_1` is a list of two whole numbers.
+
+```python
+chunks_80 = make_chunks(80)
+vectors_80 = emb.encode([chunk[2] for chunk in chunks_80])                    # given
+answer_1 = None  # replace None with [number of chunks, hits for the top 3 chunks]
+```
+
+<details>
+<summary>Hint</summary>
+
+`hits(chunks, vectors)` takes the chunks and their vectors, and its default is the top 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [len(chunks_80), hits(..., ...)]
+```
+
+</details>
+
+<Solution>
+
+```python
+chunks_80 = make_chunks(80)
+vectors_80 = emb.encode([chunk[2] for chunk in chunks_80])
+answer_1 = [len(chunks_80), hits(chunks_80, vectors_80)]
+```
+
+[124, 12]: chunks of about 80 words give 124 chunks, and 12 of the 16 questions find the phrase of their answer in the top 3, as many as with the chunks of 120 words in unit 1.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-rag-retrieval-pipeline-2">
+
+**How many answers within k.** Before you start, say in one sentence what you expect: as k grows from 1 to 10, the hits can only stay or rise. Why? Then write the cell yourself, in the empty cell of the notebook: with the chunks of 120 words (`CHUNKS` and `VECTORS`), put the number of the 16 questions that have the phrase of the answer among their top 1, top 5 and top 10 chunks in the list `answer_2`. Expected: `answer_2` is a list of three whole numbers from 0 to 16, not decreasing.
+
+<details>
+<summary>Hint</summary>
+
+`hits` has a third argument, `k`. A list comprehension over `(1, 5, 10)` gives the three numbers.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_2 = [hits(CHUNKS, VECTORS, k) for k in ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_2 = [hits(CHUNKS, VECTORS, k) for k in (1, 5, 10)]
+```
+
+[9, 12, 13]: the phrase is in the top chunk for 9 questions, in the top 5 for 12 and in the top 10 for 13. The count can only stay or rise as k grows, because the top 5 contain the top 1. Every extra chunk is more tokens in the prompt.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: your pipeline answers a question about a topic that is not in the corpus, with a confident sentence and a citation. Name two places where you can stop that, and say what each one reads.
+
+   <details>
+   <summary>answer</summary>
+
+   Before the model: a threshold on the cosine of the best chunk. After it: the validation of the reply, with a rule that an answer needs a citation and that the cited source holds it. The prompt can also tell the model to reply with a null answer when the sources do not hold the answer.
+
+   </details>
+
+<Exercise id="ml-engineer-rag-retrieval-pipeline-3">
+
+**Spot the flaw.** A colleague reports that the citations are right for every answer of unit 3, because every cited number is one of the numbers of the sources shown. Change the count so that an answer counts only when at least one source it cites holds a phrase of the answer (`DEV[i][2]`), and put the number of such answers in `answer_3`. Expected: `answer_3` is a whole number from 0 to 8.
+
+```python
+cited_ok = sum(r["valid"] and len(r["sources"]) > 0 for r in results)                # colleague: "every cited number is one of the sources shown"
+answer_3 = cited_ok
+# change the count: an answer counts only when a source it cites holds a phrase of the answer
+```
+
+<details>
+<summary>Hint</summary>
+
+For each answer, `r["found"][n - 1]` is the (cosine, chunk number) of the source the model calls `n`, and `CHUNKS[chunk number][2]` is its text.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+supported = 0
+for i, r in zip(chosen, results):
+    cited_text = " ".join(CHUNKS[r["found"][n - 1][1]][2] for n in r["sources"] if 1 <= n <= len(r["found"]))
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+supported = 0
+for i, r in zip(chosen, results):
+    cited_text = " ".join(CHUNKS[r["found"][n - 1][1]][2] for n in r["sources"] if 1 <= n <= len(r["found"]))
+    supported += any(phrase in cited_text for phrase in DEV[i][2])
+answer_3 = supported
+```
+
+The answer is 4. All 8 answers cite numbers that exist, which is what the flawed count measures, but only 4 of them cite a source that holds the phrase of the answer. A valid citation is a pointer; whether it leads to the answer is a second check.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can cut documents into chunks and show how the size changes what a search finds and costs, run a cosine search, get an answer with checked citations from a model, and make the system refuse when the best chunk is a poor match.*
+Test: Exercise ml-engineer-rag-retrieval-pipeline-2, done from the notebook without opening the hints.
+
+The pattern to remember: **chunk, embed, search, answer only from the sources, check the citations, refuse below a threshold.** The next lesson, *Evaluating LLM and RAG systems* (MLE10), measures how well this system does all of that.

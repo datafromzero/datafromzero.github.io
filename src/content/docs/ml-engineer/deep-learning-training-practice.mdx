@@ -1,0 +1,446 @@
+---
+id: ml-engineer-deep-learning-training-practice
+title: 'Training deep models well: regularization and transfer learning'
+short_title: Training deep models
+description: Control overfitting with dropout and early stopping, tune batch size and learning rate, and start from a pretrained model instead of from scratch.
+stage: ml-engineer
+order: 60
+level: advanced
+duration: 36
+objectives:
+  - Add dropout and early stopping and compare validation curves
+  - Explain batch size and learning rate effects
+  - Reuse a pretrained model for a small dataset
+  - Keep a single-number metric and compare with a baseline
+prerequisites:
+  - ml-engineer-neural-networks-and-training-loop
+datasets:
+  - app-events
+notebook: notebooks/ml-engineer/ml-engineer-deep-learning-training-practice.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'PyTorch documentation: torch.nn.Dropout, version 2.15 (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/docs/2.15/generated/torch.nn.Dropout.html
+  - title: 'PyTorch documentation: torch.optim.SGD, version 2.15 (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/docs/2.15/generated/torch.optim.SGD.html
+  - title: 'PyTorch documentation: torch.nn.Module, version 2.15 (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/docs/2.15/generated/torch.nn.Module.html
+  - title: 'PyTorch tutorials: Transfer learning for computer vision (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
+  - title: 'torchvision documentation: resnet18 (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html
+  - title: 'The Oxford-IIIT Pet Dataset, Parkhi, Vedaldi, Zisserman and Jawahar (accessed 2026-11-25)'
+    url: https://www.robots.ox.ac.uk/~vgg/data/pets/
+  - title: 'Google for Developers: Rules of Machine Learning, rule 4 (accessed 2026-11-25)'
+    url: https://developers.google.com/machine-learning/guides/rules-of-ml
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: a Colab notebook (D60); a CPU runtime is enough and a GPU would not change the numbers (`DEVICE = "cpu"`, one thread, seeded). Run twice with the same text on Linux with Python 3.13.18, PyTorch 2.15.0 (CPU build), torchvision 0.29.2, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3 and DuckDB 2.0.0; not run on Colab, a GPU, Windows or macOS, so a last digit may move. Photos, as your note of 2026-11-23 asks: six breeds of the Oxford-IIIT Pet dataset, CC BY-SA 4.0 with "the copyright remains with the original owners of the images" (its page). The two WebP files (`public/images/ml-engineer/`, plain `img` tags with width, height and lazy loading) come from `scripts/charts/mle-batch-2.py`, which runs the notebook's own cells. Please confirm that ShareAlike covers the photos and not the lesson text. The license of the ImageNet weights that `torchvision` downloads is not stated on the page I opened. The six breeds are the first six of the dataset's list. Stub changes: the Hugging Face and "Learn the basics" sources are dropped (no claim rests on them), and the stub's visual of curves is the numbers of units 1 to 3. Duration 30 became 36 for the word count. Set `reviewed` when you publish.
+
+## The question
+
+The network of lesson MLE5, 64 neurons learning from 500 people, ended with a training loss of 0.330 and a validation loss of 0.874, worse than the 0.689 of a flat guess. A second teammate has a different problem: 60 photos of six breeds of dog and cat, far too few to teach a network to read pixels. *How do you make a network memorize less, and how do you start when you have almost nothing to learn from?* The people come from lesson DS3 and the photos from the Oxford-IIIT Pet dataset:
+
+| breed | photos to learn from | photos to test |
+|---|---:|---:|
+| Abyssinian | 10 | 30 |
+| American Bulldog | 10 | 30 |
+| American Pit Bull Terrier | 10 | 30 |
+| Basset Hound | 10 | 30 |
+| Beagle | 10 | 30 |
+| Bengal | 10 | 30 |
+
+<img src="/images/ml-engineer/pets-samples.webp" width="768" height="256" loading="lazy" decoding="async" alt="Twelve training photos in two rows, one column for each of the six breeds from left to right: Abyssinian, American Bulldog, American Pit Bull Terrier, Basset Hound, Beagle and Bengal. The photos differ in angle, distance and light." />
+
+*The first and the third training photo of each breed, from left to right: Abyssinian, American Bulldog, American Pit Bull Terrier, Basset Hound, Beagle, Bengal. Photos: Oxford-IIIT Pet dataset, CC BY-SA 4.0; the copyright remains with the original owners.*
+
+By the end you can add dropout and early stopping to the loop, read what batch size and learning rate change, and put a new last layer on a pretrained network, each time with one number and a baseline beside it.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Overfitting and cross-validation*](/data-scientist/cross-validation-and-overfitting/) (DS5) overfitting showed as a gap between the score on the rows a model learned from and on rows it had not seen. A network's two loss curves show the same gap, epoch by epoch.
+
+**Diverge.** There the fix was a better test. Units 1 and 2 change the training instead, and unit 4 changes where it starts.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE5, what does the lowest point of the validation loss curve mark?
+
+   <details>
+   <summary>answer</summary>
+
+   The epoch where the network does best on people it does not learn from. After it the network starts to memorize its own people.
+
+   </details>
+
+2. In lesson DS2, which one number scored the day-7 model on held-out people, and what does 0.5 mean for it? Write the call that computes it from `y_val` and a column of chances.
+
+   <details>
+   <summary>answer</summary>
+
+   The ROC AUC; 0.5 is the score of a flat guess. `roc_auc_score(y_val, chances)`.
+
+   </details>
+
+## The big idea
+
+Regularization makes memorizing harder, early stopping picks the epoch with the validation people, and a pretrained start brings what 60 photos could not teach.
+
+## Learn by doing
+
+About 36 minutes, 4 new ideas: dropout, early stopping, batch size with learning rate, a pretrained start. The setup cells built the table of lesson DS3, the track's split with the fitting and validation people of lesson DS4 (10,021 and 3,341; the test part is not scored here), the 19 columns of lesson MLE1 and the 500-person pilot of lesson MLE5. A logistic regression on the same 500 people has a validation AUC of 0.677; fitted on all 10,021 it has 0.699. The training function below is the one of MLE5 with the lines this lesson explains marked `NEW`; run it as it is.
+
+<OpenInColab />
+
+```python
+def fit_network(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED, dropout=0.0, weight_decay=0.0, patience=None):
+    """Train a network with one hidden layer; return it and the loss on the fitting and validation people after each epoch."""
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(),
+                          nn.Dropout(dropout),                             # NEW: switches off a random share of the hidden outputs
+                          nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay)    # NEW: weight_decay is used in Exercise 1
+    history, best, best_state, waited = [], float("inf"), None, 0
+    for epoch in range(epochs):
+        model.train()                                                      # NEW: training mode
+        order = torch.randperm(len(Xa))
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()
+            loss_fn(model(Xa[rows]), ya[rows]).backward()
+            optimizer.step()
+        model.eval()                                                       # NEW: evaluation mode, to measure the loss
+        with torch.no_grad():
+            history.append((float(loss_fn(model(Xa), ya)), float(loss_fn(model(Xv), yv))))
+        if history[-1][1] < best:                                          # NEW: remember the numbers of the lowest validation loss so far
+            best, best_state, waited = history[-1][1], copy.deepcopy(model.state_dict()), 0
+        else:
+            waited += 1
+            if patience is not None and waited >= patience:                # NEW: stop after `patience` epochs without a new lowest
+                break
+    if patience is not None:
+        model.load_state_dict(best_state)                                  # NEW: give back the numbers of the lowest point
+    return model, history
+```
+
+### 1. Dropout
+
+**Idea.** *Regularization* is any change that makes memorizing harder. *Dropout* is one: at every training step it switches off a random share `p` of a layer's outputs, chosen again each time. The first `NEW` line puts `nn.Dropout(dropout)` after the hidden layer.
+
+**Try it:** train the 64-neuron network on the 500 people for 300 epochs with no dropout and with half of the hidden outputs switched off, and print the lowest validation loss, then the loss on the 500 people and on the validation people at epoch 300.
+
+```python
+for p in [0.0, 0.5]:
+    model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, dropout=p)
+    validation = [pair[1] for pair in history]
+    print(p, round(min(validation), 3), round(history[-1][0], 3), round(history[-1][1], 3))
+```
+
+**Predict:** Will dropout lower the lowest validation loss of the 300 epochs, the validation loss at epoch 300, or both?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.0 0.638 0.33 0.874
+0.5 0.639 0.456 0.717
+```
+
+</details>
+
+*Why:* The columns are the dropout, the lowest validation loss, and the two losses at epoch 300. Dropout left the lowest point where it was, 0.638 and 0.639, and lowered the end: the validation loss at epoch 300 went from 0.874 to 0.717, while the loss on the 500 people rose from 0.330 to 0.456. Dropout did not make the best network better. It made the network memorize more slowly, so the end of training is less bad. The optional cell with 20 other pilots of 500 people agrees: dropout gave the lower loss at epoch 300 in all 20 (median 0.689 against 0.842) and the same lowest point (0.638 for both medians).
+
+### 2. Early stopping
+
+**Idea.** *Early stopping* watches the validation loss after each epoch. When it has not reached a new lowest for `patience` epochs, training stops and the network gets back the numbers of the lowest point. These are the last three `NEW` lines of `fit_network`.
+
+**Try it:** train with `patience=10` and, as in unit 1, for all 300 epochs; score both on the validation people with the ROC AUC, next to a logistic regression fitted on the same 500 people.
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, patience=10)
+best_epoch = int(np.argmin([pair[1] for pair in history])) + 1
+long_model, _ = fit_network(Xp, yp, 64, 0.1, 300, batch=50)                    # the same network for all 300 epochs
+print(len(history), best_epoch, val_auc(model), val_auc(long_model))
+print(round(float(roc_auc_score(y_val, logit_pilot.predict_proba(prep.transform(X_val))[:, 1])), 3))
+```
+
+**Predict:** Which has the higher validation AUC, the network that stopped early or the one that trained for 300 epochs, and how does the stopped network compare with the logistic regression?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+38 28 0.681 0.613
+0.677
+```
+
+</details>
+
+*Why:* The first line is the epochs run, the epoch kept, and the two AUCs. The run stopped after 38 epochs and kept epoch 28, ten epochs earlier. Its AUC is 0.681; the same network after 300 epochs has 0.613, and a flat guess has 0.5. The logistic regression on the same 500 people, the second line, has 0.677: the stopped network ties it. Over the 20 other pilots the medians are 0.681 and 0.679, and the network was at least as high in 11 of 20. The validation people picked the epoch, so 0.681 is a little flattering; a final number needs people nothing was chosen on.
+
+### 3. Batch size and learning rate
+
+**Idea.** A *batch* is the people used for one update (lesson MLE5), and the learning rate sets the size of the step. Smaller batches give more updates in an epoch, each from fewer people. Both decide how far the network gets in a fixed number of epochs, so they are chosen together.
+
+**Try it:** train the 8-neuron network on all 10,021 fitting people for 10 epochs at six combinations, and print the batch, the learning rate, the number of updates and the validation loss.
+
+```python
+for batch in [32, 256, 1024]:
+    for lr in [0.1, 1.0]:
+        model, history = fit_network(Xf, yf, 8, lr, 10, batch=batch)
+        updates = -(-len(Xf) // batch) * 10                                    # steps taken: batches per epoch times 10 epochs
+        print(batch, lr, updates, round(history[-1][1], 3))
+```
+
+**Predict:** Which run ends with the lowest validation loss, and does one learning rate win at every batch size?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+32 0.1 3140 0.627
+32 1.0 3140 0.64
+256 0.1 400 0.638
+256 1.0 400 0.627
+1024 0.1 100 0.663
+1024 1.0 100 0.629
+```
+
+</details>
+
+*Why:* Two runs tie for the lowest, 0.627: batch 32 with 0.1 and batch 256 with 1.0. No rate wins everywhere: 0.1 is better at 32 (0.627 against 0.640) and 1.0 is better at 256 and at 1,024 (0.627 against 0.638, and 0.629 against 0.663). Ten epochs are 3,140 updates at batch 32, 400 at 256 and 100 at 1,024. Our reading is that a larger batch gives a steadier slope, which a larger step can use; a smaller batch gives more steps, which a smaller step can use. The table says only that in this run the better rate moved with the batch size.
+
+### 4. A pretrained start
+
+**Idea.** A network trained on a very large dataset has already learned numbers that read pictures. The PyTorch transfer-learning tutorial names ImageNet, 1.2 million images in 1,000 categories, and two ways to reuse it. Fine-tuning starts every number from the pretrained ones and trains the whole network. As a fixed feature extractor the network is *frozen* (its numbers do not change), its last layer is replaced by a new one with random numbers, and only that layer is trained. Here we use the second.
+
+**Try it:** train `Scratch`, a small network that starts from random numbers and reads pixels, and ResNet-18 with its ImageNet numbers frozen and a new last layer, for 200 epochs on the 60 photos. A given cell of the notebook loaded the photos (the six breeds, 10 to learn from and 30 to test for each) and defined `Scratch`, `fit_classifier` and `accuracy`; the flat guess for six equal breeds is 1 in 6, 0.167.
+
+```python
+backbone = models.resnet18(weights=WEIGHTS)                                # ResNet-18 with the numbers learned on ImageNet
+for parameter in backbone.parameters():
+    parameter.requires_grad = False                                        # freeze: these numbers stay as they are
+backbone.fc = nn.Identity()                                                # take off its last layer: 512 numbers come out for each photo
+backbone.eval()
+with torch.no_grad():
+    features_fit, features_test = backbone(images_fit), backbone(images_test)      # computed once, because nothing in the backbone learns
+torch.manual_seed(SEED)
+head = nn.Linear(512, 6)                                                   # the new last layer: the only numbers that learn
+print(sum(p.numel() for p in backbone.parameters()), sum(p.numel() for p in head.parameters()))
+fit_classifier(head, features_fit, labels_fit, 200, 0.01)
+torch.manual_seed(SEED)
+scratch = Scratch()
+fit_classifier(scratch, images_fit, labels_fit, 200, 0.003, batch=20)
+print("pretrained, new last layer", accuracy(head, features_test, labels_test), accuracy(head, features_fit, labels_fit))
+print("from nothing", accuracy(scratch, images_test, labels_test), accuracy(scratch, images_fit, labels_fit))
+```
+
+**Predict:** On the 180 test photos, which network scores higher and by how much, and does either score 1.0 on the 60 photos it learned from?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+11176512 3078
+pretrained, new last layer 0.833 1.0
+from nothing 0.233 1.0
+```
+
+</details>
+
+*Why:* The first line counts numbers: the frozen ResNet-18 has 11,176,512, and the new last layer has 3,078 (512 inputs times 6 breeds, plus 6 biases), the only ones the 60 photos have to teach. The pretrained network scores 0.833 on the test photos and `Scratch` 0.233, against the flat guess of 0.167; both score 1.0 on the photos they learned from, so only the test photos show the difference. The 20 other draws of 10 training photos in the optional cell give medians of 0.878 for the pretrained network (0.833 to 0.922) and 0.233 for `Scratch` (0.139 to 0.300), so this run sits at the low end for the pretrained network and the gap does not depend on the draw.
+
+The notebook's picture cell draws the photos that the pretrained network gets wrong: 30 of the 180, by breed 3, 5, 11, 6, 3 and 2, in the order of the list above. The first eight of them, from left to right and then the second row:
+
+<img src="/images/ml-engineer/pets-mistakes.webp" width="512" height="256" loading="lazy" decoding="async" alt="Eight test photos in two rows of four: three Abyssinian cats and a white bulldog in the first row, and four bulldogs in the second." />
+
+*Abyssinian read as American Pit Bull Terrier; Abyssinian read as Bengal; Abyssinian read as Bengal; American Bulldog read as American Pit Bull Terrier; American Bulldog read as American Pit Bull Terrier; American Bulldog read as American Pit Bull Terrier; American Bulldog read as American Pit Bull Terrier; American Bulldog read as American Pit Bull Terrier. Photos: Oxford-IIIT Pet dataset, CC BY-SA 4.0.*
+
+<Aside type="tip" title="Remember">
+
+- Dropout switches off a random share of a layer's outputs during training; here it lowered the end of the validation curve and left its lowest point where it was.
+- Early stopping gives back the numbers of the lowest validation point after `patience` epochs without a new one.
+- Batch size and learning rate are chosen together: in the six runs the better rate changed with the batch size.
+- A frozen pretrained network with a new last layer learns from 60 photos what a network from nothing cannot.
+- Report one number on people the choices never saw, next to a baseline fitted on the same people (Rules of Machine Learning, rule 4).
+
+**Common trap:** a score above the flat guess means the network works. The early-stopped network scored 0.681 and a logistic regression on the same 500 people 0.677.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-deep-learning-training-practice-1">
+
+**Weight decay.** `fit_network` has one more argument marked `NEW`, `weight_decay`. Train the 64-neuron network on the 500 people, for 300 epochs with batches of 50, as in unit 1 but with `weight_decay=0.01` and no dropout, and put the validation loss at epoch 300, rounded to 3 decimals, in `answer_1`. Expected: `answer_1` is a number between 0.6 and 0.8.
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, weight_decay=0.0)     # given: change the weight decay to 0.01
+answer_1 = None  # replace None with the validation loss after the last epoch, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+Each value of `history` is a pair: the loss on the 500 people and the loss on the validation people. You want the second number of the last pair.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, weight_decay=0.01)
+answer_1 = round(history[-1][1], 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, weight_decay=0.01)
+answer_1 = round(history[-1][1], 3)
+```
+
+0.655. With `weight_decay=0.01` the update adds 0.01 times each number to its slope (the formula on the SGD page, where the page calls it a weight decay, an L2 penalty), so every step pulls every number a little toward 0. That is a third way to make memorizing harder: the validation loss at epoch 300 is 0.655, below the 0.717 of dropout 0.5 and the 0.874 of no regularization in unit 1.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-deep-learning-training-practice-2">
+
+**Dropout and patience from a blank cell.** Before you start, say in one sentence what you expect: with `dropout=0.7` and `patience=10`, does the network keep an earlier or a later epoch than the 28 of unit 2? Then write the cell yourself, in the empty cell of the notebook: train the 64-neuron network on the 500 people with batches of 50, learning rate 0.1, up to 300 epochs, `dropout=0.7` and `patience=10`. Put the epoch whose numbers it keeps and the validation AUC of the kept network, rounded to 3 decimals, in a list `answer_2`. Expected: `answer_2` is a list of two numbers, a whole epoch number and an AUC a little below 0.7.
+
+<details>
+<summary>Hint</summary>
+
+The function returns the model and the history. The model already holds the kept numbers, so `val_auc(model)` scores them. The kept epoch is where the validation loss is lowest, or `len(history) - 10`, because the run stops 10 epochs after it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, dropout=0.7, patience=10)
+...
+```
+
+</details>
+
+<Solution>
+
+```python
+model, history = fit_network(Xp, yp, 64, 0.1, 300, batch=50, dropout=0.7, patience=10)
+kept_epoch = int(np.argmin([pair[1] for pair in history])) + 1
+answer_2 = [kept_epoch, val_auc(model)]
+```
+
+[35, 0.683]: the run stopped after 45 epochs and kept epoch 35, later than the 28 of unit 2, with about the same AUC (0.683 against 0.681). Dropout makes the validation curve fall more slowly, so its lowest point comes later; `patience=10` waited for it and `load_state_dict` gave its numbers back.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a teammate's validation loss is lowest at epoch 12 and rises after it, while the training loss keeps falling. Name two changes to the training that make the network memorize less, and say what you would print to see whether either helped.
+
+   <details>
+   <summary>answer</summary>
+
+   Dropout and early stopping. Print the validation curve beside the training curve, and the ROC AUC next to the AUC of a logistic regression fitted on the same people.
+
+   </details>
+
+<Exercise id="ml-engineer-deep-learning-training-practice-3">
+
+**Spot the flaw.** A colleague copies `fit_network` for a network with `dropout=0.4`, but writes the loop without `model.train()` and `model.eval()`. Change the function so that the loss is measured the way unit 1 measures it, and put the validation loss at epoch 300 (500 people, 64 neurons, batches of 50, learning rate 0.1), rounded to 3 decimals, in `answer_3`. Expected: `answer_3` is a number between 0.6 and 0.8.
+
+```python
+def fit_unswitched(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED, dropout=0.0):
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(), nn.Dropout(dropout), nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    history = []
+    for epoch in range(epochs):
+        order = torch.randperm(len(Xa))
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()
+            loss_fn(model(Xa[rows]), ya[rows]).backward()
+            optimizer.step()
+        with torch.no_grad():
+            history.append((float(loss_fn(model(Xa), ya)), float(loss_fn(model(Xv), yv))))
+    return history
+
+
+answer_3 = round(fit_unswitched(Xp, yp, 64, 0.1, 300, batch=50, dropout=0.4)[-1][1], 3)
+# change the function so that the loss is measured the way unit 1 measures it
+```
+
+<details>
+<summary>Hint</summary>
+
+What state is the network in when the loss is measured? Where does `fit_network` change it, and where does it change it back?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    for epoch in range(epochs):
+        model.train()
+        ...
+        model.eval()
+        with torch.no_grad():
+            history.append(...)
+```
+
+</details>
+
+<Solution>
+
+```python
+def fit_unswitched(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED, dropout=0.0):
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(), nn.Dropout(dropout), nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    history = []
+    for epoch in range(epochs):
+        model.train()
+        order = torch.randperm(len(Xa))
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()
+            loss_fn(model(Xa[rows]), ya[rows]).backward()
+            optimizer.step()
+        model.eval()
+        with torch.no_grad():
+            history.append((float(loss_fn(model(Xa), ya)), float(loss_fn(model(Xv), yv))))
+    return history
+
+
+answer_3 = round(fit_unswitched(Xp, yp, 64, 0.1, 300, batch=50, dropout=0.4)[-1][1], 3)
+```
+
+0.723, the validation loss at epoch 300 when the network is switched to evaluation mode for the measurement. The flawed function reports 0.770: the network is still in training mode when it measures, so `Dropout` keeps switching off 40 percent of the hidden outputs while the loss is computed. The PyTorch page says that during evaluation the module computes an identity function, and the `Module.eval` page that `eval()` affects only certain modules, such as `Dropout` and `BatchNorm`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can add dropout and early stopping to a training loop, say what each does to the validation curve, and start from a pretrained network with a new last layer, scoring each against a baseline on people or photos the choices never saw.*
+Test: Exercise ml-engineer-deep-learning-training-practice-2, done from the notebook without opening the hints.
+
+The pattern to remember: **regularization slows memorizing, early stopping picks the epoch, and a pretrained start brings what the data cannot; judge each by one number beside a baseline.** The next lesson, *Text as numbers: tokens, embeddings and transformers* (MLE7), turns text into the numbers a network reads.

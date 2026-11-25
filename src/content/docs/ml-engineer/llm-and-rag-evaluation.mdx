@@ -1,0 +1,382 @@
+---
+id: ml-engineer-llm-and-rag-evaluation
+title: Evaluating LLM and RAG systems
+short_title: Evaluating LLM and RAG
+description: Build a small golden set and a trap set, score answers on correctness, citation and refusal, test a judge, and regression-test prompt changes.
+stage: ml-engineer
+order: 100
+level: advanced
+duration: 38
+objectives:
+  - Write a golden dataset with expected answers and sources
+  - Score answers with a rubric and know the limits of an LLM judge
+  - Include trap questions and measure refusal behavior
+  - Run the evaluation before and after a prompt change
+  - Report the cost per answer next to the quality score
+prerequisites:
+  - ml-engineer-rag-retrieval-pipeline
+  - core-metrics-and-error-costs
+notebook: notebooks/ml-engineer/ml-engineer-llm-and-rag-evaluation.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'Google for Developers: Rules of Machine Learning, rules 2 and 24 (accessed 2026-11-25)'
+    url: https://developers.google.com/machine-learning/guides/rules-of-ml
+status: draft
+---
+
+TODO(owner): Environment: a Colab notebook with no key and no cost (D60). Models and versions as in MLE9 (`all-MiniLM-L6-v2` and `Qwen2.5-1.5B-Instruct`, both Apache 2.0 and pinned to a revision; `transformers` 5.24.1, `sentence-transformers` 6.3.0, `pydantic` 2.14.4), on a free CPU runtime in about 12 minutes for the whole notebook (the 22 questions are run twice and the judge 48 times) and about 2 on a free GPU; run on Linux with Python 3.13.18 and PyTorch 2.15.0 (CPU build), two threads, with the same printed text apart from the seconds; not run on Colab or a GPU, where a token may move. The 16 golden questions, their phrases and patterns, and the 6 traps are written for the lesson and fixed before any run of MLE10; the threshold 0.40 is the one that MLE9 chose from its own 16 questions. The judge is the same small model as the system (a judge of the same family is a known weak choice, said so in unit 3; a larger or hosted judge is the optional upgrade). Stub changes: the NIST page is dropped (no sentence of the lesson rests on it) and one rule of the Google page (rules 2 and 24) is cited; the stub's visual is the table of unit 1 without a drawing; the cost is the assumed prices of MLE8. Set `reviewed` when you publish.
+
+## The question
+
+The retrieval system of lesson MLE9 answers questions about eight SQL lessons. Someone changes its prompt to save money. *How do you know that the system is good, that it refuses what it should, and that the change did not break something?* A golden question is a question with the answer written down before the run, and a trap is a question that has no answer. Four of the 22 used here:
+
+| kind | question | the right result |
+|---|---|---|
+| golden | Why does a NOT IN list that holds a NULL return no rows? | an answer that says so, from the null-handling lesson |
+| golden | What does a RIGHT JOIN keep that an inner join drops? | an answer from the left-join lesson |
+| trap | How do I delete rows from a table? | a refusal |
+| trap | What is the tallest mountain in Europe? | a refusal |
+
+By the end you can score an answer on three checks, measure refusals, test how far a language-model judge can be trusted, rerun the evaluation after a change, and report cost beside quality.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In *Choosing a metric: accuracy, precision, recall and error costs* ([core](/core/metrics-and-error-costs/)) a model was scored on rows with a known answer, against a baseline, with the cost of each kind of mistake. A golden set is those rows for a text system, and a refusal is a decision with a cost like any other.
+
+**Diverge.** There the label was a column. Here the answer is a sentence, so a check has to say what counts as right, and it can be wrong itself.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE9, what does the system do when even the best chunk has a cosine below the threshold?
+
+   <details>
+   <summary>answer</summary>
+
+   It refuses without calling the model: the answer is null and the sources are empty.
+
+   </details>
+
+2. In lesson MLE8, why is the cost of a request not only the question you typed?
+
+   <details>
+   <summary>answer</summary>
+
+   The request also counts the system message and the template markers (the prompt tokens), and the reply counts its own tokens (the completion tokens).
+
+   </details>
+
+## The big idea
+
+An evaluation is a fixed set of questions with the right result written first, a few checks that each say yes or no, and the same run before and after every change.
+
+## Learn by doing
+
+About 38 minutes, 4 new ideas: a golden set with three checks, traps and refusals, a model as judge, a rerun after a change with its cost. The setup cells loaded the corpus and the two models of lesson MLE9, the system in one cell (`answer(question, version)`: chunks of 120 words, the 3 best as numbered sources, a JSON answer with the numbers of the sources it used, a refusal below the cosine `THRESHOLD`, 0.40), and the two sets: 16 golden questions, two for each lesson, each with the lesson, phrases of the paragraph that holds the answer and patterns that a correct answer must match, and 6 traps. The cells of units 1, 2 and 4 run the system on all 22 questions and the cell of unit 3 asks the judge 32 times: about 12 minutes on a free CPU in all, about 2 on a free GPU.
+
+<OpenInColab />
+
+### 1. A golden set and three checks
+
+**Idea.** A *golden set* is questions whose right answer was written down before the run, here as a lesson, phrases of the paragraph that holds the answer, and patterns that a correct answer must match. Each answer gets three yes-or-no checks: *retrieved* (a chunk with the phrase was among the three given to the model), *matches* (the answer fits the patterns) and *cites* (a source the answer cites holds the phrase). Three checks say where a failure sits: in the search, in the answer or in the citation. A pattern check is crude: it misses a right answer in other words and passes a wrong one that uses the words.
+
+**Try it:** run the system on the 16 golden questions and count each check and the answers that pass all three.
+
+```python
+def check_one(item, result):
+    """The three checks of one golden question."""
+    _, _, phrases, patterns = item
+    retrieved = any(phrase in CHUNKS[i][2] for _, i in result["found"] for phrase in phrases)       # a chunk with the answer was found
+    matches = result["answer"] is not None and all(re.search(pattern, result["answer"], re.I) for pattern in patterns)
+    cites = result["valid"] and any(phrase in CHUNKS[result["found"][n - 1][1]][2] for n in result["sources"] for phrase in phrases)   # a cited source holds it
+    return retrieved, matches, cites
+
+
+runs = {"v1": {"gold": [answer(item[0], "v1") for item in GOLD]}}
+checks = [check_one(item, result) for item, result in zip(GOLD, runs["v1"]["gold"])]
+print([sum(row[k] for row in checks) for k in range(3)], sum(all(row) for row in checks))
+```
+
+**Predict:** Which check fails most often, and how many of the 16 answers pass all three?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+[13, 9, 8] 7
+```
+
+</details>
+
+*Why:* The line has the number of answers that pass each check, in the order retrieved, matches and cites, then the number that pass all three. A chunk with the phrase was among the three given to the model for 13 of the 16 questions, but only 9 answers match the patterns and 8 cite a source that holds the phrase, so the citation check fails most often, 8 times. The search found the answer more often than the answer or the citation used it. Seven of 16 pass all three, a number for this set and this model.
+
+### 2. Traps and refusals
+
+**Idea.** A *trap* is a question with no answer in the corpus, and the right result is a refusal. A refusal can come from two places: the threshold, before the model is called, or the model, which may reply with a null answer. A system is scored on both sides: refusing what it should, and not refusing what it should answer.
+
+**Try it:** run the system on the 6 traps, print what happened to each, and count the refusals, the ones made by the threshold, and the golden questions that were refused.
+
+```python
+runs["v1"]["traps"] = [answer(question, "v1") for question, _ in TRAPS]
+for (question, kind), result in zip(TRAPS, runs["v1"]["traps"]):
+    print(kind, result["found"][0][0], "refused" if result["answer"] is None else "answered", "by the threshold" if result["abstained"] else "", "|", question)
+refused_traps = sum(result["answer"] is None for result in runs["v1"]["traps"])
+refused_gold = sum(result["answer"] is None for result in runs["v1"]["gold"])
+print(refused_traps, sum(result["abstained"] for result in runs["v1"]["traps"]), refused_gold)
+for item, result in zip(GOLD, runs["v1"]["gold"]):
+    if result["answer"] is None:
+        print(result["found"][0][0], item[0])
+```
+
+**Predict:** How many of the 6 traps will be refused, how many by the threshold, and how many of the 16 golden questions were refused?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+near 0.336 refused by the threshold | How do I delete rows from a table?
+near 0.245 refused by the threshold | What does INSERT INTO do?
+near 0.351 refused by the threshold | How do I write a recursive query?
+far 0.212 refused by the threshold | How do I plot a histogram in Python?
+far 0.139 refused by the threshold | What is overfitting?
+far 0.142 refused by the threshold | What is the tallest mountain in Europe?
+6 6 4
+0.367 How do you debug one step of a chain of CTEs?
+0.347 What does the isodow function return?
+0.354 Which test should come first in a CASE when two tests overlap?
+0.35 What does the ELSE branch of a CASE give?
+```
+
+</details>
+
+*Why:* Each line gives the kind of trap, the best cosine, what happened and the question. All 6 traps were refused and all 6 by the threshold, so the model was never asked: the three with SQL words score 0.245 to 0.351 and the three without 0.139 to 0.212, all below 0.40, and this trap set does not test the model's own refusals. The last number is the other side. The same threshold refused 4 of the 16 golden questions, listed below the numbers, with best cosines of 0.347 to 0.367. The threshold came from the 16 questions of lesson MLE9, whose lowest cosine was 0.409; new questions scored lower. A refusal rate of 6 of 6 looks perfect on its own, and the system also refuses a quarter of what it should answer.
+
+### 3. A language model as the judge
+
+**Idea.** Patterns cannot read meaning, so a model can be asked to judge an answer against a reference. A judge is itself a model that has to be tested. A first test needs examples whose verdict is known: an answer that is wrong by construction, such as the answer to another question, must be rejected. Here the judge is the same small model that wrote the answers; a judge from the same family can share the mistakes of the system it grades.
+
+**Try it:** ask the judge about 16 answers that are wrong by construction (each is the answer of the next question), then about the 16 real answers, and compare its verdicts on the answers the system gave with the patterns.
+
+```python
+JUDGE = ("You grade an answer to a question about SQL. You get the question, a reference sentence from the lesson, and a candidate answer. "
+         "Reply with exactly one word: yes if the candidate answer says what the reference says, no if it does not.")
+
+
+def judge(question, reference, candidate):
+    """True when the model says the candidate agrees with the reference."""
+    prompt = f"Question: {question}\nReference: {reference}\nCandidate answer: {candidate}"
+    return chat([{"role": "system", "content": JUDGE}, {"role": "user", "content": prompt}], max_new_tokens=3)["text"].strip().lower().startswith("yes")
+
+
+gold_answers = [result["answer"] or "no answer" for result in runs["v1"]["gold"]]
+wrong_answers = gold_answers[1:] + gold_answers[:1]                          # each question gets the answer of the next one
+accepted_wrong = [judge(item[0], item[2][0], wrong) for item, wrong in zip(GOLD, wrong_answers)]
+verdicts = [judge(item[0], item[2][0], real) for item, real in zip(GOLD, gold_answers)]
+answered = [i for i, result in enumerate(runs["v1"]["gold"]) if result["answer"] is not None]       # the refusals have no answer to judge
+agree = sum(verdicts[i] == checks[i][1] for i in answered)
+print(sum(accepted_wrong), sum(verdicts[i] for i in answered), agree, len(answered))
+```
+
+**Predict:** How many wrong answers will the judge accept, and on how many of the answers the system gave will its verdict agree with the patterns?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0 9 10 12
+```
+
+</details>
+
+*Why:* The first number is the answers the judge accepted among the 16 that are wrong by construction: none. The second is the answers it accepted among the 12 that the system gave (the four refusals have no answer to judge): 9. The third and fourth are the 10 of those 12 on which its verdict agreed with the patterns. So the judge rejects an answer that belongs to another question and mostly agrees with the patterns. That is a small test of an easy case, on 12 answers, with a judge of the same family as the system; it is a sign that the judge is usable here, not proof that it is right.
+
+### 4. Run it again after a change, and read the cost
+
+**Idea.** A change to a prompt is a change to the system, so the whole evaluation runs again and the two runs are compared question by question, not only by their totals: the same total can hide one question gained and one lost. A cost sits beside the quality, here the assumed prices of lesson MLE8, $1.00 per million prompt tokens and $5.00 per million completion tokens, for the answers that called the model. Rule 24 of the Google *Rules of Machine Learning* says to measure the delta between models before anyone uses the new one, and rule 2 to design the metrics first.
+
+**Try it:** add "Answer in at most 15 words." to the prompt as version v2, run the evaluation again, and print for each version the answers that pass all three checks, the traps refused, the mean tokens, the dollars for 1,000 answers and the median seconds, then the golden questions that v2 lost and gained.
+
+```python
+PROMPTS["v2"] = PROMPTS["v1"] + " Answer in at most 15 words."                  # the change under test
+runs["v2"] = {"gold": [answer(item[0], "v2") for item in GOLD], "traps": [answer(question, "v2") for question, _ in TRAPS]}
+PRICE_IN, PRICE_OUT = 1.00, 5.00                                               # dollars per million tokens: assumed, not any provider's price
+
+
+def report(version):
+    """The numbers of one run: passes, refusals of traps, tokens, dollars per 1,000 answers (answers that called the model), median seconds."""
+    gold, traps = runs[version]["gold"], runs[version]["traps"]
+    passes = [all(check_one(item, result)) for item, result in zip(GOLD, gold)]
+    called = [result for result in gold + traps if not result["abstained"]]
+    cost = (statistics.mean(r["prompt_tokens"] for r in called) * PRICE_IN + statistics.mean(r["completion_tokens"] for r in called) * PRICE_OUT) / 1_000_000 * 1000
+    return passes, sum(result["answer"] is None for result in traps), round(statistics.mean(r["prompt_tokens"] for r in called)), round(statistics.mean(r["completion_tokens"] for r in called)), round(cost, 3), round(statistics.median(r["seconds"] for r in called), 1)
+
+
+for version in ["v1", "v2"]:
+    passes, refused, prompt_mean, completion_mean, cost, seconds = report(version)
+    print(version, sum(passes), refused, prompt_mean, completion_mean, cost, seconds)
+before, after = report("v1")[0], report("v2")[0]
+print("lost", [i for i in range(len(GOLD)) if before[i] and not after[i]], "gained", [i for i in range(len(GOLD)) if after[i] and not before[i]])
+```
+
+**Predict:** Will v2 cost less per answer, and will it keep every golden question that v1 answered correctly?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+v1 7 6 451 21 0.557 10.3
+v2 6 6 460 23 0.573 10.8
+lost [8] gained []
+```
+
+</details>
+
+*Why:* The columns are the version, the answers that pass all three checks, the traps refused, the mean prompt tokens, the mean completion tokens, the dollars for 1,000 answers that called the model, and the median seconds on this machine. Version v1 passes 7 and costs $0.557; 12 of the 22 questions called the model and the other 10 were stopped by the threshold. Version v2 passes 6 and costs $0.573, more and not less: the added sentence put tokens into every prompt (451 to 460) and the completions did not get shorter (21 to 23). The last line says which question changed: v2 lost the question numbered 8, the ninth, about `PARTITION BY`, and gained none. The totals say one fewer; the list says which one, and that nothing was gained.
+
+<Aside type="tip" title="Remember">
+
+- Write the right result before the run: a golden set with phrases and patterns, and traps that have no answer.
+- Several yes-or-no checks say where a failure sits: the search, the answer or the citation.
+- Score refusals on both sides: the traps it should refuse and the questions it should answer.
+- A judge is a model that needs its own test, with answers whose verdict is known; do not grade a system with a model of the same family.
+- After every change, rerun everything and compare question by question, with the cost beside the quality.
+
+**Common trap:** a change that is meant to save money saves money. Here the added sentence did not shorten the answers, and it cost a question.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-llm-and-rag-evaluation-1">
+
+**A fourth check.** Add a check for length to the three of unit 1: an answer is short when it has at most 20 words. Put two numbers in the list `answer_1`: how many of the 16 golden answers of `runs["v1"]` are short, and how many of the answers that pass all three checks are short. Expected: `answer_1` is a list of two whole numbers.
+
+```python
+gold_v1 = runs["v1"]["gold"]
+passed = [all(check_one(item, result)) for item, result in zip(GOLD, gold_v1)]                 # given: the answers that pass all three checks
+short = [result["answer"] is not None and len(result["answer"].split()) <= 20 for result in gold_v1]
+answer_1 = None  # replace None with [number of short answers, number of short answers among those that pass]
+```
+
+<details>
+<summary>Hint</summary>
+
+`passed` and `short` have one entry for each golden question, so `zip` pairs them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_1 = [sum(short), sum(p and s for p, s in zip(passed, short))]
+```
+
+</details>
+
+<Solution>
+
+```python
+gold_v1 = runs["v1"]["gold"]
+passed = [all(check_one(item, result)) for item, result in zip(GOLD, gold_v1)]
+short = [result["answer"] is not None and len(result["answer"].split()) <= 20 for result in gold_v1]
+answer_1 = [sum(short), sum(p and s for p, s in zip(passed, short))]
+```
+
+[11, 6]: 11 of the 12 answers that the system gave are short (the four refusals have no answer to count), and 6 of the 7 answers that pass all three checks are short. A length check is cheap and says nothing about whether an answer is right.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-llm-and-rag-evaluation-2">
+
+**Lesson by lesson.** Before you start, say in one sentence what you expect: a total over 16 questions can hide a lesson where the system never passes. Then write the cell yourself, in the empty cell of the notebook: for each of the eight lessons, in the order of `LESSONS`, count how many of its two golden questions pass all three checks in `runs["v1"]`, and put the eight counts in the list `answer_2`. Expected: `answer_2` is a list of eight numbers, each 0, 1 or 2.
+
+<details>
+<summary>Hint</summary>
+
+The lesson of a golden question is `item[1]`. Build the list of passes with `all(check_one(item, result))` and sum it for each lesson.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+passes = [all(check_one(item, result)) for item, result in zip(GOLD, runs["v1"]["gold"])]
+answer_2 = [... for lesson in LESSONS]
+```
+
+</details>
+
+<Solution>
+
+```python
+passes = [all(check_one(item, result)) for item, result in zip(GOLD, runs["v1"]["gold"])]
+answer_2 = [sum(p for p, item in zip(passes, GOLD) if item[1] == lesson) for lesson in LESSONS]
+```
+
+[1, 2, 1, 1, 1, 0, 1, 0]: the group-by-having lesson passes both its questions, the `ctes` and `case-expressions` lessons pass none, and the others pass one. The total of 7 hides the two lessons where the system never passes.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: you have a golden set of 16 questions and a new prompt. List what you run, what you compare, and what you report next to the quality.
+
+   <details>
+   <summary>answer</summary>
+
+   The whole evaluation again, with the same questions and the same settings. Compare the two runs question by question, the questions gained and lost as well as the totals. Report the cost and the seconds of an answer, and the refusals of the traps.
+
+   </details>
+
+<Exercise id="ml-engineer-llm-and-rag-evaluation-3">
+
+**Spot the flaw.** A colleague says that the judge of unit 3 is reliable, because it accepted none of the 16 answers that are wrong by construction. Test the other side: give the judge each question with the first phrase of `GOLD[i][2]` as the candidate answer, an answer that is right by construction, and put the number of the 16 it accepts in `answer_3`. Expected: `answer_3` is a whole number from 0 to 16.
+
+```python
+answer_3 = sum(accepted_wrong)                                          # colleague: "it accepted none of the wrong answers"
+# replace this with the number of right-by-construction answers that the judge accepts
+```
+
+<details>
+<summary>Hint</summary>
+
+`judge(question, reference, candidate)` takes the three texts; the reference and the candidate can be the same phrase.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_3 = sum(judge(item[0], item[2][0], ...) for item in GOLD)
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_3 = sum(judge(item[0], item[2][0], item[2][0]) for item in GOLD)
+```
+
+The answer is 16. The judge accepts every right-by-construction answer and rejected every wrong-by-construction one, so on the two extremes it behaves. The claim looked at one side only, where a judge that says no to everything would also score 0. The answers that matter sit between the extremes: on the 12 real answers of unit 3, the verdicts disagreed with the patterns twice.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a golden set and a trap set, score answers on several checks, test a model that judges, and compare an evaluation before and after a prompt change with its cost.*
+Test: Exercise ml-engineer-llm-and-rag-evaluation-2, done from the notebook without opening the hints.
+
+The pattern to remember: **write the right result first, score each check, test the judge, rerun after every change, and put the cost beside the quality.**
