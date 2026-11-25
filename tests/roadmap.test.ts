@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupRoadmap, lessonCode, nextLesson, ROADMAP_STAGES, type MapLesson } from '../src/lib/roadmap.ts';
+import { readdirSync, readFileSync } from 'node:fs';
+import { groupRoadmap, lessonCode, nextLesson, ROADMAP_STAGES, SPLITS, type MapLesson } from '../src/lib/roadmap.ts';
 
 const lesson = (id: string, o: Partial<MapLesson> = {}): MapLesson => ({
 	id,
@@ -23,14 +24,33 @@ describe('lessonCode', () => {
 	});
 	test('an inserted lesson keeps its neighbors codes', () => {
 		assert.equal(lessonCode('excel', 25), 'E2b');
-		assert.equal(lessonCode('data-engineer', 255), 'DE25b');
 		assert.equal(lessonCode('excel', 33), 'E3.3');
 	});
-	test('a lesson listed in SPLIT_A reads as "a" beside its "b"', () => {
+	test('the parts of a split lesson read a, b, c ...', () => {
 		assert.equal(lessonCode('data-analyst', 80), 'DA8a');
 		assert.equal(lessonCode('data-analyst', 85), 'DA8b');
 		assert.equal(lessonCode('data-analyst', 90), 'DA9');
-		assert.equal(lessonCode('data-engineer', 60), 'DE6');
+		assert.equal(lessonCode('data-engineer', 60), 'DE6a');
+		assert.equal(lessonCode('data-engineer', 65), 'DE6b');
+		assert.equal(lessonCode('data-engineer', 255), 'DE25b');
+		assert.equal(lessonCode('python', 220), 'P22a');
+	});
+	test('SPLITS lists exactly the bands of ten that hold more than one lesson', () => {
+		const found: Record<string, number[][]> = {};
+		for (const stage of readdirSync('src/content/docs')) {
+			if (!ROADMAP_STAGES.some((s) => s.id === stage)) continue;
+			const bands = new Map<number, number[]>();
+			for (const f of readdirSync(`src/content/docs/${stage}`).filter((f) => /\.mdx?$/.test(f))) {
+				const order = readFileSync(`src/content/docs/${stage}/${f}`, 'utf8').match(/^order: (\d+)/m)?.[1];
+				if (!order) continue;
+				const band = Math.floor(Number(order) / 10);
+				bands.set(band, [...(bands.get(band) ?? []), Number(order)]);
+			}
+			const groups = [...bands.values()].filter((g) => g.length > 1).map((g) => g.sort((a, b) => a - b)).sort((a, b) => a[0] - b[0]);
+			if (groups.length) found[stage] = groups;
+		}
+		const listed = Object.fromEntries(Object.entries(SPLITS).map(([k, v]) => [k, v.map((g) => [...g])]));
+		assert.deepEqual(found, listed);
 	});
 	test('unknown stage has no code', () => {
 		assert.equal(lessonCode('nope', 10), undefined);

@@ -43,7 +43,7 @@ You have 90 minutes, and the rubric is below, so you can read it now. There is n
 
 From memory first, then click to check.
 
-1. In [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/) (DE6), what did the contract of `order_lines` list, and what did a check do when the data broke it?
+1. In [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/) (DE6a), what did the contract of `order_lines` list, and what did a check do when the data broke it?
 
    <details>
    <summary>answer</summary>
@@ -280,7 +280,7 @@ app --1--> daily file --2--> raw (as it arrived) --3--> staged events --4--> dbt
 
 1. **The file does not arrive.** Detected by a check at 5:00 that today's file exists and is not empty; response: retry twice, then page the owner and keep yesterday's table with a "stale since" date.
 2. **The file arrives twice or changed.** Detected by the file's size and a count of events in it against the previous load; response: the load is by key, so a second copy changes nothing (DE4).
-3. **A column changes or fills with empty values.** Detected by the contract check of DE6; response: the run stops and the file is quarantined.
+3. **A column changes or fills with empty values.** Detected by the contract check of DE6a; response: the run stops and the file is quarantined.
 4. **A model builds and its numbers are wrong.** Detected by tests on the grain and a reconciliation of the sum of `signups` with the count of `signup_complete` events (DE10); response: `dbt build` stops and the dashboard keeps the last good table.
 5. **Late events change a past day.** Detected by recomputing the last 10 days on every run and comparing them with the stored rows; response: the changed days are replaced whole, and their provisional flag stays until final.
 6. **The dashboard shows a stale table as if it were fresh.** Detected by the table's `built_at` shown on the dashboard; response: a visible warning after 7 a.m.
