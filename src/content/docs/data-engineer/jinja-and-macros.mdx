@@ -1,0 +1,510 @@
+---
+id: data-engineer-jinja-and-macros
+title: 'Jinja and macros: write a rule once'
+short_title: Jinja and macros
+description: Write one SQL column per list item with a Jinja loop, put a rule that several models share in a macro, and read the compiled SQL when a model misbehaves.
+stage: data-engineer
+order: 115
+level: advanced
+duration: 30
+objectives:
+  - Use a Jinja variable and a for loop to write one SQL column for each item of a list
+  - Write a macro with arguments and call it from more than one model
+  - Compile a model, read the SQL that dbt sends to the database, and find an error in it
+  - Say when a macro makes a model harder to read
+prerequisites:
+  - data-engineer-dbt-project-and-first-model
+  - data-engineer-materializations-and-incremental-models
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'dbt documentation: Jinja and macros (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/jinja-macros
+status: published
+---
+
+## The question
+
+The owner of the cafes writes:
+
+> Every new report copies the formula for the amount of a line, and one day someone will change it in one place and forget the other. Can the rule be written once, and can I still read the SQL that runs?
+
+A dbt model is a text file, so dbt can write parts of it for you before it runs. By the end you can make a loop write the columns of a model, put a shared rule in one macro, and read what dbt actually sent to the database.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Readable queries with CTEs*](/sql/ctes/) (S24) gave a piece of a query a name inside one query, so that you could read it and use it more than once. A macro gives a piece of text a name for the whole project.
+
+**Diverge.** A common table expression is SQL, and the database runs it. A macro is Jinja, and dbt runs it first.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE11, what does `unique_key` do in an incremental model?
+
+   <details>
+   <summary>answer</summary>
+
+   A row of the new data that has the same key as a row in the table replaces it; a row with a new key is added.
+
+   </details>
+
+2. Write a `select` that gives, for each `store_id` of `int_order_lines_priced`, the sum of `line_amount_usd` of the completed lines only.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   select store_id, sum(line_amount_usd) filter (where status = 'completed') as completed_usd
+   from int_order_lines_priced
+   group by store_id
+   ```
+
+   A `CASE` inside the `sum` gives the same.
+
+   </details>
+
+## The big idea
+
+dbt writes your SQL before it runs it: Jinja is the text that writes the text.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: a list and a loop, a macro, and the compiled SQL. Work in `de-pipeline-starter` at the end of DE11: `int_order_lines_priced` is incremental and has `payment_method`, and `uv run dbt build` passes from the `dbt` folder. The checkpoint `de-11-done` holds both DE11 and this lesson, so it is the state you reach at the end; to catch up with DE11, run `git checkout de-11-start` and do that lesson first. Run every dbt command from the `dbt` folder.
+
+### 1. A list and a loop
+
+**Idea.** dbt runs Jinja on a model before the database sees it. The dbt documentation says an expression in `{{ }}` prints a value, and a statement in `{% %}` prints nothing: it sets a variable, or repeats text in a loop. `{% set statuses = [...] %}` makes a list, and `{% for status_name in statuses %}` repeats everything up to `{% endfor %}` once for each item. The page recommends setting a variable at the top of a model.
+
+**Try it.** Save the net amount of each store, with one column for each status in the list, as `dbt/models/marts/fct_store_status_amounts.sql`:
+
+```sql
+{% set statuses = ['completed', 'canceled'] %}
+-- Grain: one row for each store. One column of net amount for each status in the list above.
+select
+    store_id,
+{% for status_name in statuses %}
+    sum(line_amount_usd) filter (where status = '{{ status_name }}') as {{ status_name }}_usd{{ "," if not loop.last }}
+{% endfor %}
+from {{ ref('int_order_lines_priced') }}
+group by store_id
+```
+
+```bash
+uv run dbt show --quiet --select fct_store_status_amounts
+```
+
+**Predict:** What will `canceled_usd` show for each of the three stores?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt show --quiet --select fct_store_status_amounts
+| store_id | completed_usd | canceled_usd |
+| -------- | ------------- | ------------ |
+|        1 |      8,996.75 |              |
+|        2 |      9,017.75 |            5 |
+|        3 |      4,611.25 |              |
+```
+
+</details>
+
+*Why:* the sum of no rows is empty (`NULL`), and the data has one canceled line, in store 2, for \$5.00. The loop ran twice and wrote one column each time; `{{ "," if not loop.last }}` prints a comma after every column but the last, which is what keeps the generated list valid. Build the model and open what dbt wrote:
+
+```bash
+uv run dbt build --select fct_store_status_amounts 2>&1 | grep -E "Done"
+cat -s target/compiled/cafe/models/marts/fct_store_status_amounts.sql
+```
+
+```console
+$ uv run dbt build --select fct_store_status_amounts 2>&1 | grep -E "Done"
+20:07:47  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+```
+
+```console
+$ cat -s target/compiled/cafe/models/marts/fct_store_status_amounts.sql
+
+-- Grain: one row for each store. One column of net amount for each status in the list above.
+select
+    store_id,
+
+    sum(line_amount_usd) filter (where status = 'completed') as completed_usd,
+
+    sum(line_amount_usd) filter (where status = 'canceled') as canceled_usd
+
+from "analytics"."main"."int_order_lines_priced"
+group by store_id
+```
+
+The compiled file is plain SQL: no braces, one `sum` for each item, the `ref` replaced by the table's full name, and blank lines where the Jinja statements were.
+
+### 2. A macro: one rule, called from several models
+
+**Idea.** A **macro** is Jinja saved in the `macros` folder with a name and arguments, the way a function is. The dbt documentation says macros are pieces of code that can be reused many times, and you call one inside `{{ }}`; the text it returns replaces the call. Use one for a rule that must be the same in several models. The rule here is the one of DE9: the amount of a line is units times price, minus the discount.
+
+**Try it.** First note what the incremental table holds now. Then save the macro as `dbt/macros/line_amount.sql`:
+
+```sql
+{% macro line_amount(units, unit_price, discount) %}
+    ({{ units }} * {{ unit_price }} - {{ discount }})
+{% endmacro %}
+```
+
+In `int_order_lines_priced.sql`, replace the expression `l.units * p.unit_price_usd - l.discount_usd` by `{{ line_amount('l.units', 'p.unit_price_usd', 'l.discount_usd') }}`. Save a second model that uses the same call, as `dbt/models/marts/fct_store_discounts.sql`:
+
+```sql
+-- Grain: one row for each store. The list amount, the discounts and the net amount of the completed lines.
+select
+    l.store_id,
+    sum(l.units * p.unit_price_usd) as list_usd,
+    sum(l.discount_usd) as discount_usd,
+    sum({{ line_amount('l.units', 'p.unit_price_usd', 'l.discount_usd') }}) as net_usd
+from {{ ref('stg_order_lines') }} as l
+join {{ ref('stg_products') }} as p using (product_id)
+where l.status = 'completed'
+group by l.store_id
+```
+
+```bash
+uv run dbt show --quiet --inline "select count(*) as lines, sum(line_amount_usd) as amount from {{ ref('int_order_lines_priced') }}"
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as lines, sum(line_amount_usd) as amount from {{ ref('int_order_lines_priced') }}"
+| lines |    amount |
+| ----- | --------- |
+|  3287 | 22,630.75 |
+```
+
+**Predict:** What text does dbt leave in the compiled `int_order_lines_priced` in place of the macro call, and will the line count or the total of the table change after the build?
+
+After your guess, compile, build, and ask the same question again:
+
+```bash
+uv run dbt compile --quiet --select int_order_lines_priced > /dev/null
+grep -B2 -A1 "as line_amount_usd" target/compiled/cafe/models/intermediate/int_order_lines_priced.sql
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+uv run dbt show --quiet --inline "select count(*) as lines, sum(line_amount_usd) as amount from {{ ref('int_order_lines_priced') }}"
+uv run dbt show --quiet --select fct_store_discounts
+```
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt compile --quiet --select int_order_lines_priced > /dev/null
+grep -B2 -A1 "as line_amount_usd" target/compiled/cafe/models/intermediate/int_order_lines_priced.sql
+
+    (l.units * p.unit_price_usd - l.discount_usd)
+ as line_amount_usd,
+    l.updated_at
+```
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:07:56  Done. PASS=25 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=25
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as lines, sum(line_amount_usd) as amount from {{ ref('int_order_lines_priced') }}"
+| lines |    amount |
+| ----- | --------- |
+|  3287 | 22,630.75 |
+```
+
+```console
+$ uv run dbt show --quiet --select fct_store_discounts
+| store_id | list_usd | discount_usd |  net_usd |
+| -------- | -------- | ------------ | -------- |
+|        1 | 9,033.75 |         37.0 | 8,996.75 |
+|        2 | 9,033.25 |         15.5 | 9,017.75 |
+|        3 | 4,642.75 |         31.5 | 4,611.25 |
+```
+
+</details>
+
+*Why:* the call became the three arguments' text inside parentheses, on its own lines, because the macro's text has line breaks; they do no harm. Only the text of the model changed, not what a row means, so the incremental table needed no full refresh (DE11): the build ran and the table holds the same 3,287 lines and the same total of \$22,630.75, which counts the canceled line. The net amount of the store-level model is the completed lines only, and its three numbers add up to \$22,625.75, the completed total of DE9. Both models now take their rule from one file.
+
+The descriptions and tests of the two new models (a unique, filled `store_id` each) are given with the file of the marts:
+
+```bash
+git show de-11-done:dbt/models/marts/schema.yml > models/marts/schema.yml
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:08:05  Done. PASS=29 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=29
+```
+
+### 3. Read the compiled SQL
+
+**Idea.** The database never sees your Jinja: dbt sends it the compiled text, and keeps a copy in `target/compiled/`. The dbt documentation says to run `dbt compile` and open the file there to see what a model turns into. When a model that uses Jinja fails or gives an odd result, that file is where you look.
+
+**Try it.** Call the macro in `fct_store_discounts.sql` with only two arguments, leaving out `'l.discount_usd'`, and build the model:
+
+```bash
+uv run dbt build --select fct_store_discounts 2>&1 | grep -E "Parser Error|LINE|compiled|Done"
+grep -B2 -A1 "unit_price_usd - )" target/compiled/cafe/models/marts/fct_store_discounts.sql
+```
+
+**Predict:** Which line does the error name, and what does the compiled file show there?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt build --select fct_store_discounts 2>&1 | grep -E "Parser Error|LINE|compiled|Done"
+  Parser Error: syntax error at or near ")"
+  LINE 16:     (l.units * p.unit_price_usd - )
+20:08:08    compiled code at target/compiled/cafe/models/marts/fct_store_discounts.sql
+20:08:08  Done. PASS=0 WARN=0 ERROR=1 SKIP=2 NO-OP=0 REUSED=0 TOTAL=3
+```
+
+```console
+$ grep -B2 -A1 "unit_price_usd - )" target/compiled/cafe/models/marts/fct_store_discounts.sql
+    sum(l.discount_usd) as discount_usd,
+    sum(
+    (l.units * p.unit_price_usd - )
+) as net_usd
+```
+
+</details>
+
+*Why:* an argument that is not passed has no value, and Jinja prints nothing for a name without one, like the undefined name in the quoting tip of the dbt page. The database then received `(l.units * p.unit_price_usd - )`, and the error names a line of the compiled file, not of your model. Put the third argument back and build again; it passes.
+
+When is a macro worth it? The dbt page warns that Jinja can make a model harder for others to read, and advises favoring readability even when that means repeating some lines of SQL. A macro earns its place when the same rule appears in several models and has to change in all of them together, as `line_amount` does. The list of statuses of unit 1 is used once, and a macro around it would only hide it.
+
+<Aside type="tip" title="Remember">
+
+- `{{ }}` prints a value and `{% %}` does something and prints nothing; dbt runs both before the database sees the model.
+- A loop writes the same text once for each item of a list; the last pass needs no comma.
+- A macro is a named piece of text with arguments, and its call is replaced by what it returns; write one when several models share a rule that must change together.
+- When a model that uses Jinja fails or surprises, read the file in `target/compiled/`.
+
+**Common trap:** a change to a macro reaches every model that calls it, and an incremental table does not recompute its old rows, so refresh the table when the meaning changed.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-jinja-and-macros-1">
+
+**A loop with two expressions.** Extend the loop so that each status also gets a count of its lines: save the start as `dbt/models/marts/scratch_status_counts.sql`, fill in the missing line, and show the model. The start is given. Expected: 3 rows and 5 columns, and for a store without canceled lines the count is not empty. When you are done, delete the file.
+
+```sql
+{% set statuses = ['completed', 'canceled'] %}
+select
+    store_id,
+{% for status_name in statuses %}
+    sum(line_amount_usd) filter (where status = '{{ status_name }}') as {{ status_name }}_usd,
+    ___
+{% endfor %}
+from {{ ref('int_order_lines_priced') }}
+group by store_id
+```
+
+```bash
+uv run dbt show --quiet --select scratch_status_counts
+```
+
+<details>
+<summary>Hint</summary>
+
+The missing line is a `count(*)` with the same `filter` as the line above it, named `{{ status_name }}_lines`. The comma now belongs after the last expression of each pass, not after the first.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+    count(*) filter (where status = '{{ status_name }}') as {{ status_name }}_lines...
+```
+
+</details>
+
+<Solution>
+
+```sql
+{% set statuses = ['completed', 'canceled'] %}
+select
+    store_id,
+{% for status_name in statuses %}
+    sum(line_amount_usd) filter (where status = '{{ status_name }}') as {{ status_name }}_usd,
+    count(*) filter (where status = '{{ status_name }}') as {{ status_name }}_lines{{ "," if not loop.last }}
+{% endfor %}
+from {{ ref('int_order_lines_priced') }}
+group by store_id
+```
+
+```console
+$ uv run dbt show --quiet --select scratch_status_counts
+| store_id | completed_usd | completed_lines | canceled_usd | canceled_lines |
+| -------- | ------------- | --------------- | ------------ | -------------- |
+|        1 |      8,996.75 |            1337 |              |              0 |
+|        2 |      9,017.75 |            1304 |            5 |              1 |
+|        3 |      4,611.25 |             645 |              |              0 |
+```
+
+The first expression of a pass is always followed by a comma, so the test for the last pass moves to the second. A sum of no rows is empty and a count of no rows is 0: the stores without canceled lines show an empty `canceled_usd` and a `canceled_lines` of 0.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-jinja-and-macros-2">
+
+**A macro of your own.** Before you start, say in a sentence what the result will look like for the three stores. Then, from blank files, write a macro `share(part, whole)` in `dbt/macros/share.sql` that gives the sum of one column as a percentage of the sum of another, rounded to one decimal, and a model `dbt/models/marts/scratch_discount_share.sql` that uses it to show each store's discounts in `fct_store_discounts` as a share of its list amount. Expected: 3 rows, 2 columns. When you are done, delete both files.
+
+<details>
+<summary>Hint</summary>
+
+The macro returns one expression: `round(100.0 * sum(...) / sum(...), 1)`, with the two arguments in the places of the columns. The model selects `store_id` and the macro call, from `fct_store_discounts`, grouped by `store_id`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Three rows; store 1 gives its discounts as a little under half a percent of its list amount."*
+
+</details>
+
+<Solution>
+
+```sql
+{% macro share(part, whole) %}
+    round(100.0 * sum({{ part }}) / sum({{ whole }}), 1)
+{% endmacro %}
+```
+
+```sql
+select
+    store_id,
+    {{ share('discount_usd', 'list_usd') }} as discount_pct
+from {{ ref('fct_store_discounts') }}
+group by store_id
+```
+
+```bash
+uv run dbt show --quiet --select scratch_discount_share
+```
+
+```console
+$ uv run dbt show --quiet --select scratch_discount_share
+| store_id | discount_pct |
+| -------- | ------------ |
+|        1 |          0.4 |
+|        2 |          0.2 |
+|        3 |          0.7 |
+```
+
+The macro is one expression, called with column names as text; because the model groups by store, the `sum` inside it adds the one row of each store. A macro this small is at the edge of what unit 3 allows: it names one idea and keeps its rounding in one place, but a reader has to open it to see the formula.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what is the difference between `{{ ... }}` and `{% ... %}` in a model?
+
+   <details>
+   <summary>answer</summary>
+
+   `{{ ... }}` prints a value into the SQL; `{% ... %}` is a statement that prints nothing, and sets a variable, repeats text in a loop or defines a macro.
+
+   </details>
+
+<Exercise id="data-engineer-jinja-and-macros-3">
+
+**Spot the flaw.** A colleague turns the two columns of unit 1 into a macro, so that a model can ask for any status by name. The macro and a model that uses it are saved, the model builds, and the colleague says it works:
+
+```sql
+{% macro status_total(status_name) %}
+    sum(line_amount_usd) filter (where status = 'completed')
+{% endmacro %}
+```
+
+```sql
+select
+    store_id,
+    {{ status_total('completed') }} as completed_usd,
+    {{ status_total('canceled') }} as canceled_usd
+from {{ ref('int_order_lines_priced') }}
+group by store_id
+```
+
+Save both as `dbt/macros/status_total.sql` and `dbt/models/marts/scratch_status_totals.sql`, show the model, and open its compiled file. Expected: the model builds and shows numbers. What is wrong, and what shows it? When you are done, delete both files.
+
+```bash
+uv run dbt show --quiet --select scratch_status_totals
+grep -n "filter" target/compiled/cafe/models/marts/scratch_status_totals.sql
+```
+
+<details>
+<summary>Hint</summary>
+
+Compare `canceled_usd` with `completed_usd` for each store, and then read the two `sum` lines of the compiled file.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The model asked for two different statuses. Look for the argument inside the body of the macro.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt show --quiet --select scratch_status_totals
+| store_id | completed_usd | canceled_usd |
+| -------- | ------------- | ------------ |
+|        1 |      8,996.75 |     8,996.75 |
+|        2 |      9,017.75 |     9,017.75 |
+|        3 |      4,611.25 |     4,611.25 |
+```
+
+```console
+$ grep -n "filter" target/compiled/cafe/models/marts/scratch_status_totals.sql
+4:    sum(line_amount_usd) filter (where status = 'completed')
+7:    sum(line_amount_usd) filter (where status = 'completed')
+```
+
+Both columns hold the completed amount: the macro takes `status_name` and never uses it, so it hard-codes `'completed'`, and every call compiles to the same text. Nothing fails, because the SQL is valid; only the compiled file shows two identical lines. The fix is to use the argument, as the loop of unit 1 did:
+
+```sql
+{% macro status_total(status_name) %}
+    sum(line_amount_usd) filter (where status = '{{ status_name }}')
+{% endmacro %}
+```
+
+```console
+$ uv run dbt show --quiet --select scratch_status_totals
+| store_id | completed_usd | canceled_usd |
+| -------- | ------------- | ------------ |
+|        1 |      8,996.75 |              |
+|        2 |      9,017.75 |            5 |
+|        3 |      4,611.25 |              |
+```
+
+A macro that hides its condition makes every model that calls it depend on a rule nobody can see in the model; the compiled file is where you find it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a loop that generates one column for each item of a list, put a rule that several models share in a macro, read the compiled SQL when a model fails or surprises, and say when a macro would only hide a rule.*
+Test: Exercise data-engineer-jinja-and-macros-2, done without opening the hints.
+
+The pattern to remember: **Jinja writes the SQL, so read what it wrote.** The next lesson, [*From a logical model to physical tables*](/data-engineer/logical-to-physical-design/) (DE12), moves from building models to the shape of the tables themselves.

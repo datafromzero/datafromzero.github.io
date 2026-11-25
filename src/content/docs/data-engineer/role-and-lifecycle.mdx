@@ -1,0 +1,401 @@
+---
+id: data-engineer-role-and-lifecycle
+title: 'What a data engineer owns: lifecycle, ETL, ELT and layers'
+short_title: Role and lifecycle
+description: Follow data from a source to a reader in five stages, tell ETL from ELT, place each step in raw, staging or serving, and price a batch run against a stream.
+stage: data-engineer
+order: 10
+level: intermediate
+duration: 35
+objectives:
+  - Name the five stages of a pipeline and the part of it a data engineer owns
+  - Tell ETL from ELT by where the transformation runs
+  - Place each step of a pipeline in the raw, staging or serving layer
+  - Price a nightly batch run against an always-on stream in hours alive
+  - Sketch a pipeline for a stated source and consumer
+prerequisites:
+  - core-laptop-setup-and-terminal
+  - core-environments-and-dependencies
+  - core-git-branches-and-pull-requests
+  - core-warehouses-lakes-and-cost
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'AWS Certified Data Engineer - Associate (DEA-C01) exam guide (accessed 2026-11-24)'
+    url: https://docs.aws.amazon.com/aws-certification/latest/data-engineer-associate-01/data-engineer-associate-01.html
+  - title: 'dbt documentation: Staging, preparing our atomic building blocks (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/best-practices/how-we-structure/2-staging
+  - title: 'dbt Labs: Extract, load, transform (ELT) (accessed 2026-11-24)'
+    url: https://www.getdbt.com/blog/extract-load-transform
+status: published
+---
+
+## The question
+
+The owner of the three cafes writes:
+
+> I read a sales sheet every morning. Last week the numbers for one store did not match what the till showed, and nobody could tell me where the sheet's numbers came from. Can you build whatever fills the sheet, and build it so someone can check it?
+
+The sheet has one row for each store and day. The stores are in a file that a partner drops each month:
+
+| store_id | store_name | city | opened_on |
+|---:|---|---|---|
+| 1 | Old Town | Oakland | 2023-05-12 |
+| 2 | Campus | Berkeley | 2024-09-03 |
+| 3 | Harbor | Alameda | 2026-04-01 |
+
+The sales themselves live in the tills, behind an API. By the end you can sketch the pipeline that connects the two to the sheet, say which steps happen where, and defend one choice of how often it runs.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Warehouses, data lakes and what things cost*](/core/warehouses-lakes-and-cost/) (C35) separated a lake of files from a warehouse of tables. A pipeline uses both: files where data lands, tables where it is read.
+
+**Diverge.** In C35 the data was already in the place you queried. Here the first job is to get it there from a system you do not control.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Git: saving a history of your work*](/core/git-save-history/) (C23), which two commands save a change with a message?
+
+   <details>
+   <summary>answer</summary>
+
+   `git add` puts the change in the next snapshot, and `git commit -m "message"` saves the snapshot.
+
+   </details>
+
+2. In C35, the owner must keep a copy of files exactly as they arrived. Does a lake or a warehouse fit, and why?
+
+   <details>
+   <summary>answer</summary>
+
+   A lake: it keeps files as they are, and a warehouse keeps tables whose columns have been chosen.
+
+   </details>
+
+## The big idea
+
+A pipeline is a promise that data moves from a source you do not control to a reader who needs it, every time it is asked.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: the five stages, ETL against ELT, three layers, and batch against stream. You work in the starter repository `de-pipeline-starter`, which every lesson of this track builds on. Open two terminals in VS Code (or in a codespace): terminal 1 runs the mock API and stays open, and terminal 2 is where you type everything else. As in C22, use Git Bash on Windows. In a codespace, create one from the repository page and skip the first two commands below.
+
+### 1. Five stages, and the three you own
+
+**Idea.** Data goes through five stages. A **source** makes it (a till), **ingestion** copies it out of the source, **storage** keeps it, **transformation** reshapes it, and **serving** hands it to a reader. A data engineer owns ingestion, storage and transformation, and the promise that all five run every day. The AWS exam guide for data engineers lists, among the tasks its target candidate is not expected to perform, ML training and inference and drawing business conclusions from data; the data scientist and data analyst tracks of this site teach that side.
+
+**Try it.** Clone the starter and check it. The check script is the one of [*Your laptop setup and the terminal*](/core/laptop-setup-and-terminal/) (C22), extended for this project.
+
+```bash
+git clone https://github.com/datafromzero/de-pipeline-starter.git
+cd de-pipeline-starter
+uv sync
+uv run check_environment.py
+uv run pytest -q
+```
+
+You should see eight `PASS` lines and a short pytest run (your versions and timings will differ):
+
+```console
+$ uv run check_environment.py
+PASS  Python 3.11 or newer: 3.13.18
+PASS  Git: git version 2.43.0
+PASS  Git name and email: set
+PASS  uv: uv 0.11.32 (x86_64-unknown-linux-gnu)
+PASS  DuckDB: 2.0.0
+PASS  requests: 2.34.2
+PASS  pytest: 9.2.0
+PASS  Port 8000 is free for the mock API: free
+8 of 8 checks passed.
+
+$ uv run pytest -q
+.........                                                                [100%]
+9 passed in 1.25s
+```
+
+Now start the source. In terminal 1, run `uv run python mock_api.py`; it prints `Mock API on http://127.0.0.1:8000 (seed 2026). Press Ctrl+C to stop.` and keeps running. In terminal 2, ask it for two lines of sales:
+
+```bash
+curl -s "http://127.0.0.1:8000/order-lines?limit=2"
+```
+
+**Predict:** The answer is one piece of JSON. Which field names a line, so that you could tell two lines apart? And does the answer say how many lines the API holds in all?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ curl -s "http://127.0.0.1:8000/order-lines?limit=2"
+{"data": [{"order_item_id": 5001, "order_id": 1001, "ordered_at": "2026-01-01 08:02:00", "store_id": 2, "customer_id": 15, "status": "completed", "payment_method": "mobile", "product_id": 10, "quantity": 1, "discount_usd": "0.00", "updated_at": "2026-01-01 08:07:00"}, {"order_item_id": 5002, "order_id": 1001, "ordered_at": "2026-01-01 08:02:00", "store_id": 2, "customer_id": 15, "status": "completed", "payment_method": "mobile", "product_id": 6, "quantity": 1, "discount_usd": "0.00", "updated_at": "2026-01-01 08:07:00"}], "next_cursor": "bzoy"}
+```
+
+</details>
+
+*Why:* `order_item_id` is the key: lines 5001 and 5002 belong to the same order, 1001, and differ in it. The answer holds no total, only a `next_cursor`, a piece of text that says where the next page starts. A source tells you where to go next and not how much there is, so the loop that reads it must know when to stop. That loop is the next lesson's work. The README of the starter states the whole contract of this API.
+
+### 2. ETL or ELT: where the transformation runs
+
+**Idea.** ETL stands for extract, transform, load: the data is reshaped on its way, and only the result is loaded. ELT stands for extract, load, transform: the data is loaded as it arrived and reshaped inside the place where it now lives. Read the starter's script before you run it:
+
+```python
+"""The first page of the API, summed two ways. Run it with: uv run python scripts/tour.py"""
+
+import json
+from urllib.request import urlopen
+
+import duckdb
+
+from pipeline.config import API_URL, RAW_DIR
+
+with urlopen(f"{API_URL}/order-lines?limit=100", timeout=10) as response:
+    body = response.read()
+
+# ETL: transform in Python, keep only the result.
+rows = [(line["order_item_id"], line["quantity"]) for line in json.loads(body)["data"]]
+print(f"ETL: {sum(quantity for _, quantity in rows)} units on {len(rows)} lines; raw bytes kept: none")
+
+# ELT: land the bytes first, then transform with SQL where the data now lives.
+page = RAW_DIR / "tour" / "page-0001.json"
+page.parent.mkdir(parents=True, exist_ok=True)
+page.write_bytes(body)
+units = duckdb.sql(f"SELECT sum(line.quantity) FROM (SELECT unnest(data) AS line FROM read_json('{page}'))").fetchall()[0][0]
+print(f"ELT: {units} units; raw bytes kept: {page.stat().st_size:,} in data/raw/tour/page-0001.json")
+```
+
+**Try it.** Run `uv run python scripts/tour.py`.
+
+**Predict:** Both routes read the same 100 lines. Do the two totals match? And tomorrow the owner asks for the quantity of coffee only: which route can answer without asking the API again?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/tour.py
+ETL: 148 units on 100 lines; raw bytes kept: none
+ELT: 148 units; raw bytes kept: 25,736 in data/raw/tour/page-0001.json
+```
+
+</details>
+
+*Why:* the totals match: 148 units on both routes. The new question needs a column the ETL route never kept, `product_id`, so it would have to call the API again, while the ELT route reads the file it saved. The dbt article says ELT leaves the source data on hand so that a team can revise how it is transformed without extracting again. It adds that ELT suits cloud warehouses such as Snowflake, BigQuery and Amazon Redshift, because the transformation uses the warehouse's own computing power. The same article says ETL suits industries with strict data governance, such as finance and healthcare, where data needs to be transformed, cleaned and validated before it enters the warehouse.
+
+### 3. Three layers: raw, staging, serving
+
+**Idea.** Data sits in a layer that says what has been done to it. **Raw** holds the data as it arrived. **Staging** holds it cleaned up, with typed columns and clear names. **Serving** holds the tables that readers connect to.
+
+**Try it.** Here are the steps of the pipeline for the owner's sheet, in the order they run. Save a file `docs/pipeline-sketch.md`: a title, the consumer and sources, and a table with one row for each step and the columns `#`, `Step`, `Layer` and `ETL or ELT`. Fill the last two yourself.
+
+1. Save every page of the API exactly as it arrives.
+2. Save `products.csv` and `stores.csv` exactly as they are.
+3. Give each column of the lines its type and a clear name.
+4. Do the same for the two files, one table for each file.
+5. Join lines to products (the price) and to stores (the name).
+6. Add up units and dollars for each store and day.
+7. Publish the table `sales_by_store_day` for the sheet.
+
+**Predict:** Which layer does step 5 belong to? And does any step after step 2 need to call the API again?
+
+<details>
+<summary>Reveal the result</summary>
+
+```markdown
+# Sketch: sales for each store and day
+
+Consumer: the owner's morning sheet. Question: how many units and how many dollars did each store sell each day?
+Sources: the sales API (order lines) and two files, `products.csv` and `stores.csv`.
+
+| # | Step | Layer | ETL or ELT |
+|---|------|-------|------------|
+| 1 | Save every page of the API exactly as it arrives | raw | load first |
+| 2 | Save `products.csv` and `stores.csv` exactly as they are | raw | load first |
+| 3 | Give each column of the lines its type and a clear name | staging | ELT, in SQL |
+| 4 | Do the same for the two files, one staged table for each file | staging | ELT, in SQL |
+| 5 | Join lines to products (the price) and to stores (the name) | serving | ELT, in SQL |
+| 6 | Add up units and dollars for each store and day | serving | ELT, in SQL |
+| 7 | Publish the table `sales_by_store_day` for the sheet | serving | ELT, in SQL |
+
+Batch or stream: batch, once a night, because the sheet is read once a morning.
+```
+
+</details>
+
+*Why:* step 5 is serving, because a join makes a table shaped for one question. The dbt guide says staging models should have a 1-to-1 relationship to their source tables, and that their goal is to clean and prepare individual source-conformed concepts. No step after step 2 calls the API: everything after the raw copy reads files, so a changed question never touches the source. The last line chooses a batch; the next unit prices that choice.
+
+### 4. Batch or stream, priced in hours alive
+
+**Idea.** A **batch** run starts on a schedule, reads a window of data and stops. A **stream** stays alive and handles each event as it arrives. Price each in two numbers: the hours a month the program has to be alive, and how old the owner's answer may be.
+
+**Try it.** Count how often the cafes' orders arrive, from the file behind the mock API: `uv run python scripts/arrivals.py`.
+
+**Predict:** Across the six months, what is the largest number of orders in a single hour: about 2, about 5 or about 20?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/arrivals.py
+1,800 orders on 181 days
+per day: fewest 4, median 9.0, most 19
+most orders in one hour: 5
+```
+
+</details>
+
+*Why:* the busiest hour of six months has 5 orders, and a typical day has 9. A stream alive all month is alive for 24 × 30 = 720 hours to handle about 300 orders. A nightly batch that runs 5 minutes (an assumption; the next lesson times a real run) is alive 30 × 5 minutes = 2.5 hours, about 288 times fewer. The sheet is read once a morning, so an answer that is a day old costs the owner nothing, and the batch wins. A stream would earn its hours if someone had to act within minutes, for example a call to a store that has had no order for two hours. These are hours of a program you keep alive; a service that bills for each event has its own price page, which you read before you choose it.
+
+<Aside type="tip" title="Remember">
+
+- A pipeline has five stages: source, ingestion, storage, transformation and serving. You own the middle three.
+- ETL reshapes data on its way to the store; ELT stores it first and reshapes it inside.
+- Raw holds the data as it arrived, staging is one typed table for each source table, serving is shaped for a question.
+- Price batch against stream in hours alive and in how old the answer may be.
+
+**Common trap:** calling a stream cheap because the data is small. A stream costs the hours it stays alive, not the rows it handles.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-role-and-lifecycle-1">
+
+**A second consumer.** The owner adds: "Each month, I also want the units sold for each product category." Extend your `docs/pipeline-sketch.md` with the steps that this question adds, below step 7, each with a layer and ETL or ELT. The first one is given; the files already have everything it needs. Expected: three new rows, numbered 8 to 10.
+
+```markdown
+| 8 | Join lines to products to get each line's category | ... | ... |
+```
+
+<details>
+<summary>Hint</summary>
+
+After the join, two things are left: add up, and publish. Ask of each step whether it is shaped for one question.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```markdown
+| 8 | Join lines to products to get each line's category | serving | ... |
+| 9 | Add up units for each category and month | ... | ... |
+```
+
+</details>
+
+<Solution>
+
+```markdown
+| 8 | Join lines to products to get each line's category | serving | ELT, in SQL |
+| 9 | Add up units for each category and month | serving | ELT, in SQL |
+| 10 | Publish the table `units_by_category_month` | serving | ELT, in SQL |
+```
+
+Nothing is added to raw or staging: both files and all lines are already there, typed. A second question costs two serving steps and no new call to the API.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-role-and-lifecycle-2">
+
+**A different source and a different clock.** The owner asks: "Every Monday morning I want a list of the gold-tier loyalty customers who have not ordered for 30 days." The customers are in a file, `customers.csv` (150 rows, with `loyalty_tier`; it comes from version 1 of the cafe-sales dataset), and the orders come from the same API. Before you start, write one sentence saying what the sketch will contain. Then, in a new file `docs/exercise-2.md`, write the sketch from a blank page: a table of steps with layer and ETL or ELT, and a last line that chooses batch or stream and prices the choice in hours alive, with an assumed run time of 5 minutes. Expected: a table of at least five steps whose first rows are in raw, and a priced last line.
+
+<details>
+<summary>Hint</summary>
+
+The list is read once a week. Count the Mondays in a month, or use 4. Which two sources land in raw, and which step is the first one that needs both?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two raw steps, two staging steps, then a serving step that finds the customers, then a publish step; a weekly batch."*
+
+```markdown
+| 1 | Save every page of the API exactly as it arrives | raw | load first |
+| 2 | Save `customers.csv` exactly as it is | raw | ... |
+```
+
+</details>
+
+<Solution>
+
+```markdown
+| # | Step | Layer | ETL or ELT |
+|---|------|-------|------------|
+| 1 | Save every page of the API exactly as it arrives | raw | load first |
+| 2 | Save `customers.csv` exactly as it is | raw | load first |
+| 3 | Type and name the order lines | staging | ELT, in SQL |
+| 4 | Type and name the customers | staging | ELT, in SQL |
+| 5 | Find the gold customers whose latest order is more than 30 days old | serving | ELT, in SQL |
+| 6 | Publish the table `lapsed_gold_customers` | serving | ELT, in SQL |
+
+Batch or stream: batch, once a week. A weekly batch of 5 minutes is alive about 4 × 5 minutes = 20 minutes a month, against 720 hours for a stream; the list is read on Mondays, so an answer a few days old changes nothing.
+```
+
+The two files could also be one step each in raw; what matters is that both land untouched and that the first join comes after staging.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the five stages of a pipeline and the three layers of data.
+
+   <details>
+   <summary>answer</summary>
+
+   Source, ingestion, storage, transformation and serving; and raw, staging and serving.
+
+   </details>
+
+<Exercise id="data-engineer-role-and-lifecycle-3">
+
+**Spot the flaw.** A colleague sketches the pipeline for the owner's sheet in four lines and calls it "clean and short". What is wrong with it, and what would you change?
+
+```markdown
+| # | Step | Layer | ETL or ELT |
+|---|------|-------|------------|
+| 1 | Save every page of the API, keeping only the lines whose status is completed | raw | load first |
+| 2 | Save `products.csv` and `stores.csv` exactly as they are | raw | load first |
+| 3 | Give each column of the lines and of the two files its type and a clear name | staging | ELT, in SQL |
+| 4 | Join the lines to products and stores, add up each store and day, and publish `sales_by_store_day` | serving | ELT, in SQL |
+```
+
+<details>
+<summary>Hint</summary>
+
+The owner's first message said that one store's numbers did not match the till. Which lines could you not look at, to find out why?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```markdown
+| 1 | Save every page of the API ... | raw | load first |
+| 4 | ... | serving | ELT, in SQL |
+```
+
+</details>
+
+<Solution>
+
+Step 1 filters on the way in. The sheet counts completed orders, but the rule is applied before the bytes are kept, so the one canceled order of the six months is gone from raw, and so is any question about it: whether the till or the sheet is right about a store, or how many lines were canceled. A rule applied before landing cannot be undone, and a changed rule means asking the API for everything again. The dbt article gives the same reason for ELT: with the source data on hand, a team can revise how it is transformed without extracting again. The fix is to land every page exactly as it arrives, and to keep the completed lines where the rule can change: in the serving step, in SQL.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can name the five stages and say which three I own, tell ETL from ELT by where the transformation runs, place each step of a pipeline in raw, staging or serving, and choose batch or stream with a price in hours alive.*
+Test: Exercise data-engineer-role-and-lifecycle-2, done without opening the hints.
+
+The pattern to remember: **land it untouched, shape it in layers, and run it only as often as someone needs the answer.** Next comes [*Ingesting from APIs and files defensively*](/data-engineer/ingest-apis-and-files/) (DE2), which writes the first stage of this pipeline: the loop that reads the API through its faults and lands every page.

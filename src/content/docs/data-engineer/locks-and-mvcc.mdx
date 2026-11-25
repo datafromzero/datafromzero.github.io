@@ -1,0 +1,439 @@
+---
+id: data-engineer-locks-and-mvcc
+title: Locks, waits and MVCC
+description: Watch a writer wait for another writer in pg_locks, name the blocker, and see that readers never block writers under MVCC.
+stage: data-engineer
+order: 260
+level: advanced
+duration: 25
+objectives:
+  - Show that a reader does not block a writer under MVCC, in pg_locks
+  - Find a waiting update in pg_locks and name its blocker
+  - Choose a lock timeout for a nightly load
+prerequisites:
+  - data-engineer-mvcc-and-row-versions
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'PostgreSQL 16 documentation: Introduction to MVCC (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/mvcc-intro.html
+  - title: 'PostgreSQL 16 documentation: Explicit locking (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/explicit-locking.html
+  - title: 'PostgreSQL 16 documentation: pg_locks (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/view-pg-locks.html
+  - title: 'PostgreSQL 16 documentation: System information functions (pg_blocking_pids) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/functions-info.html
+  - title: 'PostgreSQL 16 documentation: Client connection defaults (lock_timeout) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/runtime-config-client.html
+  - title: 'PostgreSQL 16 documentation: SET (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-set.html
+status: published
+---
+
+## The question
+
+The data engineer asks the database administrator:
+
+> The nightly load sometimes sits for minutes doing nothing, and the morning report is late. Is it the analysts' long reports? Is it another job? How do I find out, and what should the load do about it?
+
+By the end you can say who waits for whom and give the load a limit on waiting.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*When transactions are not enough: write skew*](/data-engineer/write-skew-and-serializable/) (DE25) a `SELECT ... FOR UPDATE` made one session wait for another.
+
+**Diverge.** There the wait was a terminal that printed nothing. Here you ask the database who holds it up.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*MVCC: row versions and vacuum*](/data-engineer/mvcc-and-row-versions/) (DE25b), what does a row version's `xmax` hold?
+
+   <details>
+   <summary>answer</summary>
+
+   The id of the transaction that deleted or replaced it, or zero.
+
+   </details>
+
+2. Which SQLSTATE did Serializable return when it rolled a transaction back?
+
+   <details>
+   <summary>answer</summary>
+
+   `40001`, a serialization failure.
+
+   </details>
+
+## The big idea
+
+Locks decide who has to wait for whom, and two system views show it while it happens.
+
+## Learn by doing
+
+About 25 minutes, 3 new ideas: the locks of a reader and a writer, a wait you can see, and a limit on waiting. Open four terminals in the folder of the lab. Start each `psql` with a name, so the system views say which terminal is which: `PGAPPNAME=A psql -d lab` (then `B`, `C` and `M`; M only looks). In each, set the prompt to its letter and type `\pset footer off`, as in the previous lessons. In M, make a fresh scratch table:
+
+```sql
+DROP TABLE IF EXISTS orders_tx;
+CREATE TABLE orders_tx AS SELECT * FROM orders;
+ALTER TABLE orders_tx ADD PRIMARY KEY (order_id);
+```
+
+### 1. A reader beside a writer
+
+**Idea.** The view `pg_locks` has one row for each lock a session holds or waits for: what is locked (`locktype`), the lock `mode`, and `granted`. Joined to `pg_stat_activity`, it says which named session each lock belongs to. M asks it about the locks of A, B and C on `orders_tx`.
+
+**Try it.** A starts a long report at Repeatable Read, B cancels an order while the report is open, and M lists the locks:
+
+```sql
+-- in A
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+-- in B
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+-- in M
+SELECT a.application_name AS who, l.locktype, l.mode, l.granted
+FROM pg_locks AS l JOIN pg_stat_activity AS a USING (pid)
+WHERE a.application_name IN ('A', 'B', 'C') AND l.locktype IN ('relation', 'transactionid', 'tuple')
+  AND (l.relation IS NULL OR l.relation = 'orders_tx'::regclass)
+ORDER BY who, l.granted DESC, l.locktype;
+-- in A
+COMMIT;
+```
+
+**Predict:** Which locks does M list?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+M> SELECT a.application_name AS who, l.locktype, l.mode, l.granted
+FROM pg_locks AS l JOIN pg_stat_activity AS a USING (pid)
+WHERE a.application_name IN ('A', 'B', 'C') AND l.locktype IN ('relation', 'transactionid', 'tuple')
+  AND (l.relation IS NULL OR l.relation = 'orders_tx'::regclass)
+ORDER BY who, l.granted DESC, l.locktype;
+ who | locktype |      mode       | granted
+-----+----------+-----------------+---------
+ A   | relation | AccessShareLock | t
+A> COMMIT;
+COMMIT
+```
+
+</details>
+
+*Why:* B's update finished at once, while A's transaction was open, and B, which committed at once, holds nothing afterwards. A holds one lock on the table, `AccessShareLock`, the mode a `SELECT` takes on the tables it reads; B's update needed a mode that does not conflict with it. The documentation states the rule: in MVCC, reading never blocks writing and writing never blocks reading. [*MVCC: row versions and vacuum*](/data-engineer/mvcc-and-row-versions/) (DE25b) showed the two row versions that make it possible.
+
+### 2. Two writers, one row
+
+**Idea.** A row lock is held until the transaction ends. The documentation says that a session that must wait for another transaction asks for a share lock on that transaction's id, which it gets only when that transaction ends; `pg_locks` shows such a request with `granted` false. The function `pg_blocking_pids(pid)` returns the sessions that block a process.
+
+**Try it.** B changes order 1001 and does not commit; C changes the same order; M asks who waits for whom, and which locks are not granted:
+
+```sql
+-- in B
+BEGIN;
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1001;
+-- in C
+UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+-- in M
+SELECT a.application_name AS who, a.state, a.wait_event_type AS waits_on,
+       (SELECT string_agg(b.application_name, ', ') FROM pg_stat_activity AS b
+        WHERE b.pid = ANY (pg_blocking_pids(a.pid))) AS blocked_by
+FROM pg_stat_activity AS a WHERE a.application_name IN ('A', 'B', 'C') ORDER BY who;
+-- then the pg_locks query of unit 1 again; then, in B
+COMMIT;
+```
+
+**Predict:** What does terminal C print before B commits? In M, which row has `granted` false, and on what kind of object?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+B> BEGIN;
+BEGIN
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1001;
+UPDATE 1
+C> UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+(C waits)
+M> SELECT a.application_name AS who, a.state, a.wait_event_type AS waits_on,
+       (SELECT string_agg(b.application_name, ', ') FROM pg_stat_activity AS b
+        WHERE b.pid = ANY (pg_blocking_pids(a.pid))) AS blocked_by
+FROM pg_stat_activity AS a WHERE a.application_name IN ('A', 'B', 'C') ORDER BY who;
+ who |        state        | waits_on | blocked_by
+-----+---------------------+----------+------------
+ A   | idle                | Client   |
+ B   | idle in transaction | Client   |
+ C   | active              | Lock     | B
+M> SELECT a.application_name AS who, l.locktype, l.mode, l.granted
+FROM pg_locks AS l JOIN pg_stat_activity AS a USING (pid)
+WHERE a.application_name IN ('A', 'B', 'C') AND l.locktype IN ('relation', 'transactionid', 'tuple')
+  AND (l.relation IS NULL OR l.relation = 'orders_tx'::regclass)
+ORDER BY who, l.granted DESC, l.locktype;
+ who |   locktype    |       mode       | granted
+-----+---------------+------------------+---------
+ B   | relation      | RowExclusiveLock | t
+ B   | transactionid | ExclusiveLock    | t
+ C   | relation      | RowExclusiveLock | t
+ C   | transactionid | ExclusiveLock    | t
+ C   | tuple         | ExclusiveLock    | t
+ C   | transactionid | ShareLock        | f
+B> COMMIT;
+COMMIT
+(C goes on)
+UPDATE 1
+```
+
+Lines in parentheses are notes: "(C waits)" means terminal C printed nothing yet, and "(C goes on)" marks where its result appeared.
+
+</details>
+
+*Why:* C sat with no output until B committed. M saw C `active` but waiting on a `Lock`, blocked by B, which was `idle in transaction`: B was doing nothing, just holding its transaction open. In `pg_locks`, C's only lock not granted is a `ShareLock` on a `transactionid`, B's; the documentation says a process waiting for a row lock usually appears as waiting for the transaction id of the row's holder.
+
+### 3. A limit on waiting
+
+**Idea.** The setting `lock_timeout` makes the server abort any statement that waits longer than the given time for a lock; zero, the default, means wait forever. The documentation advises against setting it for the whole server in `postgresql.conf`, because it would affect all sessions. Set it in the session of the job.
+
+**Try it.** B holds order 1001 again; C gives itself two seconds:
+
+```sql
+-- in B
+BEGIN;
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1001;
+-- in C
+SET lock_timeout = '2s';
+UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+-- in B, once C has answered
+ROLLBACK;
+```
+
+**Predict:** What does C print, and after how long?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+B> BEGIN;
+BEGIN
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1001;
+UPDATE 1
+C> SET lock_timeout = '2s';
+SET
+C> UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+ERROR:  canceling statement due to lock timeout
+CONTEXT:  while updating tuple (0,1) in relation "orders_tx"
+B> ROLLBACK;
+ROLLBACK
+```
+
+</details>
+
+*Why:* after two seconds C gave up with `canceling statement due to lock timeout`, and the context names the row version it waited for (its numbers, here `(0,1)`, will differ on your machine). Choosing the value is a trade: long enough to ride out the short waits of a normal night, short enough that the job fails while there is still time to run it again before the report. A load that fails with a clear message can be retried by the orchestrator.
+
+<Aside type="tip" title="Remember">
+
+- Under MVCC, reading never blocks writing and writing never blocks reading.
+- A writer waits for the transaction that changed the row first. `pg_locks` shows the wait with `granted` false, and `pg_blocking_pids` names the blocker.
+- `lock_timeout` turns an endless wait into an error after a time you choose, set in the job's own session.
+
+**Common trap:** tuning a slow job that is not working at all. Look at `wait_event_type` in `pg_stat_activity` first: `Lock` means the job is waiting for someone.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-locks-and-mvcc-1">
+
+**The nightly column.** Tonight's load must add a column `note` to `orders_tx`. An analyst's report (A) has a transaction open that read the table. The load (B) gives itself two seconds. Finish the steps: try the `ALTER TABLE`, then end A's transaction and try again. Expected: what each `ALTER TABLE` prints.
+
+```sql
+-- in A
+BEGIN;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+-- in B
+SET lock_timeout = '2s';
+-- in B: the ALTER TABLE; then in A: COMMIT; then in B: the ALTER TABLE again
+```
+
+<details>
+<summary>Hint</summary>
+
+The statement is `ALTER TABLE orders_tx ADD COLUMN note text;`. Look up which lock mode `ALTER TABLE` takes in the table of lock modes.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+-- in B
+ALTER TABLE orders_tx ADD COLUMN note text;
+-- in A
+COMMIT;
+```
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+B> SET lock_timeout = '2s';
+SET
+B> ALTER TABLE orders_tx ADD COLUMN note text;
+ERROR:  canceling statement due to lock timeout
+A> COMMIT;
+COMMIT
+B> ALTER TABLE orders_tx ADD COLUMN note text;
+ALTER TABLE
+```
+
+The first try failed after two seconds; the second, after A committed, worked at once. A's `SELECT` holds `AccessShareLock` until its transaction ends, and the documentation says that this mode conflicts with `ACCESS EXCLUSIVE` only, the mode that many forms of `ALTER TABLE` take. A report that only reads blocks a schema change, though it never blocks an update. Drop the column again (`ALTER TABLE orders_tx DROP COLUMN note;`) before the next exercise.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-locks-and-mvcc-2">
+
+**The queue.** This time the load sets no timeout. A's report is open, B's `ALTER TABLE` waits for it, and then a third session C starts a new report on the same table. Before you run it, say in one sentence whether C's report runs at once, given that it only reads. Then run it and ask M who blocks whom. Expected: M's three rows, then the order in which B and C finish after A commits.
+
+<details>
+<summary>Hint</summary>
+
+Type, in order: in A `BEGIN;` and the count of Exercise 1; in B the `ALTER TABLE`; in C the same count; in M the `pg_stat_activity` query of unit 2; in A `COMMIT;`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"C waits too, behind B, although its lock does not conflict with A's; both finish after A commits."*
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+B> ALTER TABLE orders_tx ADD COLUMN note text;
+(B waits)
+C> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+(C waits)
+M> SELECT a.application_name AS who, a.state, a.wait_event_type AS waits_on,
+       (SELECT string_agg(b.application_name, ', ') FROM pg_stat_activity AS b
+        WHERE b.pid = ANY (pg_blocking_pids(a.pid))) AS blocked_by
+FROM pg_stat_activity AS a WHERE a.application_name IN ('A', 'B', 'C') ORDER BY who;
+ who |        state        | waits_on | blocked_by
+-----+---------------------+----------+------------
+ A   | idle in transaction | Client   |
+ B   | active              | Lock     | A
+ C   | active              | Lock     | B
+A> COMMIT;
+COMMIT
+(B goes on)
+ALTER TABLE
+(C goes on)
+ count
+-------
+   355
+```
+
+C, a plain reader, waited and was blocked by B, not by A. The documentation of `pg_blocking_pids` names this case: a process blocks another if it holds a conflicting lock, or if it is waiting for a lock that would conflict with the blocked process's request and is ahead of it in the queue. B's waiting request for `ACCESS EXCLUSIVE` conflicts with C's `ACCESS SHARE`, so every new reader lines up behind the load. A schema change that waits without a limit can stop every reader of the table.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: in `pg_locks`, what does a row with `granted` false mean?
+
+   <details>
+   <summary>answer</summary>
+
+   The session is waiting to acquire that lock; another session holds or waits for a conflicting one.
+
+   </details>
+
+<Exercise id="data-engineer-locks-and-mvcc-3">
+
+**Spot the flaw.** A colleague writes the load's first lines as below, to give each run "a local two-second limit". B holds order 1001 as in unit 3 (`BEGIN;` and the update, no commit). Run the colleague's lines in C, wait five seconds, then roll back in B. Expected: what each line in C prints, and when the `UPDATE` finishes. What went wrong?
+
+```sql
+SET LOCAL lock_timeout = '2s';
+BEGIN;
+UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+COMMIT;
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the line that the first statement prints, and compare it with the plain `SET` of unit 3.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The first line prints a `WARNING`. Ask what `LOCAL` limits the setting to, and whether that thing exists yet.
+
+</details>
+
+<Solution>
+
+```console
+B> BEGIN;
+BEGIN
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1001;
+UPDATE 1
+C> SET LOCAL lock_timeout = '2s';
+WARNING:  SET LOCAL can only be used in transaction blocks
+SET
+C> BEGIN;
+BEGIN
+C> UPDATE orders_tx SET payment_method = 'cash' WHERE order_id = 1001;
+(C waits)
+B> ROLLBACK;
+ROLLBACK
+(C goes on)
+UPDATE 1
+C> COMMIT;
+COMMIT
+```
+
+The documentation of `SET` says that `LOCAL` takes effect for only the current transaction, and that outside a transaction block it emits a warning and otherwise has no effect. There was no transaction yet, so the timeout was never set. So the `UPDATE` waited with no limit and finished only when B rolled back. Put `SET LOCAL` after `BEGIN;`, or use a plain `SET` as in unit 3, and read warnings in the job's log, not only errors.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can show that a reader and a writer do not wait for each other, find a waiting session and its blocker in `pg_stat_activity` and `pg_locks`, and give a job a lock timeout that makes it fail instead of wait.*
+Test: Exercise data-engineer-locks-and-mvcc-2, done without opening the hints.
+
+The pattern to remember: **when a job is slow, ask first whether it is working or waiting, and for whom.** Next comes [*WAL and recovery: the contract*](/data-engineer/wal-and-recovery/) (DE27), where the database writes down what it will do before it does it.

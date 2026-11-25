@@ -1,0 +1,528 @@
+---
+id: data-engineer-transactions-and-isolation
+title: 'Transactions: what ACID actually promises'
+short_title: Transactions and ACID
+description: Break a transaction on purpose, read the isolation levels as a table of allowed anomalies, and watch a nonrepeatable read and a phantom in two sessions.
+stage: data-engineer
+order: 240
+level: advanced
+duration: 30
+objectives:
+  - Say what each letter of ACID promises, and show atomicity with a failed transaction
+  - Read the isolation levels as the anomalies each one allows, including where PostgreSQL is stricter than the standard
+  - Reproduce a nonrepeatable read and a phantom at Read Committed, and see both vanish at Repeatable Read
+prerequisites:
+  - data-engineer-rows-columns-and-files
+  - sql-modify-data-transactions
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'PostgreSQL 16 documentation: Transaction isolation (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/transaction-iso.html
+  - title: 'PostgreSQL 16 documentation: Introduction to MVCC (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/mvcc-intro.html
+  - title: 'PostgreSQL 16 documentation: Transactions (tutorial) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/tutorial-transactions.html
+status: published
+---
+
+## The question
+
+The owner of the three cafes asks:
+
+> My report counts the Harbor orders when it starts and again a few seconds later, in the same report. Nobody changed my report. Can the database give two answers to the same question?
+
+The table is `orders`, with one row for each order. The first three of 1,800:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02:00 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38:00 | completed | mobile |
+| 1003 | 61 | 2 | 2026-01-01 15:47:00 | completed | mobile |
+
+By the end you can say what a transaction promises and what it does not, and make a report read one moment.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Inside the database: plans, transactions and copies*](/core/inside-the-database/) (C34) named the four letters of ACID, and [*Inserting, updating and deleting safely*](/sql/modify-data-transactions/) (S34) used `BEGIN`, `COMMIT` and `ROLLBACK`.
+
+**Diverge.** There the second session saw the first one's work all at once. Here two sessions run side by side, and the level you pick decides which moments the second one sees.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In S34, which statement undoes everything since `BEGIN`?
+
+   <details>
+   <summary>answer</summary>
+
+   `ROLLBACK;`
+
+   </details>
+
+2. In C34, which letter of ACID is about what other sessions see of work in progress?
+
+   <details>
+   <summary>answer</summary>
+
+   Isolation.
+
+   </details>
+
+## The big idea
+
+A transaction promises that its steps happen all together or not at all, and the isolation level says how much of other transactions' work it can see while it runs.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: a transaction that fails, the isolation levels, and two moments in one transaction. You need two terminals, each running `psql -d lab` against the lab of the first lesson of this module. In each one, type these two lines (type B instead of A in the second); they name the terminals and drop the row-count lines under each result, so what you see matches what is printed here:
+
+```sql
+\set PROMPT1 'A> '
+\pset footer off
+```
+
+In terminal A, make a scratch copy of the orders, so that the lab's own table stays as it is (the transcripts below show what each terminal prints):
+
+```sql
+CREATE TABLE orders_tx AS SELECT * FROM orders;
+ALTER TABLE orders_tx ADD PRIMARY KEY (order_id);
+```
+
+### 1. All or nothing
+
+**Idea.** The PostgreSQL tutorial says a transaction bundles multiple steps into a single, all-or-nothing operation. In ACID that is the letter A, atomicity. The letter C, consistency, is here the rules you declared, such as a primary key. Write the steps between `BEGIN` and `COMMIT`.
+
+**Try it.** In terminal A: mark one order canceled, then insert an order with an id that already exists, then commit, then look:
+
+```sql
+BEGIN;
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+INSERT INTO orders_tx VALUES (1001, 7, 1, '2026-07-01 09:00', 'completed', 'card');
+COMMIT;
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+```
+
+**Predict:** What does `COMMIT` print, and what status does order 1580 have at the end?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN;
+BEGIN
+A> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+A> INSERT INTO orders_tx VALUES (1001, 7, 1, '2026-07-01 09:00', 'completed', 'card');
+ERROR:  duplicate key value violates unique constraint "orders_tx_pkey"
+DETAIL:  Key (order_id)=(1001) already exists.
+A> COMMIT;
+ROLLBACK
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+```
+
+</details>
+
+*Why:* the key refused the second step, the `UPDATE` that had already printed `UPDATE 1` was undone, and `COMMIT` printed `ROLLBACK`: after an error, the transaction could not be committed. The order is still `completed`. A step that fails takes the others with it, so you never find half a job. The rule that broke is one you declared, which is the part of consistency the database can check. A rule you only know, such as "an order's total matches its lines", is one the database was never told, so it cannot check it. The tutorial adds a third promise: once a transaction is acknowledged, the changes are recorded permanently, even if a crash follows.
+
+### 2. Isolation is a dial
+
+**Idea.** The PostgreSQL documentation defines the isolation levels by the phenomena they must not allow. A **dirty read** is a read of data written by a concurrent transaction that has not committed. A **nonrepeatable read** is finding, on a second read, that data you read before was changed by a transaction that committed since. A **phantom read** is re-running a query and finding that the set of rows that match has changed.
+
+**Try it.** In terminal A ask for the loosest level, in terminal B change an order without committing, and read it from A:
+
+```sql
+-- in A
+BEGIN ISOLATION LEVEL READ UNCOMMITTED;
+-- in B
+BEGIN;
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+-- in A
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+-- in B
+ROLLBACK;
+-- in A
+COMMIT;
+```
+
+**Predict:** What status does A read for order 1580?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN
+B> BEGIN;
+BEGIN
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+B> ROLLBACK;
+ROLLBACK
+A> COMMIT;
+COMMIT
+```
+
+</details>
+
+*Why:* A read `completed`, so the dirty read did not happen, although A asked for the level that allows it. The documentation says PostgreSQL implements three distinct levels internally and that its Read Uncommitted behaves like Read Committed.
+
+### 3. Two moments in one transaction
+
+**Idea.** Read Committed is the default level of PostgreSQL. In the run below, terminal A reads twice inside one transaction, and between the two reads terminal B changes one row and adds another, in separate transactions that commit at once.
+
+**Try it.** Run it twice, once with a plain `BEGIN;` and once with `BEGIN ISOLATION LEVEL REPEATABLE READ;`. Reset the scratch table between the two runs (`DROP TABLE orders_tx;`, then create it again as at the start of this lesson):
+
+```sql
+-- in A
+BEGIN;   -- the second time: BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+-- in B
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
+-- in A
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+COMMIT;
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+```
+
+**Predict:** In each run, what do A's second pair of reads show (the status and the count), and what do the reads after `COMMIT` show?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN;
+BEGIN
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+B> INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
+INSERT 0 1
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+----------
+     1580 | canceled
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   356
+A> COMMIT;
+COMMIT
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+----------
+     1580 | canceled
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   356
+```
+
+```console
+A> BEGIN ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+B> INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
+INSERT 0 1
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+A> COMMIT;
+COMMIT
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+----------
+     1580 | canceled
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   356
+```
+
+</details>
+
+*Why:* at Read Committed, A's second reads showed `canceled` and 356: the same row had changed (a nonrepeatable read) and a new row had joined the set (a phantom read), inside one transaction. At Repeatable Read, A saw `completed` and 355 both times and met the changes only after `COMMIT`. The documentation explains it: a Read Committed query sees only data committed before that query began, so two queries can see two moments, while a Repeatable Read query sees a snapshot as of the start of the first non-transaction-control statement of the transaction. The phantom did not appear at Repeatable Read, which goes beyond what the standard requires; the documentation says that is acceptable, because the standard names only what must not occur. This is the owner's report: one report that asks twice at Read Committed can see two moments.
+
+Now the whole picture, as the table of the documentation in our words (the standard's four levels in the rows, the four phenomena in the columns):
+
+| level | dirty read | nonrepeatable read | phantom read | serialization anomaly |
+|---|---|---|---|---|
+| Read uncommitted | allowed by the standard, not in PostgreSQL | possible | possible | possible |
+| Read committed | not possible | possible | possible | possible |
+| Repeatable read | not possible | not possible | allowed by the standard, not in PostgreSQL | possible |
+| Serializable | not possible | not possible | not possible | not possible |
+
+The table says PostgreSQL is stricter than the standard in two places: unit 2 showed the first (Read Uncommitted allows no dirty read) and this unit the second (Repeatable Read allows no phantom). The last column belongs to the next lesson.
+
+<figure>
+<svg viewBox="0 0 360 168" width="360" role="img" aria-labelledby="dd5-moments-t dd5-moments-d">
+<title id="dd5-moments-t">What session A reads in one transaction while session B changes a row and adds one, at Read Committed and at Repeatable Read</title>
+<desc id="dd5-moments-d">Two rows of three boxes. Each box shows what session A reads: the status of order 1580 and the number of orders of store 3. At Read Committed: first read completed, 355; second read canceled, 356; after COMMIT canceled, 356. At Repeatable Read: first read completed, 355; second read completed, 355; after COMMIT canceled, 356. Session B changed order 1580 to canceled and added an order for store 3 between the first and the second read.</desc>
+<g fill="currentColor">
+<text x="16" y="22.4" font-size="10.5" font-weight="600">What session A reads, step by step</text>
+<text x="146" y="46.4" font-size="10" text-anchor="middle" fill-opacity="0.85">first read</text>
+<text x="226" y="46.4" font-size="10" text-anchor="middle" fill-opacity="0.85">second read</text>
+<text x="306" y="46.4" font-size="10" text-anchor="middle" fill-opacity="0.85">after COMMIT</text>
+<text x="226" y="59.4" font-size="9" text-anchor="middle" fill-opacity="0.7">(B has committed)</text>
+<text x="16" y="92.4" font-size="10" font-weight="600">Read Committed</text>
+<rect x="108" y="68.4" width="76" height="38" rx="4" fill="currentColor" fill-opacity="0.1" />
+<text x="146" y="84.4" font-size="10" font-weight="600" text-anchor="middle">completed</text>
+<text x="146" y="98.4" font-size="10" text-anchor="middle">355 orders</text>
+<rect x="188" y="68.4" width="76" height="38" rx="4" fill="#00a07a" fill-opacity="0.9" />
+<text x="226" y="84.4" font-size="10" font-weight="600" text-anchor="middle" fill="#ffffff">canceled</text>
+<text x="226" y="98.4" font-size="10" text-anchor="middle" fill="#ffffff">356 orders</text>
+<rect x="268" y="68.4" width="76" height="38" rx="4" fill="currentColor" fill-opacity="0.1" />
+<text x="306" y="84.4" font-size="10" font-weight="600" text-anchor="middle">canceled</text>
+<text x="306" y="98.4" font-size="10" text-anchor="middle">356 orders</text>
+<text x="16" y="140.4" font-size="10" font-weight="600">Repeatable Read</text>
+<rect x="108" y="116.4" width="76" height="38" rx="4" fill="currentColor" fill-opacity="0.1" />
+<text x="146" y="132.4" font-size="10" font-weight="600" text-anchor="middle">completed</text>
+<text x="146" y="146.4" font-size="10" text-anchor="middle">355 orders</text>
+<rect x="188" y="116.4" width="76" height="38" rx="4" fill="currentColor" fill-opacity="0.1" />
+<text x="226" y="132.4" font-size="10" font-weight="600" text-anchor="middle">completed</text>
+<text x="226" y="146.4" font-size="10" text-anchor="middle">355 orders</text>
+<rect x="268" y="116.4" width="76" height="38" rx="4" fill="currentColor" fill-opacity="0.1" />
+<text x="306" y="132.4" font-size="10" font-weight="600" text-anchor="middle">canceled</text>
+<text x="306" y="146.4" font-size="10" text-anchor="middle">356 orders</text>
+</g>
+</svg>
+</figure>
+
+<Aside type="tip" title="Remember">
+
+- A transaction is all or nothing: a failed step takes the others with it, and `COMMIT` of a failed transaction rolls back.
+- The isolation levels are a table of which anomalies each allows; in PostgreSQL, Read Uncommitted is Read Committed and Repeatable Read has no phantoms.
+- At Read Committed each query sees what was committed before it began; at Repeatable Read the whole transaction sees one snapshot.
+- A report that must agree with itself reads inside one Repeatable Read transaction.
+
+**Common trap:** thinking a transaction protects a report from changes by others. At the default level it protects it from half-finished work, not from two moments.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-transactions-and-isolation-1">
+
+**A row that vanishes.** The report counts the mobile orders twice, and between the two counts another session deletes order 1003 (a mobile order). Run it at Read Committed and at Repeatable Read. Expected: the two counts of each run. Start from the given steps, and finish the rest in the right terminal:
+
+```sql
+-- in A
+BEGIN;
+SELECT count(*) FROM orders_tx WHERE payment_method = 'mobile';
+-- in B
+DELETE FROM orders_tx WHERE order_id = 1003;
+-- in A: the count again, then COMMIT
+```
+
+<details>
+<summary>Hint</summary>
+
+For the second run, put `ISOLATION LEVEL REPEATABLE READ` after `BEGIN`, and put order 1003 back first (drop and re-create `orders_tx`).
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+-- in A
+SELECT count(*) FROM orders_tx WHERE payment_method = 'mobile';
+COMMIT;
+```
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+A> SELECT count(*) FROM orders_tx WHERE payment_method = 'mobile';
+ count
+-------
+   546
+B> DELETE FROM orders_tx WHERE order_id = 1003;
+DELETE 1
+A> SELECT count(*) FROM orders_tx WHERE payment_method = 'mobile';
+ count
+-------
+   545
+A> COMMIT;
+COMMIT
+```
+
+At Read Committed the second count is 545. The same run at Repeatable Read (`BEGIN ISOLATION LEVEL REPEATABLE READ;`) printed 546 and 546: A kept the row that B deleted until its own transaction ended. A row that disappears between two reads is the phantom read of unit 3 turned around.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-transactions-and-isolation-2">
+
+**Three lines, one bad.** A nightly job inserts three new orders into `orders_tx` (ids 2801, 2802 and 2802 again: the third repeats the id of the second). Before you start, say in one sentence how many of the three land, and how many orders the table holds afterwards, if the job sends the three `INSERT` statements one by one, and if it sends them between `BEGIN` and `COMMIT`. From a fresh `orders_tx`, run both ways and count. Expected: one count after each way.
+
+<details>
+<summary>Hint</summary>
+
+Use `INSERT INTO orders_tx VALUES (2801, NULL, 1, '2026-07-01 09:00', 'completed', 'cash');` and change the id and the time for the others. Drop and re-create `orders_tx` between the two ways.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"One way leaves two new orders and the other leaves none."*
+
+```sql
+BEGIN;
+INSERT ... (2801 ...);
+-- the next two inserts, then COMMIT
+```
+
+</details>
+
+<Solution>
+
+```console
+A> INSERT INTO orders_tx VALUES (2801, NULL, 1, '2026-07-01 09:00', 'completed', 'cash');
+INSERT 0 1
+A> INSERT INTO orders_tx VALUES (2802, NULL, 1, '2026-07-01 09:05', 'completed', 'card');
+INSERT 0 1
+A> INSERT INTO orders_tx VALUES (2802, NULL, 1, '2026-07-01 09:10', 'completed', 'mobile');
+ERROR:  duplicate key value violates unique constraint "orders_tx_pkey"
+DETAIL:  Key (order_id)=(2802) already exists.
+A> SELECT count(*) FROM orders_tx;
+ count
+-------
+  1802
+```
+
+```console
+A> BEGIN;
+BEGIN
+A> INSERT INTO orders_tx VALUES (2801, NULL, 1, '2026-07-01 09:00', 'completed', 'cash');
+INSERT 0 1
+A> INSERT INTO orders_tx VALUES (2802, NULL, 1, '2026-07-01 09:05', 'completed', 'card');
+INSERT 0 1
+A> INSERT INTO orders_tx VALUES (2802, NULL, 1, '2026-07-01 09:10', 'completed', 'mobile');
+ERROR:  duplicate key value violates unique constraint "orders_tx_pkey"
+DETAIL:  Key (order_id)=(2802) already exists.
+A> COMMIT;
+ROLLBACK
+A> SELECT count(*) FROM orders_tx;
+ count
+-------
+  1800
+```
+
+Sent one by one, each statement is its own transaction: two orders landed and the third failed, which leaves the table half loaded, with no sign that the batch was meant to be whole. Between `BEGIN` and `COMMIT` none landed and the table is as it was, so the job can be fixed and run again.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which phenomenon is a second read of the same row finding that another transaction changed it?
+
+   <details>
+   <summary>answer</summary>
+
+   A nonrepeatable read. A phantom read is the same for a set of rows that match a query.
+
+   </details>
+
+<Exercise id="data-engineer-transactions-and-isolation-3">
+
+**Spot the flaw.** A colleague wants the Harbor report to read one moment, and writes the steps below: `BEGIN`, the count, then `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;`, then the count again. "That should make the second count the same as the first." Run the steps in one terminal. Expected: a count, an error, and then what the second `SELECT` and the `COMMIT` print. What went wrong, and how would you ask for the level?
+
+```sql
+BEGIN;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SELECT count(*) FROM orders_tx WHERE store_id = 3;
+COMMIT;
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the text of the error the `SET TRANSACTION` line prints, and the one the next `SELECT` prints.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+-- the two counts
+```
+
+</details>
+
+<Solution>
+
+```console
+A> BEGIN;
+BEGIN
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ count
+-------
+   355
+A> SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+ERROR:  SET TRANSACTION ISOLATION LEVEL must be called before any query
+A> SELECT count(*) FROM orders_tx WHERE store_id = 3;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+A> COMMIT;
+ROLLBACK
+```
+
+The level was never set: the error says the command must come before any query, and the first count was a query. The error also aborted the transaction, so the second `SELECT` was refused and `COMMIT` rolled back, with no count at all. Ask for the level in the `BEGIN` line, `BEGIN ISOLATION LEVEL REPEATABLE READ;`, as units 2 and 3 did, and both counts then read the same snapshot.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can show that a transaction is all or nothing, read the isolation levels as a table of allowed anomalies, and reproduce a nonrepeatable read and a phantom at Read Committed and see them vanish at Repeatable Read.*
+Test: Exercise data-engineer-transactions-and-isolation-2, done without opening the hints.
+
+The pattern to remember: **a transaction is one moment or many, depending on its level; ask which moment each read sees.** Next comes [*When transactions are not enough: write skew*](/data-engineer/write-skew-and-serializable/) (DE25), where even Repeatable Read lets a business rule break.

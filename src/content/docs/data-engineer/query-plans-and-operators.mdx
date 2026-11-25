@@ -1,0 +1,470 @@
+---
+id: data-engineer-query-plans-and-operators
+title: 'Reading the machine: plans and operators'
+short_title: Plans and operators
+description: Read EXPLAIN ANALYZE in PostgreSQL and DuckDB, compare estimated with actual rows, refresh statistics with ANALYZE, and see how join order changes cost.
+stage: data-engineer
+order: 200
+level: advanced
+duration: 30
+objectives:
+  - Compare the estimated rows of a plan node with its actual rows, in PostgreSQL and DuckDB
+  - Say where an estimate comes from and refresh it with ANALYZE
+  - Name a cause when an estimate is far from the actual rows
+  - Show that inner joins in any order give the same rows at a different cost
+prerequisites:
+  - core-inside-the-database
+  - sql-inner-join
+  - data-engineer-role-and-lifecycle
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'PostgreSQL 16 documentation: Using EXPLAIN (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/using-explain.html
+  - title: 'PostgreSQL 16 documentation: Statistics used by the planner (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/planner-stats.html
+  - title: 'PostgreSQL 16 documentation: ANALYZE (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-analyze.html
+  - title: 'PostgreSQL 16 documentation: Controlling the planner with explicit JOIN clauses (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/explicit-joins.html
+  - title: 'DuckDB documentation: EXPLAIN (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/guides/meta/explain
+  - title: 'PostgreSQL downloads (accessed 2026-11-24)'
+    url: https://www.postgresql.org/download/
+status: published
+---
+
+## The question
+
+The owner of the three cafes asks the data engineer:
+
+> The report for Harbor before April came back with no rows, and the database printed a plan for it. Can I trust a plan?
+
+The table in question holds the first three of 1,800 orders:
+
+| order_id | customer_id | store_id | ordered_at | status | payment_method |
+|---:|---:|---:|---|---|---|
+| 1001 | 15 | 2 | 2026-01-01 08:02:00 | completed | mobile |
+| 1002 | 46 | 1 | 2026-01-01 15:38:00 | completed | mobile |
+| 1003 | 61 | 2 | 2026-01-01 15:47:00 | completed | mobile |
+
+By the end you can set what a plan expects beside what it found, say where the expectation comes from, and tell two joins in a different order apart by their cost.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Inside the database: plans, transactions and copies*](/core/inside-the-database/) (C34) read a plan as a tree of operators, from the scans at the bottom to the aggregate at the top.
+
+**Diverge.** There you named the boxes. Here every box carries a second number, and unit 1 shows where the two numbers part.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C34, which box of a plan keeps the rows that pass a test, and which box pairs up the rows of two inputs?
+
+   <details>
+   <summary>answer</summary>
+
+   The filter keeps the rows that pass; the join pairs them.
+
+   </details>
+
+2. In [*Inner join*](/sql/inner-join/) (S20), write a query that lists each order's `order_id` beside its `store_name`.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   SELECT o.order_id, s.store_name
+   FROM orders AS o
+   JOIN stores AS s ON s.store_id = o.store_id;
+   ```
+
+   </details>
+
+## The big idea
+
+A plan is a tree of boxes, and every box carries a guess: how many rows the planner expects to come out of it.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the planner's guess beside the real count, where the guess comes from, and join order. The PostgreSQL steps run in `psql`; the DuckDB steps run in the page.
+
+**Set up once.** Install PostgreSQL 16 for your system from the PostgreSQL download page (the installers include `psql`), or start it with Docker and run `psql` from your computer. Then, in an empty folder, fetch the lab script and build the lab:
+
+```bash
+docker run --name lab-pg -e POSTGRES_PASSWORD=lab -p 5432:5432 -d postgres:16
+export PGHOST=localhost PGUSER=postgres PGPASSWORD=lab
+curl -fLO https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/de-internals-v1/scripts/de-internals/lab.py
+uv run python lab.py
+createdb lab
+cd lab && psql -d lab -f setup.sql
+```
+
+The first two lines are for the Docker route only; with an installer, skip them and connect as you were told to. The script writes the five cafe-sales tables and four larger tables as CSV files, and prints their rows and a checksum. It must end with these lines (the checksums prove that your files equal the ones used here):
+
+```console
+$ uv run python lab.py
+big/customers_big.csv          200,000 rows  sha256 b5cc3509fe82
+big/lines_big.csv              950,414 rows  sha256 d42a67935097
+big/order_items_big.csv        950,414 rows  sha256 593a939e7b55
+big/orders_big.csv             500,000 rows  sha256 0ca5894b7eb0
+cafe/customers.csv                 150 rows  sha256 60a7a149bc5f
+cafe/order_items.csv             3,287 rows  sha256 4e8ec251f0fa
+cafe/orders.csv                  1,800 rows  sha256 fe1ded9598da
+cafe/products.csv                   16 rows  sha256 7e2d8b367d90
+cafe/stores.csv                      3 rows  sha256 96132824febe
+seed 2026; 950,414 order lines
+```
+
+`setup.sql` loads them into the database `lab` and ends by printing the number of rows of six tables. The tables with `_big` in their name are made-up data of the sizes this module needs, and later lessons use them. Start `psql -d lab` for the PostgreSQL steps and type `\pset footer off` once: it drops the `(3 rows)` line under each result, so plans read the same as the ones printed here. `\q` leaves `psql`.
+
+### 1. The planner's guess beside the real count
+
+**Idea.** `EXPLAIN` prints a plan with the number of rows the planner expects from each node, and the PostgreSQL documentation says the rows value is the number a node emits, estimated. `EXPLAIN ANALYZE` adds the true row counts of each node beside the estimates, and the documentation calls the question of whether the estimated counts are reasonably close to reality the thing that is usually most important to look for. DuckDB marks its estimates with a `~`.
+
+**Try it.** In `psql`, the orders of store 3 placed before April 1 (`TIMING OFF` and `SUMMARY OFF` leave out the times, which this lesson does not read):
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT * FROM orders WHERE store_id = 3 AND ordered_at < '2026-04-01';
+```
+
+**Predict:** What does the scan expect (`rows=`), and how many rows does it find (`actual rows=`)? Is the planner's number the larger?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+                                            QUERY PLAN
+--------------------------------------------------------------------------------------------------
+ Seq Scan on orders  (cost=0.00..43.00 rows=142 width=34) (actual rows=0 loops=1)
+   Filter: ((ordered_at < '2026-04-01 00:00:00'::timestamp without time zone) AND (store_id = 3))
+   Rows Removed by Filter: 1800
+```
+
+</details>
+
+*Why:* the planner expected 142 rows and found 0. The `stores` table says Harbor opened on 2026-04-01, so it has no orders before April, but the planner does not know that two conditions are linked. The documentation says the planner normally assumes that multiple conditions are independent, and multiplies their chances: Harbor has 355 of the 1,800 orders and 718 orders are from before April, so $$355 \times 718 / 1800 = 141.6$$, which prints as 142. DuckDB makes its own guess. In the editor, the first block prints the plan with `~` estimates and the second the plan with true counts. Expected: the scan box ends with `~900 rows` in the first plan and with `0 rows` in the second (the page's engine and DuckDB 2.0.0 print the same two numbers):
+
+<RunSQL query={`EXPLAIN SELECT * FROM orders WHERE store_id = 3 AND ordered_at < '2026-04-01';`} />
+
+<RunSQL query={`EXPLAIN ANALYZE SELECT * FROM orders WHERE store_id = 3 AND ordered_at < '2026-04-01';`} />
+
+Two engines, two different wrong numbers, one right count. A plan tells you what the planner believes, and `EXPLAIN ANALYZE` tells you where the belief is wrong.
+
+### 2. Where the guess comes from
+
+**Idea.** PostgreSQL keeps statistics: the planner's guesses come from the number of rows of each table and from a summary of each column (the most common values and how often they occur), and the `ANALYZE` command collects them. The table `orders_fresh` below is a copy of `orders` whose automatic upkeep is switched off, so nothing has collected its statistics yet.
+
+**Try it.** In `psql`:
+
+```sql
+CREATE TABLE orders_fresh (LIKE orders) WITH (autovacuum_enabled = false);
+INSERT INTO orders_fresh SELECT * FROM orders;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) SELECT * FROM orders_fresh WHERE payment_method = 'cash';
+ANALYZE orders_fresh;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) SELECT * FROM orders_fresh WHERE payment_method = 'cash';
+```
+
+**Predict:** For cash orders, what does the first plan expect, and what does the second expect?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+                                       QUERY PLAN
+----------------------------------------------------------------------------------------
+ Seq Scan on orders_fresh  (cost=0.00..30.40 rows=6 width=84) (actual rows=253 loops=1)
+   Filter: (payment_method = 'cash'::text)
+   Rows Removed by Filter: 1547
+
+ANALYZE
+                                        QUERY PLAN
+------------------------------------------------------------------------------------------
+ Seq Scan on orders_fresh  (cost=0.00..38.50 rows=253 width=34) (actual rows=253 loops=1)
+   Filter: (payment_method = 'cash'::text)
+   Rows Removed by Filter: 1547
+```
+
+</details>
+
+*Why:* before `ANALYZE` the planner expected 6 rows and found 253; after it, the estimate is 253. The PostgreSQL documentation says `ANALYZE` collects statistics about the contents of tables and stores them where the planner reads them. You can see the first gap in the catalog too: `SELECT reltuples FROM pg_class WHERE relname = 'orders_fresh'` prints -1, which the documentation reads as a row count that is unknown because the table has never been vacuumed or analyzed. In the default setup a background process (autovacuum) analyzes tables for you, which is why most plans are not like the first one. Drop the copy with `DROP TABLE orders_fresh;`.
+
+### 3. Join order changes the cost, not the rows
+
+**Idea.** For inner joins the PostgreSQL documentation says the planner is free to join the tables in any order, and that the possibilities give semantically equivalent results but might have hugely different execution costs. The setting `join_collapse_limit = 1` makes the planner follow the order you wrote the joins in, so you can ask for two orders and compare. A join has two inputs, and the cost of the next join depends on how many rows the lower one sends up.
+
+**Try it.** Units sold at Harbor for each category, joined in two written orders. Run both (the second starts from `order_items`):
+
+```sql
+SET join_collapse_limit = 1;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT p.category, sum(i.quantity) AS units
+FROM orders o
+JOIN order_items i ON i.order_id = o.order_id
+JOIN products p ON p.product_id = i.product_id
+WHERE o.store_id = 3
+GROUP BY p.category;
+
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT p.category, sum(i.quantity) AS units
+FROM order_items i
+JOIN products p ON p.product_id = i.product_id
+JOIN orders o ON o.order_id = i.order_id
+WHERE o.store_id = 3
+GROUP BY p.category;
+```
+
+**Predict:** In each plan, how many rows does the lower of the two joins send up to the join above it? And which plan has the lower cost on the top line?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+SET
+                                                  QUERY PLAN
+---------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=112.20..112.24 rows=4 width=14) (actual rows=4 loops=1)
+   Group Key: p.category
+   Batches: 1  Memory Usage: 24kB
+   ->  Hash Join  (cost=44.30..108.96 rows=648 width=10) (actual rows=645 loops=1)
+         Hash Cond: (i.product_id = p.product_id)
+         ->  Hash Join  (cost=42.94..105.46 rows=648 width=8) (actual rows=645 loops=1)
+               Hash Cond: (i.order_id = o.order_id)
+               ->  Seq Scan on order_items i  (cost=0.00..53.87 rows=3287 width=12) (actual rows=3287 loops=1)
+               ->  Hash  (cost=38.50..38.50 rows=355 width=4) (actual rows=355 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 21kB
+                     ->  Seq Scan on orders o  (cost=0.00..38.50 rows=355 width=4) (actual rows=355 loops=1)
+                           Filter: (store_id = 3)
+                           Rows Removed by Filter: 1445
+         ->  Hash  (cost=1.16..1.16 rows=16 width=10) (actual rows=16 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               ->  Seq Scan on products p  (cost=0.00..1.16 rows=16 width=10) (actual rows=16 loops=1)
+
+                                                  QUERY PLAN
+---------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=120.97..121.01 rows=4 width=14) (actual rows=4 loops=1)
+   Group Key: p.category
+   Batches: 1  Memory Usage: 24kB
+   ->  Hash Join  (cost=44.30..117.73 rows=648 width=10) (actual rows=645 loops=1)
+         Hash Cond: (i.order_id = o.order_id)
+         ->  Hash Join  (cost=1.36..66.14 rows=3287 width=14) (actual rows=3287 loops=1)
+               Hash Cond: (i.product_id = p.product_id)
+               ->  Seq Scan on order_items i  (cost=0.00..53.87 rows=3287 width=12) (actual rows=3287 loops=1)
+               ->  Hash  (cost=1.16..1.16 rows=16 width=10) (actual rows=16 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                     ->  Seq Scan on products p  (cost=0.00..1.16 rows=16 width=10) (actual rows=16 loops=1)
+               ->  Hash  (cost=38.50..38.50 rows=355 width=4) (actual rows=355 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 21kB
+                     ->  Seq Scan on orders o  (cost=0.00..38.50 rows=355 width=4) (actual rows=355 loops=1)
+                           Filter: (store_id = 3)
+                           Rows Removed by Filter: 1445
+```
+
+The two plans print one after the other, in the order you ran them.
+
+</details>
+
+*Why:* in the order that starts from `orders`, the lower join sends up 645 rows, and in the order that starts from `order_items` and `products` it sends up 3,287, because nothing has narrowed the lines yet. The plans cost 112.24 and 121.01. Both queries give the same four rows (bakery 214 units, coffee 508, food 145, tea 174): run each without `EXPLAIN` and look. Leave the setting with `RESET join_collapse_limit;`. In DuckDB 2.0.0 the two written orders gave the same tree, with 645 rows leaving the lower join in both, so its optimizer chose the order and the written one did not matter.
+
+<figure>
+<svg viewBox="0 0 360 144" width="360" role="img" aria-labelledby="dd1-join-order-t dd1-join-order-d">
+<title id="dd1-join-order-t">Rows the lower join sends up, for the same query written in two join orders</title>
+<desc id="dd1-join-order-d">Two horizontal bars on a scale of rows. When the query starts from orders, the lower join sends up 645 rows and the plan costs 112.24. When it starts from order&#95;items and products, the lower join sends up 3,287 rows and the plan costs 121.01. Both queries return the same four rows.</desc>
+<g fill="currentColor">
+<text x="21.1" y="22.4" font-size="10.5" font-weight="600">Rows sent up by the lower join (Harbor, units sold by category)</text>
+<text x="27.1" y="52.4" font-size="10">orders first: orders, order&#95;items, then products</text>
+<rect x="27.1" y="60.4" width="30.4" height="18" rx="3" fill="#0072b2" />
+<text x="65.5" y="73.4" font-size="10" font-weight="600">645 rows, cost 112.24</text>
+<text x="27.1" y="104.4" font-size="10">items first: order&#95;items, products, then orders</text>
+<rect x="27.1" y="112.4" width="155.1" height="18" rx="3" fill="#00a07a" />
+<text x="190.2" y="125.4" font-size="10" font-weight="600">3,287 rows, cost 121.01</text>
+<path d="M27.1 48.4 L27.1 120.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+</g>
+</svg>
+</figure>
+
+<Aside type="tip" title="Remember">
+
+- Every node of a plan shows the rows the planner expects; `EXPLAIN ANALYZE` adds the rows it found. A large gap is the clue.
+- PostgreSQL's estimates come from statistics that `ANALYZE` collects for each column; a table that was never analyzed has none.
+- The planner multiplies the chances of separate conditions as if they were independent.
+- Inner joins in any order return the same rows; the cost follows the number of rows each join sends up.
+
+**Common trap:** reading a plan's cost and ignoring its row counts. A cost is the planner's estimate in its own units, and the rows beside it say whether the estimate rests on the data.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-query-plans-and-operators-1">
+
+**Join order on three other tables.** The orders of gold-tier customers, with the city of each store, joined in the order customers, orders, stores. Run it, then write the same query with the joins in the order stores, orders, customers and run that. Expected: two plans; say how many rows the lower join of each plan sends up, and which plan costs less. Start from the given one:
+
+```sql
+SET join_collapse_limit = 1;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT s.city, count(*) AS orders
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id
+JOIN stores s ON s.store_id = o.store_id
+WHERE c.loyalty_tier = 'gold'
+GROUP BY s.city;
+```
+
+<details>
+<summary>Hint</summary>
+
+Keep the `WHERE` and the `GROUP BY` as they are. Only the order of the `FROM` and the two `JOIN` lines changes, and each `ON` condition goes with the table it joins in.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+FROM stores s
+JOIN orders o ON o.store_id = s.store_id
+JOIN ... ON ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+SET join_collapse_limit = 1;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT s.city, count(*) AS orders
+FROM stores s
+JOIN orders o ON o.store_id = s.store_id
+JOIN customers c ON c.customer_id = o.customer_id
+WHERE c.loyalty_tier = 'gold'
+GROUP BY s.city;
+```
+
+The first plan costs 45.06 and its lower join (customers with orders) sends up 173 rows. The second costs 55.32 and its lower join (stores with orders) sends up all 1,800 rows, because no store is filtered out. Both give the same three cities (Alameda 56 orders, Berkeley 31, Oakland 86). Finish with `RESET join_collapse_limit;`.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-query-plans-and-operators-2">
+
+**One week of orders.** A report filters the orders of the week of May 11 with `date_trunc('week', ordered_at) = '2026-05-11'`. Before you start, say in one sentence whether you expect the planner's estimate for this filter to be close. From a blank file or the `psql` prompt, run `EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)` on it, then write the same filter as a range of `ordered_at` and run that. Expected: two plans, each with `rows=` and `actual rows=` on the scan.
+
+<details>
+<summary>Hint</summary>
+
+A week starting on May 11 ends before May 18. Write the second filter with `>=` and `<` on the bare column.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"In the first plan the estimate is far below the actual rows; in the second it equals them."*
+
+```sql
+WHERE ordered_at >= '2026-05-11' AND ordered_at < ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT * FROM orders WHERE date_trunc('week', ordered_at) = '2026-05-11';
+
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT * FROM orders WHERE ordered_at >= '2026-05-11' AND ordered_at < '2026-05-18';
+```
+
+```console
+ Seq Scan on orders  (cost=0.00..43.00 rows=9 width=34) (actual rows=86 loops=1)
+   Filter: (date_trunc('week'::text, ordered_at) = '2026-05-11 00:00:00'::timestamp without time zone)
+   Rows Removed by Filter: 1714
+
+ Seq Scan on orders  (cost=0.00..43.00 rows=86 width=34) (actual rows=86 loops=1)
+   Filter: ((ordered_at >= '2026-05-11 00:00:00'::timestamp without time zone) AND (ordered_at < '2026-05-18 00:00:00'::timestamp without time zone))
+   Rows Removed by Filter: 1714
+```
+
+The statistics are kept for the column `ordered_at`, not for the value of a function of it, so the first filter gets a fixed guess: 9 rows, which is 0.5 percent of 1,800 (the filters on `extract(month ...)` and `ordered_at::date` also got 9 in the run behind this lesson). The range uses the column's own statistics and the estimate equals the 86 rows found. The rows are the same either way; only what the planner believes changed.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: where does PostgreSQL get the number of rows it expects from a filter, and what command refreshes it?
+
+   <details>
+   <summary>answer</summary>
+
+   From statistics about each column and the table's row count, which `ANALYZE` collects and stores for the planner.
+
+   </details>
+
+<Exercise id="data-engineer-query-plans-and-operators-3">
+
+**Spot the flaw.** A colleague wants to know what a cleanup costs before running it, so she types the line below on a scratch copy of the orders, reads the plan, and then runs the real `DELETE` on the same copy, which reports `DELETE 0`. She says the database is broken. Run her steps. Expected: one plan and a count. What went wrong, and how do you look at the plan without changing the table?
+
+```sql
+CREATE TABLE orders_scratch AS SELECT * FROM orders;
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) DELETE FROM orders_scratch WHERE store_id = 3;
+SELECT count(*) AS harbor_orders FROM orders_scratch WHERE store_id = 3;
+```
+
+<details>
+<summary>Hint</summary>
+
+Look at the count after her first plan, before she runs anything else. Then read the top line of the plan.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+BEGIN;
+EXPLAIN (ANALYZE, ...) DELETE ...;
+...
+```
+
+</details>
+
+<Solution>
+
+```console
+                                          QUERY PLAN
+-----------------------------------------------------------------------------------------------
+ Delete on orders_scratch  (cost=0.00..30.40 rows=0 width=0) (actual rows=0 loops=1)
+   ->  Seq Scan on orders_scratch  (cost=0.00..30.40 rows=6 width=6) (actual rows=355 loops=1)
+         Filter: (store_id = 3)
+         Rows Removed by Filter: 1445
+
+
+ harbor_orders
+---------------
+             0
+```
+
+The count is already 0 before her `DELETE`: `EXPLAIN ANALYZE` carried the statement out (the scan found 355 rows and the `Delete` node removed them). The PostgreSQL documentation says that because it actually runs the query, any side effects happen as usual, and it shows the remedy: begin a transaction, run `EXPLAIN ANALYZE`, and `ROLLBACK`. After `BEGIN; EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) DELETE ...; ROLLBACK;` the same count prints 355. Plain `EXPLAIN` without `ANALYZE` shows only estimates and changes nothing. (The first plan's `rows=6` is the guess of a table that was never analyzed, as in unit 2.)
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can run EXPLAIN ANALYZE, set the estimated rows of a node beside the actual rows, name a likely cause of a gap, refresh statistics with ANALYZE, and compare two join orders by the rows their lower join sends up.*
+Test: Exercise data-engineer-query-plans-and-operators-2, done without opening the hints.
+
+The pattern to remember: **a plan is a belief; read the rows it expects beside the rows it finds.** Next comes [*Indexes, honestly*](/data-engineer/indexes-honestly/) (DE21), which reads an index page by page and asks when the planner is right to ignore it.

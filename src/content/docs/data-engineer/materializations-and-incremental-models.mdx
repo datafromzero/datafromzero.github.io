@@ -1,0 +1,510 @@
+---
+id: data-engineer-materializations-and-incremental-models
+title: Materializations and incremental models
+short_title: Materializations
+description: Choose view, table, ephemeral or incremental for a dbt model, make one incremental with a unique key, and write the cost line of what a run reads and writes.
+stage: data-engineer
+order: 110
+level: advanced
+duration: 35
+objectives:
+  - Compare view, table, ephemeral and incremental materializations and say what each one stores
+  - Write an incremental model with is_incremental() and a unique key, and read what a run adds and what it replaces
+  - Explain what a full refresh does and why a model that changed needs one
+  - Write the cost line of a model, the sentence that says what a run reads, what it writes and when a full rebuild is needed
+prerequisites:
+  - data-engineer-dbt-project-and-first-model
+  - data-engineer-dbt-tests-and-documentation
+  - data-engineer-incremental-loads-idempotency
+  - sql-views
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'dbt documentation: Materializations (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/materializations
+  - title: 'dbt documentation: Incremental models (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/incremental-models
+  - title: 'dbt documentation: About incremental strategy (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/incremental-strategy
+  - title: 'dbt documentation: DuckDB configurations (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/reference/resource-configs/duckdb-configs
+  - title: 'DuckDB documentation: CREATE VIEW statement (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/statements/create_view
+status: published
+---
+
+## The question
+
+The owner of the cafes writes:
+
+> When a day's lines arrive, how much of the sales tables has to be built again, and how will I know the answer is still right?
+
+Every model of the project is built from scratch on every run, and nobody asked what a run costs. By the end you can say what each way of building a model stores, make one model add only what is new, and write down what a run reads and writes.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Incremental loads and idempotent reruns*](/data-engineer/incremental-loads-idempotency/) (DE4) loaded only the lines changed since a saved time and wrote them by key, so that a second run changed nothing. An incremental dbt model is that pattern written as a `select`.
+
+**Diverge.** In DE4 the loader's Python chose what to read. Here the model's own SQL chooses, and dbt writes the rows.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Saving a query as a view*](/sql/views/) (S29), you saved a query as a view. Write the statement that saves `SELECT store_id, store_name FROM stores` as a view named `store_names`.
+
+   <details>
+   <summary>answer</summary>
+
+   ```sql
+   CREATE VIEW store_names AS SELECT store_id, store_name FROM stores;
+   ```
+
+   </details>
+
+2. In DE4, a second run of the load changed nothing. What made that so?
+
+   <details>
+   <summary>answer</summary>
+
+   The lines were written by key: one already in the table was updated only if its version was newer, and one that was not there was added.
+
+   </details>
+
+## The big idea
+
+Every model is a `select`; the materialization decides what dbt keeps of it, and so what each run pays to keep it current.
+
+## Learn by doing
+
+About 35 minutes, 3 new ideas: a view against a table, an incremental model with a key, and a model that changes under an incremental table, with the cost line. Work in `de-pipeline-starter` with the dbt project of DE10 built (`uv run dbt build` passes 20 nodes from `dbt`), the full pull staged and the mock API running. To catch up, run `git checkout de-11-start`. Run dbt commands from `dbt`, and `uv run python` commands from the repository root.
+
+### 1. A view and a table, side by side
+
+**Idea.** A **materialization** is what dbt stores for a model. The dbt documentation says a `view` model is rebuilt on each run with `create view as` and a `table` model with `create table as`. In `dbt_project.yml` of DE9 the staging and intermediate folders are views and the marts are tables.
+
+**Try it.** Two small files are given: `scripts/stage_until.py` stages the order lines as the API showed them at a time (the `land` and `write_staging` of DE2 and DE3), and `scripts/model_report.py` prints what each model is in the database and its rows. Fetch them, stage the world at the end of May 2, build, and report, with the query that a view stores:
+
+```bash
+git show de-11-done:scripts/stage_until.py > scripts/stage_until.py
+git show de-11-done:scripts/model_report.py > scripts/model_report.py
+uv run python scripts/stage_until.py "2026-05-02 23:59:59"
+cd dbt
+uv run dbt build 2>&1 | grep -E "Done"
+uv run python ../scripts/model_report.py stg_stores fct_store_daily_sales
+```
+
+```console
+$ uv run python ../scripts/model_report.py stg_stores fct_store_daily_sales
+fct_store_daily_sales    table     276 rows
+int_order_lines_priced   view     1989 rows
+stg_order_lines          view     1989 rows
+stg_products             view       16 rows
+stg_stores               view        3 rows
+
+stg_stores: CREATE VIEW stg_stores AS SELECT store_id, store_name, city, opened_on FROM "../data/staging/stores.parquet";
+
+fct_store_daily_sales: a table, so no query is stored
+```
+
+The rest of the days arrive: stage the full pull again (DE3), and do not run dbt.
+
+```bash
+cd ..
+uv run python -m pipeline.stage
+cd dbt
+uv run python ../scripts/model_report.py
+```
+
+**Predict:** What will the report show now for `stg_order_lines` and for `fct_store_daily_sales`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python ../scripts/model_report.py
+fct_store_daily_sales    table     276 rows
+int_order_lines_priced   view     3287 rows
+stg_order_lines          view     3287 rows
+stg_products             view       16 rows
+stg_stores               view        3 rows
+```
+
+</details>
+
+*Why:* the view stores only its query, and the DuckDB documentation says the query is run every time the view is referenced, so it reads the Parquet file again and shows 3,287 lines as soon as the file changes. The table stores the result of its last build: 276 store-days from the first 1,989 lines. A view is always current and pays on every query; a table is fast to read and as fresh as its last build. The dbt page advises starting with views and changing only when a model is slow. A third kind, `ephemeral`, stores nothing: dbt pastes the model's SQL into the models that read it as a common table expression. Exercise 1 tries it.
+
+### 2. An incremental model with a key
+
+**Idea.** An **incremental** model builds the whole table on its first run. The dbt documentation says `is_incremental()` is true only when the table exists, `--full-refresh` is not passed and the model is configured as incremental; inside `{% if is_incremental() %}` the `select` can be narrowed to what is new. A **unique key** names the column that identifies a row: dbt replaces a row that has the same key and inserts the others. Without a key, most adapters only append. The `merge` strategy does this matching in one statement; with dbt-duckdb it needs DuckDB 1.4.0 or later (the project has 2.0.0).
+
+**Try it.** Make three changes to `dbt/models/intermediate/int_order_lines_priced.sql`. Put this at the top:
+
+```sql
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='order_line_id'
+    )
+}}
+```
+
+Add a comma after the `line_amount_usd` line and the column `l.updated_at` as the last one. Add this at the end:
+
+```sql
+{% if is_incremental() %}
+-- On a later run: only the lines posted since the newest one this table holds.
+where l.updated_at >= (select max(updated_at) from {{ this }})
+{% endif %}
+```
+
+The model was a view and becomes a table, so the first build creates it. Stage the world of May 2, build, and look at line 6952, the extra-zero line that the API corrects later:
+
+```bash
+cd ..
+uv run python scripts/stage_until.py "2026-05-02 23:59:59"
+cd dbt
+uv run dbt build 2>&1 | grep -E "incremental|Done"
+uv run python ../scripts/model_report.py
+uv run dbt show --quiet --inline "select order_line_id, units, updated_at from {{ ref('int_order_lines_priced') }} where order_line_id = 6952"
+```
+
+```console
+$ uv run python ../scripts/model_report.py
+fct_store_daily_sales    table     276 rows
+int_order_lines_priced   table    1989 rows
+stg_order_lines          view     1989 rows
+stg_products             view       16 rows
+stg_stores               view        3 rows
+```
+
+```console
+$ uv run dbt show --quiet --inline "select order_line_id, units, updated_at from {{ ref('int_order_lines_priced') }} where order_line_id = 6952"
+| order_line_id | units |          updated_at |
+| ------------- | ----- | ------------------- |
+|          6952 |    20 | 2026-05-01 13:30:00 |
+```
+
+Stage the full pull and count the lines the filter will select:
+
+```bash
+cd ..
+uv run python -m pipeline.stage
+cd dbt
+uv run dbt show --quiet --inline "select count(*) as selected from {{ ref('stg_order_lines') }} where updated_at >= (select max(updated_at) from {{ ref('int_order_lines_priced') }})"
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as selected from {{ ref('stg_order_lines') }} where updated_at >= (select max(updated_at) from {{ ref('int_order_lines_priced') }})"
+| selected |
+| -------- |
+|     1301 |
+```
+
+**Predict:** The table holds 1,989 rows and the build will read 1,301 lines. How many rows will the table hold after the build, and what will line 6952 show?
+
+After your guess, split the 1,301 by what the table already has, build, and report:
+
+```bash
+uv run dbt show --quiet --inline "select count(*) filter (where i.order_line_id is null) as new_lines, count(*) filter (where i.updated_at = s.updated_at) as same_version, count(*) filter (where i.updated_at < s.updated_at) as newer_version from {{ ref('stg_order_lines') }} as s left join {{ ref('int_order_lines_priced') }} as i using (order_line_id) where s.updated_at >= (select max(updated_at) from {{ ref('int_order_lines_priced') }})"
+uv run dbt build 2>&1 | grep -E "incremental|Done"
+uv run python ../scripts/model_report.py
+uv run dbt show --quiet --inline "select order_line_id, units, updated_at from {{ ref('int_order_lines_priced') }} where order_line_id = 6952"
+```
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) filter (where i.order_line_id is null) as new_lines, count(*) filter (where i.updated_at = s.updated_at) as same_version, count(*) filter (where i.updated_at < s.updated_at) as newer_version from {{ ref('stg_order_lines') }} as s left join {{ ref('int_order_lines_priced') }} as i using (order_line_id) where s.updated_at >= (select max(updated_at) from {{ ref('int_order_lines_priced') }})"
+| new_lines | same_version | newer_version |
+| --------- | ------------ | ------------- |
+|      1298 |            2 |             1 |
+```
+
+```console
+$ uv run python ../scripts/model_report.py
+fct_store_daily_sales    table     453 rows
+int_order_lines_priced   table    3287 rows
+stg_order_lines          view     3287 rows
+stg_products             view       16 rows
+stg_stores               view        3 rows
+```
+
+```console
+$ uv run dbt show --quiet --inline "select order_line_id, units, updated_at from {{ ref('int_order_lines_priced') }} where order_line_id = 6952"
+| order_line_id | units |          updated_at |
+| ------------- | ----- | ------------------- |
+|          6952 |     2 | 2026-05-03 13:30:00 |
+```
+
+</details>
+
+*Why:* the 1,301 lines are three kinds. 1,298 are new, and 1,989 plus 1,298 is 3,287. Two are lines of the newest timestamp that the table already holds, read again because the filter uses `>=`, as the dbt page's example does: with `>` a line that reached the source later with that same timestamp would be missed, and the unique key keeps the repeats from doubling. One is the correction of line 6952, a newer version of a line the table has: the key replaced its row, and its units went from 20 to 2. So the table grew by 1,298, not by 1,301. The mart is still a table, rebuilt in full from the intermediate model: it went from 276 to 453 rows.
+
+### 3. A model that changes, a full refresh and the cost line
+
+**Idea.** An incremental run reads only the rows its filter selects, so the rows already in the table keep what they were built with. The dbt documentation says `--full-refresh` drops the target table and builds it again for all time. A **cost line** is one sentence in a model's description that says what a run reads, what it writes and when a full rebuild is needed; write it before you choose a materialization, and read it when a run gets slow.
+
+**Try it.** Add the payment method: put the line `l.payment_method,` after `l.status,` in `int_order_lines_priced.sql`, and build the model.
+
+```bash
+uv run dbt build --select int_order_lines_priced 2>&1 | grep -E "Binder Error|Done"
+```
+
+**Predict:** What does the build do?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt build --select int_order_lines_priced 2>&1 | grep -E "Binder Error|Done"
+  Binder Error: Table "int_order_lines_priced" does not have a column with name "payment_method"
+20:07:02  Done. PASS=0 WARN=0 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+```
+
+</details>
+
+*Why:* the table was built before the column existed, and the merge writes by column name, so dbt stops with an error and leaves the table as it was. The Incremental models page lists a setting for this, `on_schema_change`, whose value `append_new_columns` adds the column. A full refresh is how every row gets the new meaning:
+
+```bash
+uv run dbt build --full-refresh --select int_order_lines_priced 2>&1 | grep -E "Done"
+uv run dbt show --quiet --inline "select count(*) as lines, count(payment_method) as with_method from {{ ref('int_order_lines_priced') }}"
+```
+
+```console
+$ uv run dbt build --full-refresh --select int_order_lines_priced 2>&1 | grep -E "Done"
+20:07:04  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as lines, count(payment_method) as with_method from {{ ref('int_order_lines_priced') }}"
+| lines | with_method |
+| ----- | ----------- |
+|  3287 |        3287 |
+```
+
+Now write the cost line. This is the description of the intermediate model; the file also keeps the key unique and filled, so that a repeated or empty row would fail a test (DE10), and it is given:
+
+```yaml
+    description: >
+      One row for each order line, priced with the product's price and net of the line's discount.
+      Cost line: an incremental merge on order_line_id. Each run reads the lines posted since the newest one the table
+      holds and writes only those; a change to what a row means needs dbt build --full-refresh.
+```
+
+```bash
+git show de-11-done:dbt/models/intermediate/schema.yml > models/intermediate/schema.yml
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:07:11  Done. PASS=23 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=23
+```
+
+The three kinds of this project read like this. The view `stg_order_lines` reads the Parquet file at every query and writes nothing. The incremental model reads the lines since the newest one (1,301 on the second build) and writes those. The builds in the logs took well under a second, so at this size time does not decide; the rows a run reads do. That is why the dbt page says to move to incremental when runs become too slow, and not to start there.
+
+<Aside type="tip" title="Remember">
+
+- A view stores the query, a table the result, an incremental table the result and a rule for adding to it, an ephemeral model nothing.
+- Start with a view, move to a table when it is slow to read, and to incremental when the rebuild is slow.
+- `is_incremental()` is false on the first run and with `--full-refresh`; a unique key replaces the row that has it and adds the rest.
+- A cost line says what a run reads and writes and when a full rebuild is needed.
+
+**Common trap:** changing what a row means and not refreshing the table: the old rows keep the old meaning.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-materializations-and-incremental-models-1">
+
+**An ephemeral model.** `stg_stores` is read by one model and by some tests, and nobody queries it on its own. Make it ephemeral: put `{{ config(materialized='ephemeral') }}` as the first line of `dbt/models/staging/stg_stores.sql`, build, and look at the first line of the compiled mart. The start is given; fill in the name of the mart. Expected: one node fewer than the 23 of unit 3, and a compiled mart that starts with a common table expression. When you are done, take the line out and build.
+
+```bash
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+head -1 target/compiled/cafe/models/marts/___.sql
+```
+
+<details>
+<summary>Hint</summary>
+
+The compiled SQL of a model is in `target/compiled/cafe/models/`, in the folder of the model. The mart that reads `stg_stores` is `fct_store_daily_sales`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+head -1 target/compiled/cafe/models/marts/fct_store_daily_sales.sql
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:07:15  Done. PASS=22 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=22
+```
+
+```console
+$ head -1 target/compiled/cafe/models/marts/fct_store_daily_sales.sql
+with __dbt__cte__stg_stores as (
+```
+
+The view `stg_stores` is no longer built, and its SQL sits inside the mart as `__dbt__cte__stg_stores`: the Materializations page says dbt interpolates the code of an ephemeral model into its dependents as a common table expression. The tests on it still ran, inside their own queries. The page also notes that overuse of ephemeral models makes queries harder to debug, and that you cannot select from one.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-materializations-and-incremental-models-2">
+
+**The cost line of the mart.** Before you start, say in a sentence what the cost line of `fct_store_daily_sales` must contain. Then, from a blank edit, add a cost line to its description in `dbt/models/marts/schema.yml`, and use `scripts/dbt_counts.py` to find how many rows the model reads and writes. Expected: a description with your cost line, and the two counts. Keep it: the next checkpoint has it.
+
+<details>
+<summary>Hint</summary>
+
+The mart is a table: it is rebuilt in full on every run, from the intermediate model. `dbt_counts.py` prints the rows of the intermediate model and of the mart.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A table rebuilt in full on every run; it reads every line of the intermediate model (3,287) and writes one row for each store and day (453)."*
+
+```yaml
+      Cost line: a table, ...
+```
+
+</details>
+
+<Solution>
+
+```yaml
+    description: >
+      Sales of completed order lines, for each store and each day on which it sold something.
+      A day without a sale has no row.
+      Cost line: a table, rebuilt in full on every run. It reads every line of int_order_lines_priced
+      and writes one row for each store and day.
+```
+
+```bash
+uv run python ../scripts/dbt_counts.py
+```
+
+```console
+$ uv run python ../scripts/dbt_counts.py
+stg_order_lines: 3287 rows, 3287 different grains
+int_order_lines_priced: 3287 rows, 3287 different grains
+fct_store_daily_sales: 453 rows, 453 different grains
+```
+
+The line says no number, so it stays true as history grows; the numbers belong in the answer to "is this slow yet?", which you read from the counts. It also says where the cost would be if the mart ever got slow: in reading all of history.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `is_incremental()` return on the first run of a model, and what does `--full-refresh` do to it?
+
+   <details>
+   <summary>answer</summary>
+
+   It returns false on the first run, because the table does not exist yet. With `--full-refresh` it is false again, and the table is dropped and built anew.
+
+   </details>
+
+<Exercise id="data-engineer-materializations-and-incremental-models-3">
+
+**Spot the flaw.** A colleague wants the mart to read only what is new too. They make `dbt/models/marts/fct_store_daily_sales.sql` incremental: the configuration below at the top, the filter below at the end of the `where`, and `max(l.updated_at) as updated_at` added to the select. They run `dbt run`: every model is built and nothing fails.
+
+```sql
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['store_id', 'order_date']
+    )
+}}
+```
+
+```sql
+{% if is_incremental() %}
+  and l.updated_at >= (select max(updated_at) from {{ this }})
+{% endif %}
+```
+
+Run it as they did, test it, and compare the completed lines of staging with the sum of `lines` in the mart. Expected: the run is green and one test fails.
+
+```bash
+cd ..
+uv run python scripts/stage_until.py "2026-05-02 23:59:59"
+cd dbt
+uv run dbt build --full-refresh 2>&1 | grep -E "FAIL|SKIP|Done"
+cd ..
+uv run python -m pipeline.stage
+cd dbt
+uv run dbt run 2>&1 | grep -E "Done"
+uv run dbt test 2>&1 | grep -E "FAIL|Done"
+uv run dbt show --quiet --inline "select (select count(*) from {{ ref('stg_order_lines') }} where status = 'completed') as completed_lines, sum(lines) as lines_in_mart from {{ ref('fct_store_daily_sales') }}"
+```
+
+What is wrong, and what showed it? When you are done, restore the mart of DE9 (`git show de-09-done:dbt/models/marts/fct_store_daily_sales.sql > models/marts/fct_store_daily_sales.sql`) and build.
+
+<details>
+<summary>Hint</summary>
+
+Compare the number of completed lines in `stg_order_lines` with the sum of the column `lines` of the mart, with `dbt show`. The row count of the mart is not the number to compare.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The test that failed is one of DE10. Ask which lines the second run read, and what the merge did with the store-day row of the line that was corrected.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt run 2>&1 | grep -E "Done"
+20:07:32  Done. PASS=5 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=5
+```
+
+```console
+$ uv run dbt test 2>&1 | grep -E "FAIL|Done"
+20:07:35  4 of 18 FAIL 1 assert_the_mart_keeps_every_completed_line ...................... [FAIL 1 in 0.02s]
+20:07:35  Done. PASS=17 WARN=0 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=18
+```
+
+```console
+$ uv run dbt show --quiet --inline "select (select count(*) from {{ ref('stg_order_lines') }} where status = 'completed') as completed_lines, sum(lines) as lines_in_mart from {{ ref('fct_store_daily_sales') }}"
+| completed_lines | lines_in_mart |
+| --------------- | ------------- |
+|            3286 |          3267 |
+```
+
+The run is green because `dbt run` runs no tests, and the mart has 453 rows, the number the correct mart has. But the second run read only the lines posted since the newest one, and the correction of line 6952 belongs to a store-day built before: the merge replaced that whole row with the total of that one line, so the mart counts 3,267 completed lines where staging has 3,286. The reconciliation test of DE10, `assert_the_mart_keeps_every_completed_line`, caught it; `dbt build` would have stopped at once. An incremental model is safe at the grain of the line, where a new version replaces an old one. At the grain of a store-day, a row is made of many lines, and a row built from only the new ones is wrong.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what a view, a table, an ephemeral and an incremental model store, make a model incremental with a filter and a unique key, say what a run of it reads and replaces, refresh it when its meaning changes, and write its cost line.*
+Test: Exercise data-engineer-materializations-and-incremental-models-2, done without opening the hints.
+
+The pattern to remember: **a materialization is a promise about cost and freshness; write the cost line before you choose it.** The next lesson, [*Jinja and macros*](/data-engineer/jinja-and-macros/) (DE11b), writes the rules these models share once.

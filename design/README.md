@@ -176,10 +176,9 @@ is one bar (D35): Starlight's header menu button and "On this page" bar are hidd
   Liquid glass: `--tb-glass` tint (0.5 dark, 0.55 light), 14px backdrop blur with saturate 1.8, a top-edge sheen
   (`--tb-sheen`), a solid `--bg` fallback without blur support. Motion is CSS only: sheet rows rise in with a stagger
   and a slight spring (`--tb-spring`), buttons scale to 0.96 when pressed; none of it under reduced motion.
-- **Sheet:** grows upward from the bar. A segmented control with two tabs, This lesson (This page off lessons: the
-  page's h2s, current one marked with a bar on the leading edge) and Course (stages with published lessons as `<details>`
-  of `E1 Title` rows, current lesson marked and scrolled into view; stages without lessons as muted "SQL · coming soon"
-  lines). Rows are at least 44px. A bottom row holds Home, Career quiz, a flag button (Report a problem, SPEC D37) and the light / dark switch (a
+- **Sheet:** grows upward from the bar. A segmented control with two tabs, Course first and open by default (stages with published lessons as
+  `<details>` of `E1 Title` rows, current lesson in inverted colors like the selected tab and scrolled into view; stages without lessons as muted "SQL · coming soon"
+  lines), then This lesson (This page off lessons: the page's h2s, the current one marked the same way). Rows are at least 44px. A bottom row holds Home, Career quiz, a flag button (Report a problem, SPEC D37) and the light / dark switch (a
   half-filled circle). The Course pane ends with a bordered row "See the whole roadmap →" to `/start/`, one for the SQL playground, and an "About this site" group (About, Cite, What's new, License, Privacy, Read in your language; owner, 2026-11-24): docs pages show it below 50rem only, where the sidebar is hidden, the homepage and pages without a sidebar (the playground, the 404) at every width. The Report pane (selected
   by the flag, a third hidden radio; no script) is a plain form: kind select, "What happened?" textarea, a solid
   "Continue on GitHub ↗" button and a one-line note; it opens GitHub's issue form in a new tab. Esc, a second tap, a link or an outside click closes it.

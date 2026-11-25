@@ -1,0 +1,512 @@
+---
+id: data-engineer-dbt-tests-and-documentation
+title: 'Tests and documentation: how a model earns trust'
+short_title: dbt tests and docs
+description: Add the four built-in dbt tests and two of your own, break the data to watch them fail, document the models and read what a change touches.
+stage: data-engineer
+order: 100
+level: intermediate
+duration: 30
+objectives:
+  - Add the four built-in tests to a model and run them on real and on broken data
+  - Write a test of your own for a business rule, and one that reconciles counts
+  - Document models and columns, and build the documentation
+  - Read the lineage to find what a change affects
+prerequisites:
+  - data-engineer-dbt-project-and-first-model
+  - data-engineer-data-quality-checks
+  - data-engineer-quality-gates-stop-or-quarantine
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'dbt documentation: Data tests (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/data-tests
+  - title: 'dbt documentation: Documentation (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/documentation
+  - title: 'dbt documentation: SQL models, ref (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/sql-models
+  - title: 'dbt documentation: build command, skipping on failures (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/reference/commands/build
+status: published
+---
+
+## The question
+
+The owner writes:
+
+> The new sales table looked fine for a week, and then a number was wrong for two days before anyone said so. How do we know the table is right every time it is built, and who is hurt when we change a model?
+
+Both questions have the same answer: the project says, in files, what must hold and what depends on what, and dbt checks the first and shows the second. A rule you wrote in DE6 for the incoming lines is a test here, on the models.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/) (DE6) wrote each rule as a query for the bad lines and broke the data on purpose. A dbt test is the same idea: a `select` for failing rows, zero rows to pass.
+
+**Diverge.** The gate of DE6b sat in front of the load. These run on the models, after they are built.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE9, what does `ref('stg_stores')` give dbt besides the table to read?
+
+   <details>
+   <summary>answer</summary>
+
+   The dependency: the dbt documentation says dbt uses `ref` to determine the order to run the models, by building a graph of them, so `stg_stores` is built first.
+
+   </details>
+
+2. In DE6, what did a check that returned rows mean?
+
+   <details>
+   <summary>answer</summary>
+
+   The rows were the bad lines: the check had failed, and none meant it passed.
+
+   </details>
+
+## The big idea
+
+A model is trusted when its rules are written as tests that fail on bad data, and when anyone can see what it depends on and what depends on it.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the built-in tests, tests of your own, and documentation with lineage. Work in `de-pipeline-starter` with the dbt project of DE9 built (`cd dbt` and `uv run dbt build` pass) and the full pull staged. To catch up, run `git checkout de-10-start`. Every dbt command runs from the `dbt` folder.
+
+### 1. The four built-in tests
+
+**Idea.** The dbt documentation says data tests are `select` statements that grab failing records: zero failing rows, and the test passes. dbt ships four **generic tests**: `unique`, `not_null`, `accepted_values` and `relationships`, and you apply them to a column in a YAML file. Tests that need inputs take them under `arguments`.
+
+**Try it.** Save the tests of the staging models as `dbt/models/staging/schema.yml`. They also hold the first documentation, a `description` for each model and for the columns that matter:
+
+```yaml
+version: 2
+
+models:
+  - name: stg_order_lines
+    description: One row for each order line, the latest version of it that the pipeline staged.
+    columns:
+      - name: order_line_id
+        description: Key of the line, as the sales API sends it.
+        data_tests:
+          - unique
+          - not_null
+      - name: status
+        description: "completed or canceled: whether the order was paid."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [completed, canceled]
+      - name: product_id
+        description: The product sold on the line.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: store_id
+        description: The store that took the order.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_stores')
+                field: store_id
+
+  - name: stg_stores
+    description: One row for each store.
+    columns:
+      - name: store_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_products
+    description: One row for each product on the menu.
+    columns:
+      - name: product_id
+        data_tests:
+          - unique
+          - not_null
+```
+
+Two files change too, and they are given: `sources.yml` reads the folder of the staged files from the variable `STAGING_DIR` (default: the real one), and `profiles.yml` gains a second target, `scratch`, with a database of its own. Together they let dbt build on a broken copy of the data without touching your tables. `scripts/break_staging.py` writes six broken copies of the three staged files, one fault each, like DE6's. Fetch them, run the tests, and make the copies:
+
+```bash
+git show de-10-done:dbt/models/staging/sources.yml > dbt/models/staging/sources.yml
+git show de-10-done:dbt/profiles.yml > dbt/profiles.yml
+git show de-10-done:scripts/break_staging.py > scripts/break_staging.py
+cd dbt
+uv run dbt test --select stg_order_lines 2>&1 | grep -E "PASS|FAIL|Done"
+cd ..
+uv run python scripts/break_staging.py
+```
+
+```console
+$ uv run dbt test --select stg_order_lines 2>&1 | grep -E "PASS|FAIL|Done"
+13:50:20  1 of 6 PASS accepted_values_stg_order_lines_status__completed__canceled ........ [PASS in 0.05s]
+13:50:20  2 of 6 PASS not_null_stg_order_lines_order_line_id ............................. [PASS in 0.03s]
+13:50:20  3 of 6 PASS not_null_stg_order_lines_product_id ................................ [PASS in 0.02s]
+13:50:20  4 of 6 PASS relationships_stg_order_lines_product_id__product_id__ref_stg_products_  [PASS in 0.03s]
+13:50:20  5 of 6 PASS relationships_stg_order_lines_store_id__store_id__ref_stg_stores_ .. [PASS in 0.02s]
+13:50:20  6 of 6 PASS unique_stg_order_lines_order_line_id ............................... [PASS in 0.02s]
+13:50:20  Done. PASS=6 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=6
+$ uv run python scripts/break_staging.py
+data/broken_staging/null_key: line 5500 loses its key
+data/broken_staging/repeated_key: line 5500 comes twice
+data/broken_staging/odd_status: line 5600 has the status 'completd'
+data/broken_staging/unknown_product: line 5500 sells product 99, which is not on the menu
+data/broken_staging/extra_zero: line 6952 has a quantity of 20
+data/broken_staging/late_opening: store 3 opened on May 1, a month after its first sale
+```
+
+Now build on the copy in which line 5500 comes twice, in the scratch database:
+
+```bash
+cd dbt
+STAGING_DIR=../data/broken_staging/repeated_key uv run dbt build --target scratch 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+**Predict:** Which test fails, and what happens to the models that read `stg_order_lines`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ STAGING_DIR=../data/broken_staging/repeated_key uv run dbt build --target scratch 2>&1 | grep -E "FAIL|SKIP|Done"
+13:50:25  7 of 15 FAIL 1 unique_stg_order_lines_order_line_id ............................ [FAIL 1 in 0.02s]
+13:50:25  14 of 15 SKIP relation main.int_order_lines_priced ............................. [SKIP]
+13:50:25  15 of 15 SKIP relation main.fct_store_daily_sales .............................. [SKIP]
+13:50:25  Done. PASS=12 WARN=0 ERROR=1 SKIP=2 NO-OP=0 REUSED=0 TOTAL=15
+```
+
+</details>
+
+*Why:* the `unique` test of the key fails with one bad row, and `build` skips the two models that come after `stg_order_lines`, so a table made from a repeated line is never built. The `build` page of the dbt documentation says the same rule: a failing test on an upstream resource makes the resources downstream of it skip. That is the stop of DE6b, done by the order of the graph. The tests of the other columns still pass, as in DE6: one fault trips one test.
+
+### 2. Tests of your own
+
+**Idea.** A **singular test** is a SQL file in the `tests` folder that returns the failing rows; its name is the file's name. Use one for a rule no generic test states. Two kinds are worth writing: a rule of the business, and a **reconciliation**, which compares a count before and after a model.
+
+**Try it.** Make the folder, and save the business rule as `dbt/tests/assert_no_sales_before_a_store_opens.sql`: a store cannot sell before the day it opened.
+
+```sql
+-- A store cannot sell before the day it opened. The test passes when this returns no rows.
+select
+    f.store_id,
+    f.order_date,
+    s.opened_on
+from {{ ref('fct_store_daily_sales') }} as f
+join {{ ref('stg_stores') }} as s using (store_id)
+where f.order_date < s.opened_on
+```
+
+Save the reconciliation as `dbt/tests/assert_the_mart_keeps_every_completed_line.sql`:
+
+```sql
+-- Every completed line of staging must be in the mart. A row here is the count on both sides when they differ.
+select
+    s.completed_lines,
+    m.mart_lines
+from (select count(*) as completed_lines from {{ ref('stg_order_lines') }} where status = 'completed') as s
+cross join (select sum(lines) as mart_lines from {{ ref('fct_store_daily_sales') }}) as m
+where s.completed_lines <> m.mart_lines
+```
+
+```bash
+mkdir -p tests
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+STAGING_DIR=../data/broken_staging/late_opening uv run dbt build --target scratch 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+**Predict:** The copy `late_opening` says that store 3 opened on May 1, though it sold from April 1. How many rows does the opening-date test return?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+13:51:44  Done. PASS=17 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=17
+$ STAGING_DIR=../data/broken_staging/late_opening uv run dbt build --target scratch 2>&1 | grep -E "FAIL|SKIP|Done"
+13:51:49  16 of 17 FAIL 30 assert_no_sales_before_a_store_opens .......................... [FAIL 30 in 0.02s]
+13:51:49  Done. PASS=16 WARN=0 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=17
+```
+
+</details>
+
+*Why:* 30 rows, one for each store-day of April 1 to 30 that now falls before the new opening date. On the real data both tests pass: `build` runs five models, ten tests of columns and these two. The first rule is about the world and no column test could state it; the second compares two counts, so that a join that drops lines cannot pass unnoticed.
+
+### 3. Documentation and lineage
+
+**Idea.** The dbt documentation says to add a `description:` key to the same YAML files where you declare tests. `dbt docs generate` builds the documentation from them and from the project, including a graph of the project; dbt also lists columns you did not describe, so a gap shows. The **lineage** is the same graph `ref` and `source` build, and the command line can read it: `dbt ls --select stg_stores+` selects a model and everything after it.
+
+**Try it.** Save the mart's documentation as `dbt/models/marts/schema.yml`:
+
+```yaml
+version: 2
+
+models:
+  - name: fct_store_daily_sales
+    description: >
+      Sales of completed order lines, for each store and each day on which it sold something.
+      A day without a sale has no row.
+    columns:
+      - name: store_id
+        description: The store, as in stg_stores.
+        data_tests:
+          - not_null
+      - name: order_date
+        description: The day of the orders, in the cafe's local time.
+        data_tests:
+          - not_null
+      - name: lines
+        description: Completed order lines sold that day.
+      - name: units
+        description: Units on those lines.
+      - name: sales_usd
+        description: "Amount of those lines in US dollars: units times the product's price, minus the line's discount."
+```
+
+```bash
+uv run dbt docs generate 2>&1 | tail -2
+uv run dbt ls --quiet --select stg_stores+ --resource-type model
+uv run dbt ls --quiet --select stg_products+ --resource-type model
+```
+
+**Predict:** You change a column of `stg_stores`, and then one of `stg_products`. Which models does each change touch?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt docs generate 2>&1 | tail -2
+13:50:38  Building catalog
+13:50:38  Catalog written to .../dbt/target/catalog.json
+$ uv run dbt ls --quiet --select stg_stores+ --resource-type model
+cafe.marts.fct_store_daily_sales
+cafe.staging.stg_stores
+$ uv run dbt ls --quiet --select stg_products+ --resource-type model
+cafe.marts.fct_store_daily_sales
+cafe.intermediate.int_order_lines_priced
+cafe.staging.stg_products
+```
+
+</details>
+
+*Why:* the path of the file is shortened to `...`. A change to the stores touches the store model and the mart, which joins it directly, and not the intermediate model; a change to the products touches the intermediate model and, through it, the mart. The same graph is drawn as boxes in the documentation site that `dbt docs generate` builds into `target/`, with each description beside its model; that site was not opened for this lesson. The command line gives the list a reviewer needs before approving a change to a model.
+
+<Aside type="tip" title="Remember">
+
+- A test is a select for failing rows: none, and it passes. The four generic tests go in YAML; a rule of your own is a file in `tests`.
+- Break the data on purpose, on a copy and in a scratch database, and watch the right test fail and the models after it skip.
+- A reconciliation test compares a count before and after a model.
+- A description sits beside the test it belongs to, and `dbt ls` with a `+` lists what a change reaches.
+
+**Common trap:** trusting a test you have never seen fail.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-dbt-tests-and-documentation-1">
+
+**Cover the category.** `stg_products` has tests for its key but none for `category`, which should be one of `coffee`, `tea`, `bakery` or `food`. Add an `accepted_values` test for it in `dbt/models/staging/schema.yml`, under `stg_products`, and run the tests of that model. The start is given; fill in the values. Expected: four tests on `stg_products` pass, one more than before. Keep the test.
+
+```yaml
+      - name: category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [...]
+```
+
+```bash
+uv run dbt test --select stg_products 2>&1 | grep -E "PASS|FAIL|Done"
+```
+
+<details>
+<summary>Hint</summary>
+
+The new `- name: category` goes under `columns:` of `stg_products`, at the same indent as `- name: product_id`. The values are the four categories in a list.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```yaml
+                values: [coffee, tea, ...]
+```
+
+</details>
+
+<Solution>
+
+```yaml
+      - name: category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [coffee, tea, bakery, food]
+```
+
+```console
+$ uv run dbt test --select stg_products 2>&1 | grep -E "PASS|FAIL|Done"
+13:50:49  1 of 4 PASS accepted_values_stg_products_category__coffee__tea__bakery__food ... [PASS in 0.04s]
+13:50:49  2 of 4 PASS not_null_stg_products_product_id ................................... [PASS in 0.03s]
+13:50:49  3 of 4 PASS relationships_stg_order_lines_product_id__product_id__ref_stg_products_  [PASS in 0.03s]
+13:50:49  4 of 4 PASS unique_stg_products_product_id ..................................... [PASS in 0.02s]
+13:50:49  Done. PASS=4 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=4
+```
+
+The relationship test of `stg_order_lines` is selected too, because it depends on `stg_products`. A test that has never failed proves little, so change one value, say `food` to `meals`, run it again to see it fail, and change it back.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-dbt-tests-and-documentation-2">
+
+**The range of DE6, as a test.** Before you start, say in one sentence what a passing and a failing run look like. Then, from a blank file `dbt/tests/assert_units_at_most_ten.sql`, write a singular test that returns the order lines of `stg_order_lines` that sold more than 10 units, the range of DE6's contract. Run it on the real data, and then on the copy `extra_zero` in the scratch database. Expected: it passes on the real data, and on the copy it fails with 1 row. When you are done, delete the file.
+
+<details>
+<summary>Hint</summary>
+
+The test is a `select` of the key and the units, from `{{ ref('stg_order_lines') }}`, with a `where`. Build the copy with `STAGING_DIR=../data/broken_staging/extra_zero` and `--target scratch`, and select the model and the test.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Passes on the real file, and on `extra_zero` fails with 1 row, the line with the quantity of 20."*
+
+```sql
+select order_line_id, units
+from {{ ref('stg_order_lines') }}
+where ...
+```
+
+</details>
+
+<Solution>
+
+```sql
+-- No order line sells more than 10 units, the range of the contract of DE6. The test passes when this returns no rows.
+select
+    order_line_id,
+    units
+from {{ ref('stg_order_lines') }}
+where units > 10
+```
+
+```console
+$ uv run dbt test --select assert_units_at_most_ten 2>&1 | grep -E "PASS|FAIL|Done"
+13:52:07  1 of 1 PASS assert_units_at_most_ten ........................................... [PASS in 0.04s]
+13:52:07  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=1
+$ STAGING_DIR=../data/broken_staging/extra_zero uv run dbt build --target scratch --select stg_order_lines assert_units_at_most_ten 2>&1 | grep -E "FAIL|SKIP|Done"
+13:52:11  3 of 9 FAIL 1 assert_units_at_most_ten ......................................... [FAIL 1 in 0.01s]
+13:52:11  9 of 9 SKIP test assert_the_mart_keeps_every_completed_line .................... [SKIP]
+13:52:11  Done. PASS=7 WARN=0 ERROR=1 SKIP=1 NO-OP=0 REUSED=0 TOTAL=9
+```
+
+The same rule that DE6 wrote for the incoming lines now guards the model. Here it also skipped the one selected test that depends on the model, the reconciliation of unit 2.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `dbt build` do with a model whose test fails, and with the models that read it?
+
+   <details>
+   <summary>answer</summary>
+
+   The failing test is reported as an error. The models and tests that depend on that model are skipped.
+
+   </details>
+
+<Exercise id="data-engineer-dbt-tests-and-documentation-3">
+
+**Spot the flaw.** A colleague adds a `not_null` test for `customer_id` in `stg_order_lines`. The build fails, because one line has no customer, a walk-in. "Fixed it": the colleague adds `where customer_id is not null` to the staging model, and the whole build passes. Make both changes and run the build after each, then run the counts script. Expected: the first build fails one test and skips what follows, the second passes everything, and the counts show what the fix cost. What is wrong, and what would catch it? When you are done, undo both changes.
+
+```bash
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+uv run python ../scripts/dbt_counts.py
+```
+
+<details>
+<summary>Hint</summary>
+
+Add the test under `customer_id` in `schema.yml` (a `not_null` under `data_tests`), build, then add the `where` line at the end of `stg_order_lines.sql`, and build again. Compare the rows of `stg_order_lines` with the 3,287 lines of the source.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The failing test said a true thing about the data: one line has no customer. Ask which was wrong, the data or the rule, and what the `where` did to the line.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+13:52:16  5 of 21 FAIL 1 not_null_stg_order_lines_customer_id ............................ [FAIL 1 in 0.02s]
+13:52:16  16 of 21 SKIP relation main.int_order_lines_priced ............................. [SKIP]
+13:52:16  17 of 21 SKIP relation main.fct_store_daily_sales .............................. [SKIP]
+13:52:16  18 of 21 SKIP test assert_no_sales_before_a_store_opens ........................ [SKIP]
+13:52:16  19 of 21 SKIP test assert_the_mart_keeps_every_completed_line .................. [SKIP]
+13:52:16  20 of 21 SKIP test not_null_fct_store_daily_sales_order_date ................... [SKIP]
+13:52:16  21 of 21 SKIP test not_null_fct_store_daily_sales_store_id ..................... [SKIP]
+13:52:16  Done. PASS=14 WARN=0 ERROR=1 SKIP=6 NO-OP=0 REUSED=0 TOTAL=21
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+13:52:20  Done. PASS=21 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=21
+$ uv run python ../scripts/dbt_counts.py
+stg_order_lines: 3286 rows, 3286 different grains
+int_order_lines_priced: 3286 rows, 3286 different grains
+fct_store_daily_sales: 453 rows, 453 different grains
+```
+
+The test was telling the truth about the data: a walk-in customer has no `customer_id`, and the contract of DE6 says so (`nullable: true`). The rule was wrong, not the line. Filtering made the test pass by deleting a real sale: the staging model now holds 3,286 lines, not 3,287, and every test still passes, even the reconciliation test, because it compares the mart with the already filtered staging. What would catch it is a test against the source, which the colleague's change cannot move. Save it as `tests/assert_staging_keeps_every_source_line.sql`:
+
+```sql
+-- Staging must hold every line of the source. A row here is the count on both sides when they differ.
+select
+    s.source_lines,
+    t.staged_lines
+from (select count(*) as source_lines from {{ source('pipeline', 'order_lines') }}) as s
+cross join (select count(*) as staged_lines from {{ ref('stg_order_lines') }}) as t
+where s.source_lines <> t.staged_lines
+```
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+13:52:23  5 of 22 FAIL 1 assert_staging_keeps_every_source_line .......................... [FAIL 1 in 0.01s]
+13:52:23  17 of 22 SKIP relation main.int_order_lines_priced ............................. [SKIP]
+13:52:23  18 of 22 SKIP relation main.fct_store_daily_sales .............................. [SKIP]
+13:52:23  19 of 22 SKIP test assert_no_sales_before_a_store_opens ........................ [SKIP]
+13:52:23  20 of 22 SKIP test assert_the_mart_keeps_every_completed_line .................. [SKIP]
+13:52:23  21 of 22 SKIP test not_null_fct_store_daily_sales_order_date ................... [SKIP]
+13:52:23  22 of 22 SKIP test not_null_fct_store_daily_sales_store_id ..................... [SKIP]
+13:52:24  Done. PASS=15 WARN=0 ERROR=1 SKIP=6 NO-OP=0 REUSED=0 TOTAL=22
+```
+
+The right fix is to drop the `not_null` test for `customer_id`, or to document that it may be null, and to keep the `where` out of staging.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can add the four built-in tests and a singular test, break the data on a copy to watch the right test fail and the models after it skip, reconcile a count against the source, and read from the lineage what a change reaches.*
+Test: Exercise data-engineer-dbt-tests-and-documentation-2, done without opening the hints.
+
+The pattern to remember: **a model earns trust by the tests it has seen fail, and a change is safe to review when the lineage says what it reaches.** The next dbt lessons choose how models are built and run them in CI.

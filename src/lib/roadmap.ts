@@ -4,8 +4,8 @@
  * native <details> that opens on its numbered lesson list, so a learner sees the big steps first.
  *
  * Lesson codes (E1, S12, DA3…) are a stage prefix plus `order / 10`. Orders use gaps of 10 (SPEC §5.1) so a lesson
- * can be inserted at order 25 (code E2.5) while it is a draft; when a stage is published the owner renumbers it to
- * whole codes (the SQL stage did, D34). Codes are labels only, never part of a URL.
+ * can be inserted at order 25 (code E2b, the "b" of E2) while it is a draft; when a stage is published the owner renumbers it to
+ * whole codes (the SQL stage did, D34) or keeps the "b" codes (the Data Engineer stage did, D55). Codes are labels only, never part of a URL.
  */
 
 export interface StageDef {
@@ -70,7 +70,10 @@ export function lessonCode(stage: string, order: number): string | undefined {
 	const def = ROADMAP_STAGES.find((s) => s.id === stage);
 	if (!def) return undefined;
 	const n = order / 10;
-	return `${def.code}${Number.isInteger(n) ? n : Number(n.toFixed(2))}`;
+	if (Number.isInteger(n)) return `${def.code}${n}`;
+	// A lesson split off its neighbor at the half order (65 after 60) reads as that lesson's "b" (owner, 2026-11-25).
+	if (Number.isInteger(n - 0.5)) return `${def.code}${n - 0.5}b`;
+	return `${def.code}${Number(n.toFixed(2))}`;
 }
 
 /** A published (or deprecated) lesson as the roadmap needs it. */

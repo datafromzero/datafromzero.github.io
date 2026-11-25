@@ -1,0 +1,106 @@
+"""Build the Git history of the starter, with the checkpoint tags of the lessons.
+
+    python3 starters/de-pipeline-checkpoints/make_history.py TARGET_DIR
+
+TARGET_DIR must not exist. It becomes a repository whose `main` is the state after the last lesson,
+with these tags (the lessons say "check out de-03-start to catch up"; DE11 and DE11b share de-11):
+
+    de-01-start                      the starter as the learner first clones it
+    de-NN-done                       the starter after lesson NN, with the files the lesson saves
+    de-NN+1-start                    the same commit as de-NN-done
+
+The files of each lesson are the folder `de-NN-done/` next to this script: only the files the lesson
+adds or replaces. The lesson pages quote them, and the checks of the build compare every quoted block.
+
+Every commit has the same author and date (below), so a rebuild gives the same hashes. The published repository
+was built that way; `PUBLISHED` holds the hashes of its commits, and the script stops if a rebuild of a published
+lesson gives another one, because the files of a published checkpoint never change (a change would not be a
+fast-forward of what learners already cloned).
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+STARTER = HERE.parent / "de-pipeline"
+LESSONS = 18
+AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
+DATE = "2026-11-24T12:00:00+0000"
+# The commits whose files never change again, by lesson (the starter commit is key 0): the published repository (0 to 18) and
+# the checkpoints that later lessons build on. Add a lesson's hash once it is pushed or once a later lesson depends on it.
+PUBLISHED = {
+    0: "ed98dbedbf5966caf13110923c46286bb75f87b1",
+    1: "6ebbc9ece65776b95503d6fba65307b383bde764",
+    2: "b6eb8bf7e23eddb030987df6b2826f1cbc6a482a",
+    3: "7af7bf670106158f72239fd5a1f2b535cabdb548",
+    4: "eee98d78a11e1ed56dd8700c8691835537250cee",
+    5: "b939cb4a99553af143065b5e0036761ea7c591e3",
+    # Lessons 6 to 18 were pushed on 2026-11-24.
+    6: "393a8204144975196963cd5733efbada34853e54",
+    7: "ccb3b7940c2fbcada9680cc923194ae3f215a26d",
+    8: "fa0a03b75ec474aaa1bc65627815e62d1162f646",
+    9: "59573a615b8936f5b93313f92790f8e7e0cd9aa3",
+    10: "deb0e4779c60e81fc358c1c54345b6d564d5baf4",
+    11: "123d8461b5a5fbff14a5ec912f0f67119d397604",
+    12: "af653e095585ed8606dda3742d83e845bc584749",
+    13: "6dfaac147563c57ced42545b6af5be7916c10a49",
+    14: "8cb985842fcedca1703c198ce6197214a7eb5b01",
+    15: "0d8c02509c3d52df232b4df615d76a8a1892c421",
+    16: "46e8461398e304bbba161d586c70c1e814e5dd9d",
+    17: "aa9c4ce3b60437aa4b5a9fbb92c001ace08e621d",
+    18: "773a05e06b8b8a2206dc68b89200ef8c439056c2",
+}
+IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc")
+
+
+def git(target, *args):
+    environment = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": AUTHOR[0], "GIT_AUTHOR_EMAIL": AUTHOR[1], "GIT_AUTHOR_DATE": DATE,
+        "GIT_COMMITTER_NAME": AUTHOR[0], "GIT_COMMITTER_EMAIL": AUTHOR[1], "GIT_COMMITTER_DATE": DATE,
+    }
+    command = ["git", "-c", "commit.gpgsign=false", *args]
+    return subprocess.run(command, cwd=target, check=True, capture_output=True, text=True, env=environment).stdout.strip()
+
+
+def keep_published(target, number):
+    """Stop when a rebuild of an already published commit gives another hash."""
+    if number in PUBLISHED and git(target, "rev-parse", "HEAD") != PUBLISHED[number]:
+        sys.exit(f"The commit of lesson {number} is not the published one: a published checkpoint changed.")
+
+
+def clear_landing_zones(target):
+    for zone in ("raw", "staging", "serving"):
+        for path in (target / "data" / zone).iterdir():
+            if path.name != ".gitkeep":
+                shutil.rmtree(path) if path.is_dir() else path.unlink()
+
+
+def main(target):
+    target = Path(target)
+    if target.exists():
+        sys.exit(f"{target} exists; choose a folder that does not")
+    shutil.copytree(STARTER, target, ignore=IGNORED)
+    clear_landing_zones(target)
+    git(target, "init", "-b", "main")
+    git(target, "add", "-A")
+    git(target, "commit", "-m", "Starter for the Data Engineer track")
+    keep_published(target, 0)
+    git(target, "tag", "de-01-start")
+    for number in range(1, LESSONS + 1):
+        shutil.copytree(HERE / f"de-{number:02d}-done", target, dirs_exist_ok=True, ignore=IGNORED)
+        git(target, "add", "-A")
+        git(target, "commit", "-m", f"DE{number} done")
+        keep_published(target, number)
+        git(target, "tag", f"de-{number:02d}-done")
+        git(target, "tag", f"de-{number + 1:02d}-start")
+    print(f"Built {target} with tags de-01-start to de-{LESSONS + 1:02d}-start and de-01-done to de-{LESSONS:02d}-done.")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    main(sys.argv[1])

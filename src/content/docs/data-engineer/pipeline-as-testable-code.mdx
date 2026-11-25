@@ -1,0 +1,727 @@
+---
+id: data-engineer-pipeline-as-testable-code
+title: Pipelines as small, testable functions
+short_title: Testable pipelines
+description: Write the test first, pull each step into a small function, make a log line a test can assert, and accept or reject an AI-written transform by its tests.
+stage: data-engineer
+order: 50
+level: intermediate
+duration: 35
+objectives:
+  - Write the test first, watch it fail for the right reason, and make it pass with the smallest change
+  - Pull a step into a small function that takes rows and returns rows, and test it on a handful of rows
+  - Make a log line a check that a test can assert
+  - Accept or reject an AI-written transform by running those tests, and say what they do not cover
+prerequisites:
+  - data-engineer-ingest-apis-and-files
+  - data-engineer-file-formats-and-partitioning
+  - core-testing-with-pytest
+  - core-logging-config-secrets
+  - core-trust-but-verify-ai-output
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'IETF RFC 9110: HTTP Semantics, section 10.2.3, Retry-After (accessed 2026-11-24)'
+    url: https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3
+  - title: 'Python documentation: email.utils, parsedate_to_datetime (accessed 2026-11-24)'
+    url: https://docs.python.org/3/library/email.utils.html#email.utils.parsedate_to_datetime
+  - title: 'pytest documentation: How to manage logging (accessed 2026-11-24)'
+    url: https://docs.pytest.org/en/stable/how-to/logging.html
+  - title: 'pytest documentation: How to monkeypatch and mock modules and environments (accessed 2026-11-24)'
+    url: https://docs.pytest.org/en/stable/how-to/monkeypatch.html
+  - title: 'pytest documentation: How to use fixtures, autouse fixtures (accessed 2026-11-24)'
+    url: https://docs.pytest.org/en/stable/how-to/fixtures.html
+  - title: 'pytest documentation: API reference, pytest_addoption (accessed 2026-11-24)'
+    url: https://docs.pytest.org/en/stable/reference/reference.html
+  - title: 'DuckDB documentation: SELECT clause, DISTINCT (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/query_syntax/select.html
+  - title: 'DuckDB documentation: QUALIFY clause (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/sql/query_syntax/qualify.html
+  - title: 'DuckDB documentation: Python relational API (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/clients/python/relational_api.html
+  - title: 'Microsoft Learn: Naming Files, Paths, and Namespaces (accessed 2026-11-24)'
+    url: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+status: published
+---
+
+## The question
+
+A teammate who reads the pipeline's log writes:
+
+> Last month someone changed the retry, and on a night with rate limits half the pages never loaded. Nobody noticed for a week. Can the pipeline check itself every time we change it?
+
+The retry's wait has three cases that you can work out by hand:
+
+| the answer says | the wait, in seconds |
+|---|---:|
+| nothing, on the first try | 0.5 |
+| `Retry-After: 3` | 3 |
+| `Retry-After: Tue, 24 Nov 2026 08:00:10 GMT`, asked at 08:00:00 | 10 |
+
+By the end you can write a test before the code, test a step on a handful of rows, and decide whether to trust a function that an assistant wrote, by what your tests say.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Testing on known answers with pytest*](/core/testing-with-pytest/) (C27) tested a count on a small list whose answer you knew, with edge rows, and took the expected answer from another route. The tests below do the same for the steps of the pipeline.
+
+**Diverge.** In C27 the code existed before the test. Unit 1 writes the test first and watches it fail.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C27, what did the last test of the lesson take its expected numbers from, and why not from the function?
+
+   <details>
+   <summary>answer</summary>
+
+   From a SQL query on the same data: numbers produced by the function under test cannot check the function.
+
+   </details>
+
+2. In [*Trust, but verify: checking AI output*](/core/trust-but-verify-ai-output/) (C38), what are the three verdicts of the log?
+
+   <details>
+   <summary>answer</summary>
+
+   Accept, revise or reject, each with the checks that were run and the reason.
+
+   </details>
+
+## The big idea
+
+A step is testable when it is a small function that takes rows and returns rows, and a test comes first when you want to know that it can fail.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: the test first, a small function on a handful of rows, a log line you can assert, and an assistant's answer judged by your tests. Work in `de-pipeline-starter`, with the mock API running for the real-data runs. To catch up, run `git checkout de-05-start`.
+
+### 1. The test first
+
+**Idea.** Write the test of the behavior you want before the code, run it, and read why it fails: it must fail for the reason you expect, or it tells you nothing when it passes. Then change the code as little as you can until it passes. The RFC allows the `Retry-After` header to hold a date as well as a number of seconds, and the `wait_time` of DE2 reads only seconds.
+
+**Try it.** Save the three cases as `tests/test_ingest.py`, with a stand-in for a response that has only the header that `wait_time` reads, and run it:
+
+```python
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from pipeline.ingest import wait_time
+
+
+def reply(retry_after=None):
+    """A stand-in for a response: only the header that wait_time reads."""
+    return SimpleNamespace(headers={} if retry_after is None else {"Retry-After": retry_after})
+
+
+def test_a_number_of_seconds_is_obeyed():
+    assert wait_time(reply("3"), attempt=1) == 3.0
+
+
+def test_no_header_means_a_doubling_wait():
+    assert [wait_time(reply(), attempt=n) for n in (1, 2, 3)] == [0.5, 1.0, 2.0]
+
+
+def test_a_date_means_the_seconds_until_then():
+    now = datetime(2026, 11, 24, 8, 0, 0, tzinfo=timezone.utc)
+    assert wait_time(reply("Tue, 24 Nov 2026 08:00:10 GMT"), attempt=1, now=now) == 10.0
+```
+
+```bash
+uv run pytest -q --tb=short tests/test_ingest.py
+```
+
+**Predict:** The `wait_time` of DE2 already handles two of the three cases. Which test fails, and what does the last `E` line say?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q --tb=short tests/test_ingest.py
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+___________________ test_a_date_means_the_seconds_until_then ___________________
+tests/test_ingest.py:22: in test_a_date_means_the_seconds_until_then
+    assert wait_time(reply("Tue, 24 Nov 2026 08:00:10 GMT"), attempt=1, now=now) == 10.0
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: wait_time() got an unexpected keyword argument 'now'
+=========================== short test summary info ============================
+FAILED tests/test_ingest.py::test_a_date_means_the_seconds_until_then - TypeE...
+1 failed, 2 passed in 0.02s
+```
+
+</details>
+
+*Why:* the third test fails and the first two pass, which is the right reason: the date case needs a `now` that the function does not take, and the cases it already served still hold. Now make it pass. In `src/pipeline/ingest.py`, add the import `parsedate_to_datetime` under the `datetime` line, and replace `wait_time`:
+
+```python
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+```
+
+```python
+def wait_time(response, attempt, base=0.5, now=None):
+    """How long to wait before trying again: what the server asked for, else a doubling wait."""
+    value = response.headers.get("Retry-After", "")
+    if value.isdigit():
+        return float(value)  # a number of seconds
+    try:
+        when = parsedate_to_datetime(value)  # or a date
+    except (TypeError, ValueError):
+        return base * 2 ** (attempt - 1)
+    return max(0.0, (when - (now or datetime.now(timezone.utc))).total_seconds())
+```
+
+```console
+$ uv run pytest -q --tb=short tests/test_ingest.py
+...                                                                      [100%]
+3 passed in 0.01s
+```
+
+`now` is a parameter so that the test can fix the clock: a function that reads the real time cannot have a known answer. The Python page says `parsedate_to_datetime` reads a date by the rules of RFC 2822 (the format of email dates), as `parsedate` does, but returns a `datetime`, and raises `ValueError` for an invalid value.
+
+### 2. A small function: rows in, rows out
+
+**Idea.** A step you can test is a function that takes rows and returns rows, with no network and no files in it. `stage.py` keeps the latest version of each key inside a SQL string, where no test can reach it. Pull it out as `dedupe_latest(rows, key, version)` and give it three tests whose answers you know by hand: a repeated record is kept once, the latest version wins even when it comes first, and different keys all stay.
+
+**Try it.** Save the tests as `tests/test_transform.py` and run them before `transform.py` exists:
+
+```python
+import duckdb
+import pytest
+
+from pipeline import transform
+
+
+@pytest.fixture
+def lines():
+    """Build a tiny relation of (order_item_id, quantity, updated_at) rows from a list of tuples."""
+    con = duckdb.connect()
+
+    def build(*rows):
+        values = ", ".join(f"({key}, {quantity}, TIMESTAMP '{updated}')" for key, quantity, updated in rows)
+        return con.sql(f"SELECT * FROM (VALUES {values}) AS t(order_item_id, quantity, updated_at)")
+
+    return build
+
+
+def keep(relation):
+    return sorted((key, quantity) for key, quantity, _ in relation.fetchall())
+
+
+def test_a_repeated_record_is_kept_once(lines):
+    rows = lines((1, 2, "2026-05-01 10:00:00"), (1, 2, "2026-05-01 10:00:00"), (2, 1, "2026-05-01 10:05:00"))
+    assert keep(transform.dedupe_latest(rows)) == [(1, 2), (2, 1)]
+
+
+def test_the_latest_version_wins_even_when_it_comes_first(lines):
+    rows = lines((1, 2, "2026-05-03 09:00:00"), (1, 20, "2026-05-01 13:30:00"))
+    assert keep(transform.dedupe_latest(rows)) == [(1, 2)]
+
+
+def test_different_keys_all_stay(lines):
+    rows = lines((1, 1, "2026-05-01 10:00:00"), (2, 1, "2026-05-01 10:00:00"), (3, 1, "2026-05-01 10:00:00"))
+    assert keep(transform.dedupe_latest(rows)) == [(1, 1), (2, 1), (3, 1)]
+```
+
+```bash
+uv run pytest -q --tb=short tests/test_transform.py
+```
+
+**Predict:** `transform.py` does not exist yet. Does pytest report three failed tests, or something else?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q --tb=short tests/test_transform.py
+
+==================================== ERRORS ====================================
+___________________ ERROR collecting tests/test_transform.py ___________________
+ImportError while importing test module '.../tests/test_transform.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+.../importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_transform.py:4: in <module>
+    from pipeline import transform
+E   ImportError: cannot import name 'transform' from 'pipeline' (.../src/pipeline/__init__.py)
+=========================== short test summary info ============================
+ERROR tests/test_transform.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+```
+
+Paths are shortened to `...`; yours show your folders.
+
+</details>
+
+*Why:* pytest could not even import the module, so no test ran: an error, not three failures, and the sign that the code is missing. Now write the smallest function that can pass. Save as `src/pipeline/transform.py`:
+
+```python
+"""Small steps that turn rows into other rows. Each one is tested on a handful of rows."""
+
+
+def dedupe_latest(rows, key="order_item_id", version="updated_at"):
+    """Keep one row for each key: the one with the latest version."""
+    return rows.query(
+        "rows",
+        f"SELECT * FROM rows QUALIFY row_number() OVER (PARTITION BY {key} ORDER BY {version} DESC) = 1",
+    )
+```
+
+```console
+$ uv run pytest -q --tb=short tests/test_transform.py
+...                                                                      [100%]
+3 passed in 0.10s
+```
+
+The DuckDB page says that `QUALIFY` filters the results of window functions, here the rank of each version within its key, and that a relation's `query` method runs SQL over it. The second test is the one that matters: in a file sorted by `updated_at` the old version comes first; here it comes last, so a function that kept the last row it saw would fail it.
+
+### 3. A log line a test can assert
+
+**Idea.** A line in the log that says how many rows went in and how many came out lets a person see at a glance that a night lost half its rows. A test can check the same line: pytest's `caplog` fixture holds everything logged during the test, as records and as text, and the pytest page says it is useful when you want to assert on the contents of a message.
+
+**Try it.** Save the test as `tests/test_stage.py`: it writes a page of three records, one of them repeated, and stages it. Run it against the `stage.py` of DE3, which logs nothing.
+
+```python
+import json
+import logging
+
+import duckdb
+
+from pipeline.stage import staged_lines
+
+BASE = {
+    "order_id": 1,
+    "ordered_at": "2026-05-01 13:25:00",
+    "store_id": 1,
+    "customer_id": None,
+    "status": "completed",
+    "payment_method": "mobile",
+    "product_id": 15,
+    "discount_usd": "0.00",
+}
+
+
+def line(key, quantity):
+    return {**BASE, "order_item_id": key, "quantity": quantity, "updated_at": "2026-05-01 13:30:00"}
+
+
+def test_the_log_says_how_many_records_became_how_many_lines(tmp_path, caplog):
+    records = [line(1, 2), line(1, 2), line(2, 1)]
+    (tmp_path / "page-0001.json").write_text(json.dumps({"data": records, "next_cursor": None}))
+    with caplog.at_level(logging.INFO, logger="pipeline.stage"):
+        staged_lines(duckdb.connect(), str(tmp_path / "page-*.json"))
+    assert "3 records read, 2 lines kept" in caplog.text
+```
+
+```bash
+uv run pytest -q --tb=short tests/test_stage.py
+```
+
+**Predict:** What does the assertion message show for `caplog.text`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q --tb=short tests/test_stage.py
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_the_log_says_how_many_records_became_how_many_lines ___________
+tests/test_stage.py:29: in test_the_log_says_how_many_records_became_how_many_lines
+    assert "3 records read, 2 lines kept" in caplog.text
+E   AssertionError: assert '3 records read, 2 lines kept' in ''
+E    +  where '' = <_pytest.logging.LogCaptureFixture object at 0x...>.text
+=========================== short test summary info ============================
+FAILED tests/test_stage.py::test_the_log_says_how_many_records_became_how_many_lines
+1 failed in 0.08s
+```
+
+The memory address is shortened to `...`.
+
+</details>
+
+*Why:* `caplog.text` is empty, because the code logs nothing, and the test failed for the right reason. Now make it pass in three edits to `src/pipeline/stage.py`. First, replace the imports at the top, so that the function of unit 2 is used through its module (a test can then swap it, as unit 4 does):
+
+```python
+import logging
+
+import duckdb
+
+from pipeline import transform
+from pipeline.config import RAW_DIR, SOURCE_FILES, STAGING_DIR
+from pipeline.ingest import window_name
+
+log = logging.getLogger("pipeline.stage")
+```
+
+Second, replace the function `staged_lines` with these two:
+
+```python
+def raw_lines(con, pages_glob):
+    """Every record of every landed page, with typed columns. A repeated record stays repeated."""
+    return con.sql(f"""
+        WITH pages AS (
+            SELECT unnest(data) AS line
+            FROM read_json('{pages_glob}', columns = {{data: '{LINE_FIELDS}[]'}})
+        )
+        SELECT line.* FROM pages
+    """)
+
+
+def staged_lines(con, pages_glob):
+    """One row for each order line, and a log line that says how many records became how many lines."""
+    records = raw_lines(con, pages_glob)
+    lines = transform.dedupe_latest(records)
+    log.info("%d records read, %d lines kept", records.count("*").fetchall()[0][0], lines.count("*").fetchall()[0][0])
+    return lines.order("order_item_id")
+```
+
+Third, make the last two lines of the file show log lines when you run the module:
+
+```python
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    write_staging(duckdb.connect())
+```
+
+```console
+$ uv run pytest -q --tb=short tests/test_stage.py
+.                                                                        [100%]
+1 passed in 0.08s
+$ uv run python -m pipeline.stage
+INFO 3288 records read, 3287 lines kept
+```
+
+The same line now tells you about the real night: 3,288 records, one of them a repeat, became 3,287 lines.
+
+### 4. An assistant's answer, judged by your tests
+
+**Idea.** Your tests are what you hold an assistant's code to. Run them against its function without touching yours, and then ask what they leave open. The starter's root `conftest.py` is a given file: it adds an option `--candidate FILE` that replaces `transform.dedupe_latest` for one run. The pytest page says that `pytest_addoption` registers command-line options, that a fixture made with `autouse=True` applies to every test, and that `monkeypatch` undoes its changes when the test ends. Fetch it from the checkpoint:
+
+```bash
+git show de-05-done:conftest.py > conftest.py
+git show de-05-done:tests/test_real_pull.py > tests/test_real_pull.py
+```
+
+The second file is a test on the real data: it stages the full pull of DE2 and expects 3,287 lines.
+
+<Aside type="note" title="Two answers written for this lesson, in the style of an assistant">
+
+The request: *"Write `dedupe_latest(rows, key, version)` for a DuckDB relation: keep one row for each key."* No model was run; both answers were written for this lesson.
+
+</Aside>
+
+**Try it.** Save the first answer as `candidates/ai_distinct.py` and the second as `candidates/ai_ranked.py` (make the folder `candidates`):
+
+```python
+"""Written for the lesson, in the style of an assistant's answer. Not produced by a model."""
+
+
+def dedupe_latest(rows, key="order_item_id", version="updated_at"):
+    """Remove duplicate rows."""
+    return rows.distinct()
+```
+
+```python
+"""Written for the lesson, in the style of an assistant's answer. Not produced by a model."""
+
+
+def dedupe_latest(rows, key="order_item_id", version="updated_at"):
+    """Keep the latest version of each key."""
+    ranked = rows.project(f"*, row_number() OVER (PARTITION BY {key} ORDER BY {version} DESC) AS rank_in_key")
+    return ranked.filter("rank_in_key = 1").project("* EXCLUDE (rank_in_key)")
+```
+
+Run the whole suite, with the API running, against each answer:
+
+```bash
+uv run pytest -q --tb=short --candidate candidates/ai_distinct.py
+uv run pytest -q --tb=short --candidate candidates/ai_ranked.py
+```
+
+**Predict:** Which answer does the suite reject? And does the real-data test, with its 3,287 lines, reject it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q --tb=short --candidate candidates/ai_distinct.py
+...............F.                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_the_latest_version_wins_even_when_it_comes_first _____________
+tests/test_transform.py:30: in test_the_latest_version_wins_even_when_it_comes_first
+    assert keep(transform.dedupe_latest(rows)) == [(1, 2)]
+E   assert [(1, 2), (1, 20)] == [(1, 2)]
+E     
+E     Left contains one more item: (1, 20)
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_transform.py::test_the_latest_version_wins_even_when_it_comes_first
+1 failed, 16 passed in 1.17s
+$ uv run pytest -q --tb=short --candidate candidates/ai_ranked.py
+.................                                                        [100%]
+17 passed in 1.18s
+```
+
+</details>
+
+*Why:* the first answer fails the test of the second rule only. `SELECT DISTINCT` returns the unique rows, so it drops a row that is identical in every column and keeps both versions of a line whose quantity changed: the old 20 stays next to the corrected 2. The real-data test passed with it, because a full pull holds one version of each line; a load that staged two windows together would meet the old version. Only the three-row test with two versions of one line could tell the answers apart. The log of the decision, in the form of C38:
+
+| answer | checks run | verdict | reason |
+|---|---|---|---|
+| `ai_distinct` | the suite: 16 passed, 1 failed; the real pull: 3,287 lines | reject | It keeps the old version of a corrected line; the real data could not show it. |
+| `ai_ranked` | the suite: 17 passed; read the code against the rule | accept | It keeps the latest version of each key and matches the tests. For two versions with the same `updated_at` the choice is not defined by any test, and neither is it in `transform.py`. |
+
+Commit your work: `git add -A`, then `git commit -m "Test first: wait time, dedupe_latest and the row-count log"`.
+
+<Aside type="tip" title="Remember">
+
+- Write the test first and read why it fails: the right failure shows the test can fail.
+- A step you can test takes rows and returns rows, and a clock or a file it needs is passed in.
+- A log line of rows in and rows out is a check a person reads and `caplog` asserts.
+- Run your tests against an assistant's code without touching yours; what they do not cover is still open.
+
+**Common trap:** trusting a check on the real data. A count on today's data passed a function that a three-row test with a corrected line rejects.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-pipeline-as-testable-code-1">
+
+**Test first: keep the completed lines.** The sheet counts completed orders only. Save this as `exercises/test_de05_ex1.py`, run it with `uv run pytest -q --tb=short exercises/test_de05_ex1.py` and read the failure. Then write the body of `completed_only` and run it again. Expected: first one failure, then one passed.
+
+```python
+import duckdb
+
+
+def completed_only(rows):
+    """Keep the rows whose status is 'completed'."""
+    ...
+
+
+def test_a_canceled_line_is_dropped():
+    con = duckdb.connect()
+    rows = con.sql("SELECT * FROM (VALUES (1, 'completed'), (2, 'canceled'), (3, 'completed')) AS t(order_item_id, status)")
+    assert sorted(completed_only(rows).fetchall()) == [(1, "completed"), (3, "completed")]
+```
+
+<details>
+<summary>Hint</summary>
+
+A relation has a `filter` method that takes the text of a condition, as in `rows.filter("quantity > 1")`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    return rows.filter(...)
+```
+
+</details>
+
+<Solution>
+
+```python
+    return rows.filter("status = 'completed'")
+```
+
+```console
+$ uv run pytest -q --tb=short exercises/test_de05_ex1.py
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________________ test_a_canceled_line_is_dropped ________________________
+exercises/test_de05_ex1.py:12: in test_a_canceled_line_is_dropped
+    assert sorted(completed_only(rows).fetchall()) == [(1, "completed"), (3, "completed")]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'NoneType' object has no attribute 'fetchall'
+=========================== short test summary info ============================
+FAILED exercises/test_de05_ex1.py::test_a_canceled_line_is_dropped - Attribut...
+1 failed in 0.07s
+$ uv run pytest -q --tb=short exercises/test_de05_ex1.py
+.                                                                        [100%]
+1 passed in 0.07s
+```
+
+The first run failed because the body is only `...` and returns nothing; the second passes with one line.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-pipeline-as-testable-code-2">
+
+**Tests for a function that has none.** `window_name` of DE2 chooses the folder of a request, and no test guards it. Before you start, say in one sentence what the function must never put in a folder name, and why a Windows laptop would care. Then, from a blank file `exercises/test_de05_ex2.py`, write three tests: the same request gives the same name, the name is a valid file name on Windows, and two different windows give two different names. Run them; then commit your work (unit 4 ends with the command), delete the first `.replace(...)` call from `window_name` in `src/pipeline/ingest.py`, run them again, and put the function back with `git restore src/pipeline/ingest.py`. Expected: three passed, then one failed, then three passed.
+
+<details>
+<summary>Hint</summary>
+
+Call `window_name("2026-05-02 16:20:00", "2026-05-02 23:59:59")` and look at what comes back. The Microsoft page *Naming Files, Paths, and Namespaces* lists the characters a Windows file name cannot hold. The second test needs one assert on the characters of the name.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"All three pass on the real function; with the first replace removed, the test about Windows file names fails and the other two still pass."*
+
+```python
+from pipeline.ingest import window_name
+
+
+def test_the_same_request_gives_the_same_folder():
+    assert window_name("2026-05-02 16:20:00", None) == ...
+```
+
+</details>
+
+<Solution>
+
+```python
+from pipeline.ingest import window_name
+
+
+def test_the_same_request_gives_the_same_folder():
+    assert window_name("2026-05-02 16:20:00", None) == window_name("2026-05-02 16:20:00", None)
+
+
+def test_the_name_is_a_valid_file_name_on_windows():
+    name = window_name("2026-05-02 16:20:00", "2026-05-02 23:59:59")
+    assert [c for c in name if c in '<>:"/\\|?*'] == []
+
+
+def test_different_windows_give_different_folders():
+    assert window_name(None, None) != window_name("2026-05-02 16:20:00", None)
+```
+
+```console
+$ uv run pytest -q --tb=short exercises/test_de05_ex2.py
+...                                                                      [100%]
+3 passed in 0.07s
+$ uv run pytest -q --tb=short exercises/test_de05_ex2.py
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+________________ test_the_name_is_a_valid_file_name_on_windows _________________
+exercises/test_de05_ex2.py:10: in test_the_name_is_a_valid_file_name_on_windows
+    assert [c for c in name if c in '<>:"/\\|?*'] == []
+E   AssertionError: assert [':', ':', ':', ':'] == []
+E     
+E     Left contains 4 more items, first extra item: ':'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED exercises/test_de05_ex2.py::test_the_name_is_a_valid_file_name_on_windows
+1 failed, 2 passed in 0.07s
+$ uv run pytest -q --tb=short exercises/test_de05_ex2.py
+...                                                                      [100%]
+3 passed in 0.06s
+```
+
+A test you have never seen fail may not test anything: this one fails when the function breaks the one rule that matters. The Microsoft page lists the colon among the reserved characters of a Windows file name, so `window_name` turns the colons of a time into hyphens.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: why does `wait_time` take a `now` argument?
+
+   <details>
+   <summary>answer</summary>
+
+   So that a test can fix the clock. A function that reads the real time has no answer you can know in advance.
+
+   </details>
+
+<Exercise id="data-engineer-pipeline-as-testable-code-3">
+
+**Spot the flaw.** A colleague runs the suite against another assistant's answer, sees `17 passed`, and accepts it. Save the answer as `exercises/ai_hardcoded.py` and run `uv run pytest -q --tb=short --candidate exercises/ai_hardcoded.py`. Expected: 17 passed. What is wrong with accepting it, and which test would you add?
+
+```python
+def dedupe_latest(rows, key="order_item_id", version="updated_at"):
+    return rows.query(
+        "rows",
+        "SELECT * FROM rows QUALIFY row_number() OVER (PARTITION BY order_item_id ORDER BY updated_at DESC) = 1",
+    )
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the function's two parameters, then read what each test passes to it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+kept = transform.dedupe_latest(rows, key="store_id").fetchall()
+```
+
+</details>
+
+<Solution>
+
+```python
+import duckdb
+
+from pipeline import transform
+
+
+def test_the_key_argument_decides_what_a_duplicate_is():
+    con = duckdb.connect()
+    rows = con.sql("""
+        SELECT * FROM (VALUES (1, 1, TIMESTAMP '2026-05-01 10:00:00'), (2, 1, TIMESTAMP '2026-05-01 11:00:00'), (3, 2, TIMESTAMP '2026-05-01 12:00:00'))
+        AS t(order_item_id, store_id, updated_at)
+    """)
+    kept = transform.dedupe_latest(rows, key="store_id").fetchall()
+    assert sorted((key, store) for key, store, _ in kept) == [(2, 1), (3, 2)]
+```
+
+Save it as `exercises/test_de05_ex3.py` and run it three ways:
+
+```console
+$ uv run pytest -q --tb=short --candidate exercises/ai_hardcoded.py
+.................                                                        [100%]
+17 passed in 1.16s
+$ uv run pytest -q --tb=short exercises/test_de05_ex3.py --candidate exercises/ai_hardcoded.py
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________ test_the_key_argument_decides_what_a_duplicate_is _______________
+exercises/test_de05_ex3.py:13: in test_the_key_argument_decides_what_a_duplicate_is
+    assert sorted((key, store) for key, store, _ in kept) == [(2, 1), (3, 2)]
+E   assert [(1, 1), (2, 1), (3, 2)] == [(2, 1), (3, 2)]
+E     
+E     At index 0 diff: (1, 1) != (2, 1)
+E     Left contains one more item: (3, 2)
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED exercises/test_de05_ex3.py::test_the_key_argument_decides_what_a_duplicate_is
+1 failed in 0.07s
+$ uv run pytest -q --tb=short exercises/test_de05_ex3.py
+.                                                                        [100%]
+1 passed in 0.07s
+```
+
+The answer ignores its `key` and `version` arguments and has the column names written into the SQL. Every test of the suite calls it with the defaults, so none of them could notice. Passing the suite shows that the function does what the tests ask; it says nothing about what the tests never ask. Read the function against its signature, and add the test that varies each argument.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a test first and read why it fails, pull a step into a function of rows that a test can reach, make a log line a check that a test asserts, and run my tests against an assistant's function and say what they do not cover.*
+Test: Exercise data-engineer-pipeline-as-testable-code-2, done without opening the hints.
+
+The pattern to remember: **a test you have seen fail, on a function small enough to have a known answer, is what decides whether to trust the code, whoever wrote it.** The next lessons of this track put checks on the data itself and run the pipeline on a schedule.

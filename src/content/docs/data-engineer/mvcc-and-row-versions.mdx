@@ -1,0 +1,386 @@
+---
+id: data-engineer-mvcc-and-row-versions
+title: 'MVCC: row versions and vacuum'
+short_title: Row versions and MVCC
+description: See an update write a second version of a row, read who made and ended each version, and watch VACUUM remove the old one only when nobody needs it.
+stage: data-engineer
+order: 255
+level: advanced
+duration: 20
+objectives:
+  - Read the two versions of an updated row with ctid, xmin and xmax
+  - Say when VACUUM can remove an old version, and show a long transaction keeping one alive
+  - Explain why an update of every row grows a table, and what a row's ctid identifies
+prerequisites:
+  - data-engineer-write-skew-and-serializable
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'PostgreSQL 16 documentation: Introduction to MVCC (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/mvcc-intro.html
+  - title: 'PostgreSQL 16 documentation: System columns (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/ddl-system-columns.html
+  - title: 'PostgreSQL 16 documentation: Routine vacuuming (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/routine-vacuuming.html
+  - title: 'PostgreSQL 16 documentation: VACUUM (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-vacuum.html
+  - title: 'PostgreSQL 16 documentation: pageinspect (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/pageinspect.html
+status: published
+---
+
+## The question
+
+The owner of the three cafes asks:
+
+> An analyst's report runs for an hour while the tills keep updating orders. If an order changes during the report, which value does the report read, and where does the database keep the other one?
+
+By the end you can read both versions of a changed row, say when the old one goes away, and avoid two mistakes that come from forgetting it exists.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Transactions: what ACID actually promises*](/data-engineer/transactions-and-isolation/) (DE24) a Repeatable Read report kept reading `completed` after another session committed `canceled`.
+
+**Diverge.** There you saw only the value. Here you look under it, at the stored versions of the row.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. Which moment does every query of a Repeatable Read transaction see?
+
+   <details>
+   <summary>answer</summary>
+
+   One snapshot, taken at the transaction's first query.
+
+   </details>
+
+2. In [*When transactions are not enough: write skew*](/data-engineer/write-skew-and-serializable/) (DE25), what does SQLSTATE `40001` ask a program to do?
+
+   <details>
+   <summary>answer</summary>
+
+   Run the whole transaction again from the start.
+
+   </details>
+
+## The big idea
+
+The database keeps more than one version of a row, and each transaction's snapshot decides which one it reads.
+
+## Learn by doing
+
+About 20 minutes, 2 new ideas: row versions, and the vacuum that removes them. Open two terminals with `psql -d lab`, set the prompts to A and B and type `\pset footer off`, as in the previous lessons. In B, make a fresh scratch table and the page-reading extension:
+
+```sql
+DROP TABLE IF EXISTS orders_tx;
+CREATE TABLE orders_tx AS SELECT * FROM orders;
+ALTER TABLE orders_tx ADD PRIMARY KEY (order_id);
+CREATE EXTENSION IF NOT EXISTS pageinspect;
+```
+
+### 1. Two versions of one row
+
+**Idea.** Every table has hidden **system columns**. The documentation defines `xmin` as the id of the transaction that inserted this row version, `xmax` as the id of the deleting transaction (zero for a version not deleted), and `ctid` as the version's place in the table (page, then item). It also says that each update of a row creates a new row version for the same logical row.
+
+**Try it.** A starts a long report at Repeatable Read, B cancels an order while the report is open, and both look at the row's versions:
+
+```sql
+-- in A
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+-- in B
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+-- in A, then in B
+SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1580;
+```
+
+**Predict:** Does B's `UPDATE` wait for A's open report? Do A and B see the same `ctid`, `xmin` and `xmax`?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> BEGIN ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+A> SELECT order_id, status FROM orders_tx WHERE order_id = 1580;
+ order_id |  status
+----------+-----------
+     1580 | completed
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1580;
+UPDATE 1
+A> SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1580;
+ ctid  | xmin | xmax | order_id |  status
+-------+------+------+----------+-----------
+ (5,1) | 1003 | 1005 |     1580 | completed
+B> SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1580;
+  ctid   | xmin | xmax | order_id |  status
+---------+------+------+----------+----------
+ (15,67) | 1005 |    0 |     1580 | canceled
+```
+
+Your transaction ids will differ. Leave A's transaction open for unit 2.
+
+</details>
+
+*Why:* B's update finished at once, while A's transaction was open. A read the old version at `(5,1)`: its `xmax` is the id of B's transaction (1005), which ended it by writing the new version at `(15,67)`, whose `xmin` is that same 1005. A's snapshot was taken before transaction 1005 committed, so for A the old version is still the row. The MVCC documentation states the rule behind it: reading never blocks writing and writing never blocks reading.
+
+<figure>
+<svg viewBox="0 0 360 181" width="360" role="img" aria-labelledby="dd7-versions-t dd7-versions-d">
+<title id="dd7-versions-t">The two versions of order 1580 after B's update, and which session reads which</title>
+<desc id="dd7-versions-d">Two boxes, one under the other. The old version sits at ctid (5,1) with xmin 1003, xmax 1005 and status completed; A's snapshot reads it. The new version sits at ctid (15,67) with xmin 1005, xmax 0 and status canceled; B and later readers. A line joins the old version's xmax 1005 to the new version's xmin 1005: transaction 1005, B's update, ended one version and wrote the other.</desc>
+<g fill="currentColor">
+<text x="15" y="22.4" font-size="10.5" font-weight="600">Order 1580 after B's update: two row versions</text>
+<text x="15" y="52.4" font-size="10" fill-opacity="0.9">old version: A's snapshot reads it</text>
+<rect x="15" y="58.4" width="330" height="30" rx="4" fill="none" stroke="#0072b2" stroke-width="2" />
+<text x="23" y="72.4" font-size="9" fill-opacity="0.75">ctid</text>
+<text x="23" y="84.4" font-size="10" font-weight="600">(5,1)</text>
+<text x="99" y="72.4" font-size="9" fill-opacity="0.75">xmin</text>
+<text x="99" y="84.4" font-size="10" font-weight="600">1003</text>
+<text x="175" y="72.4" font-size="9" fill-opacity="0.75">xmax</text>
+<text x="175" y="84.4" font-size="10" font-weight="600">1005</text>
+<text x="251" y="72.4" font-size="9" fill-opacity="0.75">status</text>
+<text x="251" y="84.4" font-size="10" font-weight="600">completed</text>
+<text x="15" y="164.4" font-size="10" fill-opacity="0.9">new version: B and later readers</text>
+<rect x="15" y="118.4" width="330" height="30" rx="4" fill="none" stroke="#00a07a" stroke-width="2" />
+<text x="23" y="132.4" font-size="9" fill-opacity="0.75">ctid</text>
+<text x="23" y="144.4" font-size="10" font-weight="600">(15,67)</text>
+<text x="99" y="132.4" font-size="9" fill-opacity="0.75">xmin</text>
+<text x="99" y="144.4" font-size="10" font-weight="600">1005</text>
+<text x="175" y="132.4" font-size="9" fill-opacity="0.75">xmax</text>
+<text x="175" y="144.4" font-size="10" font-weight="600">0</text>
+<text x="251" y="132.4" font-size="9" fill-opacity="0.75">status</text>
+<text x="251" y="144.4" font-size="10" font-weight="600">canceled</text>
+<path d="M191 88.4 L115 118.4" fill="none" stroke="#9a6be0" stroke-width="2" stroke-opacity="0.9" />
+<text x="203" y="106.4" font-size="9.5" fill-opacity="0.9">transaction 1005 (B's update)</text>
+</g>
+</svg>
+</figure>
+
+### 2. Old versions wait for vacuum
+
+**Idea.** The documentation says an `UPDATE` or `DELETE` does not immediately remove the old version of a row, because it must not be deleted while it is still potentially visible to other transactions; `VACUUM` reclaims the space of versions that no transaction needs any more. The function `heap_page_items` of `pageinspect` shows every item on a page, whether or not a snapshot can see it.
+
+**Try it.** With A's report still open, B looks at item 1 of page 5, vacuums, and looks again; then A commits, and B vacuums and looks once more:
+
+```sql
+-- in B
+SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+VACUUM orders_tx;
+SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+-- in A
+COMMIT;
+-- in B
+VACUUM orders_tx;
+SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+```
+
+**Predict:** Is the old version still on page 5 after the first `VACUUM`? After the second?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+B> SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+ lp | t_xmin | t_xmax | t_ctid
+----+--------+--------+---------
+  1 |   1003 |   1005 | (15,67)
+B> VACUUM orders_tx;
+VACUUM
+B> SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+ lp | t_xmin | t_xmax | t_ctid
+----+--------+--------+---------
+  1 |   1003 |   1005 | (15,67)
+A> COMMIT;
+COMMIT
+B> VACUUM orders_tx;
+VACUUM
+B> SELECT lp, t_xmin, t_xmax, t_ctid FROM heap_page_items(get_raw_page('orders_tx', 5)) WHERE lp = 1;
+ lp | t_xmin | t_xmax | t_ctid
+----+--------+--------+--------
+  1 |        |        |
+```
+
+</details>
+
+*Why:* the old version's `t_ctid` points to the new one, `(15,67)`. The first `VACUUM` left it in place, because A's open snapshot could still read it. Once A committed, nobody needed it, and the second `VACUUM` emptied the item. A report or a session left open for hours keeps every version it might read, on every table, until it ends.
+
+<Aside type="tip" title="Remember">
+
+- An update writes a new row version and ends the old one; `xmin` and `xmax` name the transactions that made and ended each version.
+- A snapshot reads the version that was current for it, so readers and writers do not wait for each other.
+- `VACUUM` removes an old version only when no transaction can still read it.
+- A long open transaction keeps old versions alive.
+
+**Common trap:** picturing an `UPDATE` as a change made in place. The old version stays on its page until vacuum.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-mvcc-and-row-versions-1">
+
+**A delete that changes its mind.** B deletes order 1002 inside a transaction and does not commit; A looks at the row's system columns; B rolls back; A looks again. Expected: the `xmax` that A reads each time.
+
+```sql
+-- in B
+BEGIN;
+DELETE FROM orders_tx WHERE order_id = 1002;
+-- in A: the ctid, xmin, xmax query of unit 1 for order 1002; then ROLLBACK in B, and the query again in A
+```
+
+<details>
+<summary>Hint</summary>
+
+Use unit 1's query with `WHERE order_id = 1002`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+-- in A
+SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1002;
+-- in B
+ROLLBACK;
+```
+
+</details>
+
+<Solution>
+
+```console
+B> BEGIN;
+BEGIN
+B> DELETE FROM orders_tx WHERE order_id = 1002;
+DELETE 1
+A> SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1002;
+ ctid  | xmin | xmax | order_id |  status
+-------+------+------+----------+-----------
+ (0,2) | 1003 | 1006 |     1002 | completed
+B> ROLLBACK;
+ROLLBACK
+A> SELECT ctid, xmin, xmax, order_id, status FROM orders_tx WHERE order_id = 1002;
+ ctid  | xmin | xmax | order_id |  status
+-------+------+------+----------+-----------
+ (0,2) | 1003 | 1006 |     1002 | completed
+```
+
+A still saw the row, with B's transaction (1006) as its `xmax`, both before and after the rollback. The documentation explains it: `xmax` can be nonzero in a visible row version, which usually means that the deleting transaction has not committed yet, or that an attempted deletion was rolled back. So `xmax` alone does not say a row is gone: whether the transaction it names committed decides that.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-mvcc-and-row-versions-2">
+
+**The nightly rewrite.** A cleanup job writes every order's `payment_method` in capitals: one `UPDATE` of all 1,800 rows, then a `VACUUM`. Before you run it, write in one sentence how the table's size on disk changes after the update and after the vacuum. Then measure it with `pg_relation_size('orders_tx')` before, between and after. Expected: three sizes in bytes.
+
+<details>
+<summary>Hint</summary>
+
+`SELECT pg_relation_size('orders_tx') AS bytes;` and `UPDATE orders_tx SET payment_method = upper(payment_method);`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The table grows with the update, because every row gets a second version, and the vacuum does not shrink it."*
+
+</details>
+
+<Solution>
+
+```console
+B> SELECT pg_relation_size('orders_tx') AS bytes;
+ bytes
+--------
+ 131072
+B> UPDATE orders_tx SET payment_method = upper(payment_method);
+UPDATE 1800
+B> SELECT pg_relation_size('orders_tx') AS bytes;
+ bytes
+--------
+ 262144
+B> VACUUM orders_tx;
+VACUUM
+B> SELECT pg_relation_size('orders_tx') AS bytes;
+ bytes
+--------
+ 262144
+```
+
+The table doubled, from 131,072 to 262,144 bytes: 1,800 new versions next to 1,800 old ones. `VACUUM` freed the old versions but the size stayed: the documentation says plain `VACUUM` reclaims space and makes it available for re-use, but in most cases does not return it to the operating system; it is kept for new rows of the same table. A job that rewrites a whole table every night pays for twice its size on disk, and for vacuuming the old half.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does a row version's `xmin` hold?
+
+   <details>
+   <summary>answer</summary>
+
+   The id of the transaction that inserted that version.
+
+   </details>
+
+<Exercise id="data-engineer-mvcc-and-row-versions-3">
+
+**Spot the flaw.** A colleague's script remembers an order by its `ctid`, "the row's address, faster than the key", and refunds it later. In between, the till cancels the order. Run the steps in B. Expected: what the refund prints and the order's final status. What went wrong?
+
+```sql
+SELECT ctid AS saved FROM orders_tx WHERE order_id = 1003 \gset
+UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1003;
+UPDATE orders_tx SET status = 'refunded' WHERE ctid = :'saved';
+SELECT order_id, status FROM orders_tx WHERE order_id = 1003;
+```
+
+<details>
+<summary>Hint</summary>
+
+What did unit 1 show about the `ctid` of order 1580 before and after an update?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Read the line that the refund prints, and compare the saved `ctid` with the order's `ctid` now.
+
+</details>
+
+<Solution>
+
+```console
+B> SELECT ctid AS saved FROM orders_tx WHERE order_id = 1003 \gset
+B> UPDATE orders_tx SET status = 'canceled' WHERE order_id = 1003;
+UPDATE 1
+B> UPDATE orders_tx SET status = 'refunded' WHERE ctid = :'saved';
+UPDATE 0
+B> SELECT order_id, status FROM orders_tx WHERE order_id = 1003;
+ order_id |  status
+----------+----------
+     1003 | canceled
+```
+
+The refund printed `UPDATE 0` and the order stayed `canceled`, with no error. The saved `ctid` was the address of a version that the till's update had ended; the order's current version lives elsewhere. The documentation says a row's `ctid` changes when it is updated, so it is useless as a long-term row identifier, and a primary key should be used instead: `WHERE order_id = 1003`.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read the versions of a changed row with `ctid`, `xmin` and `xmax`, say when `VACUUM` can remove the old one, and explain why a whole-table update grows the table and what `ctid` identifies.*
+Test: Exercise data-engineer-mvcc-and-row-versions-2, done without opening the hints.
+
+The pattern to remember: **an update adds a version; something must later take the old one away.** Next comes [*Locks, waits and MVCC*](/data-engineer/locks-and-mvcc/) (DE26), where two writers meet on the same row.

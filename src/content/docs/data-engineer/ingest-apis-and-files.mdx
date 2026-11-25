@@ -1,0 +1,554 @@
+---
+id: data-engineer-ingest-apis-and-files
+title: Ingesting from APIs and files defensively
+short_title: Ingest APIs and files
+description: Read a paginated API through its 429s and 500s, land every page unchanged so a rerun lands the same bytes, and count what came, including a repeat.
+stage: data-engineer
+order: 20
+level: intermediate
+duration: 30
+objectives:
+  - Read a paginated API to its last page, waiting what the server asks after a 429 and backing off after a 5xx
+  - Land every page unchanged in a folder named by the request, so a rerun lands the same bytes
+  - Count the records and the distinct keys of what landed, and find a record that came twice
+  - Name a field that the contract does not list, and say why raw keeps it
+prerequisites:
+  - data-engineer-role-and-lifecycle
+  - core-debugging-and-retries
+  - core-logging-config-secrets
+  - python-apis-and-web-data
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'IETF RFC 6585: Additional HTTP Status Codes, section 4, 429 Too Many Requests (accessed 2026-11-24)'
+    url: https://www.rfc-editor.org/rfc/rfc6585.html#section-4
+  - title: 'IETF RFC 9110: HTTP Semantics, section 10.2.3, Retry-After (accessed 2026-11-24)'
+    url: https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3
+  - title: 'Requests documentation: Quickstart (accessed 2026-11-24)'
+    url: https://requests.readthedocs.io/en/latest/user/quickstart/
+  - title: 'Python documentation: os.replace (accessed 2026-11-24)'
+    url: https://docs.python.org/3/library/os.html#os.replace
+  - title: 'DuckDB documentation: Loading JSON (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/data/json/loading_json.html
+status: published
+---
+
+## The question
+
+The owner's reader of the sheet asks:
+
+> Does the sheet count every line the tills sold, once each? You told me the numbers come from the tills' API.
+
+The cafe database behind that API holds 3,287 order lines. An API gives them to you in pages, and a page looks like this (the first line of the first page):
+
+| order_item_id | order_id | store_id | quantity | updated_at |
+|---:|---:|---:|---:|---|
+| 5001 | 1001 | 2 | 1 | 2026-01-01 08:07:00 |
+
+By the end you can land every page of that API, unchanged, in a way that is safe to run again, and say what came in.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*When it breaks: errors, retries and debugging*](/core/debugging-and-retries/) (C26) gave a retry its limit, its wait and a final `raise`. The loop below keeps all three.
+
+**Diverge.** In C26 the step failed for any reason and waited a fixed time. Unit 1 shows which responses are worth retrying, and where the wait comes from.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C26, what four things does a retry need?
+
+   <details>
+   <summary>answer</summary>
+
+   A limit on the tries, a wait between them, a list of the errors worth another try, and a final `raise` of the last error.
+
+   </details>
+
+2. In the lesson [*What a data engineer owns*](/data-engineer/role-and-lifecycle/) (DE1), which layer holds the bytes exactly as they arrived, and may anything edit them?
+
+   <details>
+   <summary>answer</summary>
+
+   Raw. Nothing edits it.
+
+   </details>
+
+## The big idea
+
+Ingestion copies what the source sends, through its faults, and keeps the copy exactly as it came.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a retry that listens to the server, landing that is safe to repeat, counting what came, and a field nobody announced. Work in `de-pipeline-starter` with the mock API running in terminal 1 (`uv run python mock_api.py`), as in DE1. To catch up, run `git checkout de-02-start`.
+
+### 1. A retry that listens to the server
+
+**Idea.** An API fails in two ways. A request that is wrong (a bad parameter) fails again if you repeat it. A request that is right but met a busy server may pass on the next try. A `429` means too many requests in a given amount of time, and RFC 6585 says the answer may carry a `Retry-After` header that says how long to wait; RFC 9110 says its value is a number of seconds or a date. This loop retries a `429` and any `5xx`, waits as `wait_time` decides, gives up after 5 tries, and fails at once on any other status. It passes `timeout=10` to every request, because the Requests documentation says that without a timeout requests do not time out and a program can hang indefinitely, and it calls `raise_for_status()`, which the same page says raises an error for a 4xx or 5xx answer.
+
+**Try it.** Save the whole module as `src/pipeline/ingest.py`, then run it:
+
+```python
+"""Land the order lines from the API, page by page, exactly as they arrive."""
+
+import hashlib
+import json
+import logging
+import os
+import time
+from datetime import datetime, timezone
+
+import requests
+
+from pipeline.config import API_URL, RAW_DIR
+
+log = logging.getLogger("pipeline.ingest")
+
+
+def wait_time(response, attempt, base=0.5):
+    """How long to wait before trying again: what the server asked for, else a doubling wait."""
+    try:
+        return float(response.headers["Retry-After"])
+    except (KeyError, ValueError):
+        return base * 2 ** (attempt - 1)
+
+
+def fetch_page(params, attempts=5, sleep=time.sleep):
+    """Ask for one page. Try again after a 429 or a 5xx, and fail at once on any other error."""
+    for attempt in range(1, attempts + 1):
+        response = requests.get(f"{API_URL}/order-lines", params=params, timeout=10)
+        if response.status_code == 200:
+            return response
+        retryable = response.status_code == 429 or response.status_code >= 500
+        if not retryable or attempt == attempts:
+            response.raise_for_status()
+        pause = wait_time(response, attempt)
+        log.warning("HTTP %s, waiting %.1f s (attempt %d of %d)", response.status_code, pause, attempt, attempts)
+        sleep(pause)
+
+
+def window_name(since, until):
+    """A folder name for a request window: the same request always lands in the same folder."""
+    text = f"since={since or 'start'}_until={until or 'now'}"
+    return text.replace(":", "-").replace(" ", "T")
+
+
+def land(since=None, until=None, raw_dir=RAW_DIR):
+    """Write every page of a window to raw/order_lines/<window>/ and a manifest beside the pages."""
+    folder = raw_dir / "order_lines" / window_name(since, until)
+    folder.mkdir(parents=True, exist_ok=True)
+    manifest, cursor, number = [], None, 1
+    while True:
+        response = fetch_page({"since": since, "until": until, "cursor": cursor})
+        path = folder / f"page-{number:04d}.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_bytes(response.content)  # the bytes as they arrived
+        os.replace(temporary, path)  # a page is whole or absent, never half written
+        manifest.append(
+            {
+                "file": path.name,
+                "bytes": len(response.content),
+                "sha256": hashlib.sha256(response.content).hexdigest(),
+                "landed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+        )
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+        number += 1
+    (folder / "_manifest.json").write_text(json.dumps(manifest, indent=1))
+    log.info("landed %d pages in %s", len(manifest), folder.name)
+    return manifest
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    land()
+```
+
+```bash
+uv run python -m pipeline.ingest
+```
+
+**Predict:** The first failing request gets a `429` with `Retry-After: 1`. Further on, one page answers `500` twice in a row. What waits does the log print for the `429`, and for the two `500`s?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.ingest
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 2 of 5)
+INFO landed 33 pages in since=start_until=now
+```
+
+</details>
+
+*Why:* `wait_time` returns the `Retry-After` seconds when the answer has them and otherwise 0.5 seconds doubling at each try. The `429` carried `Retry-After: 1`, so the wait is 1.0 seconds; a `500` carries none, so the first wait is 0.5 and the second 1.0. Seed 2026 makes 5 requests fail on 3 pages (page 4, page 15 and page 21), the waits add up to 4.5 seconds, and all 33 pages land. This `wait_time` reads only the seconds form of `Retry-After`; a date falls back to the doubling wait, and the testing lesson of this track (DE5) adds the date form with a test first. The fault is a property of the seed, not of the API: another seed fails on other pages.
+
+### 2. Land the bytes as they arrived, in a place named by the request
+
+**Idea.** Landing is safe to repeat (the word is *idempotent*) when running it twice leaves the same files. `land` writes each page's bytes unchanged, to a path made from the request (`since=start_until=now`) and the page number. It writes to a `.tmp` file first and then renames it; the Python documentation says a successful `os.replace` is an atomic operation (a POSIX requirement), so a crash leaves a whole page or none. The manifest holds a SHA-256 code of each page and the time it landed. Save the reader of the landing as `src/pipeline/inspect_raw.py`; it prints a different report for each word you give it, and this unit uses `fingerprint`, one short code for the bytes of all pages:
+
+```python
+"""Read the landed pages and say what is in them, without changing anything.
+
+Run it with one word: keys, fields or fingerprint.
+"""
+
+import hashlib
+import json
+import sys
+from collections import Counter
+
+from pipeline.config import RAW_DIR
+from pipeline.ingest import window_name
+
+CONTRACT = {
+    "order_item_id", "order_id", "ordered_at", "store_id", "customer_id", "status",
+    "payment_method", "product_id", "quantity", "discount_usd", "updated_at",
+}
+
+
+def records_by_page(folder):
+    """Yield (page file name, records) for every landed page, in order."""
+    for page in sorted(folder.glob("page-*.json")):
+        yield page.name, json.loads(page.read_text())["data"]
+
+
+def keys(folder):
+    """How many records came, how many distinct lines they make, and which keys came twice."""
+    counts = Counter(r["order_item_id"] for _, records in records_by_page(folder) for r in records)
+    print(f"records: {sum(counts.values())}")
+    print(f"distinct order_item_id: {len(counts)}")
+    print(f"repeated keys: {[key for key, n in counts.items() if n > 1]}")
+
+
+def fields(folder):
+    """Name every field that the contract does not list, and the page where it first appears."""
+    first_seen = {}
+    for name, records in records_by_page(folder):
+        for record in records:
+            for field in set(record) - CONTRACT:
+                first_seen.setdefault(field, name)
+    for field, name in first_seen.items():
+        print(f"field outside the contract: {field} (first seen in {name})")
+    if not first_seen:
+        print("no field outside the contract")
+
+
+def fingerprint(folder):
+    """One short code for the bytes of all pages: equal codes mean equal pages."""
+    pages = sorted(folder.glob("page-*.json"))
+    code = hashlib.sha256(b"".join(page.read_bytes() for page in pages)).hexdigest()[:12]
+    print(f"{len(pages)} pages, fingerprint {code}")
+
+
+if __name__ == "__main__":
+    report = {"keys": keys, "fields": fields, "fingerprint": fingerprint}[sys.argv[1]]
+    report(RAW_DIR / "order_lines" / window_name(None, None))
+```
+
+**Try it.** Take the fingerprint and the first `landed_at` of the manifest, run the whole ingest a second time, and take both again:
+
+```bash
+uv run python -m pipeline.inspect_raw fingerprint
+grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
+uv run python -m pipeline.ingest
+uv run python -m pipeline.inspect_raw fingerprint
+grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
+```
+
+**Predict:** Will the second run meet the same failures? After it, does the folder hold the same pages with the same fingerprint, and does `landed_at` change?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.inspect_raw fingerprint
+33 pages, fingerprint 423af966d628
+$ grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
+  "landed_at": "2026-11-24T09:13:00+00:00"
+$ uv run python -m pipeline.ingest
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 2 of 5)
+INFO landed 33 pages in since=start_until=now
+$ uv run python -m pipeline.inspect_raw fingerprint
+33 pages, fingerprint 423af966d628
+$ grep -m1 landed_at "data/raw/order_lines/since=start_until=now/_manifest.json"
+  "landed_at": "2026-11-24T09:13:05+00:00"
+```
+
+Your `landed_at` times will differ; the fingerprint will not.
+
+</details>
+
+*Why:* the same five requests failed again, because every fault is a function of the seed and a success resets the count for its page. The path holds only the request and the page number, so the second run wrote the same names again and not new ones: it overwrote the same 33 files with the same bytes, so the fingerprint is unchanged, and only the manifest, which records when you landed, moved. A rerun that adds nothing and changes nothing is what makes a pipeline safe to run again after a crash. The path matters: a landing that appended to one growing file would have doubled it.
+
+### 3. Count what came
+
+**Idea.** After landing, count before you trust: how many records came, and how many distinct keys they make. The two are equal only when no record came twice.
+
+**Try it.** `uv run python -m pipeline.inspect_raw keys`
+
+**Predict:** The cafe database holds 3,287 order lines. How many records landed, and how many distinct `order_item_id` values do they hold?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.inspect_raw keys
+records: 3288
+distinct order_item_id: 3287
+repeated keys: [6000]
+```
+
+</details>
+
+*Why:* 3,288 records make 3,287 lines, so one record came twice: line 6000 is the last record of page 10 and the first of page 11, sent again because the source's pages overlap there. Nothing failed and no error was raised, so only the count shows it. Raw keeps both records, because raw is the bytes as they arrived. Removing the repeat is a decision for staging, and DE3 makes it there with the key.
+
+### 4. A field nobody announced
+
+**Idea.** A provider documents its fields: that is the **contract**. **Schema drift** is any change from it, such as a new field. A reader that lists its columns explicitly ignores a field it was not told about, with no error: the DuckDB page says that when types are given for a subset of columns, `read_json` excludes the columns that were not specified. Raw is where the field stays visible.
+
+**Try it.** `uv run python -m pipeline.inspect_raw fields` prints every field outside the contract, from the first page that holds it.
+
+**Predict:** Will it print anything? If so, which page holds the first new field: one before page 10, one near page 20, or only the last page?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m pipeline.inspect_raw fields
+field outside the contract: channel (first seen in page-0020.json)
+```
+
+</details>
+
+*Why:* from page 20 on, records carry `channel` (an invented field of the mock API: `counter` or `app`); the 19 pages before it do not, and page 20 holds both kinds. The field appears with the records updated from May 1, so a table whose columns were fixed from the first pages would have lost it without a word. The report names a new field and does not stop the run; what to do with it (add a column, or leave it out on purpose) is decided in staging, with the raw copy still holding it.
+
+<Aside type="tip" title="Remember">
+
+- Retry a `429` and a `5xx`, wait what `Retry-After` says (else back off), stop after a limit, and fail at once on anything else.
+- Land the bytes unchanged, in a path made from the request, through a temporary file; a rerun then writes the same files.
+- Count records and distinct keys after every landing.
+- Check each page for fields outside the contract; raw keeps the new field.
+
+**Common trap:** a count with no expectation beside it. Write down the number you expect (here 3,287 lines) before you count.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-ingest-apis-and-files-1">
+
+**Land a file the same way.** The partner's file `source_files/products.csv` lands like a page: copy the bytes unchanged to `data/raw/files/products.csv` and return the SHA-256 code of the copy. Create a folder `exercises` and save this as `exercises/de02_ex1.py`; finish `land_file`. Run it twice with `uv run python exercises/de02_ex1.py`. Expected: a code of 12 characters, the same both times.
+
+```python
+import hashlib
+import shutil
+
+from pipeline.config import RAW_DIR, SOURCE_FILES
+
+
+def land_file(path, raw_dir=RAW_DIR):
+    """Copy a file into raw/files/ unchanged and return the SHA-256 code of the copy."""
+    target = raw_dir / "files" / path.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    ...  # copy the bytes, then return the hexadecimal code of the target
+
+
+print(land_file(SOURCE_FILES / "products.csv")[:12])
+```
+
+<details>
+<summary>Hint</summary>
+
+`shutil.copyfile(source, target)` copies the bytes. The code is `hashlib.sha256(bytes).hexdigest()`, as in `land`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+    shutil.copyfile(path, target)
+    return ...
+```
+
+</details>
+
+<Solution>
+
+```python
+    shutil.copyfile(path, target)
+    return hashlib.sha256(target.read_bytes()).hexdigest()
+```
+
+```console
+$ uv run python exercises/de02_ex1.py
+7e2d8b367d90
+```
+
+The same bytes always give the same code, so a changed file shows up as a changed code; run `sha256sum source_files/products.csv` (macOS: `shasum -a 256`) to see it start with the same 12 characters.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-ingest-apis-and-files-2">
+
+**The other kind of drift.** `fields` finds a field that is new. A field can also vanish. Before you start, say in one sentence what your function will return for a page where one record lacks `discount_usd`. Then, from a blank file `exercises/de02_ex2.py`, write `missing_fields(folder)`, which returns a list of pairs (page file name, field) for each contract field that some record on that page lacks, and test it on a made-up folder in a temporary directory: page 1 holds one whole record, page 2 holds a whole record and a record without `discount_usd`. Use `CONTRACT` and `records_by_page` from `pipeline.inspect_raw`. Expected: it prints one pair.
+
+<details>
+<summary>Hint</summary>
+
+For one record, `CONTRACT - set(record)` is the set of missing contract fields. `tempfile.TemporaryDirectory()` gives a folder that disappears afterwards; write each page as `{"data": [...], "next_cursor": None}` with `json.dumps`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A list with one pair: page 2 and the field discount_usd."*
+
+```python
+def missing_fields(folder):
+    found = []
+    for name, records in records_by_page(folder):
+        gone = ...  # the contract fields that some record of this page lacks
+        found.extend((name, field) for field in sorted(gone))
+    return found
+```
+
+</details>
+
+<Solution>
+
+```python
+import json
+import tempfile
+from pathlib import Path
+
+from pipeline.inspect_raw import CONTRACT, records_by_page
+
+
+def missing_fields(folder):
+    found = []
+    for name, records in records_by_page(folder):
+        gone = set().union(*(CONTRACT - set(record) for record in records))
+        found.extend((name, field) for field in sorted(gone))
+    return found
+
+
+with tempfile.TemporaryDirectory() as scratch:
+    folder = Path(scratch)
+    whole = {field: 1 for field in CONTRACT}
+    short = {field: 1 for field in CONTRACT if field != "discount_usd"}
+    (folder / "page-0001.json").write_text(json.dumps({"data": [whole], "next_cursor": None}))
+    (folder / "page-0002.json").write_text(json.dumps({"data": [whole, short], "next_cursor": None}))
+    print(missing_fields(folder))
+```
+
+```console
+$ uv run python exercises/de02_ex2.py
+[('page-0002.json', 'discount_usd')]
+```
+
+A page with no gap gives nothing, and a page is named once for each field that is gone, however many of its records lack it.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which responses does `fetch_page` retry, and where does it take its wait from?
+
+   <details>
+   <summary>answer</summary>
+
+   A `429` and any `5xx`. The wait is the `Retry-After` seconds when the response has them, and otherwise 0.5 seconds doubling at each try.
+
+   </details>
+
+<Exercise id="data-engineer-ingest-apis-and-files-3">
+
+**Spot the flaw.** A colleague writes a landing loop that never raises. Save it as `exercises/de02_ex3.py` and run `uv run python exercises/de02_ex3.py` with the mock API running. Expected: one line that ends with a number of records. The cafe database holds 3,287 lines. What is wrong with the loop, and what is the fix? Afterwards stop the mock API (Ctrl+C) and start it again: the loop left the failure count of one page at 1.
+
+```python
+import tempfile
+from pathlib import Path
+
+import requests
+
+from pipeline.config import API_URL
+
+
+def land_quietly(raw_dir):
+    cursor, pages, records = None, 0, 0
+    while True:
+        try:
+            response = requests.get(f"{API_URL}/order-lines", params={"cursor": cursor}, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException:
+            break
+        pages += 1
+        (raw_dir / f"page-{pages:04d}.json").write_bytes(response.content)
+        records += len(response.json()["data"])
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+    return f"landed {pages} pages and {records} records"
+
+
+with tempfile.TemporaryDirectory() as scratch:
+    print(land_quietly(Path(scratch)))
+```
+
+<details>
+<summary>Hint</summary>
+
+Count the ways out of the `while` loop. Which of them means that the data is finished?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+        except requests.RequestException:
+            ...  # an error is not the end of the data
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run python exercises/de02_ex3.py
+landed 3 pages and 300 records
+```
+
+The trap is to treat an error as the end of the data. The loop has two exits, but only one means the data is finished: a `null` cursor. A `429` on page 4 raised an exception, `except` caught it and `break` left the loop, so the function reports a finished landing of 300 records, 9 percent of the 3,288 that a full pull gives, with no warning and no error. Counting the records against an expectation is how you would see it. The fix is not to catch the error here: retry what is worth retrying, as `fetch_page` does, and let anything else raise, so that a run that cannot land every page fails loudly.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can read a paginated API to its last page through 429s and 500s, land its pages unchanged so that a rerun writes the same bytes, count records against distinct keys, and name a field outside the contract.*
+Test: Exercise data-engineer-ingest-apis-and-files-2, done without opening the hints.
+
+The pattern to remember: **retry what can pass, land what arrived untouched, and count before you trust it.** Next comes [*File formats and partitioning*](/data-engineer/file-formats-and-partitioning/) (DE3), which turns the landed pages into typed tables and asks which file format to keep them in.

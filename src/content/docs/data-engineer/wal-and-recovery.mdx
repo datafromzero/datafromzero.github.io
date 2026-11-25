@@ -1,0 +1,441 @@
+---
+id: data-engineer-wal-and-recovery
+title: 'WAL and recovery: the contract'
+short_title: WAL and recovery
+description: Say what the write-ahead log guarantees, kill a database server mid-write and watch it recover, and explain why sequences leave gaps.
+stage: data-engineer
+order: 270
+level: advanced
+duration: 30
+objectives:
+  - Say what the write-ahead log guarantees after a crash, from the records one insert writes
+  - Stop a local server without a clean shutdown and find the recovery in its log
+  - Explain a gap in an id sequence after a rollback
+prerequisites:
+  - data-engineer-locks-and-mvcc
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'PostgreSQL 16 documentation: Write-ahead logging (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/wal-intro.html
+  - title: 'PostgreSQL 16 documentation: WAL configuration (checkpoints) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/wal-configuration.html
+  - title: 'PostgreSQL 16 documentation: pg_walinspect (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/pgwalinspect.html
+  - title: 'PostgreSQL 16 documentation: pg_ctl (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/app-pg-ctl.html
+  - title: 'PostgreSQL 16 documentation: Sequence manipulation functions (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/functions-sequence.html
+  - title: 'PostgreSQL 16 documentation: CREATE TABLE (unlogged tables) (accessed 2026-11-24)'
+    url: https://www.postgresql.org/docs/16/sql-createtable.html
+status: published
+---
+
+## The question
+
+The owner of the three cafes asks:
+
+> The till server lost power last night in the middle of the evening rush. It came back by itself. Which sales should I trust, and why are some order numbers missing?
+
+By the end you can say what a committed transaction is promised after a crash, watch a server keep that promise, and explain a missing number.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Transactions: what ACID actually promises*](/data-engineer/transactions-and-isolation/) (DE24) the tutorial said that once a transaction is acknowledged, its changes are recorded permanently, even if a crash follows. That is the D of ACID.
+
+**Diverge.** There you took the promise on trust. Here you read the log that keeps it, and pull the plug.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*MVCC: row versions and vacuum*](/data-engineer/mvcc-and-row-versions/) (DE25b), what do the system columns `xmin` and `xmax` of a row version hold?
+
+   <details>
+   <summary>answer</summary>
+
+   The id of the transaction that inserted the version, and of the one that deleted it (zero if none).
+
+   </details>
+
+2. What does `COMMIT` print after a statement of the transaction failed?
+
+   <details>
+   <summary>answer</summary>
+
+   `ROLLBACK`.
+
+   </details>
+
+## The big idea
+
+Before the database changes its data files, it writes what it is about to change into a log, and a crash is repaired by replaying that log.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the log comes first, recovery replays it, and numbers are not given back. Units 1 and 3 run in `psql -d lab` (type `\pset footer off`); unit 2 needs a second, throwaway server.
+
+### 1. The log comes first
+
+**Idea.** The documentation states the central concept of **write-ahead logging** (WAL): changes to data files may be written only after the WAL records describing them have been flushed to permanent storage. Each record has a position in the log, its **LSN**. The extension `pg_walinspect` lists the records between two positions, with the id of the transaction that wrote each (`xid`). Its functions are restricted by default to superusers and members of the `pg_read_server_files` role; if you get `permission denied`, connect as a superuser.
+
+**Try it.** Make a fresh `orders_tx` (`DROP TABLE IF EXISTS orders_tx;` and the two statements of the previous lesson), then note the log position, insert one order and list the records:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_walinspect;
+SELECT pg_current_wal_lsn() AS before \gset
+INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
+SELECT xid, resource_manager, record_type, record_length
+FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn());
+```
+
+`\gset` stores the result in the `psql` variable `before`, and `:'before'` reads it back.
+
+**Predict:** Which of the listed records belong to the insert, and which one is the last of them?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> SELECT pg_current_wal_lsn() AS before \gset
+A> INSERT INTO orders_tx VALUES (2801, NULL, 3, '2026-07-01 09:00', 'completed', 'cash');
+INSERT 0 1
+A> SELECT xid, resource_manager, record_type, record_length
+FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn());
+ xid | resource_manager | record_type | record_length
+-----+------------------+-------------+---------------
+ 745 | Heap             | INSERT      |            86
+ 745 | Btree            | INSERT_LEAF |            64
+ 745 | Transaction      | COMMIT      |            34
+```
+
+Your `xid` will differ, and your list may hold other records too. On fresh tables, one or two `Heap2 PRUNE` records with `xid` 0 sometimes came before these, and sometimes none did, and the function reads the whole server's log, so records of another session can appear. The insert's records are the ones that share one nonzero `xid`.
+
+</details>
+
+*Why:* three records belong to the insert: one for the new row in the table (`Heap`), one for its key in the primary-key index (`Btree`), and one that says the transaction committed, 184 bytes in all in these runs. The documentation draws the consequence: only the WAL has to be flushed to disk to guarantee that a transaction is committed, not every data file it changed, and the WAL is written sequentially, so syncing it costs much less than flushing the data pages. The table page with the new row can reach the disk later.
+
+<figure>
+<svg viewBox="0 0 360 166" width="360" role="img" aria-labelledby="dd8-wal-t dd8-wal-d">
+<title id="dd8-wal-t">The WAL records written by one inserted order, to scale, and what the commit waits for</title>
+<desc id="dd8-wal-d">A strip of three boxes whose widths are proportional to their sizes: Heap INSERT, 86 bytes, Btree INSERT&#95;LEAF, 64 bytes, Transaction COMMIT, 34 bytes; 184 bytes in all. A bracket under the strip says that COMMIT waits until these records are on disk. Below, a separate box for the table page with the new row says that it is written to the data file later.</desc>
+<g fill="currentColor">
+<text x="21" y="22.4" font-size="10.5" font-weight="600">One inserted order in the write-ahead log</text>
+<text x="24" y="42.4" font-size="9.5" fill-opacity="0.85">Heap</text>
+<rect x="21" y="48.4" width="147.6" height="34" rx="3" fill="#9a6be0" fill-opacity="0.35" />
+<text x="27" y="62.4" font-size="9.5" font-weight="600">INSERT</text>
+<text x="27" y="75.4" font-size="9.5">86 bytes</text>
+<text x="173.6" y="42.4" font-size="9.5" fill-opacity="0.85">Btree</text>
+<rect x="170.6" y="48.4" width="109.3" height="34" rx="3" fill="#9a6be0" fill-opacity="0.35" />
+<text x="176.6" y="62.4" font-size="9.5" font-weight="600">INSERT&#95;LEAF</text>
+<text x="176.6" y="75.4" font-size="9.5">64 bytes</text>
+<text x="284.9" y="42.4" font-size="9.5" fill-opacity="0.85">Transaction</text>
+<rect x="281.9" y="48.4" width="57.1" height="34" rx="3" fill="#9a6be0" fill-opacity="0.9" />
+<text x="287.9" y="62.4" font-size="9.5" font-weight="600" fill="#ffffff">COMMIT</text>
+<text x="287.9" y="75.4" font-size="9.5" fill="#ffffff">34 bytes</text>
+<path d="M21 88.4 L21 94.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.7" />
+<path d="M21 94.4 L339 94.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.7" />
+<path d="M339 88.4 L339 94.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.7" />
+<text x="180" y="109.4" font-size="10" font-weight="600" text-anchor="middle">COMMIT returns once these 184 bytes are on disk</text>
+<rect x="21" y="122.4" width="318" height="30" rx="3" fill="currentColor" fill-opacity="0.1" />
+<text x="31" y="141.4" font-size="10">table page, order 2801: written to the data file later</text>
+</g>
+</svg>
+</figure>
+
+### 2. Pull the plug
+
+**Idea.** The documentation says a **checkpoint** is a point at which all changes logged before it are in the data files, and that after a crash, recovery starts at the latest checkpoint and redoes the logged changes from there. `pg_ctl stop -m immediate` stops every server process without a clean shutdown; the documentation says this leads to a crash-recovery cycle at the next start.
+
+**Try it.** This unit needs the PostgreSQL programs `initdb` and `pg_ctl` on your computer: with Linux packages they sit in `/usr/lib/postgresql/16/bin`, with an installer in the `bin` folder of the install; add that folder to your `PATH`. (The Docker route of the first lesson does not provide them; read the transcripts instead.) In an empty folder, make and start a throwaway server on port 5433:
+
+```bash
+initdb -D crashlab -A trust
+pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+```
+
+`initdb` lists its settings and ends with `Success`; `pg_ctl` ends with `server started`. In terminal A, connect with `psql -p 5433 -d postgres`, save one note, and leave a second one uncommitted:
+
+```sql
+CREATE TABLE notes (note_id serial PRIMARY KEY, body text);
+INSERT INTO notes (body) VALUES ('committed before the crash');
+BEGIN;
+INSERT INTO notes (body) VALUES ('not committed');
+```
+
+In a second terminal, in the same folder, stop the server hard, start it, read the table and look for the recovery in the server's log; then try `SELECT 1;` in terminal A:
+
+```bash
+pg_ctl -D crashlab stop -m immediate
+pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+psql -p 5433 -d postgres -c "SELECT note_id, body FROM notes;"
+grep -E 'not properly|redo (starts|done)' crashlab.log
+```
+
+**Predict:** Which of the two notes is in the table after the restart? What does terminal A say?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> CREATE TABLE notes (note_id serial PRIMARY KEY, body text);
+CREATE TABLE
+A> INSERT INTO notes (body) VALUES ('committed before the crash');
+INSERT 0 1
+A> BEGIN;
+BEGIN
+A> INSERT INTO notes (body) VALUES ('not committed');
+INSERT 0 1
+A> SELECT 1;
+WARNING:  terminating connection due to immediate shutdown command
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+```
+
+These terminal A lines come from a non-interactive `psql`. An interactive `psql` prints more: the next command you type gets `no connection to the server`, followed by `The connection to the server was lost. Attempting reset: Succeeded.` once the server is back.
+
+```console
+$ pg_ctl -D crashlab stop -m immediate
+waiting for server to shut down.... done
+server stopped
+$ pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+waiting for server to start.... done
+server started
+$ psql -p 5433 -d postgres -c "SELECT note_id, body FROM notes;"
+ note_id |            body
+---------+----------------------------
+       1 | committed before the crash
+(1 row)
+$ grep -E 'not properly|redo (starts|done)' crashlab.log
+2026-11-24 17:10:56.553 UTC [1974] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-11-24 17:10:56.555 UTC [1974] LOG:  redo starts at 0/14EF3E0
+2026-11-24 17:10:56.555 UTC [1974] LOG:  redo done at 0/1518A28 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+```
+
+</details>
+
+*Why:* the log says the server was not properly shut down and ran automatic recovery: redo started at the redo point (`0/14EF3E0`), which the latest checkpoint record names (the documentation calls it the redo record), and replayed the log to its end. The committed note is back. The uncommitted one is gone, because its transaction never wrote a commit record, so after recovery no snapshot sees it. Terminal A lost its connection, and with it the open transaction. This is the contract: an acknowledged commit survives a crash, and work in progress is as if it had rolled back.
+
+### 3. Numbers are not given back
+
+**Idea.** A `serial` column takes its values from a **sequence**, with the function `nextval`. The documentation says that, to avoid blocking concurrent transactions that take numbers from the same sequence, a value obtained by `nextval` is not reclaimed for re-use if the transaction later aborts.
+
+**Try it.** Back in `psql -d lab`:
+
+```sql
+CREATE TABLE tickets (ticket_id serial PRIMARY KEY, note text);
+INSERT INTO tickets (note) VALUES ('first');
+BEGIN;
+INSERT INTO tickets (note) VALUES ('changed my mind');
+ROLLBACK;
+INSERT INTO tickets (note) VALUES ('second');
+SELECT ticket_id, note FROM tickets ORDER BY ticket_id;
+```
+
+**Predict:** Which `ticket_id` does the second saved ticket get?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+A> CREATE TABLE tickets (ticket_id serial PRIMARY KEY, note text);
+CREATE TABLE
+A> INSERT INTO tickets (note) VALUES ('first');
+INSERT 0 1
+A> BEGIN;
+BEGIN
+A> INSERT INTO tickets (note) VALUES ('changed my mind');
+INSERT 0 1
+A> ROLLBACK;
+ROLLBACK
+A> INSERT INTO tickets (note) VALUES ('second');
+INSERT 0 1
+A> SELECT ticket_id, note FROM tickets ORDER BY ticket_id;
+ ticket_id |  note
+-----------+--------
+         1 | first
+         3 | second
+```
+
+</details>
+
+*Why:* the rolled-back insert took number 2, and nobody gave it back, so the next ticket is 3. A gap in an id column is the price of not making every transaction wait for the one before it; it says nothing about a deleted row. A business that needs numbers without gaps needs another mechanism than a sequence.
+
+<Aside type="tip" title="Remember">
+
+- A change is written to the WAL before the data file; a commit waits only for the log to reach the disk.
+- After a crash, the server replays the log from the latest checkpoint: committed work comes back, work in progress does not.
+- `pg_walinspect` shows the records a statement wrote; one inserted row with a primary key writes a table record, an index record and a commit record.
+- A sequence number taken by a transaction that rolls back is not given back.
+
+**Common trap:** reading a missing id as a deleted row. A rollback leaves the same hole.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-wal-and-recovery-1">
+
+**What a delete writes.** In `psql -d lab`, delete every Harbor order from `orders_tx` (after unit 1's insert) and count the WAL records by type. Expected: one row for each kind of record, with its count.
+
+```sql
+SELECT pg_current_wal_lsn() AS before \gset
+DELETE FROM orders_tx WHERE store_id = 3;
+-- the records between :'before' and now, counted by resource_manager and record_type
+```
+
+<details>
+<summary>Hint</summary>
+
+Use `pg_get_wal_records_info(:'before', pg_current_wal_lsn())` in the `FROM` clause and group by its two name columns.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```sql
+SELECT resource_manager, record_type, count(*) AS records
+FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn())
+-- GROUP BY and ORDER BY
+```
+
+</details>
+
+<Solution>
+
+```console
+A> SELECT pg_current_wal_lsn() AS before \gset
+A> DELETE FROM orders_tx WHERE store_id = 3;
+DELETE 356
+A> SELECT resource_manager, record_type, count(*) AS records
+FROM pg_get_wal_records_info(:'before', pg_current_wal_lsn())
+GROUP BY resource_manager, record_type ORDER BY records DESC;
+ resource_manager | record_type | records
+------------------+-------------+---------
+ Heap             | DELETE      |     356
+ Transaction      | COMMIT      |       1
+```
+
+One `Heap DELETE` record for each deleted order (the 355 Harbor orders plus order 2801 of unit 1) and one commit for the whole statement. The index has no record: a delete marks the row version as deleted (its `xmax`, as in [*MVCC: row versions and vacuum*](/data-engineer/mvcc-and-row-versions/) (DE25b)) and leaves the index entry in place. The log grows with the number of rows a statement changes, which is why a large backfill writes a large amount of WAL. As in unit 1, your list can also hold records of other kinds that the server wrote in the same stretch of the log.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-wal-and-recovery-2">
+
+**The number after the crash.** In unit 2 the server crashed with note 1 committed and note 2 in progress. Before you run anything, write in one sentence which `note_id` you expect the next note to get. Then, in the second terminal, insert one note and print its id. Expected: one id.
+
+<details>
+<summary>Hint</summary>
+
+`RETURNING note_id` at the end of the `INSERT` prints the id it got.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"An id probably above 2: the crash can leave a gap, and possibly more than one number."*
+
+```bash
+psql -p 5433 -d postgres -c "INSERT INTO notes (body) VALUES ('after the crash') RETURNING note_id;"
+```
+
+</details>
+
+<Solution>
+
+```console
+$ psql -p 5433 -d postgres -c "INSERT INTO notes (body) VALUES ('after the crash') RETURNING note_id;"
+ note_id
+---------
+      34
+(1 row)
+
+INSERT 0 1
+```
+
+Not 2 and not 3, but 34 in this run: the sequence jumped by 32 across the crash. The sequence documentation says that transaction aborts or database crashes can result in gaps in the sequence of assigned values, and that a crash before a commit can leave the sequence in its original or updated state. The size of the jump is the server's business, so never compute anything from the distance between two ids.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: after a crash, where does PostgreSQL start replaying the log?
+
+   <details>
+   <summary>answer</summary>
+
+   At the redo point of the latest checkpoint.
+
+   </details>
+
+<Exercise id="data-engineer-wal-and-recovery-3">
+
+**Spot the flaw.** A colleague makes the nightly staging table faster to load: "We rebuild it every night anyway, so it does not need the log." The load fills it, then the server crashes before the transform runs. Run the colleague's steps on the throwaway server (start it again first if it is stopped). Expected: the count before and after the crash. What went wrong?
+
+```bash
+psql -p 5433 -d postgres -c "CREATE UNLOGGED TABLE staging_orders AS SELECT g AS order_id, 'completed' AS status FROM generate_series(1001, 2800) AS g;"
+psql -p 5433 -d postgres -c "SELECT count(*) FROM staging_orders;"
+pg_ctl -D crashlab stop -m immediate
+pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+psql -p 5433 -d postgres -c "SELECT count(*) FROM staging_orders;"
+```
+
+<details>
+<summary>Hint</summary>
+
+Ask what recovery replays, and whether this table's rows were ever in it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The first count is the full table. Read the `CREATE TABLE` documentation on `UNLOGGED`.
+
+</details>
+
+<Solution>
+
+```console
+$ psql -p 5433 -d postgres -c "CREATE UNLOGGED TABLE staging_orders AS SELECT g AS order_id, 'completed' AS status FROM generate_series(1001, 2800) AS g;"
+SELECT 1800
+$ psql -p 5433 -d postgres -c "SELECT count(*) FROM staging_orders;"
+ count
+-------
+  1800
+(1 row)
+$ pg_ctl -D crashlab stop -m immediate
+waiting for server to shut down.... done
+server stopped
+$ pg_ctl -D crashlab -o "-p 5433" -l crashlab.log start
+waiting for server to start.... done
+server started
+$ psql -p 5433 -d postgres -c "SELECT count(*) FROM staging_orders;"
+ count
+-------
+     0
+(1 row)
+```
+
+The load committed 1,800 rows, and after the crash the table was empty. The documentation says data written to unlogged tables is not written to the write-ahead log, which makes them faster, and that they are not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. "We rebuild it anyway" is only true if the pipeline knows it must: the transform that ran after this restart would have found an empty table without an error. Use an unlogged table only when the job checks its row count before using it, or reloads it after every restart. When you are done, stop the server with `pg_ctl -D crashlab stop`; the next lesson starts it again.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what the WAL guarantees and why a commit is cheap, stop a server without a clean shutdown and find its recovery in the log, and explain a gap in an id sequence.*
+Test: Exercise data-engineer-wal-and-recovery-2, done without opening the hints.
+
+The pattern to remember: **committed means written in the log; everything else is replayed from it or forgotten.** Next comes [*The platform layer: replication, partitioning and trade-offs*](/data-engineer/architectures-and-trade-offs/) (DE28), where the same log feeds a second server.

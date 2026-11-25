@@ -1,0 +1,448 @@
+---
+id: data-engineer-dimensional-models-and-scd
+title: Dimensional models and slowly changing dimensions
+short_title: Dimensions and SCD
+description: Build a star with surrogate keys in dbt, keep the history of a changing dimension with a snapshot, and see what Type 1 and Type 2 each tell a report.
+stage: data-engineer
+order: 130
+level: advanced
+duration: 32
+objectives:
+  - Build a fact and two dimensions in dbt, with surrogate keys, from the models of the project
+  - Explain Type 1 and Type 2 changes, and show what each does to a report
+  - Create a snapshot that records the history of a changing source, and read its valid_from and valid_to
+  - Join a fact to the version of the dimension that was true when the event happened
+prerequisites:
+  - data-engineer-dbt-project-and-first-model
+  - data-engineer-dbt-tests-and-documentation
+  - data-engineer-jinja-and-macros
+  - core-designing-a-star-schema
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'dbt documentation: Snapshots (accessed 2026-11-24)'
+    url: https://docs.getdbt.com/docs/build/snapshots
+  - title: 'Kimball Group: Slowly changing dimension type 1 (accessed 2026-11-24)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-1/
+  - title: 'Kimball Group: Slowly changing dimension type 2 (accessed 2026-11-24)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-2/
+  - title: 'Kimball Group: Surrogate keys (accessed 2026-11-24)'
+    url: https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/surrogate-key/
+status: published
+---
+
+## The question
+
+The owner of the cafes writes:
+
+> In April we moved the Blueberry Muffin from the bakery to the food section of the menu. Now the bakery total for March in the new report does not match the one we sent then. Which is right?
+
+Both can be, and the table has to say which question it answers. By the end you can keep the history of a changing attribute, point a fact at the version that was true on the day, and show a report both ways.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Grain, facts and dimensions*](/core/grain-facts-and-dimensions/) (C17) and [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18) put measures in a fact at one grain, with descriptive columns in dimensions around it. Here that star is built in dbt.
+
+**Diverge.** The dimension of C18 has one row for each product. Here a product may have several rows, one for each time it changed.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In C17 you fixed the grain of a table before its columns. Write the grain of a fact table of the cafe's sales in one sentence, then sort these columns into measures and descriptions: `quantity`, `category`, `discount_usd`, `store_name`.
+
+   <details>
+   <summary>answer</summary>
+
+   One row is one order line. The measures are `quantity` and `discount_usd`: numbers the sale produced, which you add up. `category` and `store_name` are descriptions, the columns you group and filter by; they live in dimensions, and the fact holds a key for each dimension.
+
+   </details>
+
+## The big idea
+
+A dimension that changes can overwrite its past or keep it; a fact that points at the row that was true on the day lets a report choose.
+
+## Learn by doing
+
+About 32 minutes, 3 new ideas: a snapshot that records history, dimensions with surrogate keys and a fact that points at a version, and what Type 1 and Type 2 each tell a report. Work in `de-pipeline-starter` with the dbt project of DE11 built, the full pull staged and the mock API running. To catch up, run `git checkout de-13-start`. Run dbt commands from `dbt`, and `uv run python` commands from the repository root.
+
+### 1. A snapshot: history from a file that changes
+
+**Idea.** A **slowly changing dimension** has attributes that change now and then. **Type 1** overwrites the old value, which the Kimball Group page says destroys history. **Type 2** adds a row with the new values, with at least a row effective date, a row expiration date and a current-row indicator. A dbt **snapshot** records Type 2 changes of a table that gets overwritten: it adds `dbt_valid_from` and `dbt_valid_to`, and with the `timestamp` strategy a newer `updated_at` makes dbt close the old row and insert the new one (the dbt documentation).
+
+**Try it.** The real product file never changes, so its history is invented here. A script is given that writes the partner's file as it was at version 1, 2 or 3: version 1 is today's file stamped January 1, and version 2 moves the Blueberry Muffin from bakery to food on April 15 at noon. Fetch it, the new source and the snapshot, and take the first version:
+
+```bash
+git show de-13-done:scripts/partner_files.py > scripts/partner_files.py
+git show de-13-done:dbt/models/partner_sources.yml > dbt/models/partner_sources.yml
+mkdir -p dbt/snapshots
+```
+
+`dbt/snapshots/products_snapshot.yml`:
+
+```yaml
+snapshots:
+  - name: products_snapshot
+    relation: source('partner', 'products')
+    config:
+      schema: snapshots
+      unique_key: product_id
+      strategy: timestamp
+      updated_at: updated_at
+```
+
+```bash
+uv run python scripts/partner_files.py 1
+cd dbt
+uv run dbt snapshot 2>&1 | grep -E "ERROR|Done"
+uv run dbt show --quiet --inline "select count(*) as versions, count(distinct product_id) as products, count(dbt_valid_to) as closed from {{ ref('products_snapshot') }}"
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as versions, count(distinct product_id) as products, count(dbt_valid_to) as closed from {{ ref('products_snapshot') }}"
+| versions | products | closed |
+| -------- | -------- | ------ |
+|       16 |       16 |      0 |
+```
+
+The partner sends a new file. Write version 2, take the snapshot, and take it once more without a new file:
+
+```bash
+cd ..
+uv run python scripts/partner_files.py 2
+cd dbt
+uv run dbt snapshot 2>&1 | grep -E "ERROR|Done"
+uv run dbt show --quiet --inline "select product_id, category, dbt_valid_from, dbt_valid_to from {{ ref('products_snapshot') }} where product_id = 11 order by dbt_valid_from"
+uv run dbt snapshot 2>&1 | grep -E "ERROR|Done"
+uv run dbt show --quiet --inline "select count(*) as versions, count(distinct product_id) as products, count(dbt_valid_to) as closed from {{ ref('products_snapshot') }}"
+```
+
+**Predict:** After the second snapshot, how many rows does the snapshot hold, and what does the old row of product 11 hold in `dbt_valid_to`? What does the third snapshot change?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt show --quiet --inline "select product_id, category, dbt_valid_from, dbt_valid_to from {{ ref('products_snapshot') }} where product_id = 11 order by dbt_valid_from"
+| product_id | category |      dbt_valid_from |        dbt_valid_to |
+| ---------- | -------- | ------------------- | ------------------- |
+|         11 | bakery   | 2026-01-01 00:00:00 | 2026-04-15 12:00:00 |
+|         11 | food     | 2026-04-15 12:00:00 |                     |
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as versions, count(distinct product_id) as products, count(dbt_valid_to) as closed from {{ ref('products_snapshot') }}"
+| versions | products | closed |
+| -------- | -------- | ------ |
+|       17 |       16 |      1 |
+```
+
+</details>
+
+*Why:* only the muffin's row changed, so there are 17 rows for 16 products, and the old row is closed with the new row's `updated_at`, April 15 at noon: the two meet without a gap or an overlap. The third snapshot found nothing newer than its last run and changed nothing. The dbt page says snapshots are only useful if they run often, between hourly and daily.
+
+### 2. Dimensions with surrogate keys, and a fact that points at a version
+
+**Idea.** A **surrogate key** is a key the warehouse makes in place of one from the source: the Kimball page calls it an artificial key that substitutes for a natural key, and says every join between a fact and a dimension should use it. A Type 2 dimension needs one, because `product_id` no longer identifies a row: product 11 has two. The snapshot makes one for each row, `dbt_scd_id`. The fact holds the key of the version true when the line was ordered, found by the product and the time.
+
+**Try it.** The product dimension reads the snapshot, and the fact reuses the macro of [*Jinja and macros*](/data-engineer/jinja-and-macros/) (DE11b). `dbt/models/marts/dim_product.sql`:
+
+```sql
+-- Grain: one row for each version of a product. A change in the partner's file adds a row (type 2).
+select
+    dbt_scd_id as product_key,
+    product_id,
+    product_name,
+    category,
+    unit_price_usd,
+    dbt_valid_from as valid_from,
+    dbt_valid_to as valid_to,
+    dbt_valid_to is null as is_current
+from {{ ref('products_snapshot') }}
+```
+
+`dbt/models/marts/fct_order_lines.sql`: the line is ordered at or after the version's start and before its end, and a current row has no end.
+
+```sql
+-- Grain: one row for each order line. It holds the keys of the dimension rows that were true when the line was ordered.
+select
+    l.order_line_id,
+    p.product_key,
+    s.store_key,
+    l.order_date,
+    l.status,
+    l.units,
+    l.discount_usd,
+    {{ line_amount('l.units', 'p.unit_price_usd', 'l.discount_usd') }} as line_amount_usd
+from {{ ref('stg_order_lines') }} as l
+join {{ ref('dim_product') }} as p
+    on l.product_id = p.product_id
+    and l.ordered_at >= p.valid_from
+    and l.ordered_at < coalesce(p.valid_to, timestamp '9999-12-31')
+join {{ ref('dim_store') }} as s using (store_id)
+```
+
+The store dimension is Type 1 (a rebuild overwrites it) with a hash of the store id as its key, and the descriptions, tests and a reconciliation test (every staged line is in the fact, as in DE10) are given. Fetch them and build:
+
+```bash
+git show de-13-done:dbt/models/marts/dim_store.sql > models/marts/dim_store.sql
+git show de-13-done:dbt/models/marts/star.yml > models/marts/star.yml
+git show de-13-done:dbt/tests/assert_the_fact_keeps_every_line.sql > tests/assert_the_fact_keeps_every_line.sql
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+uv run dbt show --quiet --inline "select count(*) as fact_lines, count(distinct product_key) as versions_used, round(sum(line_amount_usd) filter (where status = 'completed'), 2) as completed_usd from {{ ref('fct_order_lines') }}"
+```
+
+**Predict:** How many rows will the fact hold, and how many different product keys will its lines use?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:08:55  Done. PASS=46 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=46
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as fact_lines, count(distinct product_key) as versions_used, round(sum(line_amount_usd) filter (where status = 'completed'), 2) as completed_usd from {{ ref('fct_order_lines') }}"
+| fact_lines | versions_used | completed_usd |
+| ---------- | ------------- | ------------- |
+|       3287 |            16 |     22,625.75 |
+```
+
+</details>
+
+*Why:* each line matches exactly one version, so the fact has one row for each of the 3,287 lines; it uses 16 of the 17 versions because the Pumpkin Spice Latte was never sold, and both versions of the muffin were. The completed amount is \$22,625.75, the total of DE9: the star changed the shape of the data and not its sum, and the reconciliation test keeps it so, because an inner join that finds no version for a line drops it without a word. The Kimball page says a surrogate key should be a simple integer; the keys here are hashes, which need no counter and are the same after a rebuild.
+
+### 3. Type 1 and Type 2: what each tells a report
+
+**Idea.** With Type 2, each fact points at the version of its product that was true then, so a report can group by the category *as it was*, from the version the fact points at, or *as it is now*, from the current version of the same product, which is what a Type 1 dimension gives. They are different questions. The Kimball Type 1 page warns that after an overwrite the aggregates built on the old value must be recomputed.
+
+**Try it.** Sum the completed lines by category both ways, and split the muffin by version:
+
+```bash
+uv run dbt show --quiet --inline "select p.category, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) where f.status = 'completed' group by p.category order by p.category"
+uv run dbt show --quiet --inline "select cur.category, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) join {{ ref('dim_product') }} as cur on cur.product_id = p.product_id and cur.is_current where f.status = 'completed' group by cur.category order by cur.category"
+uv run dbt show --quiet --inline "select p.category, count(*) as lines, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) where p.product_id = 11 and f.status = 'completed' group by p.category order by p.category"
+```
+
+**Predict:** Which bakery total is higher, as it was or as it is now, and by how much?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run dbt show --quiet --inline "select p.category, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) where f.status = 'completed' group by p.category order by p.category"
+| category | completed_usd |
+| -------- | ------------- |
+| bakery   |      3,221.75 |
+| coffee   |     10,823.25 |
+| food     |      5,340.75 |
+| tea      |      3,240.00 |
+```
+
+```console
+$ uv run dbt show --quiet --inline "select cur.category, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) join {{ ref('dim_product') }} as cur on cur.product_id = p.product_id and cur.is_current where f.status = 'completed' group by cur.category order by cur.category"
+| category | completed_usd |
+| -------- | ------------- |
+| bakery   |      2,635.25 |
+| coffee   |     10,823.25 |
+| food     |      5,927.25 |
+| tea      |      3,240.00 |
+```
+
+```console
+$ uv run dbt show --quiet --inline "select p.category, count(*) as lines, round(sum(f.line_amount_usd), 2) as completed_usd from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) where p.product_id = 11 and f.status = 'completed' group by p.category order by p.category"
+| category | lines | completed_usd |
+| -------- | ----- | ------------- |
+| bakery   |   108 |         586.5 |
+| food     |   116 |         612.5 |
+```
+
+</details>
+
+*Why:* the bakery total as it was is higher by \$586.50, exactly the muffin's sales before April 15 (108 lines); as it is now, they sit under food. The muffin's history is the same in both; what changed is the question. The report sent in March used the category of the day, which the Type 2 dimension reproduces; a Type 1 dimension would have moved the muffin's whole past to food. A correction of a typo is a change to overwrite (Type 1); a product that moved on the menu is a change to keep the past of (Type 2). The choice is made for each attribute.
+
+<Aside type="tip" title="Remember">
+
+- Type 1 overwrites an attribute and loses its past; Type 2 adds a row for each version, with a start and an end.
+- A snapshot turns a table that is overwritten into Type 2 history, one run at a time.
+- A surrogate key is made by the warehouse; a Type 2 dimension needs one, because the natural key repeats.
+- The fact joins the version true at the event: the natural key, and the time between `valid_from` and `valid_to`.
+
+**Common trap:** joining a fact to a Type 2 dimension on the natural key alone: every version matches, and lines are counted once for each.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-dimensional-models-and-scd-1">
+
+**Version 3.** The partner sends a third file: Avocado Toast (product 14) moves from food to bakery on May 20. Write version 3, take the snapshot, and read the versions of product 14. The start is given; fill in the number of the version. Expected: 18 rows in the snapshot, two of them product 14's. Keep it: the next lesson builds on version 3.
+
+```bash
+uv run python scripts/partner_files.py ___
+cd dbt
+uv run dbt snapshot 2>&1 | grep -E "ERROR|Done"
+uv run dbt show --quiet --inline "select product_id, category, dbt_valid_from, dbt_valid_to from {{ ref('products_snapshot') }} where product_id = 14 order by dbt_valid_from"
+```
+
+<details>
+<summary>Hint</summary>
+
+Version 3 holds both changes. Run the script from the repository root, then the snapshot from `dbt`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+uv run python scripts/partner_files.py 3
+```
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt show --quiet --inline "select product_id, category, dbt_valid_from, dbt_valid_to from {{ ref('products_snapshot') }} where product_id = 14 order by dbt_valid_from"
+| product_id | category |      dbt_valid_from |        dbt_valid_to |
+| ---------- | -------- | ------------------- | ------------------- |
+|         14 | food     | 2026-01-01 00:00:00 | 2026-05-20 09:30:00 |
+|         14 | bakery   | 2026-05-20 09:30:00 |                     |
+```
+
+The snapshot now holds 18 rows for 16 products: the muffin's two and the toast's two. The muffin's row of version 2 was not touched again, because its `updated_at` had not changed.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-dimensional-models-and-scd-2">
+
+**A question from the star.** How many completed lines of Avocado Toast (product 14) were sold as food, and how many as bakery? Before you start, say in a sentence what the answer will look like. Then, from a blank query, answer it from `fct_order_lines` and `dim_product` with `dbt show`. Expected: two rows, one for each category the toast has had.
+
+<details>
+<summary>Hint</summary>
+
+Join the fact to the dimension with `using (product_key)`, keep `status = 'completed'` and `product_id = 14`, and group by the category of the version the fact points at.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"Two rows: the lines before May 20 under food, the lines from May 20 under bakery."*
+
+</details>
+
+<Solution>
+
+```sql
+select p.category, count(*) as lines
+from {{ ref('fct_order_lines') }} as f
+join {{ ref('dim_product') }} as p using (product_key)
+where p.product_id = 14 and f.status = 'completed'
+group by p.category
+order by p.category
+```
+
+```console
+$ uv run dbt show --quiet --inline "select p.category, count(*) as lines from {{ ref('fct_order_lines') }} as f join {{ ref('dim_product') }} as p using (product_key) where p.product_id = 14 and f.status = 'completed' group by p.category order by p.category"
+| category | lines |
+| -------- | ----- |
+| bakery   |    44 |
+| food     |    83 |
+```
+
+No query needed a date: the fact already points at the version, which is what the join of unit 2 bought.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: what does `dbt_valid_to` hold for the current version of a row?
+
+   <details>
+   <summary>answer</summary>
+
+   Nothing: it is `NULL` for a current row, and the next version's `updated_at` closes the row when one arrives.
+
+   </details>
+
+<Exercise id="data-engineer-dimensional-models-and-scd-3">
+
+**Spot the flaw.** A colleague finds the snapshot untidy: 18 rows for 16 products. "Let me clean it up." They drop its table, so that the next build makes it again from the partner's file (at version 3), and run the build. Do the same, then count the lines of the fact against the lines of staging. Expected: the build ends with a failed test. What did the cleaning cost, and how do you get the history back? When you are done, the build should pass again.
+
+```bash
+cd ..
+uv run python scripts/sql.py "DROP TABLE main_snapshots.products_snapshot" --db data/serving/analytics.duckdb
+cd dbt
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+uv run dbt show --quiet --inline "select count(*) as fact_lines, (select count(*) from {{ ref('stg_order_lines') }}) as staged_lines from {{ ref('fct_order_lines') }}"
+```
+
+<details>
+<summary>Hint</summary>
+
+The build rebuilt the snapshot from the one file it was shown. Ask what history that file holds for a product that changed twice, and what the join of the fact does with a line from before the first row.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+A run that sees only version 3 can start a row only at that version's `updated_at`.
+
+</details>
+
+<Solution>
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:09:30  40 of 46 FAIL 1 assert_the_fact_keeps_every_line ............................... [FAIL 1 in 0.01s]
+20:09:31  Done. PASS=45 WARN=0 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=46
+```
+
+```console
+$ uv run dbt show --quiet --inline "select count(*) as fact_lines, (select count(*) from {{ ref('stg_order_lines') }}) as staged_lines from {{ ref('fct_order_lines') }}"
+| fact_lines | staged_lines |
+| ---------- | ------------ |
+|       3096 |         3287 |
+```
+
+The new snapshot has 16 rows, each starting at the `updated_at` of version 3: the muffin's on April 15, the toast's on May 20. A line sold before that finds no row, and the inner join drops it: 191 lines are gone (3,096 of 3,287), and the test that every staged line is in the fact failed. The dbt page says it plainly: "Snapshots can't be rebuilt", and they ignore `--full-refresh`. The history lived only in the table that was dropped. This project still has the three versions of the file, so replaying them in order brings it back:
+
+```bash
+cd ..
+uv run python scripts/sql.py "DROP TABLE main_snapshots.products_snapshot" --db data/serving/analytics.duckdb
+for version in 1 2 3; do
+  uv run python scripts/partner_files.py $version
+  (cd dbt && uv run dbt snapshot 2>&1 | grep -E "Done")
+done
+cd dbt
+uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+```
+
+```console
+$ uv run dbt build 2>&1 | grep -E "FAIL|SKIP|Done"
+20:09:46  Done. PASS=46 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=46
+```
+
+A real partner's old files are not always there to replay; the page advises putting snapshots in a schema of their own, so that people know they are special.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can say what Type 1 and Type 2 keep and lose, build a snapshot that records the history of a changing source, join a fact to the dimension version that was true at the event, and show a report as it was and as it is now.*
+Test: Exercise data-engineer-dimensional-models-and-scd-2, done without opening the hints.
+
+The pattern to remember: **keep the version, and point the fact at it.** The next lesson, [*CI for dbt: checks on every pull request*](/data-engineer/ci-and-deployment-for-dbt/) (DE14), runs these models and their tests on every pull request.

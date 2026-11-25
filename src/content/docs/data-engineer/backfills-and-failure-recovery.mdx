@@ -1,0 +1,411 @@
+---
+id: data-engineer-backfills-and-failure-recovery
+title: Backfills, reruns and recovering from failure
+short_title: Backfills, recovery
+description: Backfill a range of past days, read a failed run, rerun only what failed without duplicates, and write a blameless incident note.
+stage: data-engineer
+order: 80
+level: advanced
+duration: 30
+objectives:
+  - Explain the data interval of a run, its logical date, and the day its run id names
+  - Backfill a date range and prove that it left the same table as another route
+  - Read a failed run, triage it as data, pipeline or definition, and rerun only what failed
+  - Write a blameless incident note with cause, impact and fix
+prerequisites:
+  - data-engineer-orchestration-with-airflow
+  - data-engineer-incremental-loads-idempotency
+  - data-engineer-quality-gates-stop-or-quarantine
+  - core-telling-the-story
+datasets:
+  - cafe-sales
+reviewed: 2026-11-25
+sources:
+  - title: 'Apache Airflow 3.3.2 documentation: Dag runs, logical date, catchup and backfill (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/core-concepts/dag-run.html
+  - title: 'Apache Airflow 3.3.2 documentation: Command line interface reference, backfill create (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/cli-and-env-variables-ref.html
+  - title: 'Apache Airflow 3.3.2 documentation: Configuration reference, max_active_runs_per_dag (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/configurations-ref.html
+  - title: 'Apache Airflow 3.3.2 documentation: Quick start, airflow standalone (accessed 2026-11-24)'
+    url: https://airflow.apache.org/docs/apache-airflow/3.3.2/start.html
+  - title: 'DuckDB documentation: Concurrency (accessed 2026-11-24)'
+    url: https://duckdb.org/docs/2.0/connect/concurrency.html
+status: published
+---
+
+## The question
+
+The owner writes:
+
+> The first week of May looks thin in the sales chart, and I think the job failed on a few nights. Can you fix it, be sure that nothing is counted twice, and tell the team what happened?
+
+You have three jobs, and they come in this order: run the missing days again, prove the table is right, and write down what went wrong. By the end you can do all three without touching the table by hand.
+
+<Aside type="note" title="You already know this">
+
+**Match.** [*Incremental loads and idempotent reruns*](/data-engineer/incremental-loads-idempotency/) (DE4) proved with a fingerprint that loading the same lines twice changes nothing. A backfill is that promise used on purpose.
+
+**Diverge.** In DE4 one load asked for everything that had changed. A backfill is many runs, one for each past day, and some of them can fail.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In DE7, which date inside a task decides the day it loads?
+
+   <details>
+   <summary>answer</summary>
+
+   `data_interval_start`, from the run's context, never the current time.
+
+   </details>
+
+2. In DE6b, what does the quarantine table keep for a held line?
+
+   <details>
+   <summary>answer</summary>
+
+   The name of the rule, the key, the version of the line and the whole line as text. The line stays in quarantine even after a corrected version loads.
+
+   </details>
+
+## The big idea
+
+A backfill is the same DAG run once for each past interval, safe only because every step gives the same table when it is run again.
+
+## Learn by doing
+
+About 30 minutes, 3 new ideas: the interval a run covers, reading a failed run, and rerunning only what failed. Work in `de-pipeline-starter` with three terminals: the mock API in terminal 1, the scheduler in terminal 3 and your commands in terminal 2. Use Linux, macOS, WSL2 or a codespace, as in DE7. To catch up, run `git checkout de-08-start`.
+
+A backfill needs the scheduler, which `airflow dags test` did not start. `airflow standalone` starts all the parts of Airflow in one terminal; the Airflow quick start says it initializes the database, creates a user and starts every component. In terminal 3, give it a data folder of its own, so that this lesson's table is apart from DE7's, and wait for the line `standalone | Airflow is ready`:
+
+```bash
+cd airflow
+source env.sh
+DATA_DIR="$PWD/../data_de8" uv run airflow standalone
+```
+
+### 1. The interval a run covers
+
+**Idea.** A **backfill** runs a DAG again for past intervals, one run for each. The Dag Runs page says the logical date "denotes the start of the data interval, not when the Dag is actually executed", and warns that for a manual run you should not assume the interval equals the logical date. `backfill create` takes a first and a last date.
+
+**Try it.** In terminal 2, unpause the DAG (new DAGs start paused) and backfill five days. `--max-active-runs 5` lets the five run at the same time. Wait about a minute and a half, then list the backfill's runs. Unpausing also lets the scheduler start its own run for yesterday, which `grep backfill` leaves out. `read_log.py` is a given file that prints a task log the short way:
+
+```bash
+cd airflow
+source env.sh
+uv run airflow dags unpause cafe_pipeline
+uv run airflow backfill create --dag-id cafe_pipeline --from-date 2026-05-01 --to-date 2026-05-05 --max-active-runs 5
+```
+
+```bash
+uv run airflow dags list-runs cafe_pipeline | grep backfill | cut -d"|" -f2,3,5
+git show de-08-done:airflow/read_log.py > read_log.py
+uv run python read_log.py "home/logs/dag_id=cafe_pipeline/run_id=backfill__2026-05-02T00:00:00+00:00/task_id=extract/attempt=1.log"
+```
+
+**Predict:** How many runs does the command create? Which logical date has the run named `backfill__2026-05-02T00:00:00+00:00`, and which day's lines does its `extract` land?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run airflow dags list-runs cafe_pipeline | grep backfill | cut -d"|" -f2,3,5
+ backfill__2026-05-06T00:00:00+00:00  | failed  | 2026-05-05T00:00:00+00:00 
+ backfill__2026-05-05T00:00:00+00:00  | success | 2026-05-04T00:00:00+00:00 
+ backfill__2026-05-04T00:00:00+00:00  | success | 2026-05-03T00:00:00+00:00 
+ backfill__2026-05-03T00:00:00+00:00  | failed  | 2026-05-02T00:00:00+00:00 
+ backfill__2026-05-02T00:00:00+00:00  | success | 2026-05-01T00:00:00+00:00 
+$ uv run python read_log.py "home/logs/dag_id=cafe_pipeline/run_id=backfill__2026-05-02T00:00:00+00:00/task_id=extract/attempt=1.log"
+info    pipeline.ingest: landed 1 pages in since=2026-04-30T23-59-59_until=2026-05-01T23-59-59
+info    pipeline.daily: 2026-05-01: 1 pages landed
+```
+
+</details>
+
+*Why:* five runs, one for each day from May 1 to May 5, so the last date counts too. The run whose id says May 2 has the logical date May 1 and landed the lines of May 1: the id carries the end of the interval, the logical date its start, and the pipeline loads the day of the start. Not every run succeeded. On the run shown, two of the five failed, the ones for May 2 and May 5; yours may be other days, or none. The next unit reads why.
+
+### 2. Reading a failed run
+
+**Idea.** A failed run is one of three things, and each has another fix and another person to tell. The **data**: a line broke a rule, and the gate says so. The **pipeline**: the code or its environment failed. The **definition**: a rule, a schedule or a setting is wrong, so the run fails or passes for the wrong reason. Airflow keeps one log file for each attempt of each task, and the error of a failed attempt is in it.
+
+**Try it.** From the `airflow` folder, list the attempt logs that hold an error, and read one of them with `read_log.py`. Use a path from your own list:
+
+```bash
+grep -l '"level":"error"' home/logs/dag_id=cafe_pipeline/run_id=backfill*/task_id=*/attempt=*.log
+uv run python read_log.py "home/logs/dag_id=cafe_pipeline/run_id=backfill__2026-05-03T00:00:00+00:00/task_id=check/attempt=1.log"
+```
+
+**Predict:** The failed tasks are all `check`. What does the error say, and which of the three kinds is it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python read_log.py "home/logs/dag_id=cafe_pipeline/run_id=backfill__2026-05-03T00:00:00+00:00/task_id=check/attempt=1.log"
+error   task: Task failed with exception
+        IOException: IO Error: Could not set lock on file ".../data_de8/serving/cafe.duckdb": Conflicting lock is held in /usr/local/bin/python3.13 (PID 30033). See also https://duckdb.org/docs/current/connect/concurrency
+```
+
+</details>
+
+*Why:* the path of the file is shortened to `...` here. This is the pipeline kind: nothing is wrong with a line or a rule. The DuckDB documentation says that in read-write mode one process can both read and write the database, so five runs that write the table at the same moment collide, and the retries, five seconds apart, collide again. The fix is in the DAG, one line after `catchup=False,`: one run at a time.
+
+```python
+    max_active_runs=1,  # the table is a DuckDB file, and one process at a time may write to it
+```
+
+The Airflow configuration reference says that the scheduler will not create more Dag runs once the limit is reached, and that `max_active_runs` sets that limit for one Dag. Save the DAG with that line (the checkpoint has it: `git show de-08-done:airflow/dags/cafe_pipeline.py > dags/cafe_pipeline.py`), and wait about a minute for Airflow to read the file again.
+
+### 3. Rerun what failed, and prove nothing doubled
+
+**Idea.** The same backfill command with `--reprocess-behavior failed` creates runs again for the days whose run failed. A rerun starts from the first task of the day, so the steps that already ran for it run again. The steps were written to be idempotent (DE4), and that is a claim to test, not to trust: take the same days through another route and compare fingerprints.
+
+**Try it.** Rerun with one run at a time, wait for the runs to finish, and then fingerprint the lines whose current version was updated from May 1 to May 5. `range_fingerprint.py` is a given file. The other route is the incremental load of DE4 into a folder of its own, asked for the world as of May 5:
+
+```bash
+uv run airflow backfill create --dag-id cafe_pipeline --from-date 2026-05-01 --to-date 2026-05-05 --reprocess-behavior failed --max-active-runs 1
+cd ..
+git show de-08-done:scripts/range_fingerprint.py > scripts/range_fingerprint.py
+DATA_DIR=data_de8 uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05
+DATA_DIR=data_ref uv run python -m pipeline.load --until "2026-05-05 23:59:59"
+DATA_DIR=data_ref uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05
+DATA_DIR=data_de8 uv run python scripts/quarantined.py
+DATA_DIR=data_ref uv run python scripts/quarantined.py
+```
+
+**Predict:** Do the two tables have the same fingerprint for May 1 to 5? Do their quarantines hold the same lines?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ DATA_DIR=data_de8 uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05
+2026-05-01 to 2026-05-05: 107 lines, 172 units, fingerprint 9d0ef5b3
+$ DATA_DIR=data_ref uv run python -m pipeline.load --until "2026-05-05 23:59:59"
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 0.5 s (attempt 1 of 5)
+WARNING HTTP 500, waiting 1.0 s (attempt 2 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 1 of 5)
+WARNING HTTP 429, waiting 1.0 s (attempt 2 of 5)
+INFO landed 21 pages in since=start_until=2026-05-05T23-59-59
+INFO 2048 records read, 2047 lines kept
+INFO 2047 lines read, 2047 clean, 0 quarantined
+INFO window since=None: 2047 inserted, 0 updated, 0 unchanged
+INFO order_lines now: 2047 rows, quantity 3182, fingerprint 1c5cfc02
+$ DATA_DIR=data_ref uv run python scripts/range_fingerprint.py 2026-05-01 2026-05-05
+2026-05-01 to 2026-05-05: 107 lines, 172 units, fingerprint 9d0ef5b3
+$ DATA_DIR=data_de8 uv run python scripts/quarantined.py
+┌───────────────────┬───────────────┬─────────────────────┬─────────────────────┬────────────────┐
+│    check_name     │ order_item_id │    held_version     │    table_version    │ table_quantity │
+│      varchar      │     int64     │      timestamp      │      timestamp      │     int64      │
+├───────────────────┼───────────────┼─────────────────────┼─────────────────────┼────────────────┤
+│ quantity_in_range │          6952 │ 2026-05-01 13:30:00 │ 2026-05-03 13:30:00 │              2 │
+└───────────────────┴───────────────┴─────────────────────┴─────────────────────┴────────────────┘
+
+$ DATA_DIR=data_ref uv run python scripts/quarantined.py
+┌────────────┬───────────────┬──────────────┬───────────────┬────────────────┐
+│ check_name │ order_item_id │ held_version │ table_version │ table_quantity │
+│  varchar   │     int64     │  timestamp   │   timestamp   │     int64      │
+└────────────┴───────────────┴──────────────┴───────────────┴────────────────┘
+                                    0 rows
+```
+
+</details>
+
+*Why:* the two tables agree to the last value: 107 lines, 172 units and the same fingerprint, reached by five daily runs that partly failed and were rerun, and by one load. The quarantines differ. The backfill saw line 6952 on May 1 with its quantity of 20, and held it; the load asked the API for the world as of May 5, where only the corrected version of the line exists, and never saw the held one. A table can be right while its history differs, which is why the incident note below says what was seen, not only what remains. The `--reprocess-behavior failed` run started the two failed days again from their first task and left the three that had succeeded alone: their logs gained no new attempt.
+
+<Aside type="tip" title="Remember">
+
+- A backfill is one run for each past interval; a run's id names the end of its interval, its logical date the start.
+- Triage a failed run as data, pipeline or definition before fixing anything.
+- Read the log of the failed attempt first: the last line of the error usually names the cause.
+- Prove a backfill with a second route: the same fingerprint for the same days.
+
+**Common trap:** running five days at once into a store that lets one process write: some runs fail, and the table fills unevenly until you look.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="data-engineer-backfills-and-failure-recovery-1">
+
+**Three more days, proved.** Backfill May 6 to May 8 with one run at a time, wait for it, and prove it the way unit 3 did: the same days through the incremental load of `data_ref`, now asked for the world as of May 8. The backfill command is given; write the other three commands. Expected: three new runs, all `success`, and the same line count, units and fingerprint from both tables.
+
+```bash
+uv run airflow backfill create --dag-id cafe_pipeline --from-date 2026-05-06 --to-date 2026-05-08 --max-active-runs 1
+```
+
+<details>
+<summary>Hint</summary>
+
+`pipeline.load` in `data_ref` continues from its saved watermark, so it needs only `--until "2026-05-08 23:59:59"`. Fingerprint both folders for `2026-05-06` to `2026-05-08`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```bash
+DATA_DIR=data_ref uv run python -m pipeline.load --until "2026-05-08 23:59:59"
+DATA_DIR=data_ref uv run python scripts/range_fingerprint.py ...
+```
+
+</details>
+
+<Solution>
+
+```console
+$ DATA_DIR=data_de8 uv run python scripts/range_fingerprint.py 2026-05-06 2026-05-08
+2026-05-06 to 2026-05-08: 51 lines, 78 units, fingerprint a02cf0ba
+$ DATA_DIR=data_ref uv run python -m pipeline.load --until "2026-05-08 23:59:59"
+INFO landed 1 pages in since=2026-05-05T15-12-00_until=2026-05-08T23-59-59
+INFO 55 records read, 55 lines kept
+INFO 55 lines read, 55 clean, 0 quarantined
+INFO window since=2026-05-05 15:12:00: 51 inserted, 0 updated, 4 unchanged
+INFO order_lines now: 2098 rows, quantity 3260, fingerprint 803c0e56
+$ DATA_DIR=data_ref uv run python scripts/range_fingerprint.py 2026-05-06 2026-05-08
+2026-05-06 to 2026-05-08: 51 lines, 78 units, fingerprint a02cf0ba
+```
+
+The incremental load inserted 51 lines and found 4 unchanged, the overlap of an hour before its watermark; the lines of the three days are the same 51 in both tables.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="data-engineer-backfills-and-failure-recovery-2">
+
+**The incident note.** Before you start, say in one sentence what a reader should know after the first line. Then, from a blank file `incident.md`, write the blameless note for the first backfill of unit 1, from the facts of your own runs and logs. Five parts in this order, 150 words at most: the decision and where things stand; the impact (which days, how many runs); the cause; the fix; what stops it recurring. Name no person, and give every number from your runs. Expected: a note that a teammate who did not read the lesson could act on.
+
+<details>
+<summary>Hint</summary>
+
+The memo of *Telling the story: the right chart and the decision memo* (C15) leads with the decision. Take the impact from your `list-runs` output, the cause from the error line of a failed attempt, and the proof from the two fingerprints.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A short note whose first line says the table is right again and what was done, with the number of failed runs, the lock error as the cause, the one-run-at-a-time fix, and the fingerprints that prove it."*
+
+```markdown
+**Where things stand.** ...
+**Impact.** ...
+```
+
+</details>
+
+<Solution>
+
+```markdown
+**Where things stand.** The table is correct for May 1 to 5. We re-ran the days that failed and checked the result against a second load: 107 lines, 172 units, fingerprint 9d0ef5b3 in both.
+
+**Impact.** Two of the five daily runs (the days of May 2 and May 5) failed in the `check` step after three tries, so those days were missing from `order_lines` until the re-run.
+
+**Cause.** The DAG let all five runs write the DuckDB file at once. DuckDB lets one process write at a time, and the others stopped with a lock error. The data was not at fault: the gate held the same one line as the second load saw.
+
+**Fix.** The DAG now allows one run at a time. Only the two failed runs were run again.
+
+**Prevention.** The DAG's test checks the setting, and backfills run one run at a time.
+```
+
+The first line gives the decision and the proof, so a reader who stops there knows the table is right. The cause names the kind of failure (the pipeline's environment, not the data or a rule), and the note blames no one: it says what the DAG allowed, not who started the backfill.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a run is named `backfill__2026-05-09T00:00:00+00:00`. Which day's lines does it load?
+
+   <details>
+   <summary>answer</summary>
+
+   The lines of May 8: the id names the end of the interval, and the pipeline loads the day the interval starts.
+
+   </details>
+
+<Exercise id="data-engineer-backfills-and-failure-recovery-3">
+
+**Spot the flaw.** The lines updated on April 10 are missing from a table, and a colleague backfills the day with the loader of DE4: `uv run python -m pipeline.load --until "2026-04-10 23:59:59"`. It ends without an error, and the colleague reports it done. First make the table with the gap, in a folder of its own, with the given setup script; then run the colleague's command and check the day with the fingerprint script. Expected: the setup removes the lines of one day, the colleague's run ends without an error, and the fingerprint shows what is wrong. What is wrong, and what is the fix?
+
+```bash
+mkdir -p exercises
+DATA_DIR=data_ex3 uv run python -m pipeline.load
+```
+
+Save this as `exercises/de08_ex3_setup.py`, run it, then run the colleague's command and the fingerprint:
+
+```python
+import duckdb
+
+from pipeline.config import SERVING_DIR
+
+con = duckdb.connect(str(SERVING_DIR / "cafe.duckdb"))
+removed = con.execute("DELETE FROM order_lines WHERE updated_at >= TIMESTAMP '2026-04-10' AND updated_at < TIMESTAMP '2026-04-11'").fetchall()[0][0]
+print(f"deleted {removed} lines updated on April 10")
+```
+
+```bash
+DATA_DIR=data_ex3 uv run python exercises/de08_ex3_setup.py
+DATA_DIR=data_ex3 uv run python -m pipeline.load --until "2026-04-10 23:59:59"
+DATA_DIR=data_ex3 uv run python scripts/range_fingerprint.py 2026-04-10 2026-04-10
+```
+
+<details>
+<summary>Hint</summary>
+
+Read the `landed` line of the colleague's run: which `since` did it ask for, and which `until`? Compare the fingerprint of April 10 with the one in `data_ref`, which loaded the whole range.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+The loader of DE4 chooses its own `since` from the watermark. Run the day through the steps that take the day itself: `uv run python -m pipeline.daily 2026-04-10`.
+
+</details>
+
+<Solution>
+
+```console
+$ DATA_DIR=data_ex3 uv run python exercises/de08_ex3_setup.py
+deleted 22 lines updated on April 10
+$ DATA_DIR=data_ex3 uv run python -m pipeline.load --until "2026-04-10 23:59:59"
+INFO landed 1 pages in since=2026-06-30T15-35-00_until=2026-04-10T23-59-59
+INFO 0 records read, 0 lines kept
+INFO 0 lines read, 0 clean, 0 quarantined
+INFO window since=2026-06-30 15:35:00: 0 inserted, 0 updated, 0 unchanged
+INFO order_lines now: 3265 rows, quantity 5121, fingerprint cfdfc4c4
+$ DATA_DIR=data_ex3 uv run python scripts/range_fingerprint.py 2026-04-10 2026-04-10
+2026-04-10 to 2026-04-10: 0 lines, None units, fingerprint None
+$ DATA_DIR=data_ref uv run python scripts/range_fingerprint.py 2026-04-10 2026-04-10
+2026-04-10 to 2026-04-10: 22 lines, 34 units, fingerprint b59ef2a8
+$ DATA_DIR=data_ex3 uv run python -m pipeline.daily 2026-04-10
+INFO landed 1 pages in since=2026-04-09T23-59-59_until=2026-04-10T23-59-59
+INFO 2026-04-10: 1 pages landed
+INFO 22 records read, 22 lines kept
+INFO 22 lines read, 22 clean, 0 quarantined
+INFO 2026-04-10: 22 inserted, 0 updated, 0 unchanged
+$ DATA_DIR=data_ex3 uv run python scripts/range_fingerprint.py 2026-04-10 2026-04-10
+2026-04-10 to 2026-04-10: 22 lines, 34 units, fingerprint b59ef2a8
+```
+
+The loader asks for what changed since its saved watermark, June 30, up to April 10: a window that ends before it starts, so it reads nothing, loads nothing and succeeds. "No error" is not "done": the day is still missing, and a count of zero lines read is the signal. A backfill asks for an interval, as `pipeline.daily` and the DAG do: it loaded the 22 lines, and the fingerprint now matches the one from the load of the whole range.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can backfill a range of days, say which day a run loads from its id and its logical date, read a failed attempt and triage it, rerun only what failed, prove the table with a second route, and write a blameless note of five parts.*
+Test: Exercise data-engineer-backfills-and-failure-recovery-2, done without opening the hints.
+
+The pattern to remember: **a backfill is an interval run many times, safe because each step is idempotent, and it is not finished until a second route gives the same fingerprint.** The next lessons move the transformations into dbt, where the same ideas return as tests.
