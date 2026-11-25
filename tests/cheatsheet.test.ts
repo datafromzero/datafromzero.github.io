@@ -93,8 +93,8 @@ describe('Python cheatsheet', () => {
 	const python = published('python');
 	const entries = entriesOf(pythonCheatsheet);
 
-	test('all 27 lessons are published, cited, and inside their part; twins are published SQL and Excel lessons', () => {
-		assert.equal(python.size, 27);
+	test('all 28 lessons are published, cited, and inside their part; twins are published SQL and Excel lessons', () => {
+		assert.equal(python.size, 28);
 		assert.deepEqual(sheetProblems(pythonCheatsheet, python, published('sql'), published('excel')), []);
 		const cited = new Set(entries.map((e) => e.lesson));
 		assert.deepEqual([...cited].sort(), [...python.keys()].sort());
@@ -136,7 +136,7 @@ describe('Cheatsheet anchors and lesson footer links (D44)', () => {
 		test(`${stage}: every card anchor is unique, lowercase lesson code, and not a part id`, () => {
 			const ids = [...anchors.values()];
 			assert.equal(new Set(ids).size, ids.length);
-			for (const id of ids) assert.match(id, new RegExp(`^${prefix[stage]}\\d+(\\.\\d+)?$`));
+			for (const id of ids) assert.match(id, new RegExp(`^${prefix[stage]}\\d+(\\.\\d+|b)?$`));
 			for (const id of ids) assert.ok(!partIds.includes(id), id);
 		});
 		test(`${stage}: the first card of a lesson carries its anchor (every cited lesson has one)`, () => {
