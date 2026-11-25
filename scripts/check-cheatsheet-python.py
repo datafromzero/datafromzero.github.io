@@ -3,7 +3,7 @@
 datasets/cafe-sales/v1/, then the few names a lesson defines before its pattern works (`lines`, `sales`, `store_month`, ...),
 which are listed in `prepare` below. Lines that start with `$` are shell commands: `python -m pip <command>` is checked by
 asking pip for the help of that command (nothing is installed), and `python <file>.py` runs the card's own code as that file.
-Needs Node 22 or later (to read the TypeScript data) and the Python packages pandas, numpy, matplotlib, seaborn and openpyxl.
+Needs Node 22 or later (to read the TypeScript data) and the Python packages pandas, numpy, matplotlib, seaborn and openpyxl (and plotly for the Plotly card).
 When pandas or Node is missing the check says so and exits 0, like `npm run check:notebooks` does without nbstripout; a
 missing chart package skips only the two chart cards. Part of `npm run check` through `npm run check:cheatsheet-python`.
 Usage: python3 scripts/check-cheatsheet-python.py"""
@@ -42,6 +42,10 @@ try:
     import seaborn as sns
 except ImportError:
     plt = sns = None
+try:
+    import plotly.express as px
+except ImportError:
+    px = None
 
 dump = "import { pythonCheatsheet as s } from './src/data/cheatsheets/python.ts'; console.log(JSON.stringify(s));"
 sheet = json.loads(subprocess.run(["node", "--input-type=module", "-e", dump], cwd=ROOT, capture_output=True, text=True, check=True).stdout)
@@ -88,6 +92,10 @@ def prepare(lesson, ns, workdir):
         ns[name].to_sql(name, con, index=False)
     ns["con"] = con
     # a stand-in for the answer of a web API (the check needs no network): ok, and a list of records
+    if lesson == "charts-plotly":  # the Plotly lesson's setup: store names, and one color for each store
+        ns["store_month"] = sales.groupby(["store", "month"], as_index=False)["amount"].sum()
+        ns["COLORS"] = {"Old Town": "#0072B2", "Campus": "#d6479a", "Harbor": "#E69F00"}
+    ns["px"] = px
     ns["response"] = types.SimpleNamespace(ok=True, status_code=200, json=lambda: [{"date": "2026-02-02", "rate": 0.85}])
 
 
@@ -117,6 +125,10 @@ with tempfile.TemporaryDirectory() as tmp:
             lesson = item["lesson"]
             label = f"{lesson} #{n}"
             code = item["code"]
+            if lesson == "charts-plotly" and px is None:
+                skipped += 1
+                print(f"skip  {label:44} plotly is not installed")
+                continue
             if plt is None and lesson.startswith("charts-"):
                 skipped += 1
                 print(f"skip  {label:44} matplotlib or seaborn is not installed")

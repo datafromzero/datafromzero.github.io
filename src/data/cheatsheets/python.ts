@@ -328,6 +328,16 @@ sns.histplot(lines["amount"], bins=10, ax=ax)`,
 					trap: 'sns.barplot on raw rows draws averages, so the bars look like totals and are not.',
 				},
 				{
+					lesson: 'charts-plotly',
+					code: `fig = px.bar(store_month, x="month",
+    y="amount", color="store", barmode="group",
+    color_discrete_map=COLORS,
+    category_orders={"store": ["Harbor", "Campus"]})
+fig.write_html("stores.html")`,
+					does: 'Plotly Express takes a table and column names and returns a Figure you can hover; fix each store\'s color and order yourself.',
+					trap: 'a color that Plotly Express picked for a store is not the store\'s color: in two charts from two tables the same store can change color.',
+				},
+				{
 					lesson: 'apis-and-web-data',
 					code: `response.ok
 rates = pd.DataFrame(response.json())
