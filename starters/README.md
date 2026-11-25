@@ -45,12 +45,11 @@ in a clean clone built by `make_history.py`.
 
 ## Publishing `ml-starter`
 
-The repository exists at `https://github.com/datafromzero/ml-starter` (created by the owner, 2026-11-25). `main` was pushed on
-2026-11-25 at `6641a17` (MLE3 done); the proxy of the writing environment refuses tag pushes, so the owner pushes the four tags
-from a codespace (`git fetch origin` then `git tag <name> <hash>` and `git push origin --tags`, hashes in `PUBLISHED`; `mle-02-start`
-is the starter commit and `mle-03-start` equals `mle-02-done`).
-It holds the lessons of the Machine Learning Engineer track that work in a repository (MLE2 and MLE3 so far; MLE1, MLE4 and MLE5 are Colab
-notebooks). The tags are `mle-02-start`, `mle-02-done`, `mle-03-start` and `mle-03-done`; each later repository lesson adds `mle-NN-done`.
+The repository exists at `https://github.com/datafromzero/ml-starter` (created by the owner, 2026-11-25), with `main` and the
+tags `mle-02-start`, `mle-02-done`, `mle-03-start` and `mle-03-done` pushed (hashes in `PUBLISHED`; the owner pushed the tags from a
+codespace because the proxy of the writing environment refuses tag pushes). Owner check in a real GitHub codespace, 2026-11-25: at
+`mle-03-done` `uv run pytest -q` gave 14 passed on Python 3.13, with one warning from MLflow's own code (an SQLAlchemy
+`SADeprecationWarning` about the `noload` loader strategy; harmless, not from the lesson code).
 
 1. Build the history in a folder that does not exist yet: `python3 starters/ml-starter-checkpoints/make_history.py ../ml-starter-build`.
    Every commit has the same author and date, so a rebuild gives the same hashes; `PUBLISHED` in the script is empty until the first
