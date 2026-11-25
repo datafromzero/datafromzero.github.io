@@ -12,6 +12,7 @@ interface Cff {
 	version: string;
 	'date-released'?: string | Date;
 	doi?: string;
+	identifiers?: { type: string; value: string; description?: string }[];
 	license: string;
 	'repository-code': string;
 	url: string;
@@ -23,6 +24,8 @@ export interface Citation {
 	version: string;
 	year: number;
 	doi: string | null;
+	/** DOI of this version (CFF `identifiers` entry described "Version x.y.z"), cited in APA and BibTeX. */
+	versionDoi: string | null;
 	url: string;
 	repository: string;
 	license: string;
@@ -38,7 +41,11 @@ export function buildCitation(cff: Cff, packageVersion: string): Citation {
 	const released = cff['date-released'] ? new Date(cff['date-released']) : null;
 	const year = released ? released.getUTCFullYear() : FIRST_YEAR;
 	const doi = cff.doi ? String(cff.doi) : null;
-	const link = doi ? `https://doi.org/${doi}` : cff.url;
+	const own = (cff.identifiers ?? []).find((i) => i.type === 'doi' && i.description === `Version ${cff.version}`);
+	const versionDoi = own ? String(own.value) : null;
+	// A citation names the version it used, so it carries that version's DOI; the concept DOI is the fallback.
+	const citedDoi = versionDoi ?? doi;
+	const link = citedDoi ? `https://doi.org/${citedDoi}` : cff.url;
 	// The author is an organization (CFF `name`), cited as a group author in APA.
 	const author = a.name;
 	if (!author) throw new Error('CITATION.cff: authors[0].name is required');
@@ -50,11 +57,11 @@ export function buildCitation(cff: Cff, packageVersion: string): Citation {
 		`  year = {${year}},`,
 		`  version = {${cff.version}},`,
 		`  url = {${cff.url}},`,
-		...(doi ? [`  doi = {${doi}},`] : []),
+		...(citedDoi ? [`  doi = {${citedDoi}},`] : []),
 		`  note = {Licensed ${cff.license}}`,
 		'}',
 	].join('\n');
-	return { apa, bibtex, version: cff.version, year, doi, url: cff.url, repository: cff['repository-code'], license: cff.license };
+	return { apa, bibtex, version: cff.version, year, doi, versionDoi, url: cff.url, repository: cff['repository-code'], license: cff.license };
 }
 
 export function loadCitation(): Citation {

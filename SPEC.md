@@ -374,12 +374,12 @@ Notebooks are cleared of outputs before commit (CI check).
   - **MINOR** — new lessons, reference entries, datasets, components, optional fields
   - **PATCH** — corrections, clarifications, link fixes
 - Each GitHub Release is archived by **Zenodo** (GitHub integration) → one **concept DOI** (always latest) + one DOI per version.
-- `CITATION.cff` at repo root (title, author, version, date, concept DOI, license). Updated on every release.
-- `/cite/` page: APA + BibTeX for the whole work, generated at build time from `CITATION.cff` (the build fails if its `version` differs from `package.json`); the DOI line reads "after the first release" until Zenodo exists, then shows the concept DOI and per-version DOIs.
+- `CITATION.cff` at repo root (title, author, version, date, concept DOI as `doi`, license; the version's DOI as an `identifiers` entry described `Version x.y.z`). Updated on every release. Concept DOI: `10.5281/zenodo.24523880`.
+- `/cite/` page: APA + BibTeX for the whole work, generated at build time from `CITATION.cff` (the build fails if its `version` differs from `package.json`); the DOI line reads "after the first release" until Zenodo exists, then shows the concept DOI and this version's DOI. APA and BibTeX cite the version's DOI (falling back to the concept DOI).
 - Every lesson footer shows **Cite this lesson**: author, year (from `reviewed`), title, site, curriculum version, URL.
   Static pages cannot know when they were read, so a note asks the reader to add their access date (D20).
 - `CHANGELOG.md` follows *Keep a Changelog*, and every bullet starts with a bold, dated, learner-facing summary (D54); `/changelog/` is a short "What's new" list of those summaries by month, linking the full file on GitHub (single source, no copy); `/license/` shows `LICENSE` and `LICENSE-CONTENT` the same way.
-- The site footer shows the current version and its DOI badge.
+- The homepage footer shows the current version and the concept DOI as a text link (no badge image, so no third-party request).
 
 ---
 
