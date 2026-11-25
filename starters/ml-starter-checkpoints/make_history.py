@@ -15,8 +15,8 @@ replaces. The lesson pages quote them, and `check_lessons.py` compares every quo
 
 Every commit has the same author and date (below), so a rebuild gives the same hashes. `PUBLISHED` holds the hashes of
 commits that were pushed; the script stops if a rebuild of a published lesson gives another one, because the files of a
-published checkpoint never change (a change would not be a fast-forward of what learners already cloned). It is empty
-until the owner creates the repository and pushes the first tags.
+published checkpoint never change (a change would not be a fast-forward of what learners already cloned). Lessons 0 (the starter), 2 and 3 were pushed
+on 2026-11-25.
 """
 
 import os
@@ -31,7 +31,12 @@ LESSONS = [2, 3]  # the lessons of the track that have a checkpoint folder, in o
 AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
 DATE = "2026-11-25T12:00:00+0000"
 # The commits whose files never change again, by lesson (the starter commit is key 0): add a lesson's hash once it is pushed.
-PUBLISHED = {}
+PUBLISHED = {
+    # Pushed to datafromzero/ml-starter on 2026-11-25.
+    0: "0123560c9ba02a70f4a375677feb9b2dd2cb7c84",
+    2: "82f82985e64e5a5330dcf869e66c839b9fe244a2",
+    3: "6641a1797bf098329c18a8ff52a47620a1392dbb",
+}
 IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc", "mlflow.db", "mlruns")
 
 
