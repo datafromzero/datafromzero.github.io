@@ -42,7 +42,7 @@ export interface SiteUi {
 		reportSent: string;
 		reportDetails: string;
 		reportHint: string;
-		reportGo: string;
+		reportOff: string;
 		reportNote: string;
 		home: string;
 		start: string;
@@ -95,7 +95,7 @@ const en: SiteUi = {
 		reportSent: 'Send',
 		reportDetails: 'What happened?',
 		reportHint: 'Tell us what happened and where on the page.',
-		reportGo: 'Continue on GitHub',
+		reportOff: 'Reporting is switched off for now.',
 		reportNote: 'Your message becomes a public issue on GitHub. Do not include your name, email or other personal details.',
 		home: 'Home',
 		start: 'Start here',
@@ -148,7 +148,7 @@ const vi: SiteUi = {
 		reportSent: 'Gửi',
 		reportDetails: 'Chuyện gì đã xảy ra?',
 		reportHint: 'Hãy cho chúng tôi biết chuyện gì đã xảy ra và ở chỗ nào trên trang.',
-		reportGo: 'Tiếp tục trên GitHub',
+		reportOff: 'Tạm thời chưa gửi báo lỗi được.',
 		reportNote: 'Tin nhắn của bạn thành một issue công khai trên GitHub. Đừng ghi tên, email hay thông tin cá nhân.',
 		home: 'Trang chủ',
 		start: 'Bắt đầu',

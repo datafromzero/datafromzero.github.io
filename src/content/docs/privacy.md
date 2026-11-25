@@ -24,7 +24,8 @@ privacy policies.
 
 Each lesson ends with a "Report an issue" form, and the "Report a problem" button in the bar at the bottom of every
 page opens the same kind of form. When you send it, we receive three things you give us: the kind of message you
-chose, your message, and the page you were on (for a lesson, also the date it was last reviewed). Nothing else is
+chose, your message, and the page you were on (its address and title; on a lesson also its id, and from the
+form at the end of a lesson the date it was last reviewed). Nothing else is
 asked for or kept: no name, no email, no account.
 
 - **It becomes public.** The message is posted as an issue in the project's GitHub repository,

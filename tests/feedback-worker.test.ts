@@ -135,3 +135,24 @@ test('safePath', () => {
 	assert.equal(safePath('/a?x=1'), null);
 	assert.equal(safePath('a'), null);
 });
+
+describe('reporting from the site (D37, D58)', () => {
+	test('every category the taskbar offers is one the Worker accepts', async () => {
+		const { siteUi } = await import('../src/i18n/site-ui.ts');
+		for (const lang of ['en', 'vi']) {
+			for (const [value] of siteUi(lang).taskbar.reportKinds) {
+				assert.ok(parseForm(form({ category: value })).ok, `${lang}: ${value}`);
+			}
+		}
+	});
+	test('no page source links to the GitHub issue tracker (owner, 2026-11-25)', async () => {
+		const { readdirSync, readFileSync, statSync } = await import('node:fs');
+		const walk = (dir: string): string[] =>
+			readdirSync(dir).flatMap((f) => {
+				const p = `${dir}/${f}`;
+				return statSync(p).isDirectory() ? walk(p) : /\.(astro|mdx?|ts)$/.test(f) ? [p] : [];
+			});
+		const hits = walk('src').filter((p) => readFileSync(p, 'utf8').includes('github.com/datafromzero/datafromzero.github.io/issues') || /\$\{(GITHUB_REPO|repoUrl|repo)\}\/issues/.test(readFileSync(p, 'utf8')));
+		assert.deepEqual(hits, []);
+	});
+});

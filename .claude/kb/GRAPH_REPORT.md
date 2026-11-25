@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1587 nodes, 1998 edges, 204 communities (627 isolated nodes).
+- 1587 nodes, 1997 edges, 204 communities (627 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 60, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 195, skill 1, spec-section 25, starlight-component 6, style 7, symbol 314, template 2, token 12.
-- Edges: defines 314, imports 51, mentions 995, overrides 6, references 30, runs 15, specified-by 4, uses 546, uses-token 32, validated-by 5.
+- Edges: defines 314, imports 51, mentions 994, overrides 6, references 30, runs 15, specified-by 4, uses 546, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -22,9 +22,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 34 | .claude/agents/LESSON-STANDARD.md:1 |
 | 9 | `src/site.ts` | module | 33 | src/site.ts:1 |
-| 10 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
-| 11 | `S6` Authoring components | spec-section | 31 | SPEC.md:282 |
-| 12 | `.claude/MISTAKES.md` | doc | 30 | .claude/MISTAKES.md:1 |
+| 10 | `.claude/MISTAKES.md` | doc | 32 | .claude/MISTAKES.md:1 |
+| 11 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
+| 12 | `S6` Authoring components | spec-section | 31 | SPEC.md:282 |
 | 13 | `scripts/sync-research-issues.mjs` | script | 26 | scripts/sync-research-issues.mjs:1 |
 | 14 | `D31` Bottom taskbar (amended by D3… | decision | 25 | SPEC.md:58 |
 | 15 | `D44` Stage cheatsheets; a math blo… | decision | 25 | SPEC.md:71 |
@@ -58,10 +58,10 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/styles/math.css` -uses-token-> `token:--fg` (C75 to C11, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C2 to C20, .claude/skills/kb/SKILL.md:3)
 - `M8` -mentions-> `D24` (C79 to C20, CLAUDE.md:66)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C34 to C55, design/README.md:181)
 - `M6` -mentions-> `D26` (C2 to C73, CLAUDE.md:62)
 - `scripts/check-lessons.mjs` -mentions-> `D47` (C179 to C2, scripts/check-lessons.mjs:10)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C181 to C2, scripts/check-placeholders.mjs:2)
-- `D51` -mentions-> `src/lib/rehype-math-errors.ts` (C75 to C193, SPEC.md:78)
 
 ## Decisions (SPEC §1)
 
@@ -103,7 +103,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D34 | Navigation for learners (amended… | Docs-style order and lesson codes (owner request, 2026-11-17) | SPEC.md:61 §11 |
 | D35 | Mobile navigation: one bottom bar | On phones the bottom bar is the only navigation (owner decision, 2026… | SPEC.md:62 |
 | D36 | Mobile search sheet | Search opens as a full-screen glass sheet on phones and a glass dialo… | SPEC.md:63 |
-| D37 | Report a problem from any page | A "Report a problem" pane in the taskbar sheet that hands off to a Gi… | SPEC.md:64 §15 |
+| D37 | Report a problem from any page | A "Report a problem" pane in the taskbar sheet with a plain form that… | SPEC.md:64 |
 | D38 | Career panel button | "Go to <career>" once that career has published lessons, else "Start… | SPEC.md:65 |
 | D39 | Data tag before v1.0.0 | Pre-release tag `v0.1.0` for notebook data (owner decision, 2026-11-1… | SPEC.md:66 §14 §7 §9 |
 | D40 | SQL stage shape | 35 lessons (39 since D53): an Excel-side first lesson, then the resea… | SPEC.md:67 |

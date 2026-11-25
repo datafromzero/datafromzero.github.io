@@ -1,6 +1,6 @@
 # Feedback Worker
 
-A small Cloudflare Worker that receives the lesson footer's feedback form and files it as a public GitHub issue
+A small Cloudflare Worker that receives the lesson footer's feedback form and the taskbar's Report a problem form and files it as a public GitHub issue
 (SPEC D58). It is one file, `worker.js`, with no build step. It is not part of the website build.
 
 What it does: accepts a form POST only from `https://datafromzero.github.io`; ignores bots that fill the hidden field;

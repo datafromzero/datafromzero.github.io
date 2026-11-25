@@ -1,4 +1,4 @@
-// Feedback Worker (SPEC D58): turns the lesson footer's form post into a GitHub issue and redirects to a thank-you
+// Feedback Worker (SPEC D58): turns a post from the lesson footer's form or the taskbar's Report a problem pane into a GitHub issue and redirects to a thank-you
 // page. One self-contained module, no imports and no build step, so it can be pasted into the Cloudflare dashboard
 // editor (README.md). The GitHub token is the secret GITHUB_TOKEN. Nothing about the sender (IP address, user agent)
 // is put into the issue or logged; the IP is used only as a salted hash, held in memory for at most 10 minutes, as the

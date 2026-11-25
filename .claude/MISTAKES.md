@@ -43,6 +43,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
   link preview. → **Every page declares `og:image` (`OG_IMAGE` in `src/site.ts`); after adding an image to a page, check
   the link preview.**
 
+- 2026-11-25 — D58 amended D37 with a note in D37's header only; D37's body still described the GitHub form, so SPEC
+  contradicted itself. → **When a decision amends another, rewrite the amended row's body in the same change.**
+
 ## Repo tooling and checks
 
 - 2026-11-25 — Adding figures to ML Engineer batch 1: a concept spec's `id` was renamed after its figure was pasted (cspell flagged the long id), and `refresh-concept-figures` found no spec for the old id, took the figure for a data stepper and kept it, so two lessons held stale figures while the script printed "0 lesson(s) rewritten". The first drafts also put arrows through labels and a value label over an error bar, which only a screenshot showed. → **Give a new concept spec its final id (three letters or fewer, or a word cspell knows) before the first paste; after renaming one, put the `{/* CONCEPT: key */}` marker back over the old figure and refresh, and check the count line (every concept figure of the repository, 91 at this commit). Screenshot every new figure in the page at 390 px in light and dark before reporting.**
