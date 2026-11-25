@@ -23,7 +23,7 @@ prerequisites:
   - core-testing-with-pytest
 datasets:
   - cafe-sales
-reviewed: 2026-11-22
+reviewed: 2026-11-25
 sources:
   - title: 'AWS: What is the difference between OLAP and OLTP? (accessed 2026-11-22)'
     url: https://aws.amazon.com/compare/the-difference-between-olap-and-oltp/
@@ -39,8 +39,10 @@ sources:
     url: https://cloud.google.com/bigquery/docs/introduction
   - title: 'Google Cloud: BigQuery pricing (accessed 2026-11-22)'
     url: https://cloud.google.com/bigquery/pricing
-  - title: 'BigQuery documentation: Estimate and control costs (accessed 2026-11-22)'
+  - title: 'BigQuery documentation: Estimate and control costs (accessed 2026-11-25)'
     url: https://cloud.google.com/bigquery/docs/best-practices-costs
+  - title: 'BigQuery documentation: Introduction to clustered tables (accessed 2026-11-25)'
+    url: https://docs.cloud.google.com/bigquery/docs/clustered-tables
   - title: 'BigQuery documentation: GoogleSQL data types, data type sizes (accessed 2026-11-22)'
     url: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types
   - title: 'Kimball Group: Additive, Semi-Additive, and Non-Additive Facts (accessed 2026-11-22)'
@@ -87,7 +89,7 @@ From memory first, then click to check.
 
 ## The big idea
 
-A warehouse is a database built to read a few columns of many rows, a lake is files kept as they arrived, and a cloud query is billed by the bytes it scans.
+A warehouse is a database built to read a few columns of many rows, a lake is files kept as they arrived, and a cloud query is billed by the bytes of the columns it references.
 
 <figure class="ca sa not-content t8">
 <input class="ca-pp" type="checkbox" id="cs-pp" aria-label="Pause the animation" />
@@ -326,11 +328,11 @@ Conversion Error: Could not convert string 'twelve' to INT32
 
 ### 3. What a scan costs
 
-**Idea.** On BigQuery's on-demand model you are charged for the bytes each query processes, and the pricing page says you are charged for the data in the columns you select. It counts *logical* bytes, which are uncompressed and fixed by the type: the BigQuery data types page gives 8 bytes for a whole number or a date, 16 for a decimal, 1 for a BOOL, and 2 bytes plus the UTF-8 size for text, with a null counting as 0. A tebibyte (TiB) is 2^40 bytes.
+**Idea.** On BigQuery's on-demand model you are charged for the bytes each query processes. The pricing page says the charge follows the columns you select, and the clustering page counts "each column referenced by the query"; a dry run in the BigQuery sandbox on 2026-11-25 counted a column used only in `WHERE` (two 8-byte columns selected, a third filtered on: 24 bytes a row), so a query is billed for the columns it references. A column in a `JOIN` or a `GROUP BY` is referenced too: no page lists the clauses, so that is the same reading of the word, not a page's claim. The count is of *logical* bytes, which are uncompressed and fixed by the type: the BigQuery data types page gives 8 bytes for a whole number or a date, 16 for a decimal, 1 for a BOOL, and 2 bytes plus the UTF-8 size for text, with a null counting as 0. A tebibyte (TiB) is 2^40 bytes.
 
 <Aside type="note" title="Price box, read on 2026-11-22">
 
-BigQuery on-demand queries: **$6.25 per TiB** processed; the first 1 TiB each month is free; charges are rounded up to the nearest MB, with a minimum of 10 MB processed per table a query references and per query; the page does not say how many bytes an MB is. Source: the BigQuery pricing page, read on 2026-11-22. Prices change: read the page again before you rely on a number.
+BigQuery on-demand queries: **$6.25 per TiB** processed; the first 1 TiB each month is free; charges are rounded up to the nearest MB, with a minimum of 10 MB processed per table a query references and per query. Source: the BigQuery pricing page, read on 2026-11-22. A run in the BigQuery sandbox on 2026-11-25 (one project, location US) billed in whole MiB, 1,048,576 bytes each, with a minimum of 10 MiB for each table referenced and for the query: 23,666,400 bytes processed were billed 24,117,248, and a view joined to a table, 20,971,520 (shown in [*Running on a cloud warehouse*](/data-engineer/cloud-warehouse-in-practice/), DE15). Prices change: read the page again before you rely on a number.
 
 </Aside>
 
@@ -354,7 +356,7 @@ Expected: 6 rows, 3 columns; `micro_dollars` is the price in millionths of a dol
 
 *Why:* `status` comes first with 19,799 bytes, although it was the smallest column in the file. Every `'completed'` counts 2 + 9 bytes, and compression does not change the count: BigQuery's cost page says on-demand queries are always charged by logical, uncompressed bytes. `customer_id` has 14,392 bytes, not 14,400, because one order has no customer.
 
-All six columns come to 89,283 bytes. A report that reads only `store_id` and `status` reads 14,400 + 19,799 = 34,199 bytes, about 38 percent of that: naming the columns you need is the first way to cut a bill, and the same table costs very different amounts depending on how it is read. The pricing page names a second way: partitioning and clustering a table reduce the data a query processes. At this size every price is far below a cent and the first TiB each month is free, so the minimum of about 10 MB per table matters more than the data; the ratio is what carries to a table a million times larger. *Goes deeper:* the Data Engineer track lesson [*File formats and partitioning*](/data-engineer/file-formats-and-partitioning/) (DE3).
+All six columns come to 89,283 bytes. A report that references only `store_id` and `status` is counted at 14,400 + 19,799 = 34,199 bytes, about 38 percent of that: naming the columns you need is the first way to cut a bill, and the same table costs very different amounts depending on how it is read. The pricing page names a second way: partitioning and clustering a table reduce the data a query processes. At this size every price is far below a cent and the first TiB each month is free, so the minimum of 10 MiB for each table matters more than the data; the ratio is what carries to a table a million times larger. *Goes deeper:* the Data Engineer track lesson [*File formats and partitioning*](/data-engineer/file-formats-and-partitioning/) (DE3).
 
 ### 4. Totals that add up, and totals that do not
 
@@ -383,7 +385,7 @@ Expected: 1 row, 2 columns.
 
 - OLTP writes whole rows all day; OLAP reads a few columns of many rows. Column storage suits the second.
 - A lake keeps files as they arrived and the reader decides the shape; a warehouse decides the shape when it loads.
-- On-demand pricing follows the logical bytes of the columns a query reads, so name the columns you need.
+- On-demand pricing follows the logical bytes of the columns a query references, in whole MiB with at least 10 MiB for each table, so name the columns you need.
 - Units and sales add up; distinct counts, averages and ratios do not.
 
 **Common trap:** adding up daily distinct counts to get a weekly one. 80 daily customers were 58 customers.
@@ -498,13 +500,13 @@ The BigQuery page on controlling costs has a best practice about `LIMIT` for tab
 <details>
 <summary>Half-solution</summary>
 
-The query returns 10 rows, and it is billed for ... of the table's bytes in the columns it selects. The fix is in the columns, not in the rows returned.
+The query returns 10 rows, and it is billed for ... of the table's bytes in the columns it references. The fix is in the columns, not in the rows returned.
 
 </details>
 
 <Solution>
 
-For a table that is not clustered, the page says a `LIMIT` clause does not affect the amount of data read: you are billed for all the bytes of the columns the query reads, although it returns a subset. `SELECT *` reads all six columns of all 1,800 orders, which unit 3 counted as 89,283 bytes, the same as without the `LIMIT`. The colleague should name the columns needed, as in unit 3, and use the free preview of the console to look at a table instead of querying it.
+For a table that is not clustered, the page says a `LIMIT` clause does not affect the amount of data read: you are billed for all the bytes of the columns the query references, although it returns a subset. `SELECT *` references all six columns of all 1,800 orders, which unit 3 counted as 89,283 bytes, the same as without the `LIMIT`. The colleague should name the columns needed, as in unit 3, and use the free preview of the console to look at a table instead of querying it.
 
 </Solution>
 
@@ -526,7 +528,7 @@ Part 5 ends its project here. **The brief.** The owner wants to know what the we
 | `logical_bytes(con, table, columns)` | the logical bytes of the columns, by the type sizes of unit 3 |
 | `estimated_cost(scanned_bytes)` | bytes divided by 2^40, times the price per TiB of the price box |
 | `QUESTION` | the query of C18 for sales by cafe and weekday or weekend: `fact_sale` joined to `dim_store` and `dim_date`, completed orders only |
-| `main()` | builds the warehouse, opens one read-only connection, and prints the rows and sum of `fact_sale`, the plan of `QUESTION`, the logical bytes and price of the columns it reads in the three tables (`store_key`, `date_key`, `amount_usd`, `order_status`, `store_name`, `is_weekend`), and the price with the minimum for each table |
+| `main()` | builds the warehouse, opens one read-only connection, and prints the rows and sum of `fact_sale`, the plan of `QUESTION`, the logical bytes and price of the columns it references in the three tables (`fact_sale`: `store_key`, `date_key`, `amount_usd`, `order_status`; `dim_store`: `store_key`, `store_name`; `dim_date`: `date_key`, `is_weekend`), and the price with the minimum for each table |
 
 Pass the connection to `explain` and `logical_bytes`: DuckDB refuses to open a file read-write while another connection holds it read-only, and one connection is all the checks need.
 
@@ -560,7 +562,7 @@ def logical_bytes(con: duckdb.DuckDBPyConnection, table: str, columns: list[str]
     return total
 ```
 
-`PRICE_PER_TIB` is `6.25`, `BYTES_PER_TIB` is `2**40` and `MINIMUM_BYTES` is `10 * 2**20`, an assumption about the unit of the page's "10 MB".
+`PRICE_PER_TIB` is `6.25`, `BYTES_PER_TIB` is `2**40` and `MINIMUM_BYTES` is `10 * 2**20`, 10 MiB, the unit in which the sandbox run billed.
 
 </details>
 
@@ -587,24 +589,25 @@ fact_sale: 3287 rows, 22754.25 dollars
 │ ~657 rows                                │
 ╰──────────────────────────────────────────╯
 ...
-scanned 143019 bytes, costing 0.0000008 dollars
+referenced 143019 bytes, costing 0.0000008 dollars
 billed at least 31457280 bytes, costing about 0.000179 dollars
 $ uv run pytest -q
 ................                                                         [100%]
 16 passed in 0.60s
 ```
 
-The count of 16 tests is the 13 that C31 leaves plus the 3 above. The plan estimates `~657 rows` for the filtered scan of `fact_sale`, and the filter keeps 3,286 of its 3,287 rows: the `~` numbers are the planner's guesses from statistics and rules of thumb, as the DuckDB page says. The first estimate counts only the bytes the question reads, in three tables. The second applies the minimum of about 10 MB for each table, so the minimum is the price. The page does not say whether MB means 10^6 or 2^20 bytes; either way the price is under two ten-thousandths of a dollar, and free under the first TiB each month.
+The count of 16 tests is the 13 that C31 leaves plus the 3 above. The plan estimates `~657 rows` for the filtered scan of `fact_sale`, and the filter keeps 3,286 of its 3,287 rows: the `~` numbers are the planner's guesses from statistics and rules of thumb, as the DuckDB page says. The first estimate counts the bytes of every column the question references, in all its clauses, in three tables: 141,340 in `fact_sale`, 50 in `dim_store` and 1,629 in `dim_date`, where each join key counts in both tables it joins. The second applies the minimum of 10 MiB for each of the three tables, 30 MiB, so the minimum is the price: 30 ÷ 1,048,576 × 6.25 is about 0.000179 dollars, under two ten-thousandths, and free under the first TiB each month. That follows the rule of the sandbox run; this query was not run there.
 
 Write the estimate in the README, in a box with its date, so a reader knows when the price was true:
 
 ```markdown
 ## What a report costs (read on 2026-11-22)
 
-BigQuery on-demand queries: $6.25 per TiB processed, the first 1 TiB each month free, a minimum of
-about 10 MB for each table and for each query (cloud.google.com/bigquery/pricing). The weekly
-question reads 143,019 logical bytes in three tables: 0.0000008 dollars, or about 0.000179
-dollars with the minimum. Prices change; check the page before you rely on this.
+BigQuery on-demand queries: $6.25 per TiB processed, the first 1 TiB each month free, billed in
+whole MiB with a minimum of 10 MiB for each table and for each query (cloud.google.com/bigquery/pricing;
+the MiB from a sandbox run of 2026-11-25). The weekly question references 143,019 logical bytes in
+three tables: 0.0000008 dollars, or about 0.000179 dollars with the minimum of 30 MiB. Prices
+change; check the page before you rely on this.
 ```
 
 Commit and push the branch, and open the pull request as in C30, from `add-warehouse` into `main`, with a description of what changed and how to check it. Sam reviews in his clone, and merges the way the Merge button does; then you catch up:
@@ -638,7 +641,7 @@ Sam's review list: no data, key or database file in the diff (`git diff --stat` 
 |---|---|---|---|
 | 1 | the lake and the warehouse exist | `ls data` | five `.csv`, five `.parquet` and `warehouse.duckdb` |
 | 2 | none of them is in Git | `git ls-files data`, `git status -s` | both print nothing |
-| 3 | the star is whole | `uv run python -m cafe_report.warehouse` | `fact_sale: 3287 rows, 22754.25 dollars`, and `scanned 143019 bytes` |
+| 3 | the star is whole | `uv run python -m cafe_report.warehouse` | `fact_sale: 3287 rows, 22754.25 dollars`, and `referenced 143019 bytes` |
 | 4 | one plan read | the plan of that run | you can say what the `Filters:` line means and why `~657` is not the real count |
 | 5 | one dated estimate | the README | a price, its unit, its source and the date you read it |
 | 6 | tests and style | `uv run pytest -q`, `uv run ruff check`, `uv run ruff format --check` | all pass; the test count is yours plus three |
@@ -647,4 +650,4 @@ Sam's review list: no data, key or database file in the diff (`git diff --stat` 
 **Can you do it?** *I can say what a warehouse and a lake are for, load a star schema into a DuckDB file from Parquet, read its plan, estimate what a scan costs at a dated published price, and take the change through a reviewed pull request.*
 Test: Exercise core-warehouses-lakes-and-cost-2, done without opening the hints.
 
-The pattern to remember: **keep the lake as it arrived and the warehouse as you shaped it, read only the columns you need, and date every price.** Part 5 ends here. Part 6 starts with [*What AI can and cannot do in data work*](/core/what-ai-can-and-cannot-do/) (C36).
+The pattern to remember: **keep the lake as it arrived and the warehouse as you shaped it, reference only the columns you need, and date every price.** Part 5 ends here. Part 6 starts with [*What AI can and cannot do in data work*](/core/what-ai-can-and-cannot-do/) (C36).
