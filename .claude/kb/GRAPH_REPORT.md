@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1586 nodes, 1994 edges, 204 communities (627 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 60, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 195, skill 1, spec-section 25, starlight-component 6, style 7, symbol 313, template 2, token 12.
-- Edges: defines 313, imports 51, mentions 992, overrides 6, references 30, runs 15, specified-by 4, uses 546, uses-token 32, validated-by 5.
+- 1587 nodes, 1995 edges, 204 communities (627 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 60, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 195, skill 1, spec-section 25, starlight-component 6, style 7, symbol 314, template 2, token 12.
+- Edges: defines 314, imports 51, mentions 992, overrides 6, references 30, runs 15, specified-by 4, uses 546, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -40,7 +40,7 @@ Label propagation; each community is named by its top-degree node.
 - **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
 - **C6 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C7 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C8 roadmap.ts** (14): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES
+- **C8 roadmap.ts** (15): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES
 - **C9 sync-research-issues.mjs** (13): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md
 - **C10 Datasets** (11): S7 Datasets; D39 Data tag before v1.0.0; SPEC.md; S13 Repository layout; D46 Accented menu names for the text-…; D52 The `app-events` dataset, v1
 - **C11 tokens.css** (11): src/styles/tokens.css; src/styles/step-animation.css; src/styles/sql-runner.css; src/styles/print.css; token:--fg --fg; token:--bg --bg

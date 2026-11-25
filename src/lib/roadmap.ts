@@ -66,11 +66,17 @@ export function deepDiveLabel(stage: string): string | undefined {
 }
 
 /** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8`; `undefined` for an unknown stage. */
+/**
+ * Lessons whose "b" lesson (the half order after them) makes them read as "a", by stage and order
+ * (owner, 2026-11-25: DA8 reads DA8a beside DA8b). Other split pairs keep the plain code for now.
+ */
+export const SPLIT_A: Record<string, readonly number[]> = { 'data-analyst': [80] };
+
 export function lessonCode(stage: string, order: number): string | undefined {
 	const def = ROADMAP_STAGES.find((s) => s.id === stage);
 	if (!def) return undefined;
 	const n = order / 10;
-	if (Number.isInteger(n)) return `${def.code}${n}`;
+	if (Number.isInteger(n)) return `${def.code}${n}${SPLIT_A[stage]?.includes(order) ? 'a' : ''}`;
 	// A lesson split off its neighbor at the half order (65 after 60) reads as that lesson's "b" (owner, 2026-11-25).
 	if (Number.isInteger(n - 0.5)) return `${def.code}${n - 0.5}b`;
 	return `${def.code}${Number(n.toFixed(2))}`;
