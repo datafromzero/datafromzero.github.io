@@ -26,6 +26,12 @@ describe('lessonCode', () => {
 		assert.equal(lessonCode('data-engineer', 255), 'DE25b');
 		assert.equal(lessonCode('excel', 33), 'E3.3');
 	});
+	test('a lesson listed in SPLIT_A reads as "a" beside its "b"', () => {
+		assert.equal(lessonCode('data-analyst', 80), 'DA8a');
+		assert.equal(lessonCode('data-analyst', 85), 'DA8b');
+		assert.equal(lessonCode('data-analyst', 90), 'DA9');
+		assert.equal(lessonCode('data-engineer', 60), 'DE6');
+	});
 	test('unknown stage has no code', () => {
 		assert.equal(lessonCode('nope', 10), undefined);
 	});
