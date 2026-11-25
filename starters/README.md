@@ -61,3 +61,19 @@ Before the push, run `python3 starters/ml-starter-checkpoints/check_lessons.py`.
 and `markdown` block of the lessons MLE2 and MLE3: a block outside an exercise must equal a checkpoint file or be a piece of one. It
 also reads every `bash` block for the files it names. It does not check `console` output or exercise solutions: run those in a clean
 clone built by `make_history.py`. Checked here on Linux with uv 0.11.32 and Python 3.13.18; not on Windows, macOS or in a codespace.
+
+### New checkpoints: MLE13 to MLE16 (drafts, not pushed)
+
+`make_history.py` now builds six lessons (`LESSONS = [2, 3, 13, 14, 15, 16]`), and `PUBLISHED` still holds only the starter and lessons 2 and 3, whose hashes a rebuild reproduces. The owner pushes these tags from a codespace, in this order, after `git push origin main`:
+
+| Tag | What it holds |
+| --- | --- |
+| `mle-13-start` | the same commit as the pushed `mle-03-done` |
+| `mle-13-done` | the service (`serve.py`, `export.py`), its tests, `Dockerfile`, `.dockerignore`, `scripts/person.json`, `scripts/compare_service.py`, and `pyproject.toml` and `uv.lock` with `fastapi`, `uvicorn`, `skops` and the dev dependency `httpx2` |
+| `mle-14-start`, `mle-14-done` | the request log, the monitor, the rollback command, the replay script, the quality gate and `docs/rollback_plan.md`; `serve.py` and `tests/test_serve.py` are replaced |
+| `mle-15-start`, `mle-15-done` | `reference/mle15_reference.py`, the reference answer of the simulation |
+| `mle-16-start`, `mle-16-done` | `reference/capstone_classical.py` and the folder `llm/` (own `pyproject.toml` and `uv.lock` with PyTorch 2.15.0 from the CPU index, `rag.py`, `questions.py`, `reference/`) |
+
+For example: `git push origin mle-13-start mle-13-done mle-14-start mle-14-done mle-15-start mle-15-done mle-16-start mle-16-done`. Then add the hashes of lessons 13 to 16 to `PUBLISHED`.
+
+Notes. FastAPI 0.165.0, uvicorn 0.54.0 and skops 0.16.0 were already in the lock file through MLflow 3.18.0; the new packages are `httpx2` 2.16.2 with `httpcore2` and `truststore` (Starlette's test client prefers `httpx2`). The `Dockerfile` was built and run on Docker Engine 29.9.2 (`python:3.13-slim`) with host networking for the build on the writing machine; not run on Docker Desktop, Windows, macOS or in a codespace, and no image was pushed or deployed. The `llm/` folder needs about 6 GB of memory and downloads about 3.1 GB of models; run one language-model process at a time. `check_lessons.py` now covers MLE2, MLE3 and MLE13 to MLE16 (`dockerfile` blocks too). Capture the `console` blocks in a clean clone as before.

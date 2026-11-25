@@ -1,0 +1,593 @@
+---
+id: ml-engineer-monitoring-drift-and-retraining
+title: Monitoring, drift and retraining
+short_title: Monitoring and drift
+description: Log what a served model sees, tell data drift from concept drift, set an alert and a retraining trigger, add a quality gate and write a rollback plan.
+stage: ml-engineer
+order: 140
+level: advanced
+duration: 38
+objectives:
+  - Tell data drift from concept drift
+  - Log inputs, predictions, latency and cost
+  - Set an alert and a retraining trigger
+  - Add a test that fails the build when quality drops
+  - Define a rollback plan
+prerequisites:
+  - ml-engineer-serving-a-model-api
+  - ml-engineer-experiment-tracking-and-reproducibility
+datasets:
+  - app-events
+reviewed: 2026-11-25
+sources:
+  - title: 'Google for Developers: Rules of Machine Learning, Rules 8, 9 and 10 and the monitoring advice (accessed 2026-11-25)'
+    url: https://developers.google.com/machine-learning/guides/rules-of-ml
+  - title: 'MLflow documentation: Model Registry (accessed 2026-11-25)'
+    url: https://mlflow.org/docs/latest/ml/model-registry/
+status: draft
+---
+
+TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, FastAPI 0.165.0, MLflow 3.18.0, scikit-learn 1.9.1, pandas 3.0.5 and NumPy 2.5.3; every console block is pasted from a run in a clean clone at `mle-14-start`, and ids and times are from one run. No library is added. Invented: the concept change of unit 3 (from May 11, the outcomes of 7 in 10 people become a coin flip, seed 2026); the dataset has none, and the lesson says so. The lesson's own choices, not a source's: PSI alert 0.1 (ten times the largest quiet-week PSI, 0.010), AUC floor 0.60 (0.035 under the worst quiet week, 0.635), two weeks in a row, gate floor 0.68 (under the day-7 model's 0.690 and the lowest of twenty splits in lesson DS2, 0.684; over the 0.668 of a model that ignores week 1), and the machine price of $0.10 an hour (an assumption). The PSI formula is the usual definition, stated without a source; the thresholds other guides give were not opened. Seed check: over 20 other seeds of the invented change retraining was due on 2026-06-23 every time, and the three weekly AUCs ranged from 0.525 to 0.602 (median 0.565). The replay of 12,194 requests took about 84 seconds on a shared machine; the median latency of seven replays was 4.41 ms (4.09 to 4.57). Not run: a real deployment, a dashboard or alerting tool, Windows, macOS, Codespaces; the rollback of a container image (by running the earlier tag) was not run. Stub changes: duration 30 to 38 by the length rule.
+
+## The question
+
+The churn model has served the app since March 1, trained on the 5,622 people who signed up before then. In the week of April 13 the app got 952 new people, up from 737 the week before. *Is the model still right, how would we know, and what would we do about it?* Every request the service scored is a line in a log, and each person's real outcome arrives 30 days after signup. Four weeks of the log, in people:
+
+| week of | March 2 | April 6 | April 13 | April 20 |
+|---|---:|---:|---:|---:|
+| people | 745 | 737 | 952 | 1,063 |
+
+By the end you can log a service, read drift in its inputs and in its answers, write a retraining trigger and a rollback plan before you need them, and stop a worse model at the door.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Tracking experiments and making runs reproducible*](/ml-engineer/experiment-tracking-and-reproducibility/) (MLE3) a run's record held what went in, what came out and what it depended on. The request log does the same for each request the service answers.
+
+**Diverge.** A run happens once and is finished. A service answers for months, so you read a window of its log, and a request's outcome arrives weeks after its answer: unit 3 shows what that delay costs.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In *Serving a model behind an API* (MLE13), what status does `/predict` give for a valid request when no model file is loaded?
+
+   <details>
+   <summary>answer</summary>
+
+   503, "service unavailable": the body is valid, but the service has no model to answer with.
+
+   </details>
+
+2. In MLE3, name three things a run's record held that let you repeat the run.
+
+   <details>
+   <summary>answer</summary>
+
+   Any three of: the parameters and the seed, a fingerprint of the data file, the commit of the code, and a fingerprint of the lock file.
+
+   </details>
+
+## The big idea
+
+A served model keeps meeting new people: log what it sees, compare that with what it learned from, and decide in advance what each kind of change means.
+
+## Learn by doing
+
+About 38 minutes, 4 new ideas: a request log, data drift, concept drift with a retraining trigger, a quality gate and a rollback. This lesson works in the starter repository `ml-starter`, as MLE13 did (catch up with `git checkout mle-14-start`). The commands run in its folder, and the tracking store needs the champion of lesson MLE3 (see the first lines of MLE13 if it has none).
+
+Fetch the files of this lesson from the tag `mle-14-done` and commit them. `serve.py` and `test_serve.py` replace the ones of MLE13: the service now logs, and the tests write their log to a folder of their own.
+
+```bash
+git show mle-14-done:.gitignore > .gitignore
+git show mle-14-done:src/ml_starter/serve.py > src/ml_starter/serve.py
+git show mle-14-done:src/ml_starter/requestlog.py > src/ml_starter/requestlog.py
+git show mle-14-done:src/ml_starter/monitor.py > src/ml_starter/monitor.py
+git show mle-14-done:src/ml_starter/rollback.py > src/ml_starter/rollback.py
+git show mle-14-done:scripts/replay.py > scripts/replay.py
+git show mle-14-done:tests/test_serve.py > tests/test_serve.py
+git show mle-14-done:tests/test_monitor.py > tests/test_monitor.py
+git show mle-14-done:tests/test_quality_gate.py > tests/test_quality_gate.py
+mkdir -p docs
+git show mle-14-done:docs/rollback_plan.md > docs/rollback_plan.md
+uv run pytest -q -W ignore::DeprecationWarning
+git add -A
+git commit -m "MLE14: watch the service"
+```
+
+```console
+...........................                                              [100%]
+27 passed in 12.78s
+```
+
+### 1. Log what the service saw
+
+**Idea.** A request log has one line for each request: what came in, what went out, how long it took and what it cost. To judge an answer later you need to know which person it was for, so the caller sends an id in the header `x-request-id` and the log keeps it. The cost is compute only: the seconds the model worked, at an assumed price (`PRICE_PER_HOUR`, $0.10 an hour), not a quote.
+
+```python
+def log_request(request_id, inputs, chance, version, seconds):
+    """Append one line: the request's id, its ten inputs, the chance, the model version, the milliseconds and the dollars."""
+    row = {
+        "request_id": request_id,
+        **inputs,
+        "churn_chance": chance,
+        "model_version": version,
+        "latency_ms": round(seconds * 1000, 3),
+        "cost_usd": seconds * PRICE_PER_HOUR / 3600,
+    }
+```
+
+**Try it:** the given script replays the spring in this process, with no server to start. It trains the model as it was on March 1, then sends every person who signed up from March 2 to May 31 to the service, in signup order, with their `user_id` as the request id. Then look at the first line of the log, and summarize it.
+
+```bash
+uv run python scripts/replay.py
+head -n 1 logs/replay.jsonl
+uv run python -m ml_starter.monitor summary logs/replay.jsonl
+```
+
+**Predict:** The replay sends 12,194 requests. Will the median time to score one be microseconds, milliseconds or seconds, and will the compute cost of all of them be under a cent, a few cents or dollars?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/replay.py
+Trained on 5,622 people who signed up before 2026-03-02; sent 12,194 people to the service.
+$ head -n 1 logs/replay.jsonl
+{"request_id": "15663", "channel": "organic_search", "platform": "android", "region": "asia_pacific", "sessions_7d": 1, "expenses_7d": 2, "recent_3d": 3, "active_days_7d": 1, "onboarded": 0, "saw_paywall": 1, "bought_plus": 0, "churn_chance": 0.4963248137381517, "model_version": "replay", "latency_ms": 5.351, "cost_usd": 1.4863158334163825e-07}
+$ uv run python -m ml_starter.monitor summary logs/replay.jsonl
+12,194 requests, model version replay
+latency: median 4.25 ms, 95th percentile 8.58 ms
+compute: $0.001669 in all, $0.000137 for 1,000 requests (at $0.10 an hour, an assumption)
+```
+
+</details>
+
+*Why:* The median request took about 4 milliseconds (4.09 to 4.57 over seven replays here, on a shared machine), and the compute of all 12,194 came to a fraction of a cent. The log counts only the seconds the model worked. A machine that serves it costs its hourly price for every hour it runs: at the assumed $0.10 that is $73 for a month of 730 hours. For a model this small, the bill is the idle machine.
+
+### 2. Data drift: the inputs have changed
+
+**Idea.** *Data drift* is a change in the inputs a model sees, compared with the people it learned from. It needs no outcomes, so it can be seen the day it starts. The *population stability index* (PSI) measures it for one input: split the input into bins (each category, or ten bins cut at the deciles of the reference) and compare the share of people in each bin now with the reference:
+
+$$
+\text{PSI} = \sum_{\text{bins}} (\text{current share} - \text{reference share}) \times \ln\frac{\text{current share}}{\text{reference share}}
+$$
+
+It is 0 when the shares are equal and grows as they differ. The reference is the 5,622 people the model was trained on. `monitor` computes the PSI of all ten inputs for each week of signups and keeps the largest. The alert level, 0.1, is our choice: ten times the largest PSI of the six quiet weeks. The Rules of Machine Learning ask for actionable alerts, so the level is a number somebody picked for a reason.
+
+**Try it:** one line for each week of signups: the people, the input with the largest PSI and its PSI, the mean chance the model gave, the day the outcomes of that week are all known, and (the log is read after June 30) the real churn rate and the AUC.
+
+```bash
+uv run python -m ml_starter.monitor weekly logs/replay.jsonl
+```
+
+**Predict:** In which week will the alert first fire, and which input will it name? And in that week, will the model's AUC fall, hold or rise?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.monitor weekly logs/replay.jsonl
+      week  people   top_input   psi  mean_chance labels_ready  churn_rate   auc
+2026-03-02     745    platform 0.009        0.499   2026-04-07       0.506 0.653
+2026-03-09     669 expenses_7d 0.010        0.506   2026-04-14       0.504 0.656
+2026-03-16     691     channel 0.007        0.501   2026-04-21       0.463 0.667
+2026-03-23     701      region 0.009        0.502   2026-04-28       0.474 0.635
+2026-03-30     824     channel 0.009        0.515   2026-05-05       0.517 0.672
+2026-04-06     737   recent_3d 0.010        0.495   2026-05-12       0.518 0.673
+2026-04-13     952     channel 0.278        0.555   2026-05-19       0.562 0.690
+2026-04-20    1063     channel 0.530        0.583   2026-05-26       0.595 0.705
+2026-04-27    1247     channel 0.462        0.576   2026-06-02       0.601 0.714
+2026-05-04    1077     channel 0.540        0.589   2026-06-09       0.606 0.723
+2026-05-11    1145     channel 0.586        0.592   2026-06-16       0.623 0.727
+2026-05-18    1188     channel 0.525        0.588   2026-06-23       0.589 0.697
+2026-05-25    1155     channel 0.506        0.587   2026-06-30       0.615 0.732
+alert weeks: 2026-04-13, 2026-04-20, 2026-04-27, 2026-05-04, 2026-05-11, 2026-05-18, 2026-05-25
+retraining due: never
+```
+
+</details>
+
+*Why:* The six weeks from March 2 to April 6 have a largest PSI of 0.007 to 0.010, on different inputs: that is quiet. From the week of April 13 the alert fires every week, always on `channel`, at 0.278 and then 0.46 to 0.59: the dataset's README says a paid-social campaign ran from April 13 to June 7. The AUC did not fall. It rose from 0.635 to 0.673 in the quiet weeks to 0.690 to 0.732, and the mean chance rose from about 0.50 to 0.59 with the real churn rate, because the model already knew the channel `paid_social`. The inputs drifted; the quality did not.
+
+The weeks, with the PSI that raised the alert and the AUC that did not move:
+
+<figure>
+<svg viewBox="0 0 360 286" width="360" role="img" aria-labelledby="mle14-weekly-t mle14-weekly-d">
+<title id="mle14-weekly-t">The largest PSI and the AUC of each week of the replay, with the alert level and the AUC floor</title>
+<desc id="mle14-weekly-d">Two charts over the 13 weeks from March 2 to May 25. The first draws the largest PSI of each week as a bar: 0.007 to 0.010 for the six weeks to April 6, then 0.278 in the week of April 13 and 0.46 to 0.586 after, with a dashed line at the alert level 0.1. The second draws the AUC of each week as a line: 0.635 to 0.673 to April 6, then 0.690 to 0.732, with a dashed line at the floor 0.60. For the last three weeks a second line, from the invented outcomes of unit 3, falls to 0.583, 0.521 and 0.569, under the floor.</desc>
+<g fill="currentColor">
+<text x="15.8" y="22.4" font-size="10.5" font-weight="600">Inputs drifted; the quality did not</text>
+<text x="15.8" y="40.4" font-size="9.5" font-weight="600">largest PSI of the week</text>
+<path d="M47.8 108.4 L339.8 108.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="42.8" y="111.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.0</text>
+<path d="M47.8 88.4 L339.8 88.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="42.8" y="91.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.2</text>
+<path d="M47.8 68.4 L339.8 68.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="42.8" y="71.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.4</text>
+<path d="M47.8 48.4 L339.8 48.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="42.8" y="51.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.6</text>
+<rect x="52.1" y="107.5" width="14" height="0.9" fill="#0072b2" fill-opacity="0.85" />
+<rect x="74.5" y="107.4" width="14" height="1" fill="#0072b2" fill-opacity="0.85" />
+<rect x="97" y="107.7" width="14" height="0.7" fill="#0072b2" fill-opacity="0.85" />
+<rect x="119.4" y="107.5" width="14" height="0.9" fill="#0072b2" fill-opacity="0.85" />
+<rect x="141.9" y="107.5" width="14" height="0.9" fill="#0072b2" fill-opacity="0.85" />
+<rect x="164.4" y="107.4" width="14" height="1" fill="#0072b2" fill-opacity="0.85" />
+<rect x="186.8" y="80.6" width="14" height="27.8" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="209.3" y="55.4" width="14" height="53" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="231.8" y="62.2" width="14" height="46.2" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="254.2" y="54.4" width="14" height="54" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="276.7" y="49.8" width="14" height="58.6" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="299.1" y="55.9" width="14" height="52.5" fill="#9a6be0" fill-opacity="0.85" />
+<rect x="321.6" y="57.8" width="14" height="50.6" fill="#9a6be0" fill-opacity="0.85" />
+<path d="M47.8 98.4 L339.8 98.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="50.8" y="94.4" font-size="9" fill-opacity="0.9">alert 0.1</text>
+<text x="193.8" y="76.6" font-size="9" font-weight="600" text-anchor="middle">0.278</text>
+<text x="283.7" y="45.8" font-size="9" font-weight="600" text-anchor="middle">0.586</text>
+<text x="15.8" y="136.4" font-size="9.5" font-weight="600">AUC of the week</text>
+<path d="M47.8 224.4 L339.8 224.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="42.8" y="227.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.5</text>
+<path d="M47.8 192.4 L339.8 192.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="42.8" y="195.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.6</text>
+<path d="M47.8 160.4 L339.8 160.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.13" />
+<text x="42.8" y="163.9" font-size="9" text-anchor="end" fill-opacity="0.8">0.7</text>
+<path d="M47.8 192.4 L339.8 192.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.8" stroke-dasharray="4 3" />
+<text x="50.8" y="203.4" font-size="9" fill-opacity="0.9">floor 0.60</text>
+<path d="M59.1 175.4 L81.5 174.5 L104 171 L126.4 181.2 L148.9 169.4 L171.4 169 L193.8 163.6 L216.3 158.8 L238.8 155.9 L261.2 153 L283.7 151.8 L306.1 161.4 L328.6 150.2" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="126.4" cy="181.2" r="3.5" fill="#00a07a" />
+<text x="126.4" y="174.2" font-size="9" font-weight="600" text-anchor="middle">0.635</text>
+<circle cx="193.8" cy="163.6" r="3.5" fill="#00a07a" />
+<text x="193.8" y="156.6" font-size="9" font-weight="600" text-anchor="middle">0.690</text>
+<circle cx="328.6" cy="150.2" r="3.5" fill="#00a07a" />
+<text x="328.6" y="143.2" font-size="9" font-weight="600" text-anchor="middle">0.732</text>
+<path d="M261.2 153 L283.7 197.8 L306.1 217.7 L328.6 202.3" fill="none" stroke="#9a6be0" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="283.7" cy="197.8" r="3.5" fill="#9a6be0" />
+<circle cx="306.1" cy="217.7" r="3.5" fill="#9a6be0" />
+<circle cx="328.6" cy="202.3" r="3.5" fill="#9a6be0" />
+<text x="306.1" y="232.7" font-size="9" font-weight="600" text-anchor="middle">0.521</text>
+<text x="59.1" y="240.4" font-size="9" text-anchor="middle" fill-opacity="0.85">Mar 2</text>
+<text x="193.8" y="240.4" font-size="9" text-anchor="middle" fill-opacity="0.85">Apr 13</text>
+<text x="328.6" y="240.4" font-size="9" text-anchor="middle" fill-opacity="0.85">May 25</text>
+<text x="193.8" y="252.4" font-size="9" text-anchor="middle" fill-opacity="0.85">campaign starts</text>
+<rect x="15.8" y="264.4" width="14" height="3" fill="#00a07a" />
+<text x="34.8" y="269.4" font-size="9.5">real outcomes</text>
+<rect x="129.8" y="264.4" width="14" height="3" fill="#9a6be0" />
+<text x="148.8" y="269.4" font-size="9.5">invented outcomes (unit 3)</text>
+</g>
+</svg>
+</figure>
+
+### 3. Concept drift: the outcome has changed, and the label is late
+
+**Idea.** *Concept drift* is a change in the link between the inputs and the outcome: people who look the same now leave for other reasons. It is a change in the outcome, so the outcome is where you look for it, and the outcome of a person scored on day 7 is known on day 30, 23 days later. A week of signups can be judged only when its last person's 30 days are over: the `labels_ready` column. A *retraining trigger* is a rule written before it is needed; ours is two weeks in a row with an AUC under 0.60, a floor 0.035 under the worst quiet week (0.635), because one week of about 700 people is noisy. The alert says look, the trigger says act. Rule 10 of the Rules of Machine Learning is the reason for both: silent failures happen more in machine learning systems than in other systems.
+
+The data has no concept change, so the next run is made up: `--invented` replaces, from May 11, the outcome of 7 in 10 people by a coin flip, whatever they did in week 1 (seed 2026). The inputs are not touched.
+
+**Try it:** the same weekly report, with the invented outcomes. `tail` keeps the last six weeks and the two lines that list the alert weeks and the day retraining is due.
+
+```bash
+uv run python -m ml_starter.monitor weekly logs/replay.jsonl --invented | tail -n 8
+```
+
+**Predict:** The inputs are the same as in unit 2. From the week of May 11, what will the PSI column do and what will the AUC do? On which day will the trigger say retraining is due?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.monitor weekly logs/replay.jsonl --invented | tail -n 8
+2026-04-20    1063     channel 0.530        0.583   2026-05-26       0.595 0.705
+2026-04-27    1247     channel 0.462        0.576   2026-06-02       0.601 0.714
+2026-05-04    1077     channel 0.540        0.589   2026-06-09       0.606 0.723
+2026-05-11    1145     channel 0.586        0.592   2026-06-16       0.548 0.583
+2026-05-18    1188     channel 0.525        0.588   2026-06-23       0.518 0.521
+2026-05-25    1155     channel 0.506        0.587   2026-06-30       0.554 0.569
+alert weeks: 2026-04-13, 2026-04-20, 2026-04-27, 2026-05-04, 2026-05-11, 2026-05-18, 2026-05-25
+retraining due: 2026-06-23
+```
+
+</details>
+
+*Why:* The PSI column is the same as before, line for line: the inputs did not change, and PSI reads only the inputs. The AUC falls to 0.583, 0.521 and 0.569, under the floor three weeks running, and retraining is due on June 23: the day the labels of the second bad week (May 18 to 24) are all known, 43 days after the first of those people signed up on May 11. On the real replay the trigger says "never". Over 20 other seeds of the invented change the date was the same every time, and the three weekly AUCs ranged from 0.525 to 0.602 (median 0.565). The alert would have had you retrain from April 20 for nothing; the trigger waits for evidence, and the price is the weeks the labels take.
+
+### 4. A gate before release, and a way back after
+
+**Idea.** A *quality gate* is a test that fails the build when the held-out score drops. The Rules of Machine Learning say to check a model's performance on held-out data before exporting it, and that many teams check the AUC then. Ours trains what the commit's code builds and requires a held-out AUC of at least 0.68: under the day-7 model's 0.690 and the lowest of twenty splits in lesson DS2 (0.684), over the 0.668 of a model that ignores week 1. The split is fixed, and nothing is tuned against these people: the gate checks a release, it never chooses one.
+
+```python
+def test_the_model_this_code_trains_clears_the_floor():
+    X_train, X_test, y_train, y_test = split(load_table())
+    model = build_pipeline().fit(X_train, y_train)
+    auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    assert auc >= FLOOR, f"held-out AUC {auc:.3f} is below the floor {FLOOR}"
+```
+
+**Try it:** run the gate. Then make an edit that looks harmless, to speed the tests up: in `src/ml_starter/pipeline.py` change `max_iter=1000` to `max_iter=1`, and run all the tests (`-p no:warnings` and `--show-capture=no` hide pytest's warning summary and the printout of the tests; `echo` shows the exit status). Undo it with `git checkout src/ml_starter/pipeline.py`.
+
+```bash
+uv run pytest -q -p no:warnings tests/test_quality_gate.py
+uv run pytest -q --tb=short --show-capture=no -p no:warnings; echo "exit status $?"
+```
+
+**Predict:** After the edit, how many of the 27 tests fail, and which?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q -p no:warnings tests/test_quality_gate.py
+.                                                                        [100%]
+1 passed in 1.33s
+$ uv run pytest -q --tb=short --show-capture=no -p no:warnings; echo "exit status $?"
+.............F.............                                              [100%]
+=================================== FAILURES ===================================
+_______________ test_the_model_this_code_trains_clears_the_floor _______________
+tests/test_quality_gate.py:20: in test_the_model_this_code_trains_clears_the_floor
+    assert auc >= FLOOR, f"held-out AUC {auc:.3f} is below the floor {FLOOR}"
+E   AssertionError: held-out AUC 0.662 is below the floor 0.68
+E   assert 0.6618904347331285 >= 0.68
+=========================== short test summary info ============================
+FAILED tests/test_quality_gate.py::test_the_model_this_code_trains_clears_the_floor
+1 failed, 26 passed in 7.38s
+exit status 1
+```
+
+</details>
+
+*Why:* One test fails, the gate: the held-out AUC is 0.662, under the floor. The other 26 pass, because they check shapes, statuses and a repeated score, not quality. Without `-p no:warnings` the same run ends `1 failed, 26 passed, 23 warnings`: scikit-learn had warned that the solver did not converge, in a summary nobody reads.
+
+A gate cannot catch everything, so write the way back before you need it. `docs/rollback_plan.md` says when, who, how, what to check and what to write down:
+
+```markdown
+# Rollback plan: the churn service
+
+**When.** `/health` is not 200 for five minutes after a release, or the new version's held-out AUC is under 0.68, or it answers
+worse than the version before it on labeled people. A drift alert alone is a reason to look.
+
+**Who.** The engineer on call decides.
+
+**How.** `uv run python -m ml_starter.rollback back`, then restart the service (or run the image built from the earlier file).
+
+**Check.** `/health` names the earlier version, and `scripts/person.json` gets the chance that version gave before.
+
+**Afterwards.** Write down which version failed, which check should have caught it, and how many requests it scored.
+```
+
+The *how* is one command. It moves the registry's `champion` alias, a name that can move, to the version before the current one, and writes that version's file. Try it on a bad release made on purpose: train with `C` of 0.00001, promote that run, and ask for the person of `scripts/person.json`; then roll back and ask again. Restart the service after each change (it loads its file at startup) before the `curl` lines.
+
+```bash
+uv run python -m ml_starter.train --C 0.00001
+uv run python -m ml_starter.rollback list
+uv run python -m ml_starter.rollback promote "C=1e-05 seed=2026"
+curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+uv run python -m ml_starter.rollback back
+curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+curl -s -w "\nstatus %{http_code}\n" localhost:8000/health
+```
+
+```console
+$ uv run python -m ml_starter.train --C 0.00001
+C=1e-05 seed=2026: cv_auc_mean 0.667244
+$ uv run python -m ml_starter.rollback list
+version 1  C=0.1 seed=2026  cv_auc_mean 0.692  champion
+$ uv run python -m ml_starter.rollback promote "C=1e-05 seed=2026"
+Registered model 'churn' already exists. Creating a new version of this model...
+Created version '2' of model 'churn'.
+Champion is now version 2 (C=1e-05 seed=2026); model/churn.skops written.
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+{"churn_chance":0.5165530684172346,"model_version":"2"}
+status 200
+$ uv run python -m ml_starter.rollback back
+Rolled back from version 2 to version 1 (C=0.1 seed=2026); model/churn.skops written.
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+{"churn_chance":0.3222071663153564,"model_version":"1"}
+status 200
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8000/health
+{"status":"ok","model_version":"1"}
+status 200
+$ uv run python -m ml_starter.rollback list
+version 1  C=0.1 seed=2026  cv_auc_mean 0.692  champion
+version 2  C=1e-05 seed=2026  cv_auc_mean 0.667
+```
+
+The bad version answered 0.517 for the person that version 1 gives 0.322, and named itself (`model_version` 2). After `back` the service says version 1 and gives 0.3222071663153564, the same as before the release, to the last digit.
+
+<Aside type="tip" title="Remember">
+
+- A request log holds the request's id, its inputs, the chance, the model version, the milliseconds and the dollars.
+- PSI compares the shares of the people in each bin now and in the reference. The reference is what the model learned from.
+- Drift in the inputs needs no outcomes and says look; quality needs outcomes, which arrive late.
+- A retraining trigger is a rule with a number and a count of weeks, written before it is needed.
+- A gate is a test that fails the build when the held-out score drops, and a rollback plan is written and tried before the incident.
+
+**Common trap:** retraining whenever an input drifts. In the replay the alert fired for seven weeks while the quality rose.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-monitoring-drift-and-retraining-1">
+
+**Rank the inputs in one week.** Save the file below as `exercises/mle14_ex1.py`. It reads the replay log, keeps the people who signed up in the week of April 13, and computes the PSI of each of the ten inputs against the reference with `feature_psi`. Finish it: print the input with the second-largest PSI and its PSI, rounded to 3 decimals. Expected: it prints a list of an input name and a number.
+
+```python
+import pandas as pd
+
+from ml_starter.data import load_table
+from ml_starter.monitor import REPLAY_START, feature_psi
+from ml_starter.requestlog import read_log
+
+table = load_table()  # given
+reference = table[table["signup_date"] < REPLAY_START]  # given: the people the replay model was trained on
+log = read_log("logs/replay.jsonl").assign(request_id=lambda frame: frame["request_id"].astype("int64"))  # given
+week = log.merge(table[["user_id", "signup_date"]], left_on="request_id", right_on="user_id")  # given: the requests with their signup dates
+week = week[(week["signup_date"] >= "2026-04-13") & (week["signup_date"] < "2026-04-20")]  # given: the week of April 13
+by_input = feature_psi(reference, week)  # given: the PSI of each of the ten inputs, as a dictionary
+second = None  # replace None: the name of the input with the second-largest PSI
+answer_1 = [second, round(by_input[second], 3)]
+print(answer_1)
+```
+
+<details>
+<summary>Hint</summary>
+
+`sorted(by_input, key=by_input.get, reverse=True)` lists the names from the largest PSI down.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+order = sorted(by_input, key=by_input.get, reverse=True)
+second = order[...]
+```
+
+</details>
+
+<Solution>
+
+The lines above `second` are as given.
+
+```python
+second = sorted(by_input, key=by_input.get, reverse=True)[1]
+answer_1 = [second, round(by_input[second], 3)]
+print(answer_1)
+```
+
+```console
+$ uv run python exercises/mle14_ex1.py
+['platform', 0.028]
+```
+
+After `channel`, the next input is `platform`, at 0.028, a tenth of the channel's 0.278 and well under the alert level. The campaign changed one input a lot and the others a little.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-monitoring-drift-and-retraining-2">
+
+**Move the floor.** Before you start, say in one sentence what you expect if the AUC floor of the trigger is set higher than the quiet weeks allow: for the real replay, with no invented change, does retraining become due, and if so, when? Save a file as `exercises/mle14_ex2.py`. Build the weekly report of the real outcomes (the arguments are those of `monitor.main`), set `monitor.AUC_FLOOR = 0.67`, and print the day retraining becomes due as text (`str(...)`). Expected: it prints a date or `None`.
+
+<details>
+<summary>Hint</summary>
+
+`retrain_due` reads the module's `AUC_FLOOR` when it is called, so `from ml_starter import monitor` and assigning `monitor.AUC_FLOOR` changes it. The weekly report is `monitor.weekly_report(log, table, reference)`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A date in April: two quiet weeks in a row sit under 0.67."*
+
+```python
+weekly = monitor.weekly_report(read_log("logs/replay.jsonl"), table, reference)
+monitor.AUC_FLOOR = 0.67
+answer_2 = str(monitor.retrain_due(...))
+```
+
+</details>
+
+<Solution>
+
+```python
+from ml_starter import monitor
+from ml_starter.data import load_table
+from ml_starter.requestlog import read_log
+
+table = load_table()
+reference = table[table["signup_date"] < monitor.REPLAY_START]
+weekly = monitor.weekly_report(read_log("logs/replay.jsonl"), table, reference)
+monitor.AUC_FLOOR = 0.67
+answer_2 = str(monitor.retrain_due(weekly))
+print(answer_2)
+```
+
+```console
+$ uv run python exercises/mle14_ex2.py
+2026-04-14
+```
+
+Retraining becomes due on April 14, the day the labels of the second week of March are known: the weeks of March 2 and March 9 scored 0.653 and 0.656, both under 0.67, in a stretch where nothing changed. A floor above what quiet weeks score raises a false alarm.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name two things the log of a service must hold so that its quality can be checked weeks later.
+
+   <details>
+   <summary>answer</summary>
+
+   An id that joins each request to the outcome that arrives later, and the chance the model gave. The inputs (to measure drift) and the model version (to know which model answered) are the other two.
+
+   </details>
+
+<Exercise id="ml-engineer-monitoring-drift-and-retraining-3">
+
+**Spot the flaw.** A colleague builds the drift monitor with a reference of "all the people we have". Save the file below as `exercises/mle14_ex3.py` and run it. It prints the first week that raises the alert, which should be a week when something changed. Change the reference so that it prints the right week. Expected: it prints a date.
+
+```python
+from ml_starter import monitor
+from ml_starter.data import load_table
+from ml_starter.requestlog import read_log
+
+table = load_table()  # given
+reference = table  # colleague: "the reference is all the people we have"
+weekly = monitor.weekly_report(read_log("logs/replay.jsonl"), table, reference)  # given
+answer_3 = str(monitor.alert_weeks(weekly)[0])  # given: the first week that raises the alert
+print(answer_3)  # prints 2026-03-02, a week of the replay when nothing changed
+```
+
+<details>
+<summary>Hint</summary>
+
+Look at what the reference holds: which weeks' people are in it, and which of them is the monitor comparing?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+reference = table[table["signup_date"] < ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+from ml_starter import monitor
+from ml_starter.data import load_table
+from ml_starter.requestlog import read_log
+
+table = load_table()
+reference = table[table["signup_date"] < monitor.REPLAY_START]
+weekly = monitor.weekly_report(read_log("logs/replay.jsonl"), table, reference)
+answer_3 = str(monitor.alert_weeks(weekly)[0])
+print(answer_3)
+```
+
+```console
+$ uv run python exercises/mle14_ex3.py
+2026-04-13
+```
+
+The flawed monitor printed `2026-03-02`, a quiet week. Its reference held the campaign weeks too, so it alerted on five of the six quiet weeks (largest PSI 0.107 to 0.166) and stayed quiet on April 13, the week the change began (0.033). The right reference is what the model learned from: the people before March 2. The first alert is then April 13.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can log what a served model sees, read drift in its inputs with PSI, check quality when the labels arrive, write a retraining trigger and a rollback plan with numbers, and add a gate that fails the build when the held-out score drops.*
+Test: Exercise ml-engineer-monitoring-drift-and-retraining-2, done in the repository without opening the hints.
+
+The pattern to remember: **log what the model sees, alert on inputs, trigger on outcomes, gate before release and roll back after.** The next lesson, *Simulation: build and evaluate in a time box* (MLE15), puts these pieces on a new question and a clock.

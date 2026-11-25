@@ -27,7 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STARTER = HERE.parent / "ml-starter"
-LESSONS = [2, 3]  # the lessons of the track that have a checkpoint folder, in order; add each new one here
+LESSONS = [2, 3, 13, 14, 15, 16]  # the lessons of the track that have a checkpoint folder, in order; add each new one here
 AUTHOR = ("johnha912", "johnha912@users.noreply.github.com")
 DATE = "2026-11-25T12:00:00+0000"
 # The commits whose files never change again, by lesson (the starter commit is key 0): add a lesson's hash once it is pushed.
