@@ -136,7 +136,7 @@ describe('Cheatsheet anchors and lesson footer links (D44)', () => {
 		test(`${stage}: every card anchor is unique, lowercase lesson code, and not a part id`, () => {
 			const ids = [...anchors.values()];
 			assert.equal(new Set(ids).size, ids.length);
-			for (const id of ids) assert.match(id, new RegExp(`^${prefix[stage]}\\d+(\\.\\d+|b)?$`));
+			for (const id of ids) assert.match(id, new RegExp(`^${prefix[stage]}\\d+(\\.\\d+|[a-j])?$`));
 			for (const id of ids) assert.ok(!partIds.includes(id), id);
 		});
 		test(`${stage}: the first card of a lesson carries its anchor (every cited lesson has one)`, () => {

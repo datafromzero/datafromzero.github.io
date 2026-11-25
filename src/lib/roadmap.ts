@@ -65,19 +65,33 @@ export function deepDiveLabel(stage: string): string | undefined {
 	return d && `${d.title}. ${d.note}`;
 }
 
-/** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8`; `undefined` for an unknown stage. */
 /**
- * Lessons whose "b" lesson (the half order after them) makes them read as "a", by stage and order
- * (owner, 2026-11-25: DA8 reads DA8a beside DA8b). Other split pairs keep the plain code for now.
+ * Lessons split into parts, by stage: each group lists the orders of the parts, first part first. All parts of a
+ * group sit in one band of ten (80 and 85; three parts would be 80, 83 and 86) and read as that number plus a
+ * letter: DA8a, DA8b, and DA8c, DA8d ... for more parts (owner decision, 2026-11-25). `tests/roadmap.test.ts`
+ * checks that this list matches the lessons in `src/content/docs`.
  */
-export const SPLIT_A: Record<string, readonly number[]> = { 'data-analyst': [80] };
+export const SPLITS: Record<string, readonly (readonly number[])[]> = {
+	python: [[220, 225]],
+	'data-analyst': [[80, 85]],
+	'data-engineer': [
+		[60, 65],
+		[110, 115],
+		[250, 255],
+	],
+};
 
+/** The code of a lesson, e.g. `lessonCode('excel', 80)` is `E8` and `lessonCode('data-analyst', 85)` is `DA8b`; `undefined` for an unknown stage. */
 export function lessonCode(stage: string, order: number): string | undefined {
 	const def = ROADMAP_STAGES.find((s) => s.id === stage);
 	if (!def) return undefined;
+	for (const group of SPLITS[stage] ?? []) {
+		const i = group.indexOf(order);
+		if (i >= 0) return `${def.code}${Math.floor(group[0] / 10)}${'abcdefghij'[i]}`;
+	}
 	const n = order / 10;
-	if (Number.isInteger(n)) return `${def.code}${n}${SPLIT_A[stage]?.includes(order) ? 'a' : ''}`;
-	// A lesson split off its neighbor at the half order (65 after 60) reads as that lesson's "b" (owner, 2026-11-25).
+	if (Number.isInteger(n)) return `${def.code}${n}`;
+	// A half order not yet listed in SPLITS still reads as "b" (65 after 60).
 	if (Number.isInteger(n - 0.5)) return `${def.code}${n - 0.5}b`;
 	return `${def.code}${Number(n.toFixed(2))}`;
 }
