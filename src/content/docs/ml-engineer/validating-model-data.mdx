@@ -1,0 +1,607 @@
+---
+id: ml-engineer-validating-model-data
+title: Validating training and serving data
+description: Reject bad rows with pandera and pydantic schemas in a dirty-data clinic, before they reach training or serving.
+stage: ml-engineer
+order: 20
+level: intermediate
+duration: 32
+objectives:
+  - Write a pandera schema for a training table and read its failure report
+  - Write a pydantic model that rejects a bad request at serving time
+  - Decide what to reject, what to quarantine and what to repair
+  - Keep one schema as the contract between training and serving
+prerequisites:
+  - ml-engineer-sklearn-pipelines-and-column-transformers
+  - core-data-leakage
+datasets:
+  - app-events
+reviewed: 2026-11-23
+sources:
+  - title: 'pandera documentation: Lazy validation (accessed 2026-11-25)'
+    url: https://pandera.readthedocs.io/en/stable/lazy_validation.html
+  - title: 'pandera documentation: DataFrame schemas (accessed 2026-11-25)'
+    url: https://pandera.readthedocs.io/en/stable/dataframe_schemas.html
+  - title: 'Pydantic documentation: Models, extra data (accessed 2026-11-25)'
+    url: https://docs.pydantic.dev/latest/concepts/models/
+  - title: 'Pydantic documentation: Strict mode (accessed 2026-11-25)'
+    url: https://docs.pydantic.dev/latest/concepts/strict_mode/
+  - title: 'Pydantic documentation: Validators (accessed 2026-11-25)'
+    url: https://docs.pydantic.dev/latest/concepts/validators/
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: the starter repository `ml-starter`, because the schema is a module that training and serving both import, with tests; you create the repository from `starters/ml-starter/` and push the tags `mle-02-start` and `mle-02-done` (`starters/README.md`). The Python floor of the starter is 3.12 (NumPy 2.5.3), not 3.11 as in the DE starter. Stub changes: five sources replace the two home pages; the duration is raised from 30 to 32 minutes by the word limit; the lesson adds the repair rule to the third objective. The faults of the dirty file are invented for the lesson (`scripts/make_dirty.py`, seed 2026). Run on Linux with Python 3.13.18, uv 0.11.32, pandera 0.36.0, pydantic 2.14.4, pandas 3.0.5 and scikit-learn 1.9.1; not run on Windows, macOS or in a codespace. Set `reviewed` when you publish.
+
+## The question
+
+The pipeline of lesson MLE1 scored a region it had never seen without a word. Data will not always arrive clean: a system upstream slips, a field does not arrive, a channel appears that nobody told the model about. *What do we check before training and before scoring, and what do we do with what fails?* Four rows of a table that went wrong, made for this lesson:
+
+| user_id | channel | platform | region | sessions_7d | active_days_7d | onboarded |
+|---:|---|---|---|---:|---:|---:|
+| 10990 | app_store | ios | north_america | -1 | 1 | 1 |
+| 11142 | tiktok | web | europe | 0 | 1 | 1 |
+| 11829 | organic_search |  | north_america | 0 | 1 | 1 |
+| 11043 | app_store | android | north_america | 1 | 1 | 2 |
+
+By the end you can write a schema for a table and a model for a request, say what to refuse, set aside or repair, and keep one contract for both sides.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Data leakage*](/core/data-leakage/) (C20) you asked of every column whether it was known at the prediction moment. A schema asks the same kind of question of every value: is it allowed to be here?
+
+**Diverge.** C20 judged columns once, by reading. A schema is code that runs on every batch and every request, so the judging does not depend on someone looking.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE1, what did the pipeline do with a region it had never seen, and what with a missing number?
+
+   <details>
+   <summary>answer</summary>
+
+   It scored the region with none of the four region columns lit, and gave no warning. The missing number raised a `ValueError`.
+
+   </details>
+
+2. Name one rule that every count column of the churn table must follow, and one that a 0 or 1 flag must follow.
+
+   <details>
+   <summary>answer</summary>
+
+   A count cannot be negative. A flag can only be 0 or 1.
+
+   </details>
+
+## The big idea
+
+Write down what a good row looks like once, in code, and let both the training job and the service refuse what does not fit.
+
+## Learn by doing
+
+About 32 minutes, 4 new ideas: a schema for a table, a model for a request, three answers to a bad row, one contract for both. This lesson works in the starter repository `ml-starter` (first clone: `git clone https://github.com/datafromzero/ml-starter.git`; catch up with `git checkout mle-02-start`). The commands run in its folder, in a terminal.
+
+Add the two libraries, fetch the files of this lesson from the tag `mle-02-done`, and make the clinic file, a copy of the churn table with faults put in by a script (seed 2026):
+
+```bash
+uv add pandera==0.36.0 pydantic==2.14.4
+git show mle-02-done:src/ml_starter/contract.py > src/ml_starter/contract.py
+git show mle-02-done:src/ml_starter/validate.py > src/ml_starter/validate.py
+git show mle-02-done:scripts/make_dirty.py > scripts/make_dirty.py
+git show mle-02-done:scripts/try_requests.py > scripts/try_requests.py
+git show mle-02-done:tests/test_contract.py > tests/test_contract.py
+git show mle-02-done:tests/test_validate.py > tests/test_validate.py
+uv run python scripts/make_dirty.py
+```
+
+```console
+Wrote dirty_table.csv: 17,828 rows.
+```
+
+### 1. A schema for the table
+
+**Idea.** A pandera `DataFrameSchema` lists, for each column, the type it must have and the checks it must pass; `validate` runs them against a table. The `lazy` argument of `validate` decides what happens at the first failure. Read the schema below against the real table before you trust it: `active_days_7d` goes up to 8, not 7, because a seven-day window that starts at a time of day touches eight calendar dates.
+
+```python
+# The values the model learned. They are listed once, and both the schema and the request model read these lists.
+CHANNELS = ["app_store", "organic_search", "paid_search", "paid_social", "referral"]
+PLATFORMS = ["android", "ios", "web"]
+REGIONS = ["asia_pacific", "europe", "latin_america", "north_america"]
+
+table_schema = pa.DataFrameSchema(
+    {
+        "user_id": pa.Column(int, unique=True),
+        "channel": pa.Column(str, pa.Check.isin(CHANNELS)),
+        "platform": pa.Column(str, pa.Check.isin(PLATFORMS)),
+        "region": pa.Column(str, pa.Check.isin(REGIONS)),
+        "sessions_7d": pa.Column(int, pa.Check.ge(0)),
+        "expenses_7d": pa.Column(int, pa.Check.ge(0)),
+        "recent_3d": pa.Column(int, pa.Check.ge(0)),
+        "active_days_7d": pa.Column(int, pa.Check.in_range(0, 8)),
+        "onboarded": pa.Column(int, pa.Check.isin([0, 1])),
+        "saw_paywall": pa.Column(int, pa.Check.isin([0, 1])),
+        "bought_plus": pa.Column(int, pa.Check.isin([0, 1])),
+        "churned": pa.Column(int, pa.Check.isin([0, 1])),
+    },
+)
+```
+
+**Try it:** validate the clinic file and print what validation says without `lazy=True`, then with it.
+
+```bash
+uv run python -m ml_starter.validate report data/dirty_table.csv
+```
+
+**Predict:** The report prints what validation says without `lazy=True`, then what it says with it, counted by column and check. How many different failed checks will each part show?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.validate report data/dirty_table.csv
+Without lazy=True: series 'user_id' contains duplicate values:
+     column                    check  cases
+    channel                     isin     45
+  onboarded                     isin     15
+   platform             not_nullable     30
+sessions_7d greater_than_or_equal_to     40
+    user_id         field_uniqueness     24
+154 failure cases in 144 different rows.
+```
+
+</details>
+
+*Why:* Without `lazy=True` pandera stops at the first failed check (the first column of the schema, `user_id`) and says nothing of the rest. With it, the pandera page says you "see all of the errors raised during the validate call": five checks failed, 154 cases in 144 rows (ten rows broke two checks). The `isin` of `channel` counts 45 cases, more than the unknown channel alone would explain.
+
+### 2. A model for one request
+
+**Idea.** A pydantic model is a class of typed fields; building one from a dictionary validates it and raises a `ValidationError` that lists each field that failed. A field can carry constraints: `Literal[...]` names the allowed values and `Field(ge=0)` a lower bound. The lists are the ones the schema uses.
+
+```python
+class ChurnRequest(BaseModel):
+    """One request to score: the ten columns the model reads, and nothing else."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    channel: Literal[*CHANNELS]
+    platform: Literal[*PLATFORMS]
+    region: Literal[*REGIONS]
+    sessions_7d: int = Field(ge=0)
+    expenses_7d: int = Field(ge=0)
+    recent_3d: int = Field(ge=0)
+    active_days_7d: int = Field(ge=0, le=8)
+    onboarded: int = Field(ge=0, le=1)
+    saw_paywall: int = Field(ge=0, le=1)
+    bought_plus: int = Field(ge=0, le=1)
+```
+
+**Try it:** send four requests, each a real person with one value changed.
+
+```bash
+uv run python scripts/try_requests.py
+```
+
+**Predict:** The four requests change `sessions_7d` to the text `"3"`, `region` to a region never seen, `sessions_7d` to 2.7, and `sessions_7d` to -1. Which will be accepted, and which refused?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/try_requests.py
+a number as text: accepted, sessions_7d is 3
+a region never seen: refused, Input should be 'asia_pacific', 'europe', 'latin_america' or 'north_america'
+a number with a fraction: refused, Input should be a valid integer, got a number with a fractional part
+a negative number: refused, Input should be greater than or equal to 0
+```
+
+</details>
+
+*Why:* The text `"3"` was accepted and became the number 3. The pydantic strict-mode page says that by default it will "attempt to coerce values to the desired type when possible", and gives the string `'123'` as an int field's input as its example. The other three were refused with a message for the field. A service that must not take a number as text turns strict mode on (the page shows the options), and says so in its contract.
+
+### 3. Refuse, set aside or repair
+
+**Idea.** A bad row has three possible answers. *Repair* it by a rule written down and counted. *Quarantine* it: set it aside in a file with its reasons, and train on the rest. *Reject* the batch when the fault is in the whole table (a wrong type, a missing column) or too many rows fail. `triage` below repairs first, with one rule, then checks, then quarantines what still fails.
+
+```python
+def repair(table):
+    """The one repair rule we trust: text columns in lower case with no spaces at the ends. Returns the table and how many rows it changed."""
+    fixed = table.copy()
+    changed = pd.Series(False, index=table.index)
+    for column in TEXT_COLUMNS:
+        cleaned = table[column].str.strip().str.lower()
+        changed |= cleaned.notna() & (cleaned != table[column])
+        fixed[column] = cleaned
+    return fixed, int(changed.sum())
+```
+
+```python
+def triage(table, max_share=MAX_SHARE):
+    """Repair, then quarantine the rows that still fail; raise BatchRejected when the batch itself is wrong."""
+    fixed, repaired = repair(table)
+    cases = failure_cases(fixed)
+    if cases["index"].isna().any():
+        raise BatchRejected("a check failed on a whole column, not on rows")
+    bad = sorted(cases["index"].astype(int).unique())
+    if len(bad) / len(table) > max_share:
+        raise BatchRejected(f"{len(bad):,} of {len(table):,} rows fail, more than {max_share:.0%}")
+    return Triage(fixed.drop(index=bad), fixed.loc[bad], repaired, cases)
+```
+
+**Try it:** triage the clinic file.
+
+```bash
+uv run python -m ml_starter.validate triage data/dirty_table.csv
+```
+
+**Predict:** The report of unit 1 counts 154 failure cases in 144 different rows. Will the quarantine hold fewer than 144 rows, exactly 144, or more?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.validate triage data/dirty_table.csv
+17,704 rows kept, 20 repaired by the rule, 124 quarantined.
+```
+
+</details>
+
+*Why:* The quarantine holds 124 rows, fewer than 144, because the rule repaired the 20 rows whose channel was typed with capitals and a space, and those rows then passed. The 124 and the 17,704 kept add up to the 17,828 rows of the file. A rule that changes rows is counted, and the count is part of the report: 20 repairs out of 17,828 rows is a number someone can read, and a rule that quietly changed a third of the file would show up in it. The rows with a duplicate id went to the quarantine in pairs, so the person's first copy left with the retry.
+
+### 4. One contract for both sides
+
+**Idea.** The allowed values of `channel`, `platform` and `region` are what the pipeline learned in training, and they are listed once, in `contract.py`; the schema and the request model both read those lists. What can drift apart is the list and the model. A test can hold them together: it fits the pipeline and compares what its encoder learned with the lists.
+
+```python
+def test_schema_and_request_model_read_the_same_lists():
+    allowed = {"channel": CHANNELS, "platform": PLATFORMS, "region": REGIONS}
+    for column, values in allowed.items():
+        assert list(get_args(ChurnRequest.model_fields[column].annotation)) == values
+
+
+def test_the_lists_are_what_the_model_learned():
+    X_train, X_test, y_train, y_test = split(load_table())
+    learned = build_pipeline().fit(X_train, y_train)["prep"].named_transformers_["cat"].categories_
+    assert [list(values) for values in learned] == [CHANNELS, PLATFORMS, REGIONS]
+```
+
+**Try it:** commit, then add a new channel to the list and run the tests. Open `src/ml_starter/contract.py` and change the `CHANNELS` line so that it ends with `"referral", "tiktok"]`.
+
+```bash
+git add -A
+git commit -m "MLE2: the contract"
+uv run pytest -q --tb=short
+```
+
+**Predict:** After you add `"tiktok"` to `CHANNELS`, which of the tests of `tests/test_contract.py` will fail?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run pytest -q --tb=short
+....F.......                                                             [100%]
+=================================== FAILURES ===================================
+__________________ test_the_lists_are_what_the_model_learned ___________________
+tests/test_contract.py:38: in test_the_lists_are_what_the_model_learned
+    assert [list(values) for values in learned] == [CHANNELS, PLATFORMS, REGIONS]
+E   AssertionError: assert [['app_store'...rth_america']] == [['app_store'...rth_america']]
+E     
+E     At index 0 diff: ['app_store', 'organic_search', 'paid_search', 'paid_social', 'referral'] != ['app_store', 'organic_search', 'paid_search', 'paid_social', 'referral', 'tiktok']
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_contract.py::test_the_lists_are_what_the_model_learned - As...
+1 failed, 11 passed in 3.48s
+```
+
+</details>
+
+*Why:* One test failed, the one that compares the lists with the fitted encoder, because the model has never seen TikTok. The schema and the request model took the new channel at once, since both read the list, and the other tests passed. A new allowed value is a change to the model: it needs a retrained pipeline and a new test run, and the failing test says so before a service does. Undo the edit with `git checkout src/ml_starter/contract.py`.
+
+<Aside type="tip" title="Remember">
+
+- A schema is code that runs on every batch: types, ranges, allowed values and uniqueness, written once.
+- `lazy=True` reports every failed check; without it validation stops at the first.
+- pydantic converts when it can: say whether the service takes `"3"` for 3.
+- Repair by a written, counted rule; quarantine the rest with its reasons; reject the batch when a whole column or too many rows fail.
+- The allowed values are what the model learned: keep one list, and a test that compares it with the fitted pipeline.
+
+**Common trap:** a table that passes every check it has been given. The checks are the ones someone wrote.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-validating-model-data-1">
+
+**A rule across two columns.** The events of the last three days are among the events of the week, so `recent_3d` cannot be more than `sessions_7d + expenses_7d`. Save the file below as `exercises/mle02_ex1.py`, build a schema from the columns of `table_schema` plus the given rule, validate the rows that passed the triage, and count the rows that break the rule. Expected: it prints one whole number.
+
+```python
+import pandera.pandas as pa
+
+from ml_starter.contract import table_schema
+from ml_starter.data import load_table
+from ml_starter.validate import triage
+
+clean = triage(load_table("data/dirty_table.csv")).clean  # given: the rows that passed the triage
+rule = pa.Check(lambda table: table["recent_3d"] <= table["sessions_7d"] + table["expenses_7d"], name="recent_within_week")  # given
+# build a schema from table_schema.columns plus the rule, validate `clean` lazily, and count the rows that break the rule
+answer_1 = None  # replace None with the number of rows
+print(answer_1)
+```
+
+<details>
+<summary>Hint</summary>
+
+`pa.DataFrameSchema(table_schema.columns, checks=[rule])` makes the new schema. With `lazy=True`, a failure raises `SchemaErrors`, and `errors.failure_cases` has an `index` column with the position of each failing row.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+with_rule = pa.DataFrameSchema(table_schema.columns, checks=[rule])
+try:
+    with_rule.validate(clean, lazy=True)
+    answer_1 = 0
+except pa.errors.SchemaErrors as errors:
+    answer_1 = ...
+```
+
+</details>
+
+<Solution>
+
+```python
+import pandera.pandas as pa
+
+from ml_starter.contract import table_schema
+from ml_starter.data import load_table
+from ml_starter.validate import triage
+
+clean = triage(load_table("data/dirty_table.csv")).clean
+rule = pa.Check(lambda table: table["recent_3d"] <= table["sessions_7d"] + table["expenses_7d"], name="recent_within_week")
+with_rule = pa.DataFrameSchema(table_schema.columns, checks=[rule])
+try:
+    with_rule.validate(clean, lazy=True)
+    answer_1 = 0
+except pa.errors.SchemaErrors as errors:
+    answer_1 = int(errors.failure_cases["index"].nunique())
+print(answer_1)
+```
+
+```console
+$ uv run python exercises/mle02_ex1.py
+20
+```
+
+The 20 rows break the rule. They passed the triage because no check of the schema looked at two columns together: the schema checks what it was given.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-validating-model-data-2">
+
+**A rule across two fields of a request.** A person who was active on 3 days has at least 3 events, so a request with more active days than `sessions_7d + expenses_7d` cannot be true. Before you start, say in one sentence which of the three requests of the file below you expect `StrictRequest` to refuse. Save it as `exercises/mle02_ex2.py` and write the class and the answer below the given lines. Expected: `answer_2` is a list of three booleans.
+
+```python
+from ml_starter.config import FEATURES
+from ml_starter.contract import ChurnRequest
+from ml_starter.data import load_table
+
+valid = load_table().iloc[0][FEATURES].to_dict()  # given: a real person, as a dictionary
+requests = [  # given: three requests
+    valid,
+    {**valid, "sessions_7d": 1, "expenses_7d": 1, "active_days_7d": 3},
+    {**valid, "sessions_7d": 1, "expenses_7d": 2, "active_days_7d": 3},
+]
+# write StrictRequest, a subclass of ChurnRequest that also refuses a request with more active days than events
+# then put in answer_2 a list that says, for each request, whether StrictRequest accepts it (True or False), and print it
+```
+
+<details>
+<summary>Hint</summary>
+
+pydantic runs a function decorated with `@model_validator(mode="after")` once all the fields have passed their own checks; it receives `self` and raises `ValueError` to refuse, or returns `self`. Build each request with `StrictRequest(**request)` inside `try` and catch `ValidationError`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A list of three booleans: the first request is a real person, and the third has exactly as many active days as events."*
+
+```python
+class StrictRequest(ChurnRequest):
+    @model_validator(mode="after")
+    def active_days_need_events(self):
+        if self.active_days_7d ... self.sessions_7d + self.expenses_7d:
+            raise ValueError("more active days than events")
+        return self
+```
+
+</details>
+
+<Solution>
+
+```python
+from pydantic import ValidationError, model_validator
+
+from ml_starter.config import FEATURES
+from ml_starter.contract import ChurnRequest
+from ml_starter.data import load_table
+
+valid = load_table().iloc[0][FEATURES].to_dict()
+requests = [
+    valid,
+    {**valid, "sessions_7d": 1, "expenses_7d": 1, "active_days_7d": 3},
+    {**valid, "sessions_7d": 1, "expenses_7d": 2, "active_days_7d": 3},
+]
+
+
+class StrictRequest(ChurnRequest):
+    @model_validator(mode="after")
+    def active_days_need_events(self):
+        if self.active_days_7d > self.sessions_7d + self.expenses_7d:
+            raise ValueError("more active days than events")
+        return self
+
+
+def accepted(request):
+    try:
+        StrictRequest(**request)
+        return True
+    except ValidationError:
+        return False
+
+
+answer_2 = [accepted(request) for request in requests]
+print(answer_2)
+```
+
+```console
+$ uv run python exercises/mle02_ex2.py
+[True, False, True]
+```
+
+The second request has 3 active days and 2 events, so it is refused. The third has 3 and 3, which is allowed: the rule refuses only what is more.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a batch of 1,000 rows arrives and 80 of them fail the schema. What does `triage` do with it, and what if the failure were in the type of a whole column?
+
+   <details>
+   <summary>answer</summary>
+
+   It rejects the batch (`BatchRejected`), because 8 percent is more than the 5 percent limit; with 30 failing rows it would quarantine them and keep the rest. A failure in the type of a whole column rejects the batch whatever the share.
+
+   </details>
+
+<Exercise id="ml-engineer-validating-model-data-3">
+
+**Spot the flaw.** A colleague writes a request model of their own, so that a missing number scores as zero instead of stopping the service. Save the file below as `exercises/mle02_ex3.py` and run it: it prints `[True, True, True]`, but the second request has no region and the third misspells a field. Change the model so that it prints `[True, False, False]`. Expected: `answer_3` is a list of three booleans.
+
+```python
+from pydantic import BaseModel, ValidationError
+
+from ml_starter.config import FEATURES
+from ml_starter.data import load_table
+
+
+class LooseRequest(BaseModel):  # colleague: "a missing number should score as zero, not stop the service"
+    channel: str = "organic_search"
+    platform: str = "web"
+    region: str = "north_america"
+    sessions_7d: int = 0
+    expenses_7d: int = 0
+    recent_3d: int = 0
+    active_days_7d: int = 0
+    onboarded: int = 0
+    saw_paywall: int = 0
+    bought_plus: int = 0
+
+
+valid = load_table().iloc[0][FEATURES].to_dict()  # given: a real person, as a dictionary
+no_region = {name: value for name, value in valid.items() if name != "region"}
+misspelled = {("session_7d" if name == "sessions_7d" else name): value for name, value in valid.items()}
+requests = [valid, no_region, misspelled]  # given: the first is fine, the other two are not
+
+
+def accepted(request):
+    try:
+        LooseRequest(**request)
+        return True
+    except ValidationError:
+        return False
+
+
+answer_3 = [accepted(request) for request in requests]
+print(answer_3)
+# change LooseRequest so that the answer is [True, False, False]
+```
+
+<details>
+<summary>Hint</summary>
+
+A field with a default value is never missing: pydantic fills it in. The third request still has the right number of fields.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+class LooseRequest(BaseModel):
+    channel: str
+    platform: str
+    region: str
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+from pydantic import BaseModel, ValidationError
+
+from ml_starter.config import FEATURES
+from ml_starter.data import load_table
+
+
+class LooseRequest(BaseModel):
+    channel: str
+    platform: str
+    region: str
+    sessions_7d: int
+    expenses_7d: int
+    recent_3d: int
+    active_days_7d: int
+    onboarded: int
+    saw_paywall: int
+    bought_plus: int
+
+
+valid = load_table().iloc[0][FEATURES].to_dict()
+no_region = {name: value for name, value in valid.items() if name != "region"}
+misspelled = {("session_7d" if name == "sessions_7d" else name): value for name, value in valid.items()}
+requests = [valid, no_region, misspelled]
+
+
+def accepted(request):
+    try:
+        LooseRequest(**request)
+        return True
+    except ValidationError:
+        return False
+
+
+answer_3 = [accepted(request) for request in requests]
+print(answer_3)
+```
+
+```console
+$ uv run python exercises/mle02_ex3.py
+[True, False, False]
+```
+
+Without a default, a field that does not arrive is refused: the request without a region fails, and so does the one that spelled `sessions_7d` as `session_7d`, because the model never received the field it requires (pydantic ignores the extra one by default, as its models page says). A default makes a missing or misspelled field look like a value, and the pipeline then scores a person who was never described.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can write a schema for a table and a model for a request, read a lazy failure report, choose between repairing, quarantining and rejecting, and keep one contract for training and serving.*
+Test: Exercise ml-engineer-validating-model-data-2, done in the repository without opening the hints.
+
+The pattern to remember: **write the contract once, check every batch and every request against it, and count what you repair or set aside.** The next lesson, *Tracking experiments and making runs reproducible* (MLE3), records every training run of this repository.

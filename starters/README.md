@@ -6,8 +6,10 @@ Starter repositories for the career tracks, built here and published by the owne
 | --- | --- | --- |
 | `de-pipeline/` | `https://github.com/datafromzero/de-pipeline-starter` | Data Engineer |
 | `de-pipeline-checkpoints/` | its Git history and the tags the lessons name | Data Engineer |
+| `ml-starter/` | `https://github.com/datafromzero/ml-starter` | Machine Learning Engineer |
+| `ml-starter-checkpoints/` | its Git history and the tags the lessons name | Machine Learning Engineer |
 
-Both folders are code, not site content: the site build, the spelling check and the links check do not read them
+These folders are code, not site content: the site build, the spelling check and the links check do not read them
 (`cspell.json` and `.markdownlint-cli2.jsonc` ignore `starters/`).
 
 ## Publishing `de-pipeline-starter`
@@ -40,3 +42,20 @@ one, or the script fails; blocks inside an exercise (task code, half-solutions, 
 can be and listed when they cannot. It also reads every `bash` block: a `git show de-NN-done:PATH`, a `python -m pipeline.NAME`
 and a `scripts/NAME.py` must name a file that exists. It does not check `console` output or the exercise solutions: run those
 in a clean clone built by `make_history.py`.
+
+## Publishing `ml-starter`
+
+Not published yet: the owner creates `https://github.com/datafromzero/ml-starter` (public, no files in it) and pushes the history.
+It holds the lessons of the Machine Learning Engineer track that work in a repository (MLE2 and MLE3 so far; MLE1, MLE4 and MLE5 are Colab
+notebooks). The tags are `mle-02-start`, `mle-02-done`, `mle-03-start` and `mle-03-done`; each later repository lesson adds `mle-NN-done`.
+
+1. Build the history in a folder that does not exist yet: `python3 starters/ml-starter-checkpoints/make_history.py ../ml-starter-build`.
+   Every commit has the same author and date, so a rebuild gives the same hashes; `PUBLISHED` in the script is empty until the first
+   push. Then add the hash of each pushed lesson to it, so that a later change to a published checkpoint stops the script.
+2. In that folder: `git remote add origin https://github.com/datafromzero/ml-starter.git`, then `git push origin main --tags`.
+3. Open a codespace on the repository and run `uv run pytest -q` at `mle-03-done` (14 tests pass here; MLflow adds about 100 packages).
+
+Before the push, run `python3 starters/ml-starter-checkpoints/check_lessons.py`. It covers every `python`, `toml`, `json`, `sql`, `yaml`
+and `markdown` block of the lessons MLE2 and MLE3: a block outside an exercise must equal a checkpoint file or be a piece of one. It
+also reads every `bash` block for the files it names. It does not check `console` output or exercise solutions: run those in a clean
+clone built by `make_history.py`. Checked here on Linux with uv 0.11.32 and Python 3.13.18; not on Windows, macOS or in a codespace.

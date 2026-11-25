@@ -1,0 +1,366 @@
+---
+id: ml-engineer-tuning-and-class-imbalance
+title: Tuning hyperparameters and handling imbalanced classes
+short_title: Tuning and imbalance
+description: Search settings with cross-validation, handle rare positive classes with weights and thresholds, and avoid tuning on the test set.
+stage: ml-engineer
+order: 40
+level: advanced
+duration: 30
+objectives:
+  - Run a grid or random search with cross-validation
+  - Keep a final test set untouched
+  - Apply class weights or resampling and compare them with a threshold change
+  - Report the tuned result next to the baseline
+prerequisites:
+  - ml-engineer-sklearn-pipelines-and-column-transformers
+  - data-scientist-gradient-boosting
+datasets:
+  - app-events
+notebook: notebooks/ml-engineer/ml-engineer-tuning-and-class-imbalance.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Tuning the hyper-parameters of an estimator (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/grid_search.html
+  - title: 'scikit-learn documentation: Metrics and scoring, average precision (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: a Colab notebook, because the lesson runs many short experiments, as the Data Scientist lessons do. The real churn table is not imbalanced (54.4 percent churned), so the lesson makes a rare outcome on purpose and says so: every person who stayed and a random 1 in 10 of the churners (seed 2026), 9,044 people, 10.2 percent churners; every number describes that sample. A naturally rare target needs a new table: your call. Stub changes: a short title; "random search" is named as the same loop (only `GridSearchCV` runs); `imbalanced-learn` is not used. Run on Linux with scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3 and DuckDB 2.0.0, and with scikit-learn 1.6.1, pandas 2.2.3, NumPy 2.1.3 and DuckDB 1.4.3 (the same text on both); one sample and one seed, not checked against others; not run on Colab, Windows or macOS. Set `reviewed` when you publish.
+
+## The question
+
+The retention team can contact a few people each week and wants the ones most likely to churn. In this lesson churn is rare, because a win-back campaign would mostly find people who stay. *Which model setting is best, how much better than a guess is it, and what do class weights, a cut and copies of rows do to the answer?* The sample, drawn from the table of lesson DS3:
+
+| | people | share |
+|---|---:|---:|
+| stayed | 8,120 | 89.8% |
+| churned | 924 | 10.2% |
+
+By the end you can search settings with the same folds, report a tuned result against its baseline on a test part scored once, compare weights with a cut, and resample without leaking.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Overfitting and cross-validation*](/data-scientist/cross-validation-and-overfitting/) (DS5) a tree was tuned over 56 settings and the best cross-validated score was higher than its test score. A search here is the same loop, run for you.
+
+**Diverge.** There the classes were close to even. When one is rare, accuracy and ROC AUC hide what the team cares about, and a new set of choices appears: the metric, the cut and the rows.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS5, why was the best cross-validated score of 56 settings higher than the same model's test score?
+
+   <details>
+   <summary>answer</summary>
+
+   The best of 56 noisy scores was picked partly because it was lucky; the test part had no part in the choice.
+
+   </details>
+
+2. Write the line that names the regularization setting of the last step of a pipeline whose steps are called `prep` and `model`, to set it to 0.1.
+
+   <details>
+   <summary>answer</summary>
+
+   `pipeline.set_params(model__C=0.1)`: the step name, two underscores, the parameter.
+
+   </details>
+
+## The big idea
+
+Tuning is a loop of fit and score over settings on the same folds: the best score is the highest of several noisy ones, so report it next to a baseline and score the test part once.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: a search, a baseline and a test part, weights against a cut, resampling inside the folds. The setup cells built the table of lesson DS3, the rare sample of the question and its split (6,783 training and 2,261 test people), and a `build(model)` function that puts one-hot text columns and scaled numbers in front of any model, as in lesson MLE1.
+
+<OpenInColab />
+
+### 1. A search is a loop over settings
+
+**Idea.** A *search* tries each setting of a grid, scores it by cross-validation on the same folds, and keeps the best. `GridSearchCV` is the loop: a setting for a step of a pipeline is named `step__parameter`, and the grid can swap the model itself. The score is *average precision* (AP), one number between 0 and 1 built from the precision and the recall at every cut, higher is better; it rewards ranking the churners high, and it suits a rare outcome. At the end the winner is refitted on all the training rows.
+
+**Try it:** search 8 settings, 4 of logistic regression and 4 of boosted trees, and compare the best with the plain logistic regression.
+
+```python
+grid = [{"model": [LogisticRegression(max_iter=1000)], "model__C": [0.01, 1.0], "model__class_weight": [None, "balanced"]},
+        {"model": [HistGradientBoostingClassifier(early_stopping=False, random_state=SEED)],
+         "model__learning_rate": [0.05, 0.2], "model__max_depth": [2, 4]}]
+search = GridSearchCV(build(LogisticRegression()), grid, scoring="average_precision", cv=folds)
+search.fit(X_train, y_train)                                  # 8 settings x 5 folds = 40 fits, then one refit of the winner on all the training rows
+results = pd.DataFrame(search.cv_results_)
+best = results.loc[search.best_index_]
+plain = results[(results["param_model__C"] == 1.0) & results["param_model__class_weight"].isna()].iloc[0]
+print(len(results), type(search.best_estimator_["model"]).__name__)
+print(round(float(best["mean_test_score"]), 3), round(float(best["std_test_score"]), 3), round(float(plain["mean_test_score"]), 3))
+```
+
+**Predict:** The grid has 8 settings: 4 of logistic regression (`C` of 0.01 or 1, with or without class weights) and 4 of boosted trees. Each is scored by average precision on the same five folds. Will the best setting beat the plain logistic regression (`C` of 1, no weights) by more than the spread of the best setting's own five fold scores (their standard deviation)?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+8 LogisticRegression
+0.219 0.046 0.216
+```
+
+</details>
+
+*Why:* The best setting is a logistic regression with a `C` of 1 and balanced class weights (the next unit explains the weights): a mean average precision of 0.219 and a standard deviation of 0.046 over the five folds. The plain logistic regression scores 0.216: a lead of 0.003, about a fifteenth of the spread. The search always returns a winner, and here the winner is a tie with the default. The four boosted settings did not win, which agrees with the Data Scientist track: the columns, not the algorithm, set the ceiling.
+
+### 2. A baseline, and a test part scored once
+
+**Idea.** A score needs a yardstick. `DummyClassifier(strategy="prior")` gives every person the share of churners in the training rows. Report the tuned model next to it, and score the test part once, after the search is over: the search has already used the training rows for every choice.
+
+**Try it:** score the flat guess and the tuned model on the test part.
+
+```python
+flat = DummyClassifier(strategy="prior").fit(X_train, y_train)
+tuned = search.best_estimator_                                # already refitted on all the training rows
+for label, model in (("flat guess", flat), ("tuned", tuned)):
+    print(label, round(float(average_precision_score(y_test, model.predict_proba(X_test)[:, 1])), 3))
+print(round(float(y_test.mean()), 3))
+```
+
+**Predict:** The flat guess gives every person the same chance. What average precision will `DummyClassifier(strategy="prior")` score on the test part, and about what will the tuned model score there?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+flat guess 0.102
+tuned 0.214
+0.102
+```
+
+</details>
+
+*Why:* The flat guess scores 0.102, exactly the share of churners in the test part (the last line). The scikit-learn page says the same: with random predictions, the AP is the fraction of positive samples. The tuned model scores 0.214, twice the baseline. That is the claim the model can make: it ranks churners about twice as well as chance, and a score of 0.214 means little without the 0.102 beside it.
+
+### 3. Class weights or a cut
+
+**Idea.** A model flags a person when the chance is at least a *cut*, 0.5 unless you say otherwise. `class_weight="balanced"` makes each churner count more in the fit, in proportion to how rare churners are. *Recall* is the share of the churners that are flagged, *precision* the share of the flagged that churned. Moving the cut changes both without a new fit. The units choose on a validation part cut from the training rows, not on the test part.
+
+**Try it:** fit the plain and the balanced model on 75 percent of the training rows, flag at 0.5, and then move the plain model's cut until its recall equals the balanced model's.
+
+```python
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=SEED, stratify=y_train)
+plain_lr = build(LogisticRegression(max_iter=1000)).fit(X_fit, y_fit)
+balanced_lr = build(LogisticRegression(max_iter=1000, class_weight="balanced")).fit(X_fit, y_fit)
+chances = {"plain": plain_lr.predict_proba(X_val)[:, 1], "balanced": balanced_lr.predict_proba(X_val)[:, 1]}
+for label, p in chances.items():
+    flagged = p >= 0.5
+    print(label, round(float(recall_score(y_val, flagged)), 3), round(float(precision_score(y_val, flagged, zero_division=0)), 3))
+target = recall_score(y_val, chances["balanced"] >= 0.5)       # the recall the balanced model has at 0.5
+cut = max(t for t in np.unique(chances["plain"]) if recall_score(y_val, chances["plain"] >= t) >= target)
+print(round(float(cut), 3), round(float(recall_score(y_val, chances["plain"] >= cut)), 3), round(float(precision_score(y_val, chances["plain"] >= cut)), 3))
+```
+
+**Predict:** A plain logistic regression and the same model with `class_weight="balanced"` are scored on a validation part cut from the training rows, at the usual cut of 0.5 (a person is flagged when the chance is at least 0.5). What share of the churners will each catch (recall)? And when the plain model's cut is moved until its recall equals the balanced model's, will its precision be clearly lower than, about the same as, or clearly higher than the balanced model's?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+plain 0.0 0.0
+balanced 0.566 0.16
+0.104 0.566 0.167
+```
+
+</details>
+
+*Why:* Each line prints recall and precision. The plain model flags nobody at 0.5, so its recall and precision are both 0.0: no person has a chance of churning that high when 10 in 100 do. The balanced model catches 56.6 percent of the churners, with a precision of 0.16. The plain model with its cut moved to 0.104 catches the same 56.6 percent with a precision of 0.167: about the same. Weights and a moved cut are two routes to one trade, recall for precision; the cut is the one you can change after the fit, and the team's capacity decides where to stand.
+
+### 4. Resample inside the folds
+
+**Idea.** Resampling changes the rows a model is fitted on. *Oversampling* copies the churners, here 5 times each. The function `copies` below makes the copies. The two routes differ only in when it is called: before the five folds are cut, or on each fold's fitting rows after the cut.
+
+**Try it:** score the plain logistic regression by average precision with copies made before the folds, and with copies made inside them.
+
+```python
+def copies(X_part, y_part, times=5):
+    """Every churner `times` times, every person who stayed once."""
+    extra = X_part[y_part == 1]
+    return pd.concat([X_part] + [extra] * (times - 1)), np.concatenate([y_part] + [y_part[y_part == 1]] * (times - 1))
+
+
+X_big, y_big = copies(X_train, y_train.to_numpy())              # copies made before the folds
+before = cross_val_score(build(LogisticRegression(max_iter=1000)), X_big, y_big, cv=folds, scoring="average_precision")
+inside = []
+for fit_ix, score_ix in folds.split(X_train, y_train):         # copies made after the cut, in the fitting rows only
+    X_f, y_f = copies(X_train.iloc[fit_ix], y_train.iloc[fit_ix].to_numpy())
+    model = build(LogisticRegression(max_iter=1000)).fit(X_f, y_f)
+    inside.append(average_precision_score(y_train.iloc[score_ix], model.predict_proba(X_train.iloc[score_ix])[:, 1]))
+print(round(float(before.mean()), 3), round(float(np.mean(inside)), 3))
+```
+
+**Predict:** Each churner in the training rows is copied 5 times. In the first route the copies are made before the five folds are cut, so a person's copies can land in both a fitting part and a scoring part; in the second route each fold's fitting rows are copied after the cut and the scoring rows are left as they are. Will the second route score higher than, equal to or lower than the first on average precision?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.56 0.218
+```
+
+</details>
+
+*Why:* Copies made first scored 0.56, and copies made inside the folds scored 0.218, no better than the 0.216 of the plain model in unit 1. With the copies made first, most scoring rows had a twin in the fitting part, so the model was scored on people it had already seen with their labels. Resampling can help a model that needs more weight on the rare class, but it did not improve the ranking here, and a score that jumps after resampling is a reason to look for the copies.
+
+<Aside type="tip" title="Remember">
+
+- A search loops over settings on the same folds and refits the winner; its best score is the highest of several noisy ones.
+- Report a tuned model next to the flat guess and the default setting; for a rare outcome the flat guess of average precision is the share of positives.
+- Class weights and a moved cut both trade recall for precision; the cut can be changed after the fit.
+- Copy or drop rows only in the fitting part of each fold.
+- Score the test part once, after every choice is made.
+
+**Common trap:** a score that jumps after balancing the classes. Look for copies of the same person on both sides of the split.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-tuning-and-class-imbalance-1">
+
+**Does the metric choose the setting?** Run the same grid with `scoring="roc_auc"` instead of average precision. Put in `answer_1` the list [`C` of the best logistic setting by ROC AUC, `True` if it is the same `C` as the best logistic setting by average precision]: both read from `cv_results_`, restricted to the four logistic rows, rounded to 3 decimals for scores and left as the grid value for `C`. To keep it short, search only the logistic part, `grid[0]`. Expected: `answer_1` is a list of a number and a boolean.
+
+```python
+logistic_grid = grid[0]                                       # given: the four logistic settings
+# search it twice, once with scoring="average_precision" and once with scoring="roc_auc", on the five folds of the lesson
+# then compare the C of the best setting of each
+answer_1 = None  # replace None with [C of the best setting by ROC AUC, True or False]
+```
+
+<details>
+<summary>Hint</summary>
+
+`GridSearchCV(build(LogisticRegression()), logistic_grid, scoring=..., cv=folds).fit(X_train, y_train)`; the winner is in `best_params_["model__C"]`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+by_ap = GridSearchCV(build(LogisticRegression()), logistic_grid, scoring="average_precision", cv=folds).fit(X_train, y_train)
+by_auc = ...
+answer_1 = [by_auc.best_params_["model__C"], ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+logistic_grid = grid[0]
+by_ap = GridSearchCV(build(LogisticRegression()), logistic_grid, scoring="average_precision", cv=folds).fit(X_train, y_train)
+by_auc = GridSearchCV(build(LogisticRegression()), logistic_grid, scoring="roc_auc", cv=folds).fit(X_train, y_train)
+answer_1 = [by_auc.best_params_["model__C"], by_auc.best_params_["model__C"] == by_ap.best_params_["model__C"]]
+```
+
+Both metrics pick a `C` of 1.0 here, so the answer is `[1.0, True]`. The choice of metric can change the winner when the grid separates the settings; on this grid the best two settings differ by less than the spread of the folds, as unit 1 showed, so a metric that agrees is not a sign that the winner is clear.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-tuning-and-class-imbalance-2">
+
+**Capacity of 100.** The retention team can contact 100 people. Before you start, say in one sentence what you expect: a whole number between 0 and 100, well above the 10 that a flat guess would find. Use the tuned model's chances on the test part, flag the 100 people with the highest chances, and put in `answer_2` how many of them churned. Write the code in the empty cell of the notebook. Expected: `answer_2` is a whole number between 0 and 100.
+
+<details>
+<summary>Hint</summary>
+
+`np.argsort(chances)[::-1][:100]` gives the positions of the 100 highest chances; `y_test.to_numpy()[positions].sum()` counts the churners among them.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+chances_test = tuned.predict_proba(X_test)[:, 1]
+top = np.argsort(chances_test)[::-1][:100]
+answer_2 = int(...)
+```
+
+</details>
+
+<Solution>
+
+```python
+chances_test = tuned.predict_proba(X_test)[:, 1]
+top = np.argsort(chances_test)[::-1][:100]
+answer_2 = int(y_test.to_numpy()[top].sum())
+```
+
+30 of the 100 people with the highest chances churned, three times the 10 that picking 100 people at random finds on average (the share of churners in the test part is 0.102).
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: you tuned over 8 settings and the best scores 0.219. What two numbers do you put beside it before anyone reads it?
+
+   <details>
+   <summary>answer</summary>
+
+   The flat guess (the share of positives, 0.102 here) and the plain default setting (0.216), and the spread of the folds (0.046); then the score of the test part, scored once.
+
+   </details>
+
+<Exercise id="ml-engineer-tuning-and-class-imbalance-3">
+
+**Spot the flaw.** A colleague fits the balanced model on the training rows and estimates how many people of the test part will churn as the sum of its chances: `answer_3 = round(float(balanced_all.predict_proba(X_test)[:, 1].sum()))`. The test part holds a known number of churners, `int(y_test.sum())`. Change the model, not the test part, so that the estimate is close to it, and put the rounded estimate in `answer_3`. Expected: `answer_3` is a whole number.
+
+```python
+balanced_all = build(LogisticRegression(max_iter=1000, class_weight="balanced")).fit(X_train, y_train)
+answer_3 = round(float(balanced_all.predict_proba(X_test)[:, 1].sum()))     # colleague: "the chances add up to the churners to expect"
+print(answer_3, int(y_test.sum()))
+# change the model so that the estimate is close to the number of churners
+```
+
+<details>
+<summary>Hint</summary>
+
+Which of the two models gives chances that match how often people churn in the rows it learned from?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+plain_all = build(LogisticRegression(max_iter=1000)).fit(X_train, y_train)
+answer_3 = round(float(plain_all.predict_proba(X_test)[:, 1].sum()))
+```
+
+</details>
+
+<Solution>
+
+```python
+plain_all = build(LogisticRegression(max_iter=1000)).fit(X_train, y_train)
+answer_3 = round(float(plain_all.predict_proba(X_test)[:, 1].sum()))
+```
+
+The plain model's chances add up to 235, close to the 231 churners of the test part. The balanced model weights each churner about nine times more, so its chances are pushed up and add up to 1,021: good for ranking people and for flagging at a cut, wrong as a chance. A cost rule that needs the real chance of churning needs the plain model's chances, or chances corrected afterwards.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can run a search over a pipeline with the same folds, report a tuned result beside its baseline on a test part scored once, compare class weights with a moved cut, and resample only inside the folds.*
+Test: Exercise ml-engineer-tuning-and-class-imbalance-2, done from the notebook without opening the hints.
+
+The pattern to remember: **search on the folds, compare with a baseline, move the cut after the fit, and copy rows only inside the fold.** The next lesson, *Neural networks and the training loop* (MLE5), trains a small network in PyTorch on the same table.

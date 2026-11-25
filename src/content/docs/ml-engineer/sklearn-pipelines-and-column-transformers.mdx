@@ -1,0 +1,424 @@
+---
+id: ml-engineer-sklearn-pipelines-and-column-transformers
+title: 'scikit-learn pipelines: one leakage-safe object'
+description: Wrap preprocessing and a model in one Pipeline with a ColumnTransformer so fitting and scoring never leak.
+stage: ml-engineer
+order: 10
+level: intermediate
+duration: 30
+objectives:
+  - Build a ColumnTransformer for numeric and categorical columns
+  - Chain preprocessing and a model in a Pipeline
+  - Cross-validate the whole pipeline
+  - Save and reload the fitted pipeline
+prerequisites:
+  - data-scientist-feature-engineering
+  - data-scientist-cross-validation-and-overfitting
+datasets:
+  - app-events
+notebook: notebooks/ml-engineer/ml-engineer-sklearn-pipelines-and-column-transformers.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'scikit-learn documentation: Pipelines and composite estimators (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/compose.html
+  - title: 'scikit-learn documentation: Model persistence (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/model_persistence.html
+  - title: 'scikit-learn documentation: Common pitfalls and recommended practices, data leakage (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/common_pitfalls.html
+  - title: 'scikit-learn documentation: FunctionTransformer (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.FunctionTransformer.html
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: a Colab notebook, because the lesson is about one library object and its behavior on many small experiments; the starter repository `ml-starter` first appears in MLE2 and holds this pipeline as `src/ml_starter/pipeline.py`. Stub changes: a fourth source (the FunctionTransformer page) for unit 3; the stub's picture (pipeline boxes with the fit-on-train boundary) is not drawn; the objectives are unchanged. Run on Linux with Python 3.13, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3 and DuckDB 2.0.0, and with scikit-learn 1.6.1, pandas 2.2.3, NumPy 2.1.3 and DuckDB 1.4.3 (the notebook printed the same text on both); not run on Colab itself, Windows or macOS. Set `reviewed` when you publish.
+
+## The question
+
+The churn model of lesson DS2 lives in a notebook. Tomorrow's signups will reach the app's service as requests, one at a time, and an engineer has to score them with it. *What has to travel with the model, and what can go wrong on the way?* A request looks like a row of the table of lesson DS3:
+
+| channel | platform | region | sessions_7d | expenses_7d | active_days_7d | churned |
+|---|---|---|---:|---:|---:|---:|
+| organic_search | web | asia_pacific | 0 | 1 | 1 | 1 |
+| app_store | android | north_america | 1 | 2 | 2 | 1 |
+| paid_search | android | north_america | 1 | 0 | 1 | 1 |
+| organic_search | web | north_america | 0 | 0 | 0 | 0 |
+
+By the end you can build one object that takes raw rows and returns chances, say what it accepts and refuses, keep every learned number inside its steps, and save and reload it.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Overfitting and cross-validation*](/data-scientist/cross-validation-and-overfitting/) (DS5) a `Pipeline` refitted every step inside each fold, and `logit()` of [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2) was one. Unit 1 builds the same model again and scores it on the same five folds.
+
+**Diverge.** There the pipeline was a tool for a fair score. Units 2 to 4 ask what happens after the folds, when it is the thing that is shipped.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson DS5, where does a scaler learn its mean during cross-validation?
+
+   <details>
+   <summary>answer</summary>
+
+   From the fitting rows of each fold only. A pipeline refits every step inside every fold.
+
+   </details>
+
+2. Write the one line that chains `StandardScaler()` and `LogisticRegression()` into a single object.
+
+   <details>
+   <summary>answer</summary>
+
+   `make_pipeline(StandardScaler(), LogisticRegression())`, or `Pipeline([("scale", StandardScaler()), ("model", LogisticRegression())])`.
+
+   </details>
+
+## The big idea
+
+A pipeline is one object that takes raw rows in and gives chances out, so everything the model learned from the training people travels with it.
+
+## Learn by doing
+
+About 30 minutes, 4 new ideas: raw rows in, what it accepts, learning in `fit`, saving it. The setup cells built the table of lesson DS3, the 13,362 training people and 4,454 test people of lesson DS2, and the five folds of lesson DS5. This lesson does not score the test part: its rows stand in for requests.
+
+<OpenInColab />
+
+### 1. One object from raw rows to chances
+
+**Idea.** A *pipeline* runs its steps in order: every step but the last transforms the rows, and the last is the model. A `ColumnTransformer` is one such step that sends different columns to different transformers, and `make_column_selector` picks the columns by their type, so a new number column joins the number group without a line of code. A column that no transformer names is dropped. The training people have 5 channels, 3 platforms and 4 regions, and `OneHotEncoder` makes one 0 or 1 column for each value of a text column.
+
+**Try it:** build the pipeline of the day-7 model from raw rows, fit it, count the columns the model receives, and cross-validate it.
+
+```python
+cat_columns = make_column_selector(dtype_exclude="number")     # every text column, picked by its type, not by its name
+num_columns = make_column_selector(dtype_include="number")     # every number column
+prep = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), cat_columns),
+                          ("num", StandardScaler(), num_columns)])
+pipe = Pipeline([("prep", prep), ("model", LogisticRegression(max_iter=1000))])
+pipe.fit(X_train, y_train)                                     # raw rows in: the pipeline fits each step in order
+names = pipe[:-1].get_feature_names_out()                      # pipe[:-1] is every step except the model
+print(len(names), sum(name.startswith("cat__") for name in names))
+scores = cross_val_score(pipe, X_train, y_train, cv=folds, scoring="roc_auc")
+print(round(float(scores.mean()), 3))
+```
+
+**Predict:** The table has 10 columns, 3 of them text. How many columns will the logistic regression receive, and how many of those come from the text columns? And will the cross-validated mean AUC of this pipeline be lower than, equal to or higher than the 0.692 of lesson DS5?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+19 12
+0.692
+```
+
+</details>
+
+*Why:* The model receives 19 columns: 12 from the text columns (5 + 3 + 4) and the 7 numbers. The mean AUC is 0.692 on the same folds, as in lesson DS5: wrapping the steps in one object changed the model by nothing, and changed what has to be written at serving time to one call on raw rows.
+
+### 2. What it accepts and what it refuses
+
+**Idea.** A request is a table with the columns of training. Because the `ColumnTransformer` was given a table with column names, it looks columns up by name. What it does with a value it has never seen, or with one that is missing, is decided by each step, not by the pipeline: `OneHotEncoder(handle_unknown="ignore")` has a rule for new categories, and the scaler and the model have their own for missing numbers.
+
+**Try it:** score five test people as five requests, then change the requests in three ways.
+
+```python
+five = X_test.iloc[:5]                                         # five people, as if they were five requests
+base = pipe.predict_proba(five)[:, 1]                          # the chance of churning, column 1 of the two chances
+requests = {"columns backwards": five[five.columns[::-1]],
+            "a region never seen": five.assign(region="africa"),
+            "a missing number": five.assign(sessions_7d=np.nan)}
+for label, rows in requests.items():
+    try:
+        chances = pipe.predict_proba(rows)[:, 1]
+        print(f"{label}: scored, biggest change from base {np.abs(chances - base).max():.3f}")
+    except ValueError as error:
+        print(f"{label}: ValueError, {str(error).splitlines()[0]}")
+```
+
+**Predict:** Three requests are scored by the fitted pipeline: the same five people with their columns in the opposite order, the same five with a region the training people never had, and the same five with one number missing. Which will be scored and which will raise an error?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+columns backwards: scored, biggest change from base 0.000
+a region never seen: scored, biggest change from base 0.014
+a missing number: ValueError, Input X contains NaN.
+```
+
+</details>
+
+*Why:* Two of the three were scored, and only one of them was right. The columns came by name, so their order did not matter. The new region lit none of the four region columns, so the five people were scored as if their region were unknown, and the chances moved by up to 0.014 with no warning. The missing number stopped the call, which is the loud failure. The silent one is the one a service has to catch before the pipeline, and lesson *Validating training and serving data* (MLE2) does it.
+
+### 3. What a step learns, it learns in fit
+
+**Idea.** A step that uses a number computed from rows (a mean, a list of categories) learns it in `fit` and keeps it on the fitted object; `transform` only applies it. The scikit-learn pitfalls page puts the rule this way: preprocessing should be "learnt from the training data" only. `FunctionTransformer` wraps a plain function as a step, and its page calls it useful for "stateless transformations", which learn nothing.
+
+**Try it:** compare two pipelines that differ in one step, the number-centering step. Both are cross-validated on the five folds, fitted, and then used to score the first five test people twice.
+
+```python
+def center_batch(rows):
+    """A function step: subtract the mean of the rows it is given."""
+    return rows - rows.mean()
+
+
+def build(number_step):
+    prep = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), cat_columns), ("num", number_step, num_columns)])
+    return Pipeline([("prep", prep), ("model", LogisticRegression(max_iter=1000))])
+
+
+pipelines = {"learned": build(StandardScaler(with_std=False)),       # keeps each column's training mean after fit
+             "recomputed": build(FunctionTransformer(center_batch))}    # a function: nothing is kept
+for label, candidate in pipelines.items():
+    cv = cross_val_score(candidate, X_train, y_train, cv=folds, scoring="roc_auc")
+    candidate.fit(X_train, y_train)
+    together = candidate.predict_proba(X_test)[:, 1][:5]
+    alone = np.array([candidate.predict_proba(X_test.iloc[[i]])[:, 1][0] for i in range(5)])
+    print(label, round(float(cv.mean()), 3), round(float(np.abs(together - alone).max()), 3))
+```
+
+**Predict:** Two pipelines differ in one step: the first centers each number column with a mean learned in `fit` (`StandardScaler(with_std=False)`), the second subtracts the mean of whatever rows it is given. Will cross-validation tell them apart? And for the first five test people, will the chances be the same scored all 4,454 together as scored one at a time?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+learned 0.692 0.0
+recomputed 0.692 0.251
+```
+
+</details>
+
+*Why:* Cross-validation could not tell them apart: both score 0.692, because the mean of a fold of about 2,700 people is close to the training mean. The learned step gives the same chances together or alone (the largest difference rounds to 0.0). The recomputed step turns a request of one person into a row of zeros, since the mean of one row is the row, and the chances moved by up to 0.251. The score is measured on batches, the service works on requests of one, and only scoring one request at a time shows the difference.
+
+### 4. Save it, reload it
+
+**Idea.** `joblib.dump(obj, path)` writes an object to a file and `joblib.load(path)` reads it back. A fitted pipeline holds what each step learned, so the reloaded object can score without being fitted again. The scikit-learn persistence page says that the environment that loads the file "should have the same packages and the same versions" as the one that trained it, and that none of these methods support loading a model trained with a different version of scikit-learn. It also lists pickle and joblib files as able to "execute arbitrary code" when loaded, so a file is loaded only when its source is trusted.
+
+**Try it:** write the fitted pipeline of unit 1 to a file, load it, and compare the chances of the two objects.
+
+```python
+path = os.path.join(tempfile.mkdtemp(), "churn_pipeline.joblib")      # a file in a throwaway folder
+joblib.dump(pipe, path)                                       # write the fitted pipeline: every step, with what it learned
+loaded = joblib.load(path)                                    # read it back: no fit, no training rows
+print(np.array_equal(pipe.predict_proba(X_test), loaded.predict_proba(X_test)))
+print(os.path.getsize(path) < 10_000)
+```
+
+**Predict:** The fitted pipeline of unit 1 is written to a file with `joblib.dump` and read back with `joblib.load`. Will the reloaded pipeline give exactly the same 4,454 chances as the one in memory? And will the file be smaller than 10 KB (10,000 bytes)?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+True
+True
+```
+
+</details>
+
+*Why:* The 4,454 chances are identical, and the file is small because it holds the learned numbers of every step (the categories, the means and spreads, the 19 weights and the intercept), not the 13,362 training rows. A file carries no record of the library that wrote it, so a note beside it does. The two helpers below write the version and the column names next to the file and refuse a file whose version differs.
+
+```python
+def save_pipeline(pipeline, path):
+    """Write the pipeline, and beside it a note of the library version and the columns it expects."""
+    joblib.dump(pipeline, path)
+    with open(path + ".json", "w") as f:
+        json.dump({"scikit_learn": sklearn.__version__, "columns": list(X_train.columns)}, f)
+
+
+def load_pipeline(path):
+    """Read the pipeline back, but refuse a file written by another scikit-learn version."""
+    with open(path + ".json") as f:
+        notes = json.load(f)
+    if notes["scikit_learn"] != sklearn.__version__:
+        raise RuntimeError(f"saved with scikit-learn {notes['scikit_learn']}, this is {sklearn.__version__}")
+    return joblib.load(path)
+```
+
+**Try it:** save the pipeline with its note, read the note, change the version in it, and load again.
+
+```python
+save_pipeline(pipe, path)
+with open(path + ".json") as f:
+    notes = json.load(f)
+print(sorted(notes))
+notes["scikit_learn"] = "0.24.2"                              # pretend the file came from an older environment
+with open(path + ".json", "w") as f:
+    json.dump(notes, f)
+try:
+    load_pipeline(path)
+except RuntimeError as error:
+    print("refused:", str(error).split(",")[0])
+```
+
+The refusal names the version on the file (the second version in the message is your own library's, and is left out here). A mismatch stops the load instead of giving chances that nobody has checked.
+
+<Aside type="tip" title="Remember">
+
+- A pipeline takes raw rows and returns chances: the steps and everything they learned travel together.
+- A column picked by type joins its group by itself; a column nobody names is dropped.
+- Cross-validation scores batches. A pipeline is checked on requests of one, and on the inputs it should refuse.
+- What a step learns, it learns in `fit` and keeps. A function that recomputes it from the rows it is given is not the same step.
+- Save a fitted pipeline with the library version that wrote it, and load only files you trust.
+
+**Common trap:** a cross-validated score that looks right while the shipped object is wrong. Score the object the way the service will use it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-sklearn-pipelines-and-column-transformers-1">
+
+**Score one request.** A request reaches the service as a dictionary, one value for each column (`request`, given). Turn it into the one-row table the pipeline expects and put the chance of churning, rounded to 3 decimals, in `answer_1`. Use the fitted `pipe` of unit 1. Expected: `answer_1` is a number between 0 and 1.
+
+```python
+request = {"channel": "paid_social", "platform": "ios", "region": "europe", "sessions_7d": 2, "expenses_7d": 1,
+           "recent_3d": 0, "active_days_7d": 1, "onboarded": 0, "saw_paywall": 1, "bought_plus": 0}      # given: one request
+# make a one-row table from the dictionary, then ask the fitted pipe for the chance of churning
+answer_1 = None  # replace None with the chance, rounded to 3 decimals
+```
+
+<details>
+<summary>Hint</summary>
+
+A table is built from a list of rows. A dictionary is one row, so it goes inside a list: `pd.DataFrame([request])`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+row = pd.DataFrame([...])
+answer_1 = round(float(pipe.predict_proba(row)[:, 1][0]), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+row = pd.DataFrame([request])
+answer_1 = round(float(pipe.predict_proba(row)[:, 1][0]), 3)
+```
+
+The chance is 0.771. `pd.DataFrame(request)` raises an error, because every value is a single number and the table has no index; `[request]` makes it one row.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-sklearn-pipelines-and-column-transformers-2">
+
+**A step that learns a cap.** The team wants `expenses_7d` capped at the 99th percentile of the people the model learned from, so one person with 34 expenses cannot stretch a column. Before you start, say in one sentence what a request with 500 expenses should be capped to. Write a class `CapExpenses` with a `fit` that learns the cap from the rows it is given (`np.percentile(rows["expenses_7d"], 99)`) and a `transform` that returns a copy of the rows with the column clipped to it. Fit it on `X_train` and put `[cap, capped]` in `answer_2`: the cap it learned and the value `transform` returns for a one-row table with 500 expenses. Write the code in the empty cell of the notebook. Expected: `answer_2` is a list of two numbers.
+
+<details>
+<summary>Hint</summary>
+
+A class with `fit(self, rows, y=None)` that stores `self.cap_` and returns `self`, and `transform(self, rows)` that uses `self.cap_`. Inherit from `BaseEstimator` and `TransformerMixin` (from `sklearn.base`) so that `clone` and a pipeline accept it.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+class CapExpenses(BaseEstimator, TransformerMixin):
+    def fit(self, rows, y=None):
+        self.cap_ = ...
+        return self
+```
+
+</details>
+
+<Solution>
+
+```python
+from sklearn.base import BaseEstimator, TransformerMixin
+
+
+class CapExpenses(BaseEstimator, TransformerMixin):
+    def fit(self, rows, y=None):
+        self.cap_ = float(np.percentile(rows["expenses_7d"], 99))      # learned from the rows given to fit, kept on the object
+        return self
+
+    def transform(self, rows):
+        rows = rows.copy()
+        rows["expenses_7d"] = rows["expenses_7d"].clip(upper=self.cap_)
+        return rows
+
+
+capper = CapExpenses().fit(X_train)
+one_row = pd.DataFrame({"expenses_7d": [500]})
+answer_2 = [capper.cap_, float(capper.transform(one_row)["expenses_7d"].iloc[0])]
+```
+
+The cap is 11.0 expenses and a request with 500 expenses comes back as 11.0. A version that took the percentile inside `transform` would cap a one-row request to its own 500, so the cap would differ between training and serving.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name two things a request can get wrong, and what the pipeline of unit 1 did with each.
+
+   <details>
+   <summary>answer</summary>
+
+   A region it never saw is scored with no region column lit, without a warning; a missing number raises a `ValueError`. Columns in another order are not wrong: they are found by name.
+
+   </details>
+
+<Exercise id="ml-engineer-sklearn-pipelines-and-column-transformers-3">
+
+**Spot the flaw.** A colleague writes the target as words, `"left"` and `"stayed"`, fits the pipeline on them, and serves the chance of leaving as column 1 of `predict_proba`, as in the units. Change the last line so that `answer_3` holds the chances of leaving of the people in rows 5 to 9 of the test part, each rounded to 3 decimals. Expected: `answer_3` is a list of five numbers between 0 and 1.
+
+```python
+words = y_train.map({1: "left", 0: "stayed"})                  # given: the target as words
+words_pipe = build(StandardScaler()).fit(X_train, words)
+requests3 = X_test.iloc[5:10]                                  # given: five requests
+answer_3 = [round(float(c), 3) for c in words_pipe.predict_proba(requests3)[:, 1]]     # colleague: "column 1 is the chance of leaving"
+# change the last line so that it holds the chance of leaving
+```
+
+<details>
+<summary>Hint</summary>
+
+`predict_proba` has one column for each class. Which class is column 1 now? The pipeline lists them in `classes_`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+position = list(words_pipe.classes_).index(...)
+answer_3 = [round(float(c), 3) for c in words_pipe.predict_proba(requests3)[:, position]]
+```
+
+</details>
+
+<Solution>
+
+```python
+position = list(words_pipe.classes_).index("left")
+answer_3 = [round(float(c), 3) for c in words_pipe.predict_proba(requests3)[:, position]]
+```
+
+The columns follow the order of `classes_`, which is sorted: `['left', 'stayed']`. Column 1 was the chance of staying, so the colleague's numbers are one minus the chance of leaving. Looking up the position of the class by name keeps the answer right whatever the labels are.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can build a pipeline of a ColumnTransformer and a model from raw rows, say what it does with a new category and a missing number, write a step that learns in `fit`, and save and reload it with its library version.*
+Test: Exercise ml-engineer-sklearn-pipelines-and-column-transformers-2, done from the notebook without opening the hints.
+
+The pattern to remember: **one object takes raw rows to chances, keeps what it learned, and is saved with the version that wrote it.** The next lesson, *Validating training and serving data* (MLE2), puts a schema in front of it, in the first repository of the track.

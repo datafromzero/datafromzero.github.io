@@ -1,0 +1,520 @@
+---
+id: ml-engineer-experiment-tracking-and-reproducibility
+title: Tracking experiments and making runs reproducible
+description: Log parameters, metrics and artifacts for every run, and pin seeds, data versions and the environment.
+stage: ml-engineer
+order: 30
+level: intermediate
+duration: 32
+objectives:
+  - Log parameters, metrics and artifacts for a run
+  - Compare runs and register the best model
+  - Pin the random seed, data version and environment
+  - Reproduce a past run from its record
+prerequisites:
+  - ml-engineer-sklearn-pipelines-and-column-transformers
+  - ml-engineer-validating-model-data
+  - core-git-branches-and-pull-requests
+  - core-environments-and-dependencies
+datasets:
+  - app-events
+reviewed: 2026-11-16
+sources:
+  - title: 'MLflow documentation: Tracking (accessed 2026-11-25)'
+    url: https://mlflow.org/docs/latest/ml/tracking/
+  - title: 'MLflow documentation: Model Registry (accessed 2026-11-25)'
+    url: https://mlflow.org/docs/latest/ml/model-registry/
+  - title: 'uv documentation: Project structure, the lockfile (accessed 2026-11-25)'
+    url: https://docs.astral.sh/uv/concepts/projects/layout/
+  - title: 'Pro Git (book): Revision selection, short SHA-1 (accessed 2026-11-25)'
+    url: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: the starter repository `ml-starter`, because tracking is a habit of a project (code, data file, lock file and a store of runs), not of one notebook; push the tag `mle-03-done` (`mle-03-start` is `mle-02-done`). Tool choice, as the map note says, is yours: the lesson uses MLflow 3.18.0 with a local SQLite store, which needs the registry; its install adds about 100 packages. Stub changes: prerequisites add MLE2 (the repository) and C25 (the lock file), the stub's Pro Git source is narrowed to one page, and the duration is 32 minutes. `mlflow` logs a scikit-learn model in the skops format and refuses a type it is not told to trust, so `train.py` names `make_column_selector`. Run on Linux with Python 3.13.18, uv 0.11.32 and MLflow 3.18.0; not run: the MLflow web page (`mlflow ui`), Windows, macOS, a codespace, or any remote tracking server. Set `reviewed` when you publish.
+
+## The question
+
+The best model was one run last Tuesday. Today it scores a little worse and nobody can say why: which settings, which data file, which version of the code and which libraries made it? *What do we record at training time so that any run can be explained, compared and repeated?* Every run of the churn pipeline reads the same file, `data/churn_table.csv`, whose first rows are these:
+
+| user_id | signup_date | channel | platform | churned |
+|---:|---|---|---|---:|
+| 10001 | 2026-01-01 | organic_search | web | 1 |
+| 10002 | 2026-01-01 | app_store | android | 1 |
+| 10003 | 2026-01-01 | paid_search | android | 1 |
+| 10004 | 2026-01-01 | organic_search | web | 0 |
+
+If a byte of that file changes, so can every score that came from it.
+
+By the end you can log a run, compare and register runs, record what a run depends on, and repeat a run from its record.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Git: branches, pull requests and review*](/core/git-branches-and-pull-requests/) (C30) every change was a commit with a hash that names its code. A run's record names its code the same way, and adds what a commit does not hold: the data and the numbers it produced.
+
+**Diverge.** A commit records what you changed. A run record also holds results that change with the data and the seed, so two runs of the same commit can differ, and unit 3 shows when.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE1 a pipeline was saved with a note of the scikit-learn version. Why that version?
+
+   <details>
+   <summary>answer</summary>
+
+   The scikit-learn page says a file can only be loaded in an environment with the same versions of the libraries.
+
+   </details>
+
+2. What does `uv.lock` hold that `pyproject.toml` does not?
+
+   <details>
+   <summary>answer</summary>
+
+   The exact version of every library that was installed, including the ones your libraries need; `pyproject.toml` holds only the requirements you wrote.
+
+   </details>
+
+## The big idea
+
+A run is a record: write down what went in, what came out and what it depended on, and any run can be found, compared and repeated.
+
+## Learn by doing
+
+About 32 minutes, 4 new ideas: a run record, comparing and registering, what a run depends on, reproducing it. This lesson works in the starter repository `ml-starter`, as lesson MLE2 did (catch up with `git checkout mle-03-start`). The commands run in its folder.
+
+Add MLflow, fetch the files of this lesson from the tag `mle-03-done`, and commit them: the lesson records the commit of each run, so a run made on uncommitted files would say so.
+
+```bash
+uv add mlflow==3.18.0
+git show mle-03-done:.gitignore > .gitignore
+git show mle-03-done:src/ml_starter/train.py > src/ml_starter/train.py
+git show mle-03-done:src/ml_starter/runs.py > src/ml_starter/runs.py
+git show mle-03-done:tests/test_train.py > tests/test_train.py
+git show mle-03-done:scripts/change_one_value.py > scripts/change_one_value.py
+uv run pytest -q -W ignore::DeprecationWarning
+git add -A
+git commit -m "MLE3: track the runs"
+```
+
+```console
+..............                                                           [100%]
+14 passed in 9.62s
+```
+
+The run ids, the commit hash and the fingerprints below are from one run of the lesson here; the ids and the hash on your computer differ, and the fingerprints of the data and the lock file are the same only if your files are the same.
+
+### 1. A run is a record
+
+**Idea.** The MLflow tracking page describes an API for "logging parameters, code versions, metrics, and output files". *Parameters* are the settings of a run, *metrics* the numbers it produced, and an *artifact* a file it wrote; here the artifact is the fitted pipeline. `train` opens a run with `with mlflow.start_run(...)`, so the run is closed when the block ends.
+
+```python
+def train(C=1.0, seed=SEED, table_path=TABLE, uri=TRACKING_URI):
+    """Cross-validate the pipeline on the training people, fit it on all of them, and record the whole run."""
+    open_store(uri)
+    X_train, X_test, y_train, y_test = split(load_table(table_path))
+    with mlflow.start_run(run_name=f"C={C} seed={seed}"):
+        mlflow.log_params({"C": C, "seed": seed, "data_sha256": fingerprint(table_path)})
+        mlflow.set_tags({
+            "git_commit": git("rev-parse", "--short", "HEAD"),
+            "git_uncommitted_changes": str(bool(git("status", "--porcelain"))),
+            "lock_sha256": fingerprint(ROOT / "uv.lock"),
+        })
+        pipeline = build_pipeline(C)
+        folds = StratifiedKFold(5, shuffle=True, random_state=seed)
+        scores = cross_val_score(pipeline, X_train, y_train, cv=folds, scoring="roc_auc")
+        mlflow.log_metrics({"cv_auc_mean": float(scores.mean()), "cv_auc_min": float(scores.min()), "cv_auc_max": float(scores.max())})
+        saved = mlflow.sklearn.log_model(pipeline.fit(X_train, y_train), name="pipeline", skops_trusted_types=TRUSTED_TYPES)
+        mlflow.set_tag("model_uri", saved.model_uri)
+    return float(scores.mean())
+```
+
+**Try it:** train with `C` 0.1, then -1, then 10, and list the runs. The second command keeps only the last line of the error.
+
+```bash
+uv run python -m ml_starter.train --C 0.1
+uv run python -m ml_starter.train --C -1 2>&1 | grep '^sklearn'
+uv run python -m ml_starter.train --C 10
+uv run python -m ml_starter.runs list
+```
+
+**Predict:** scikit-learn refuses a negative `C`. After the four commands, how many runs will the list show, and what will the status of the second run be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.train --C 0.1
+C=0.1 seed=2026: cv_auc_mean 0.691687
+$ uv run python -m ml_starter.train --C -1 2>&1 | grep '^sklearn'
+sklearn.utils._param_validation.InvalidParameterError: The 'C' parameter of LogisticRegression must be a float in the range (0.0, inf]. Got -1.0 instead.
+$ uv run python -m ml_starter.train --C 10
+C=10.0 seed=2026: cv_auc_mean 0.691592
+$ uv run python -m ml_starter.runs list
+  run_id              run   status  cv_auc_mean
+615bf25e  C=0.1 seed=2026 FINISHED        0.692
+a8a3524a C=10.0 seed=2026 FINISHED        0.692
+c3cb3042 C=-1.0 seed=2026   FAILED          NaN
+```
+
+</details>
+
+*Why:* The list shows three runs, and the run with `C` of -1 is there, with the status `FAILED` and no score. The run was opened before the error, so its parameters were logged, and the block ended with the error. A failed run in the record is information: someone tried -1 and what happened.
+
+### 2. Compare, then register
+
+**Idea.** Runs are rows that can be ordered by a metric. A *registry* keeps named models with numbered versions, and an *alias* such as `champion` points at one version; the MLflow registry page gives `models:/MyModel@champion` as the way to ask for the version an alias names, so a service can follow the alias while the version behind it changes.
+
+**Try it:** train a third setting, list the runs, and register the best.
+
+```bash
+uv run python -m ml_starter.train --C 0.001
+uv run python -m ml_starter.runs list
+uv run python -m ml_starter.runs register
+```
+
+**Predict:** Of the runs with `C` 0.001, 0.1 and 10, which will `list` show first? And will the three decimals the table shows separate the first two?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.train --C 0.001
+C=0.001 seed=2026: cv_auc_mean 0.683299
+$ uv run python -m ml_starter.runs list
+  run_id               run   status  cv_auc_mean
+615bf25e   C=0.1 seed=2026 FINISHED        0.692
+a8a3524a  C=10.0 seed=2026 FINISHED        0.692
+2f4db16b C=0.001 seed=2026 FINISHED        0.683
+c3cb3042  C=-1.0 seed=2026   FAILED          NaN
+$ uv run python -m ml_starter.runs register
+Registered churn version 1 from run C=0.1 seed=2026, alias champion.
+Successfully registered model 'churn'.
+Created version '1' of model 'churn'.
+```
+
+</details>
+
+*Why:* The run with `C` of 0.1 is first, and the table cannot separate it from `C` of 10: both show 0.692. The runs themselves printed 0.691687 and 0.691592 in unit 1, a lead of 0.0001, far smaller than the spread of the five folds of one model (0.683 to 0.702 in lesson DS5). The registry now holds a version chosen by that lead. A tie like this is reported as a tie, and the choice between the two settings is made on something else, such as which is simpler.
+
+### 3. What a run depends on
+
+**Idea.** A run's score depends on more than its parameters: on the seed that cuts the folds, on the data file, on the code and on the libraries. `train` records each: the seed as a parameter; `data_sha256`, the first 12 digits of the SHA-256 of the data file, which changes if one byte changes; `git_commit`, the abbreviated commit, as the Pro Git revision page describes short SHA-1 names, and whether files had uncommitted changes; and `lock_sha256`, the same kind of fingerprint of `uv.lock`. The uv documentation says the lockfile "contains the exact resolved versions that are installed in the project environment".
+
+**Try it:** train `C` 0.1 again with the same seed, then with seed 7, and show the record of the first run of the list in unit 2.
+
+```bash
+uv run python -m ml_starter.train --C 0.1
+uv run python -m ml_starter.train --C 0.1 --seed 7
+uv run python -m ml_starter.runs show 615bf25e
+```
+
+**Predict:** Three runs have `C` 0.1: seed 2026 in unit 1, seed 2026 again now, and seed 7. Which of the printed `cv_auc_mean` values will be equal to the last digit?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.train --C 0.1
+C=0.1 seed=2026: cv_auc_mean 0.691687
+$ uv run python -m ml_starter.train --C 0.1 --seed 7
+C=0.1 seed=7: cv_auc_mean 0.691585
+$ uv run python -m ml_starter.runs show 615bf25e
+C: 0.1
+seed: 2026
+data_sha256: 4342d7d93418
+git_commit: 62e13d8
+git_uncommitted_changes: False
+lock_sha256: 04f103b69439
+```
+
+</details>
+
+*Why:* The two runs with seed 2026 print the same 0.691687, the same score to the sixth decimal, because the seed fixes the five folds and nothing else in the run is random. Seed 7 cuts other folds and prints 0.691585. The record answers what a colleague would ask: the data file (`data_sha256`), the commit, whether files were uncommitted (`False`, because of the commit above) and the lock file. A run made on files that were not committed would carry `True`, and its commit would not name its code.
+
+### 4. Repeat a run from its record
+
+**Idea.** To repeat a run, read its record and run again with its parameters. The function below does that and returns the recorded score beside the new one.
+
+```python
+def reproduce(prefix, uri=TRACKING_URI):
+    """Run again with the recorded parameters, refusing when the data file is no longer the one that run read."""
+    open_store(uri)
+    recorded = find_run(prefix)
+    now = fingerprint(TABLE)
+    if recorded.data.params["data_sha256"] != now:
+        raise SystemExit(f"Cannot reproduce: the data file changed (recorded {recorded.data.params['data_sha256']}, now {now})")
+    again = train(float(recorded.data.params["C"]), int(recorded.data.params["seed"]), uri=uri)
+    return recorded.data.metrics["cv_auc_mean"], again
+```
+
+**Try it:** reproduce the run from unit 3. Then change one number of the data file with the given script, reproduce again, and undo the change with Git.
+
+```bash
+uv run python -m ml_starter.runs reproduce 615bf25e
+uv run python scripts/change_one_value.py
+uv run python -m ml_starter.runs reproduce 615bf25e
+git checkout data/churn_table.csv
+```
+
+**Predict:** What will `reproduce` print for the unchanged data, and what for the file with one number changed?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python -m ml_starter.runs reproduce 615bf25e
+recorded 0.691687, reproduced 0.691687, identical: True
+$ uv run python scripts/change_one_value.py
+sessions_7d of the first person: 0 to 1.
+$ uv run python -m ml_starter.runs reproduce 615bf25e
+Cannot reproduce: the data file changed (recorded 4342d7d93418, now de9b4f9f2adc)
+```
+
+</details>
+
+*Why:* On the unchanged data the new run scored exactly what the record says. After one number changed, `reproduce` stopped before training and printed both fingerprints, because a score from another file is not a reproduction. A run can be repeated exactly only while the seed, the data, the code and the libraries are the ones recorded. The commit and the lock file are in the record too, but `reproduce` here checks only the data: checking out the commit and installing the locked libraries are left to you.
+
+<Aside type="tip" title="Remember">
+
+- A run's record holds its parameters, its metrics, the fitted pipeline and fingerprints of the data, the code and the libraries.
+- A failed run is recorded too, with its parameters and no metric.
+- A registry names a model, numbers its versions and points an alias at one of them.
+- A fingerprint changes when a byte changes: compare fingerprints, do not trust a file name.
+- A score repeats exactly only when the seed, the data, the code and the libraries repeat.
+
+**Common trap:** a result that nobody can run again. Record what the run depends on before you need it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-experiment-tracking-and-reproducibility-1">
+
+**Read a run back.** Save the file below as `exercises/mle03_ex1.py`. It makes a store of its own, so the runs of the lesson stay as they are, and trains one run with `C` of 3.0. Read the run back with `mlflow.search_runs` and put the highest score of its five folds, its `cv_auc_max`, rounded to 3 decimals, in `answer_1`. Expected: it prints one number between 0.5 and 1.
+
+```python
+import tempfile
+
+import mlflow
+
+from ml_starter.train import EXPERIMENT, train
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"  # given: a store of its own, so the runs of the lesson stay as they are
+train(C=3.0, uri=uri)  # given: one run
+# read the run back with mlflow.search_runs and put its cv_auc_max, rounded to 3 decimals, in answer_1
+answer_1 = None  # replace None with the number
+print(answer_1)
+```
+
+<details>
+<summary>Hint</summary>
+
+`mlflow.search_runs(experiment_names=[EXPERIMENT])` returns a table with one row for each run; its metrics are columns named `metrics.` followed by the metric name.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+runs = mlflow.search_runs(experiment_names=[EXPERIMENT])
+answer_1 = round(float(runs.iloc[0][...]), 3)
+```
+
+</details>
+
+<Solution>
+
+```python
+import tempfile
+
+import mlflow
+
+from ml_starter.train import EXPERIMENT, train
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"
+train(C=3.0, uri=uri)
+runs = mlflow.search_runs(experiment_names=[EXPERIMENT])
+answer_1 = round(float(runs.iloc[0]["metrics.cv_auc_max"]), 3)
+print(answer_1)
+```
+
+```console
+$ uv run python exercises/mle03_ex1.py
+0.702
+```
+
+The best fold of that run scores 0.702. The store holds one run, so its first row is the run.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-experiment-tracking-and-reproducibility-2">
+
+**Log a metric of your own.** Before you start, say in one sentence what you expect the Brier score of the pipeline to look like: a number between 0 and 1, where lower is better. Save the file below as `exercises/mle03_ex2.py` and write the run below the given lines. Expected: it prints one number between 0 and 1.
+
+```python
+import tempfile
+
+import mlflow
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+from ml_starter.config import SEED
+from ml_starter.data import load_table, split
+from ml_starter.pipeline import build_pipeline
+from ml_starter.train import open_store
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"  # given: a store of its own
+X_train, X_test, y_train, y_test = split(load_table())  # given
+folds = StratifiedKFold(5, shuffle=True, random_state=SEED)  # given: the five folds of the lesson
+# open the store, start a run named "brier", and log the mean five-fold Brier score of build_pipeline(1.0) as the metric cv_brier
+# (the scorer "neg_brier_score" gives the score with its sign flipped), then read the metric back from the store
+# and put it, rounded to 3 decimals, in answer_2 and print it
+```
+
+<details>
+<summary>Hint</summary>
+
+`mlflow.start_run(run_name="brier") as run` gives you the run; `mlflow.log_metric("cv_brier", value)` logs inside it, and `mlflow.get_run(run.info.run_id).data.metrics` returns the stored metrics as a dictionary. `cross_val_score` with `neg_brier_score` returns the negated score for each fold.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"A number a little over 0.2."*
+
+```python
+open_store(uri)
+with mlflow.start_run(run_name="brier") as run:
+    scores = cross_val_score(build_pipeline(1.0), X_train, y_train, cv=folds, scoring="neg_brier_score")
+    mlflow.log_metric("cv_brier", ...)
+```
+
+</details>
+
+<Solution>
+
+```python
+import tempfile
+
+import mlflow
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+from ml_starter.config import SEED
+from ml_starter.data import load_table, split
+from ml_starter.pipeline import build_pipeline
+from ml_starter.train import open_store
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"
+X_train, X_test, y_train, y_test = split(load_table())
+folds = StratifiedKFold(5, shuffle=True, random_state=SEED)
+open_store(uri)
+with mlflow.start_run(run_name="brier") as run:
+    scores = cross_val_score(build_pipeline(1.0), X_train, y_train, cv=folds, scoring="neg_brier_score")
+    mlflow.log_metric("cv_brier", float(-scores.mean()))
+answer_2 = round(mlflow.get_run(run.info.run_id).data.metrics["cv_brier"], 3)
+print(answer_2)
+```
+
+```console
+$ uv run python exercises/mle03_ex2.py
+0.22
+```
+
+The mean Brier score is 0.22. The metric was read back from the store, not from the variable, so what is printed is what was recorded.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a teammate says "I got 0.70 on Tuesday". Name three things you would ask them for, so that you could repeat the run.
+
+   <details>
+   <summary>answer</summary>
+
+   Any three of: the parameters and the seed, the data file (its fingerprint), the code (the commit, and whether anything was uncommitted), and the libraries (the lock file).
+
+   </details>
+
+<Exercise id="ml-engineer-experiment-tracking-and-reproducibility-3">
+
+**Spot the flaw.** A colleague trains three runs and picks "the best run" as the first row of what `search_runs` returns. Save the file below as `exercises/mle03_ex3.py` and run it: it prints 10.0, but the best of the three runs is the one with `C` of 0.1. Change the search so that it prints the `C` of the run with the highest `cv_auc_mean`. Expected: it prints one number.
+
+```python
+import tempfile
+
+import mlflow
+
+from ml_starter.train import EXPERIMENT, train
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"  # given: a store of its own
+for C in [0.1, 0.001, 10.0]:  # given: three runs, made in this order
+    train(C=C, uri=uri)
+runs = mlflow.search_runs(experiment_names=[EXPERIMENT], filter_string="attributes.status = 'FINISHED'")
+best = runs.iloc[0]  # colleague: "the first row is the best run"
+answer_3 = float(best["params.C"])
+print(answer_3)
+# change the code so that answer_3 is the C of the run with the highest cv_auc_mean
+```
+
+<details>
+<summary>Hint</summary>
+
+`mlflow.search_runs` takes an `order_by` argument, a list of strings such as `"metrics.cv_auc_mean DESC"`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+runs = mlflow.search_runs(experiment_names=[EXPERIMENT], filter_string="attributes.status = 'FINISHED'",
+                          order_by=[...])
+```
+
+</details>
+
+<Solution>
+
+```python
+import tempfile
+
+import mlflow
+
+from ml_starter.train import EXPERIMENT, train
+
+uri = f"sqlite:///{tempfile.mkdtemp()}/store.db"
+for C in [0.1, 0.001, 10.0]:
+    train(C=C, uri=uri)
+runs = mlflow.search_runs(experiment_names=[EXPERIMENT], filter_string="attributes.status = 'FINISHED'",
+                          order_by=["metrics.cv_auc_mean DESC"])
+best = runs.iloc[0]
+answer_3 = float(best["params.C"])
+print(answer_3)
+```
+
+```console
+$ uv run python exercises/mle03_ex3.py
+0.1
+```
+
+Without `order_by` the first row is not the best run: here it is the run made last, the one with `C` of 10.0. The first row says nothing about the score until the table is ordered by it.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can log the parameters, metrics and fitted pipeline of a run, compare and register runs, record the seed, data, code and libraries a run depends on, and repeat a run from its record.*
+Test: Exercise ml-engineer-experiment-tracking-and-reproducibility-2, done in the repository without opening the hints.
+
+The pattern to remember: **record what went in, what came out and what it depended on, and repeat a run only against the same record.** The next lesson, *Tuning hyperparameters and handling imbalanced classes* (MLE4), searches settings in a Colab notebook and reports the tuned result next to its baseline.

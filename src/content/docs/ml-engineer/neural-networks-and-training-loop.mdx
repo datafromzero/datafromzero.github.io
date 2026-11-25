@@ -1,0 +1,418 @@
+---
+id: ml-engineer-neural-networks-and-training-loop
+title: Neural networks and the training loop
+short_title: Networks, training loop
+description: Build a small neural network, follow the training loop of batches, loss and learning rate, and watch it overfit.
+stage: ml-engineer
+order: 50
+level: advanced
+duration: 35
+objectives:
+  - Describe a neuron, a layer and a loss function
+  - 'Explain the training loop: forward pass, loss, backward pass, update'
+  - Train a small network in PyTorch on tabular data
+  - Read a training and validation loss plot
+prerequisites:
+  - ml-engineer-sklearn-pipelines-and-column-transformers
+  - core-linear-regression-basics
+datasets:
+  - app-events
+notebook: notebooks/ml-engineer/ml-engineer-neural-networks-and-training-loop.ipynb
+reviewed: 2026-11-16
+sources:
+  - title: 'PyTorch tutorials: Optimizing model parameters (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
+  - title: 'PyTorch tutorials: Build the neural network (accessed 2026-11-25)'
+    url: https://docs.pytorch.org/tutorials/beginner/basics/buildmodel_tutorial.html
+status: draft
+---
+
+TODO(owner): Environment decided by the draft: a Colab notebook, as you decided for deep learning. The network is small, so it runs on the CPU (`DEVICE = "cpu"`, one thread, seeded) and the numbers do not depend on a GPU, which first matters in the next lesson. Run twice with the same text, on Linux with Python 3.13.18, PyTorch 2.15.0 (CPU build), scikit-learn 1.9.1, pandas 3.0.5 and NumPy 2.5.3; not run on Colab, a GPU, Windows or macOS, so a last digit may move; the plotting cell was run once with matplotlib to see that it draws. Stub changes: the 3Blue1Brown and Crash Course sources were not opened and are dropped, and the Learn the basics home page gives way to the two tutorial pages that hold the claims; the stub's picture and a loss-curve chart for the page are not drawn (the notebook plots the curves, the page gives their numbers). Math: slopes only, as the stub says. Set `reviewed` when you publish.
+
+## The question
+
+The day-7 model of the Data Scientist track is a logistic regression with an ROC AUC of about 0.69. A teammate asks whether a neural network would do better, and the job postings of this track ask for PyTorch. *What is a neural network made of, how does it learn, and how do you know when it has started to memorize?* The table is the one of lesson DS3:
+
+| channel | platform | region | sessions_7d | expenses_7d | active_days_7d | churned |
+|---|---|---|---:|---:|---:|---:|
+| organic_search | web | asia_pacific | 0 | 1 | 1 | 1 |
+| app_store | android | north_america | 1 | 2 | 2 | 1 |
+| paid_search | android | north_america | 1 | 0 | 1 | 1 |
+| organic_search | web | north_america | 0 | 0 | 0 | 0 |
+
+By the end you can count the numbers a network learns, write its training loop, say what the learning rate does, and read where a validation curve parts from a training curve.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Logistic regression: predicting yes or no*](/data-scientist/logistic-regression-in-practice/) (DS4) a chance came from adding up each column times a weight and bending the sum into 0 to 1. A neuron does the same sum and the same bend.
+
+**Diverge.** A logistic regression has one such sum. A network feeds the results of several into more, and it is fitted by many small steps instead of one formula.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In [*Regression as a thinking tool*](/core/linear-regression-basics/) (C11), what does the slope of a line say?
+
+   <details>
+   <summary>answer</summary>
+
+   How much the predicted value changes when the input grows by one.
+
+   </details>
+
+2. In lesson DS5, which score does a model have to beat to be called better, and on which rows is it measured?
+
+   <details>
+   <summary>answer</summary>
+
+   A baseline, such as the flat guess or the simpler model, measured on rows the model did not learn from.
+
+   </details>
+
+## The big idea
+
+A network is sums and bends with numbers to learn, and training nudges every number a little against the slope of the loss, again and again.
+
+## Learn by doing
+
+About 35 minutes, 4 new ideas: layers and their numbers, a loss, the training loop and its step, two curves that part. The setup cells built the table of lesson DS3, the track's split with the fitting and validation people of lesson DS4 (10,021 and 3,341; the test part is not scored here), and the 19 columns a model reads: 12 from the text columns and 7 scaled numbers, as in lesson MLE1. They also print the validation AUC of the logistic regression on the same columns, 0.699.
+
+<OpenInColab />
+
+### 1. A neuron, a layer, and their numbers
+
+**Idea.** A *neuron* multiplies each input by a *weight*, adds the results and a *bias*, and bends the sum. A *layer* is several neurons that read the same inputs. A *ReLU* is a bend that keeps a positive number and turns a negative one into 0, and a *sigmoid* bends any number into 0 to 1. The numbers a network learns are its weights and biases. The PyTorch build-the-network page stacks `nn.Linear` layers with `nn.ReLU` between them in an `nn.Sequential`.
+
+**Try it:** build one neuron and a small network, count their learnable numbers, and give the neuron the weights of the logistic regression.
+
+```python
+neuron = nn.Sequential(nn.Linear(19, 1), nn.Sigmoid())                     # one neuron: 19 weights, one bias, a bend into 0 to 1
+small = nn.Sequential(nn.Linear(19, 8), nn.ReLU(), nn.Linear(8, 1))        # a layer of 8 neurons, a bend (ReLU), one output neuron
+
+
+def count(model):
+    """How many numbers the model learns."""
+    return sum(parameter.numel() for parameter in model.parameters())
+
+
+print(count(neuron), count(small))
+with torch.no_grad():                                                      # give the neuron the logistic regression's own numbers
+    neuron[0].weight.copy_(torch.tensor(logit.coef_, dtype=torch.float32))
+    neuron[0].bias.copy_(torch.tensor(logit.intercept_, dtype=torch.float32))
+    print(round(float((neuron(Xv).squeeze(1) - torch.tensor(logit_chances, dtype=torch.float32)).abs().max()), 6))
+```
+
+**Predict:** A single neuron reads the 19 columns and gives one chance; a small network has a layer of 8 neurons, then one output neuron. How many learnable numbers does each have?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+20 169
+0.0
+```
+
+</details>
+
+*Why:* The neuron has 20 numbers, 19 weights and a bias. The small network has 169: the 8 neurons of the layer have 19 weights and a bias each, 160 in all, and the output neuron has 8 weights and a bias. The second line printed 0.0: with the logistic regression's own weights, the neuron gives its chances (the largest difference is below a millionth). A neuron with a sigmoid is a logistic regression, and a network is made of them.
+
+### 2. A loss says how wrong the chances are
+
+**Idea.** Training needs one number that is small when the chances are good. *Binary cross-entropy* gives a person who churned the loss −ln(chance) and a person who stayed −ln(1 − chance), averaged over the people. The chance is the one the model gave to what happened.
+
+**Try it:** compute the loss of a flat chance of 0.5, of the share of churners, and of a new network that has not learned anything.
+
+```python
+loss_fn = nn.BCELoss()                                                     # binary cross-entropy
+torch.manual_seed(SEED)
+untrained = nn.Sequential(nn.Linear(19, 8), nn.ReLU(), nn.Linear(8, 1), nn.Sigmoid())
+share = float(yf.mean())
+with torch.no_grad():
+    print(round(float(loss_fn(torch.full_like(yf, 0.5), yf)), 3), round(float(loss_fn(torch.full_like(yf, share), yf)), 3), round(float(loss_fn(untrained(Xf), yf)), 3))
+```
+
+**Predict:** What loss will a chance of 0.5 for everyone give on the fitting people, what will the share of churners (about 0.54) give, and what will a new, untrained network give?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.693 0.689 0.706
+```
+
+</details>
+
+*Why:* A chance of 0.5 costs −ln 0.5 = 0.693 for everyone, whatever happened. The share of churners costs a little less, 0.689, because it is the best flat chance. The untrained network costs 0.706, a little more than the flat guess: its random numbers give chances near 0.5 that point nowhere. These three numbers are the starting line of every loss curve in this lesson: a trained network is worth something only below 0.689.
+
+### 3. The training loop, and the size of its step
+
+**Idea.** The loop repeats four things. The *forward pass* gives the chances for a batch, and the loss scores them. The *backward pass*, `loss.backward()`, finds the slope of the loss for every number. The *update*, `optimizer.step()`, moves each number by the *learning rate* times its slope, against it. A *batch* is the people used for one update, and an *epoch* is one pass over all of them. PyTorch's tutorial says gradients by default add up, so each step starts with `optimizer.zero_grad()`.
+
+**Try it:** run the loop for 20 epochs at four learning rates and print the loss on the fitting and validation people and the validation AUC at the end.
+
+```python
+def fit_network(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED):
+    """Train a network with one hidden layer; return it and the loss on the fitting and validation people after each epoch."""
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(), nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)                 # the update: every number moves by lr times its slope
+    history = []
+    for epoch in range(epochs):
+        order = torch.randperm(len(Xa))                                    # a new shuffle of the people every epoch
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()                                          # forget the slopes of the last batch
+            loss = loss_fn(model(Xa[rows]), ya[rows])                      # forward pass, then the loss of this batch
+            loss.backward()                                                # backward pass: the slope of the loss for every number
+            optimizer.step()                                               # update
+        with torch.no_grad():
+            history.append((float(loss_fn(model(Xa), ya)), float(loss_fn(model(Xv), yv))))
+    return model, history
+
+
+for lr in [0.01, 0.1, 1.0, 10.0]:
+    model, history = fit_network(Xf, yf, 8, lr, 20)
+    with torch.no_grad():
+        auc = roc_auc_score(y_val, model(Xv).squeeze(1).numpy())
+    print(lr, round(history[-1][0], 3), round(history[-1][1], 3), round(float(auc), 3))
+```
+
+**Predict:** The loop trains the 19, 8, 1 network for 20 epochs (an epoch is one pass over the fitting people, in batches of 256) with plain gradient descent. Tried with learning rates 0.01, 0.1, 1.0 and 10.0, which will end with the lowest loss on the fitting people?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+0.01 0.672 0.67 0.634
+0.1 0.631 0.63 0.691
+1.0 0.632 0.633 0.694
+10.0 1.215 1.216 0.517
+```
+
+</details>
+
+*Why:* The columns are: learning rate, loss on the fitting people, loss on the validation people, validation AUC. A rate of 0.1 ends lowest at 0.631, with 1.0 close behind at 0.632; 0.01 is still at 0.672 because its steps are small; and 10.0 ends at 1.215, worse than the 0.693 of a flat chance of 0.5, because its steps overshoot. The PyTorch tutorial puts it this way: large values "may result in unpredictable behavior during training". The validation AUC of the best rates is 0.691 and 0.694, against the logistic regression's 0.699 on the same people: the network has found what the regression found, and no more.
+
+### 4. Two curves, and where they part
+
+**Idea.** The loss is measured on two groups after every epoch: the people the network learns from, and validation people it never updates on. While the network learns a pattern both fall. When it starts to memorize its people, the loss on them keeps falling while the loss on the validation people rises. The epoch where the validation curve is lowest is where the network does best on people it does not learn from.
+
+**Try it:** train a bigger network, 64 neurons in the hidden layer, on only 500 people for 300 epochs, and find where the validation loss is lowest.
+
+```python
+pilot = X_fit.sample(500, random_state=SEED)                               # 500 of the fitting people
+Xp, yp = tensors(pilot, y_fit.loc[pilot.index])
+big, curves = fit_network(Xp, yp, 64, 0.1, 300, batch=50)
+validation = [pair[1] for pair in curves]
+best_epoch = int(np.argmin(validation)) + 1
+print(best_epoch, round(validation[best_epoch - 1], 3))
+print(round(curves[-1][0], 3), round(curves[-1][1], 3))
+```
+
+**Predict:** A bigger network, one hidden layer of 64 neurons, learns from only 500 of the fitting people for 300 epochs (batches of 50, learning rate 0.1). The loss on those 500 and on the 3,341 validation people is recorded after every epoch. At about which epoch will the validation loss be lowest, and will it be higher or lower at the end than at its lowest?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+28 0.638
+0.33 0.874
+```
+
+</details>
+
+*Why:* The first line is the epoch and the lowest validation loss: epoch 28, 0.638. The second is the loss at epoch 300 on the 500 people and on the validation people: 0.330 and 0.874. The network went on improving its fit to 500 people long after epoch 28, and by epoch 300 it is far worse than the flat guess of 0.689 on people it has not seen. The last cell of the notebook plots the two curves; the lowest point of the validation curve is the line to find. The 500-person pilot is a device to make memorizing visible: on all 10,021 fitting people the 8-neuron network of unit 3 does not part from its validation curve in 20 epochs.
+
+<Aside type="tip" title="Remember">
+
+- A neuron is a weighted sum plus a bias, bent; a layer is several neurons; a network learns their weights and biases.
+- A loss is one number that is small when the chances are good; the flat guess sets the line to beat.
+- The loop: forward pass, loss, backward pass, update, with `zero_grad` before each backward pass.
+- The learning rate sets the step: too small learns slowly, too large overshoots.
+- Read the validation curve beside the training curve; the lowest validation point marks where memorizing starts.
+
+**Common trap:** a training loss that keeps falling. Look at the validation loss before you believe it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-neural-networks-and-training-loop-1">
+
+**Count a deeper network.** A network has two hidden layers: 19 columns in, 16 neurons, then 8 neurons, then one output neuron, with a ReLU after each hidden layer. Complete the model and put its number of learnable numbers in `answer_1`. Expected: `answer_1` is a whole number.
+
+```python
+deeper = nn.Sequential(nn.Linear(19, 16), nn.ReLU(), nn.Linear(16, 8), nn.ReLU())      # given: the two hidden layers
+# add the output neuron to the model, then count its learnable numbers with count()
+answer_1 = None  # replace None with the number
+```
+
+<details>
+<summary>Hint</summary>
+
+The output neuron reads the 8 outputs of the layer before it: `nn.Linear(8, 1)`. Add it with `deeper.append(...)` or build the whole `nn.Sequential` again, then call `count`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+deeper = nn.Sequential(nn.Linear(19, 16), nn.ReLU(), nn.Linear(16, 8), nn.ReLU(), nn.Linear(..., 1))
+answer_1 = count(deeper)
+```
+
+</details>
+
+<Solution>
+
+```python
+deeper = nn.Sequential(nn.Linear(19, 16), nn.ReLU(), nn.Linear(16, 8), nn.ReLU(), nn.Linear(8, 1))
+answer_1 = count(deeper)
+```
+
+465 numbers: (19 + 1) x 16 = 320, (16 + 1) x 8 = 136 and (8 + 1) x 1 = 9, where each neuron has one weight for every input it reads and one bias.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-neural-networks-and-training-loop-2">
+
+**The loop from a blank cell.** Before you start, say in one sentence what the loss does as the steps go on: it falls, by less each time. Write the training loop yourself, without `fit_network`: a network `net` with 8 hidden neurons (`nn.Sequential(nn.Linear(19, 8), nn.ReLU(), nn.Linear(8, 1), nn.Sigmoid())`, built after `torch.manual_seed(SEED)`), gradient descent with learning rate 0.1, and 100 steps that each use all 10,021 fitting people at once. Put the loss on the fitting people after step 100, rounded to 3 decimals, in `answer_2`. Write the code in the empty cell of the notebook. Expected: `answer_2` is a number a little below 0.69.
+
+<details>
+<summary>Hint</summary>
+
+Each step is the same five lines as in unit 3 without the batch loop: `zero_grad`, the loss of `net(Xf)` against `yf`, `backward`, `step`. After the 100 steps compute the loss once more under `torch.no_grad()`.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+torch.manual_seed(SEED)
+net = nn.Sequential(nn.Linear(19, 8), nn.ReLU(), nn.Linear(8, 1), nn.Sigmoid())
+optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
+for step in range(100):
+    optimizer.zero_grad()
+    ...
+```
+
+</details>
+
+<Solution>
+
+```python
+torch.manual_seed(SEED)
+net = nn.Sequential(nn.Linear(19, 8), nn.ReLU(), nn.Linear(8, 1), nn.Sigmoid())
+optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
+for step in range(100):
+    optimizer.zero_grad()
+    loss = loss_fn(net(Xf), yf)
+    loss.backward()
+    optimizer.step()
+with torch.no_grad():
+    answer_2 = round(float(loss_fn(net(Xf), yf)), 3)
+```
+
+The loss after 100 full-batch steps is 0.666: below the 0.693 of a chance of 0.5 for everyone, and well above the 0.631 that unit 3 reached after 20 epochs of 40 steps each. A step on all the people moves the numbers by the average slope, and 100 of them are fewer updates than the 800 of unit 3.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: a network's training loss falls for 300 epochs. What do you plot or print next to it before you say the network has learned something, and what would tell you it memorized?
+
+   <details>
+   <summary>answer</summary>
+
+   The loss on validation people the network never updates on. If that curve stops falling and rises while the training loss keeps falling, the network is memorizing.
+
+   </details>
+
+<Exercise id="ml-engineer-neural-networks-and-training-loop-3">
+
+**Spot the flaw.** A colleague copies the loop of unit 3 and records the loss of an epoch as the loss of its last batch, `float(loss)`. Change the function so that it records the loss on all the fitting people after each epoch, and put the lowest of the 20 epoch losses (8 neurons, learning rate 0.1), rounded to 3 decimals, in `answer_3`. Expected: `answer_3` is a number between 0.5 and 0.8.
+
+```python
+def fit_last_batch(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED):
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(), nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    history = []
+    for epoch in range(epochs):
+        order = torch.randperm(len(Xa))
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()
+            loss = loss_fn(model(Xa[rows]), ya[rows])
+            loss.backward()
+            optimizer.step()
+        history.append(float(loss))                                        # colleague: "the loss of the epoch is the loss of its last batch"
+    return history
+
+
+answer_3 = round(min(fit_last_batch(Xf, yf, 8, 0.1, 20)), 3)
+# change the function so that it records the loss on all the fitting people after each epoch
+```
+
+<details>
+<summary>Hint</summary>
+
+The model sees different people in every batch. How many people are in the last batch of an epoch of 10,021 people in batches of 256? Where in the loop can you measure all of them under `torch.no_grad()`?
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+        with torch.no_grad():
+            history.append(float(loss_fn(model(Xa), ya)))
+```
+
+</details>
+
+<Solution>
+
+```python
+def fit_last_batch(Xa, ya, hidden, lr, epochs, batch=256, seed=SEED):
+    torch.manual_seed(seed)
+    model = nn.Sequential(nn.Linear(Xa.shape[1], hidden), nn.ReLU(), nn.Linear(hidden, 1), nn.Sigmoid())
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    history = []
+    for epoch in range(epochs):
+        order = torch.randperm(len(Xa))
+        for start in range(0, len(Xa), batch):
+            rows = order[start:start + batch]
+            optimizer.zero_grad()
+            loss = loss_fn(model(Xa[rows]), ya[rows])
+            loss.backward()
+            optimizer.step()
+        with torch.no_grad():
+            history.append(float(loss_fn(model(Xa), ya)))
+    return history
+
+
+answer_3 = round(min(fit_last_batch(Xf, yf, 8, 0.1, 20)), 3)
+```
+
+The lowest of the 20 losses is 0.631, the loss after the last epoch. The flawed function reports 0.543, because the last batch of each epoch holds only 37 people (10,021 = 39 x 256 + 37), and the lowest of 20 noisy values is a lucky one. A loss curve is measured on the same people every time.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can count the numbers a network learns, write the forward pass, loss, backward pass and update of a training loop, say what a too-large learning rate does, and read where a validation curve parts from a training curve.*
+Test: Exercise ml-engineer-neural-networks-and-training-loop-2, done from the notebook without opening the hints.
+
+The pattern to remember: **a network is sums and bends; the loop nudges every number against the slope of the loss; the validation curve says when to stop.** The next lesson, *Training deep models well: regularization and transfer learning* (MLE6), controls the part where the curves part.
