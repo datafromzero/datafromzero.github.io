@@ -22,7 +22,7 @@ prerequisites:
   - data-engineer-cloud-warehouse-in-practice
 datasets:
   - app-events
-reviewed: 2026-11-16
+reviewed: 2026-11-25
 sources:
   - title: 'dbt documentation: How we structure our dbt projects (accessed 2026-11-24; page updated 2026-08-19)'
     url: https://docs.getdbt.com/best-practices/how-we-structure/1-guide-overview
@@ -30,10 +30,8 @@ sources:
     url: https://kafka.apache.org/intro
   - title: 'Apache Spark documentation: Structured Streaming overview (Spark 4.3.0, accessed 2026-11-24)'
     url: https://spark.apache.org/docs/latest/streaming/index.html
-status: draft
+status: published
 ---
-
-TODO(owner): Team draft (D24), run with DuckDB 2.0.0 on Linux; tags `de-17-start` and `de-17-done` are pushed to `de-pipeline-starter` (2026-11-24). The reference SQL is in `sql/sql_test_reference.sql` of `de-17-done` (the learner opens it after the test), and every answer printed here comes from running it on the `app-events` file of release tag `v0.2.0`. The scale probe's times vary by machine (seven runs: medians 0.06 s and 0.16 s). The 100-times figures are arithmetic from those runs, labeled as not run. The AWS and Google Cloud certification pages of the stub were not opened and are dropped; the stub's sources are replaced by the three pages the reference quotes. Decide: the case and its stakeholder are invented; the reference's AI log rows are written for the lesson, in the style of an assistant, as in DS16. Not run: Windows, macOS, Codespaces. Stub changes: description kept; prerequisites unchanged; `short_title` added.
 
 ## The question
 
@@ -45,7 +43,7 @@ You have 90 minutes, and the rubric is below, so you can read it now. There is n
 
 From memory first, then click to check.
 
-1. In *Data quality checks that fail loudly* (DE6), what did the contract of `order_lines` list, and what did a check do when the data broke it?
+1. In [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/) (DE6), what did the contract of `order_lines` list, and what did a check do when the data broke it?
 
    <details>
    <summary>answer</summary>
@@ -54,7 +52,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In *Backfills, reruns and recovering from failure* (DE8), what must be true of a run for a rerun of the same days to be safe?
+2. In [*Backfills, reruns and recovering from failure*](/data-engineer/backfills-and-failure-recovery/) (DE8), what must be true of a run for a rerun of the same days to be safe?
 
    <details>
    <summary>answer</summary>
@@ -324,4 +322,4 @@ It scores 2 on item 8 with the self-score of every item and the minutes.
 
 </details>
 
-That is the last practice before the capstone, *Capstone: a pipeline repo someone else can run* (DE18), where you ship the whole project.
+That is the last practice before the capstone, [*Capstone: a pipeline repo someone else can run*](/data-engineer/analytics-platform-capstone/) (DE18), where you ship the whole project.

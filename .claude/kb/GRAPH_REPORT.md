@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1576 nodes, 1943 edges, 190 communities (636 isolated nodes).
+- 1576 nodes, 1944 edges, 190 communities (636 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 232, content-type 5, decision 58, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 10, script 191, skill 1, spec-section 25, starlight-component 6, style 7, symbol 311, template 2, token 12.
-- Edges: defines 311, imports 51, mentions 977, overrides 6, references 30, runs 15, specified-by 4, uses 512, uses-token 32, validated-by 5.
+- Edges: defines 311, imports 51, mentions 978, overrides 6, references 30, runs 15, specified-by 4, uses 512, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -20,8 +20,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 5 | `src/components/content/OpenInColab.astro` | component | 67 | src/components/content/OpenInColab.astro:1 |
 | 6 | `.claude/HANDOFF.md` | doc | 61 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
-| 8 | `src/site.ts` | module | 33 | src/site.ts:1 |
-| 9 | `agent:LESSON-STANDARD` | agent | 32 | .claude/agents/LESSON-STANDARD.md:1 |
+| 8 | `agent:LESSON-STANDARD` | agent | 33 | .claude/agents/LESSON-STANDARD.md:1 |
+| 9 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 10 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
 | 11 | `S6` Authoring components | spec-section | 31 | SPEC.md:280 |
 | 12 | `.claude/MISTAKES.md` | doc | 30 | .claude/MISTAKES.md:1 |
@@ -58,9 +58,9 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C177 to C174, src/layouts/HomeLayout.astro:39)
 - `src/styles/math.css` -uses-token-> `token:--fg` (C67 to C10, src/styles/math.css:17)
 - `M8` -mentions-> `D24` (C70 to C2, CLAUDE.md:66)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C168 to C2, scripts/check-placeholders.mjs:2)
 - `M6` -mentions-> `D26` (C2 to C66, CLAUDE.md:62)
 - `scripts/check-lessons.mjs` -mentions-> `D47` (C166 to C2, scripts/check-lessons.mjs:10)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C168 to C2, scripts/check-placeholders.mjs:2)
 - `src/lib/repo-files.ts` -mentions-> `CITATION.cff` (C182 to C2, src/lib/repo-files.ts:4)
 
 ## Decisions (SPEC §1)

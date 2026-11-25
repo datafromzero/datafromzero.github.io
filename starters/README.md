@@ -12,17 +12,23 @@ Both folders are code, not site content: the site build, the spelling check and 
 
 ## Publishing `de-pipeline-starter`
 
-The repository exists at `https://github.com/datafromzero/de-pipeline-starter`, with `main` and the tags `de-01-start` to
-`de-05-done` pushed. `uv run pytest -q` passed in a real GitHub Codespace at that state (16 passed, 1 skipped), so
-Codespaces is verified for DE1 to DE5. DE6 to DE14 were checked in a codespace too (22 tests passed and 1 skipped, `ci/dbt_ci.sh` ended with PASS=46, `airflow dags test` succeeded). Codespaces is not verified for DE15 to DE18, and GitHub Actions (DE14) was not run at all, only the script it calls. Airflow, the lesson that needs
-Linux, was run only in this repository's build environment (Linux), not in Windows with WSL2, on macOS or in a codespace.
+The repository exists at `https://github.com/datafromzero/de-pipeline-starter`, with `main` and every tag from `de-01-start` to
+`de-18-done` pushed (`de-15-start` is the pushed `de-14-done`). Owner checks in real GitHub Codespaces, 2026-11-24 and 25: at DE5
+`uv run pytest -q` passed (16 passed, 1 skipped); at DE14 pytest gave 22 passed and 1 skipped, `ci/dbt_ci.sh` ended with PASS=46
+and `airflow dags test` ended in state success; at DE18 Java 21 was present (from the dev container feature), pytest passed,
+`scripts/clean_clone_check.sh` ended with PASS=46 and exit 0, `fetch_app_events` read 13,041,745 bytes and 177,379 events, and the
+Spark job `events_by_name` ran 4 jobs with matching counts. Not tested, or not reported: GitHub Actions itself (DE14; only the script it calls was run),
+Windows with WSL2, macOS, and an older codespace after Codespaces: Rebuild Container (DE16 tells such a learner to fetch the new
+`.devcontainer/devcontainer.json` from `de-16-done`).
 
-TODO(owner): the tags `de-06-start` to `de-14-done` are pushed; `de-15-done` to `de-18-done` are built but not pushed (`de-15-start` is the pushed `de-14-done`). DE16 adds `spark/`, with PySpark 4.3.0 and its own `uv.lock`: it needs Java 17, 21 or 25. The checkpoint `de-16-done` carries a new `.devcontainer/devcontainer.json` that installs Java 21 with the Dev Containers Java feature (`ghcr.io/devcontainers/features/java:1`, option `version`); earlier checkpoints keep the old file, and a codespace created before it needs the file fetched and Codespaces: Rebuild Container (the lesson says so). That file was not built or tested in a codespace: test it in a new codespace (`java -version`, then a Spark command of DE16) and in an older one after the rebuild. DE16 was not run on Windows. To publish them:
+DE16 adds `spark/`, with PySpark 4.3.0 and its own `uv.lock`: it needs Java 17, 21 or 25. The checkpoint `de-16-done` carries a
+`.devcontainer/devcontainer.json` that installs Java 21 with the Dev Containers Java feature (`ghcr.io/devcontainers/features/java:1`,
+option `version`); earlier checkpoints keep the old file. To publish a new checkpoint:
 
 1. Build the history in a folder that does not exist yet: `python3 starters/de-pipeline-checkpoints/make_history.py ../de-pipeline-build`.
    Every commit has the same author and date, so the commits of lessons 1 to 5 get the hashes of the repository on GitHub;
    the script stops if they do not (`PUBLISHED` in the script lists the hashes, and also those of lessons 6 to 10, which later lessons build on and which no longer change), because a change to a published checkpoint
-   would not be a fast-forward. Add the hash of each new lesson to `PUBLISHED` once it is pushed (lessons 15 to 18 are not in it yet).
+   would not be a fast-forward. Add the hash of each new lesson to `PUBLISHED` once it is pushed.
 2. In that folder, add the repository as a remote and push, with the tags: `git remote add origin https://github.com/datafromzero/de-pipeline-starter.git`,
    then `git push origin main --tags` (a fast-forward of the `main` that is there).
 3. Open a codespace on the repository and run `uv run pytest -q`; for DE7 and DE8 also `cd airflow`, `uv sync`, `source env.sh`

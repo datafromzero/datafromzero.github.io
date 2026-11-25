@@ -22,16 +22,14 @@ prerequisites:
   - core-trust-but-verify-ai-output
 datasets:
   - cafe-sales
-reviewed: 2026-11-16
+reviewed: 2026-11-25
 sources:
   - title: 'dbt documentation: How we structure our dbt projects (accessed 2026-11-24; page updated 2026-08-19)'
     url: https://docs.getdbt.com/best-practices/how-we-structure/1-guide-overview
   - title: 'dbt documentation: Continuous integration (accessed 2026-11-24; page updated 2026-10-07)'
     url: https://docs.getdbt.com/docs/deploy/continuous-integration
-status: draft
+status: published
 ---
-
-TODO(owner): Team draft (D24), run with dbt-core 1.12.6, dbt-duckdb 1.11.1, DuckDB 2.0.0, uv 0.11.32 on Linux; tags `de-18-start` and `de-18-done` are pushed to `de-pipeline-starter` (2026-11-24). The reference is the starter as the track builds it, with three added files (`sql/owner_questions.sql`, `scripts/clean_clone_check.sh`, the README sections). The clean-clone check, the 46 nodes and the deliberate break were run here; **the backfill, Airflow, GitHub Actions and a warehouse were not run for the capstone** (DE8 ran the backfill). The dollars of the star are reconciled between two tables of the repository, not with the API. The Kimball page of the stub was opened and is only a table of contents, so it is dropped; the dbt CI page describes the dbt platform, and the lesson quotes only its first sentence. The case's owner is invented, and the reference's AI log rows are written for the lesson, in the style of an assistant. Not run: Windows, macOS, Codespaces. Stub changes: prerequisites add *Trust, but verify* (C38); sources replaced by the two pages opened.
 
 ## The question
 
@@ -43,7 +41,7 @@ You have built the pieces over the track; here you put them in one repository a 
 
 From memory first, then click to check.
 
-1. In *CI for dbt: checks on every pull request* (DE14), what does a green check prove?
+1. In [*CI for dbt: checks on every pull request*](/data-engineer/ci-and-deployment-for-dbt/) (DE14), what does a green check prove?
 
    <details>
    <summary>answer</summary>
@@ -52,7 +50,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In *Dimensional models and slowly changing dimensions* (DE13), which version of a product does a line of `fct_order_lines` point to?
+2. In [*Dimensional models and slowly changing dimensions*](/data-engineer/dimensional-models-and-scd/) (DE13), which version of a product does a line of `fct_order_lines` point to?
 
    <details>
    <summary>answer</summary>
