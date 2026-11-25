@@ -30,8 +30,8 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
-- **Curriculum (D29, D32, D40, D45, D49, D61):** 221 lessons in 8 stages (Excel, SQL, Python, Data Analyst, Data Scientist and Data Engineer published, the rest `status: draft`, never deployed; the Python lesson `charts-plotly`, P22b, D61, is a draft):
-  Excel 22, SQL 39, Python 28, core 44 (six parts and a capstone, D49), Data Analyst 17, Data Engineer 31 (20 plus an 11-lesson optional deep dive, published 2026-11-25),
+- **Curriculum (D29, D32, D40, D45, D49, D61):** 222 lessons in 8 stages (Excel, SQL, Python, Data Analyst, Data Scientist and Data Engineer published, the rest `status: draft`, never deployed; the Python lesson `charts-plotly`, P22b, D61, is a draft):
+  Excel 22, SQL 39, Python 28, core 44 (six parts and a capstone, D49), Data Analyst 18 (17 published plus the draft DA8b), Data Engineer 31 (20 plus an 11-lesson optional deep dive, published 2026-11-25),
   Data Scientist 16, ML Engineer 24 (16 plus an 8-lesson optional deep dive); track shape is D55, lesson codes DA, DE, DS and MLE.
   The map is `research/curriculum/06-curriculum-map.yaml` (its track stages match the files; other stages were not re-synced); lesson frontmatter is the source of truth.
 - **Quality gates:** `npm run check` locally; CI runs `checks` and `lighthouse` on every PR.
