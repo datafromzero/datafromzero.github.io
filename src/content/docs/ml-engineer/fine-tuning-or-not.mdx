@@ -23,6 +23,8 @@ sources:
     url: https://huggingface.co/docs/peft/main/en/conceptual_guides/lora
   - title: 'Hu et al., LoRA: Low-Rank Adaptation of Large Language Models, abstract (accessed 2026-11-25)'
     url: https://arxiv.org/abs/2106.09685
+  - title: 'Model card: ibm-granite/granite-4.0-1b (accessed 2026-11-26)'
+    url: https://huggingface.co/ibm-granite/granite-4.0-1b
   - title: 'OpenAI: Optimizing LLM accuracy (accessed 2026-11-25)'
     url: https://developers.openai.com/api/docs/guides/optimizing-llm-accuracy
 status: published
@@ -30,7 +32,7 @@ status: published
 
 ## The question
 
-The help box of the site sends each learner question to the lesson that answers it. In lesson MLE8 a prompt did that, and named the right lesson for 8 of 16 questions. To do better you can say more to the model, show it text, or change the model. *Which one pays for this job, and what does each cost?* Three of the 32 test questions, with the lesson that answers each:
+The help box of the site sends each learner question to the lesson that answers it. To get a model to do that you can say more to it, show it text, or change the model. *Which one pays for this job, and what does each cost?* Three of the 32 test questions, with the lesson that answers each:
 
 | question | lesson |
 |---|---|
@@ -119,7 +121,7 @@ Where each approach acts: the words of the request, the text it carries, or the 
 
 ## Learn by doing
 
-About 43 minutes, 5 units: a prompt and its cost, retrieved text, a LoRA adapter and its training, what the adapter is, the bill. No key is needed. The setup cells loaded `Qwen2.5-1.5B-Instruct` with the `chat` function of lesson MLE8, the encoder of lesson MLE9, 96 questions to train on (`TRAIN`, written for this lesson), 16 to watch the loss (`DEV`, the questions of lesson MLE9) and 32 for the test (`TEST`: the 16 golden questions of lesson MLE10 and 16 new ones). Each approach is scored once on `TEST`, and nothing is chosen on it. On the run shown (two CPU threads, no GPU, not timed on Colab) unit 1 took 97 seconds, unit 2 262 and the training of unit 3 599: start it, then read on.
+About 43 minutes, 5 units: a prompt and its cost, retrieved text, a LoRA adapter and its training, what the adapter is, the bill. No key is needed. The setup cells loaded `granite-4.0-1b`, a model made by IBM (Apache 2.0, downloaded without an account), with the `chat` function of lesson MLE8, the encoder of lesson MLE9, 96 questions to train on (`TRAIN`, written for this lesson), 16 to watch the loss (`DEV`, the questions of lesson MLE9) and 32 for the test (`TEST`: the 16 golden questions of lesson MLE10 and 16 new ones). Each approach is scored once on `TEST`, and nothing is chosen on it. On the run shown (two CPU threads, no GPU, not timed on Colab) unit 1 took 121 seconds, unit 2 282 and the training of unit 3 621: start it, then read on.
 
 <OpenInColab />
 
@@ -150,13 +152,13 @@ print(sorted({r["error"] for r in runs["prompt"] if r["error"]}))
 <summary>Reveal the result</summary>
 
 ```text
-{'pass': 32, 'right': 15, 'prompt': 92, 'completion': 8, 'cost': 0.131, 'seconds': 3.0}
-[]
+{'pass': 31, 'right': 28, 'prompt': 92, 'completion': 8, 'cost': 0.133, 'seconds': 3.8}
+['json_invalid']
 ```
 
 </details>
 
-*Why:* The first line gives the replies that pass (32), the right lessons (15), the mean prompt and completion tokens (92 and 8), the dollars for 1,000 requests ($0.131) and the median seconds (3.0). The second line lists the error types: none. Every reply is valid JSON with a name from the list, and fewer than half name the right lesson: the prompt fixed the form, and the model chooses by the eight names alone.
+*Why:* The first line gives the replies that pass (31), the right lessons (28), the mean prompt and completion tokens (92 and 8), the dollars for 1,000 requests ($0.133) and the median seconds (3.8). The second line lists the error types: one reply was not JSON at all (`json_invalid`). The other 31 are valid JSON with a name from the list, and 28 of the 32 name the right lesson: the model chooses by the eight names alone, and does it well.
 
 ### 2. Retrieve for it
 
@@ -186,19 +188,20 @@ print(sum(lesson == expected for lesson, (_, expected) in zip(top_chunk, TEST)))
 <summary>Reveal the result</summary>
 
 ```text
-{'pass': 32, 'right': 24, 'prompt': 520, 'completion': 8, 'cost': 0.559, 'seconds': 8.3}
+{'pass': 26, 'right': 22, 'prompt': 504, 'completion': 8, 'cost': 0.543, 'seconds': 8.7}
+['json_invalid'] ['{"dates-and-time"}', '{"case-expressions"}', '{"group-by-having"}']
 25
 ```
 
 </details>
 
-*Why:* The right lessons rise from 15 to 24 of 32, and the request from 92 to 520 prompt tokens: $0.559 for 1,000 requests against $0.131, and a median of 8.3 seconds against 3.0. The last line is the best chunk alone, with no model: 25. The model added nothing to the search here (24 against 25), so retrieval did the work.
+*Why:* The right lessons fall from 28 to 22 of 32, and the request grows from 92 to 504 prompt tokens: $0.543 for 1,000 requests against $0.133, and a median of 8.7 seconds against 3.8. Six replies fail the check (`json_invalid`), and the first three show how: a name in braces with no `lesson` key. Of the 26 that pass, 22 name the right lesson. The last line is the best chunk alone, with no model: 25, more than the model got from the same chunks. On this task, a choice between eight names, the text made the request more than five times as long and the answers worse.
 
 ### 3. Tune it with LoRA
 
 **Idea.** Fine-tuning changes the model. LoRA (low-rank adaptation) freezes the model's numbers and adds two small matrices beside each layer you choose; only those are trained, and the PEFT documentation says the original and the adapted weights are combined to give the output. The rank `r` sets how small the matrices are: a layer with `n_in` inputs and `n_out` outputs gets `r x (n_in + n_out)` new numbers. `lora_alpha` scales the update, and `target_modules` names the layers: the documentation says LoRA is typically applied to the attention blocks only. `lora_dropout` drops a share of the adapter's values while training, as the dropout of lesson [MLE6](/ml-engineer/deep-learning-training-practice/) does. Training needs labeled examples: here a question with its reply, 96 of them.
 
-**Try it:** wrap the four attention layers of all 28 layers of the model, with rank 8, and count the numbers that will be trained.
+**Try it:** wrap the four attention layers of all 40 layers of the model, with rank 8, and count the numbers that will be trained.
 
 ```python
 SHAPES = {}                                                                   # the shape of each layer the adapter will wrap, read before wrapping
@@ -223,16 +226,16 @@ print(trainable, total, round(100 * trainable / total, 3))
 <summary>Reveal the result</summary>
 
 ```text
-{'q_proj': (1536, 1536), 'k_proj': (1536, 256), 'v_proj': (1536, 256), 'o_proj': (1536, 1536)} 28
+{'q_proj': (2048, 2048), 'k_proj': (2048, 512), 'v_proj': (2048, 512), 'o_proj': (2048, 2048)} 40
 8 16 0.05 ['k_proj', 'o_proj', 'q_proj', 'v_proj']
-2179072 1545893376 0.141
+4259840 1636009984 0.26
 ```
 
 </details>
 
-*Why:* The first line is the shape of each wrapped layer and the number of layers. The second is `r`, `lora_alpha`, `lora_dropout` and the layers: the configuration of the run. The third is the numbers trained, the numbers in the model and the share: 8 x (3,072 + 1,792 + 1,792 + 3,072) = 77,824 for one layer, 2,179,072 for 28, which is 0.141 percent of 1,545,893,376. The paper reports 10,000 times fewer trainable parameters than full tuning of GPT-3 175B with Adam.
+*Why:* The first line is the shape of each wrapped layer and the number of layers. The second is `r`, `lora_alpha`, `lora_dropout` and the layers: the configuration of the run. The third is the numbers trained, the numbers in the model and the share: 8 x (4,096 + 2,560 + 2,560 + 4,096) = 106,496 for one layer, 4,259,840 for 40, which is 0.26 percent of 1,636,009,984. The paper reports 10,000 times fewer trainable parameters than full tuning of GPT-3 175B with Adam.
 
-**Idea.** A training example is the request followed by the reply, and the loss counts the reply only. An epoch is one pass over the 96 questions, in batches of 8. After each epoch the loss on `DEV`, which the model never trains on, says whether what it learns carries over (the validation loss of lesson MLE6). The rate 5e-4 and the 4 epochs were chosen on `DEV`: a first run at 2e-4 for 3 epochs left only 8 of 16 `DEV` questions right. `TEST` chose nothing.
+**Idea.** A training example is the request followed by the reply, and the loss counts the reply only. An epoch is one pass over the 96 questions, in batches of 8. After each epoch the loss on `DEV`, which the model never trains on, says whether what it learns carries over (the validation loss of lesson MLE6). The rate 5e-4 and the 4 epochs were chosen on `DEV`: a first run at 2e-4 for 3 epochs left 12 of 16 `DEV` questions right, and 5e-4 for 4 epochs got all 16. `TEST` chose nothing.
 
 **Try it:** train for 4 epochs. The cell loops over the batches and scores `DEV` after each epoch; these five lines are one step. It prints the loss of each of the 48 steps, and the validation loss before the first step and after each epoch.
 
@@ -250,64 +253,66 @@ optimizer.zero_grad()
 <summary>Reveal the result</summary>
 
 ```text
-48 steps 599 seconds
-[5.216, 4.008, 2.888, 2.335, 1.671, 1.53, 1.142, 0.869, 0.804, 0.589, 0.756, 0.401, 0.533, 0.402, 0.312, 0.213, 0.114, 0.253, 0.263, 0.148, 0.129, 0.209, 0.193, 0.144, 0.14, 0.145, 0.1, 0.272, 0.037, 0.084, 0.091, 0.093, 0.241, 0.243, 0.054, 0.039, 0.023, 0.027, 0.109, 0.028, 0.069, 0.03, 0.022, 0.037, 0.008, 0.085, 0.038, 0.044]
-{'epoch': 0, 'validation': 4.836}
-{'epoch': 1, 'train': 1.851, 'validation': 0.458}
-{'epoch': 2, 'train': 0.243, 'validation': 0.224}
-{'epoch': 3, 'train': 0.128, 'validation': 0.058}
-{'epoch': 4, 'train': 0.043, 'validation': 0.076}
+48 steps 611 seconds
+[5.769, 3.234, 1.743, 1.376, 0.944, 0.884, 0.449, 0.368, 0.679, 0.18, 0.218, 0.161, 0.127, 0.081, 0.04, 0.051, 0.031, 0.028, 0.056, 0.058, 0.069, 0.153, 0.03, 0.084, 0.025, 0.058, 0.007, 0.092, 0.029, 0.013, 0.015, 0.03, 0.045, 0.02, 0.003, 0.001, 0.004, 0.019, 0.002, 0.016, 0.021, 0.007, 0.003, 0.007, 0.002, 0.002, 0.001, 0.003]
+{'epoch': 0, 'validation': 5.529}
+{'epoch': 1, 'train': 1.334, 'validation': 0.119}
+{'epoch': 2, 'train': 0.067, 'validation': 0.073}
+{'epoch': 3, 'train': 0.028, 'validation': 0.014}
+{'epoch': 4, 'train': 0.007, 'validation': 0.041}
 keep the adapter of epoch 3
 ```
 
 </details>
 
-*Why:* The first line is 48 steps in 599 seconds, five passes over `DEV` included. The step losses fall from 5.216 to about 0.04, with noise from batch to batch. The rows are the epoch, the mean training loss of its steps (dropout on) and the validation loss. The validation loss falls from 4.836 to 0.058 after epoch 3, then rises to 0.076 while the training loss still falls: the adapter has begun to fit the 96 questions rather than the task. The adapter of epoch 3 is kept.
+*Why:* The first line is 48 steps in 621 seconds, five passes over `DEV` included. The step losses fall from 5.769 to 0.003, with noise from batch to batch. The rows are the epoch, the mean training loss of its steps (dropout on) and the validation loss. The validation loss falls from 5.529 to 0.014 after epoch 3, then rises to 0.041 while the training loss still falls: the adapter has begun to fit the 96 questions rather than the task. The adapter of epoch 3 is kept.
 
 The run of unit 3: the loss of every step, and the validation loss after each epoch.
 
 <figure>
 <svg viewBox="0 0 360 247" width="360" role="img" aria-labelledby="mle11-loss-t mle11-loss-d">
 <title id="mle11-loss-t">The loss of the LoRA run, step by step, and the validation loss after each epoch</title>
-<desc id="mle11-loss-d">A line chart on a log scale. The training loss of each of 48 steps falls from 5.216 to 0.044. The validation loss is 4.836 before training and 0.458, 0.224, 0.058 and 0.076 after epochs 1 to 4: lowest after epoch 3, so that epoch's adapter is kept.</desc>
+<desc id="mle11-loss-d">A line chart on a log scale. The training loss of each of 48 steps falls from 5.769 to 0.003. The validation loss is 5.529 before training and 0.119, 0.073, 0.014 and 0.041 after epochs 1 to 4: lowest after epoch 3, so that epoch's adapter is kept.</desc>
 <g fill="currentColor">
-<path d="M54.1 152.4 L330.1 152.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
-<text x="48.1" y="155.9" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.01</text>
-<path d="M54.1 108.8 L330.1 108.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
-<text x="48.1" y="112.3" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.1</text>
-<path d="M54.1 65.1 L330.1 65.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
-<text x="48.1" y="68.6" font-size="9.5" text-anchor="end" fill-opacity="0.8">1</text>
-<path d="M54.1 165.6 L54.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="54.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0</text>
-<path d="M123.1 165.6 L123.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="123.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">12</text>
-<path d="M192.1 165.6 L192.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="192.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">24</text>
-<path d="M261.1 165.6 L261.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="261.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">36</text>
-<path d="M330.1 165.6 L330.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="330.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">48</text>
-<path d="M54.1 165.6 L330.1 165.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
-<text x="192.1" y="195.6" font-size="9.5" text-anchor="middle" fill-opacity="0.9">step (12 steps make one epoch)</text>
-<text x="24.1" y="21.6" font-size="9.5" fill-opacity="0.9">loss, log scale</text>
-<path d="M59.9 33.7 L65.6 38.7 L71.4 44.9 L77.1 49 L82.9 55.3 L88.6 57 L94.4 62.5 L100.1 67.7 L105.9 69.2 L111.6 75.1 L117.4 70.4 L123.1 82.4 L128.9 77 L134.6 82.4 L140.4 87.2 L146.1 94.4 L151.9 106.3 L157.6 91.1 L163.4 90.4 L169.1 101.3 L174.9 103.9 L180.6 94.8 L186.4 96.3 L192.1 101.8 L197.9 102.4 L203.6 101.7 L209.4 108.8 L215.1 89.8 L220.9 127.6 L226.6 112.1 L232.4 110.5 L238.1 110.1 L243.9 92.1 L249.6 91.9 L255.4 120.4 L261.1 126.6 L266.9 136.6 L272.6 133.6 L278.4 107.1 L284.1 132.9 L289.9 115.8 L295.6 131.6 L301.4 137.5 L307.1 127.6 L312.9 156.7 L318.6 111.8 L324.4 127.1 L330.1 124.3" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.85" stroke-linejoin="round" stroke-linecap="round" />
-<path d="M54.1 35.2 L123.1 79.9 L192.1 93.4 L261.1 119.1 L330.1 114" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
-<circle cx="54.1" cy="35.2" r="3.5" fill="#00a07a" />
-<circle cx="123.1" cy="79.9" r="3.5" fill="#00a07a" />
-<circle cx="192.1" cy="93.4" r="3.5" fill="#00a07a" />
-<circle cx="261.1" cy="119.1" r="3.5" fill="#00a07a" />
-<circle cx="330.1" cy="114" r="3.5" fill="#00a07a" />
-<text x="62.1" y="29.2" font-size="9.5" font-weight="600">4.836</text>
-<text x="129.1" y="73.9" font-size="9.5" font-weight="600">0.458</text>
-<text x="198.1" y="87.4" font-size="9.5" font-weight="600">0.224</text>
-<text x="326.1" y="104" font-size="9.5" font-weight="600" text-anchor="end">0.076</text>
-<circle cx="261.1" cy="119.1" r="7" fill="none" stroke="#ad9100" stroke-width="2" />
-<rect x="54.1" y="207.6" width="14" height="3" fill="#0072b2" />
-<text x="73.1" y="211.6" font-size="9.5">training loss of each step</text>
-<rect x="210.1" y="207.6" width="14" height="3" fill="#00a07a" />
-<text x="229.1" y="211.6" font-size="9.5">validation loss</text>
-<circle cx="60.1" cy="227.6" r="5" fill="none" stroke="#ad9100" stroke-width="2" />
-<text x="73.1" y="230.6" font-size="9.5" font-weight="600">epoch 3 kept: validation loss 0.058</text>
+<path d="M54.3 160.8 L330.3 160.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.3" y="164.3" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.001</text>
+<path d="M54.3 130.1 L330.3 130.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.3" y="133.6" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.01</text>
+<path d="M54.3 99.3 L330.3 99.3" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.3" y="102.8" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.1</text>
+<path d="M54.3 68.6 L330.3 68.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.3" y="72.1" font-size="9.5" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M54.3 165.6 L54.3 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="54.3" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M123.3 165.6 L123.3 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="123.3" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M192.3 165.6 L192.3 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="192.3" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">24</text>
+<path d="M261.3 165.6 L261.3 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="261.3" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">36</text>
+<path d="M330.3 165.6 L330.3 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="330.3" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">48</text>
+<path d="M54.3 165.6 L330.3 165.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="192.3" y="195.6" font-size="9.5" text-anchor="middle" fill-opacity="0.9">step (12 steps make one epoch)</text>
+<text x="24.3" y="21.6" font-size="9.5" fill-opacity="0.9">loss, log scale</text>
+<path d="M60.1 45.2 L65.8 52.9 L71.6 61.2 L77.3 64.3 L83.1 69.4 L88.8 70.2 L94.6 79.3 L100.3 81.9 L106.1 73.8 L111.8 91.5 L117.6 88.9 L123.3 93 L129.1 96.1 L134.8 102.2 L140.6 111.6 L146.3 108.3 L152.1 115 L157.8 116.3 L163.6 107.1 L169.3 106.6 L175.1 104.3 L180.8 93.7 L186.6 115.4 L192.3 101.7 L198.1 117.9 L203.8 106.6 L209.6 134.8 L215.3 100.5 L221.1 115.9 L226.8 126.6 L232.6 124.7 L238.3 115.4 L244.1 110 L249.8 120.8 L255.6 146.2 L261.3 160.8 L267.1 142.3 L272.8 121.5 L278.6 151.6 L284.3 123.8 L290.1 120.2 L295.8 134.8 L301.6 146.2 L307.3 134.8 L313.1 151.6 L318.8 151.6 L324.6 160.8 L330.3 146.2" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.85" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M54.3 45.8 L123.3 97 L192.3 103.5 L261.3 125.6 L330.3 111.2" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="54.3" cy="45.8" r="3.5" fill="#00a07a" />
+<circle cx="123.3" cy="97" r="3.5" fill="#00a07a" />
+<circle cx="192.3" cy="103.5" r="3.5" fill="#00a07a" />
+<circle cx="261.3" cy="125.6" r="3.5" fill="#00a07a" />
+<circle cx="330.3" cy="111.2" r="3.5" fill="#00a07a" />
+<text x="62.3" y="39.8" font-size="9.5" font-weight="600">5.529</text>
+<text x="129.3" y="91" font-size="9.5" font-weight="600">0.119</text>
+<text x="198.3" y="97.5" font-size="9.5" font-weight="600">0.073</text>
+<text x="326.3" y="101.2" font-size="9.5" font-weight="600" text-anchor="end">0.041</text>
+<circle cx="261.3" cy="125.6" r="7" fill="none" stroke="#ad9100" stroke-width="2" />
+<rect x="54.3" y="207.6" width="14" height="3" fill="#0072b2" />
+<text x="73.3" y="211.6" font-size="9.5">training loss of each step</text>
+<rect x="210.3" y="207.6" width="14" height="3" fill="#00a07a" />
+<text x="229.3" y="211.6" font-size="9.5">validation loss</text>
+<circle cx="60.3" cy="227.6" r="5" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="73.3" y="230.6" font-size="9.5" font-weight="600">epoch 3 kept: validation loss 0.014</text>
 </g>
 </svg>
 </figure>
@@ -337,17 +342,16 @@ for i in wrong:
 <summary>Reveal the result</summary>
 
 ```text
-{'pass': 31, 'right': 28, 'prompt': 33, 'completion': 8, 'cost': 0.075, 'seconds': 2.6}
-['literal_error']
-2 group-by-having -> {"lesson": "group-by"}
-25 window-functions -> {"lesson": "group-by-having"}
+{'pass': 32, 'right': 29, 'prompt': 33, 'completion': 8, 'cost': 0.074, 'seconds': 3.5}
+[]
+2 group-by-having -> {"lesson": "ctes"}
+23 left-join-anti-join -> {"lesson": "ctes"}
 26 ctes -> {"lesson": "window-functions"}
-27 ctes -> {"lesson": "window-functions"}
 ```
 
 </details>
 
-*Why:* The tuned model names the right lesson for 28 of the 32 questions, against 15 for the prompt and 24 for retrieval, and a request counts 33 tokens against 92 and 520. Whether those gaps are more than chance is the question of unit 5. One reply fails the schema: its type is `literal_error`, JSON with a name that is not one of the eight (lesson MLE8). The lines below are the four questions it got wrong: `group-by` is a near miss that is not on the list, and three name another lesson. This is one run with one seed.
+*Why:* The tuned model names the right lesson for 29 of the 32 questions, against 28 for the prompt and 22 for retrieval, and a request counts 33 tokens against 92 and 504. All 32 replies pass the schema, and the list of error types is empty. Whether those gaps are more than chance is the question of unit 5. The lines below are the three questions it got wrong: each names another lesson from the list, `ctes` twice and `window-functions` once. This is one run with one seed.
 
 ### 4. What the adapter is
 
@@ -371,14 +375,14 @@ print(repr(chat(question, max_new_tokens=40)["text"]))                       # t
 <summary>Reveal the result</summary>
 
 ```text
-8.7 MB in the adapter file
-'The COALESCE function in SQL returns the first non-null value in a list of expressions.'
-'{"{"": "left-join-outer"}"}'
+17.1 MB in the adapter file
+'COALESCE is an SQL function that returns the first non-null value among its arguments, providing a way to handle missing or null values in a dataset.'
+'{"sentence": "COALESCE returns the first non-null value among its arguments, or null if all are null."}'
 ```
 
 </details>
 
-*Why:* The adapter file holds 8.7 MB, next to a model that downloads at about 3 GB (lesson MLE8). With the adapter off, the model answers in a sentence. With it on, the same question gets a reply in the shape it was trained for and no answer: on this one request, the tuned model answered a question outside its task with broken JSON.
+*Why:* The adapter file holds 17.1 MB, next to a model that downloads at about 3.3 GB. With the adapter off, the model answers in a sentence. With it on, the same sentence arrives inside a JSON object, the shape it was trained for, under a key (`sentence`) that none of the 96 training replies has: on this one request, the habit of replying in JSON has spread to a question outside its task.
 
 ### 5. The bill
 
@@ -420,49 +424,49 @@ print(sign_test(*differ("tuned", "retrieval")), sign_test(*differ("tuned", "prom
 <summary>Reveal the result</summary>
 
 ```text
-prompt {'pass': 32, 'right': 15, 'prompt': 92, 'completion': 8, 'cost': 0.131, 'seconds': 3.0}
-retrieval {'pass': 32, 'right': 24, 'prompt': 520, 'completion': 8, 'cost': 0.559, 'seconds': 8.3}
-tuned {'pass': 31, 'right': 28, 'prompt': 33, 'completion': 8, 'cost': 0.075, 'seconds': 2.6}
-5.6e-05 3571429
-8.9
-(5, 1) (14, 1) (10, 1)
-0.219 0.001
+prompt {'pass': 31, 'right': 28, 'prompt': 92, 'completion': 8, 'cost': 0.133, 'seconds': 3.8}
+retrieval {'pass': 26, 'right': 22, 'prompt': 504, 'completion': 8, 'cost': 0.543, 'seconds': 8.7}
+tuned {'pass': 32, 'right': 29, 'prompt': 33, 'completion': 8, 'cost': 0.074, 'seconds': 3.5}
+5.9e-05 3389831
+8.5
+(8, 1) (2, 1) (2, 8)
+0.039 1.0 0.109
 ```
 
 </details>
 
-*Why:* The tuned prompt saves $0.056 per 1,000 requests, so $200 takes 3,571,429 requests, about 3.6 million, or 8.9 months at the 400,000 requests a month invented in lesson MLE8. The cost of the training run is not counted, and the shorter prompt alone is a slow way to repay a labeling bill. The next line holds three pairs: the questions the first approach gets right and the second wrong, then the reverse. The tuned model gets 5 right that retrieval gets wrong and retrieval gets 1 right that the tuned model gets wrong: they differ on 6 questions, and the gap of four is those two counts. The last line is the sign test of two pairs. For 5 against 1, 14 of the 64 equally likely splits of 6 flips are that uneven or more, so p = 0.22 (two-sided): too few questions to call 28 better than 24. For the tuned model against the prompt, 14 against 1 gives p = 0.001: that gap is clear.
+*Why:* The tuned prompt saves $0.059 per 1,000 requests, so $200 takes 3,389,831 requests, about 3.4 million, or 8.5 months at the 400,000 requests a month invented in lesson MLE8. The cost of the training run is not counted, and the shorter prompt alone is a slow way to repay a labeling bill. The next line holds three pairs: the questions the first approach gets right and the second wrong, then the reverse. The tuned model gets 8 right that retrieval gets wrong and retrieval gets 1 right that the tuned model gets wrong: they differ on 9 questions, and the gap of seven is those two counts. The last line is the sign test of the three pairs. For 8 against 1, 20 of the 512 equally likely splits of 9 flips are that uneven or more, so p = 0.039 (two-sided): the tuned model's 29 against 22 is a clear gap. For the tuned model against the prompt, 2 against 1 gives p = 1.0: the two differ on 3 questions only, so 29 against 28 is a tie. For retrieval against the prompt, 2 against 8 gives p = 0.109: the prompt did better here, and 10 questions cannot make that certain.
 
 The three approaches on the 32 test questions, and the best chunk alone.
 
 <figure>
 <svg viewBox="0 0 360 222" width="360" role="img" aria-labelledby="mle11-compare-t mle11-compare-d">
 <title id="mle11-compare-t">Right lessons and prompt tokens of the three approaches</title>
-<desc id="mle11-compare-d">Two panels. Right lessons of the 32 test questions: prompt 15, retrieve 24, fine-tune 28; the best chunk alone, with no model, 25. Prompt tokens of a request: prompt 92, retrieve 520, fine-tune 33.</desc>
+<desc id="mle11-compare-d">Two panels. Right lessons of the 32 test questions: prompt 28, retrieve 22, fine-tune 29; the best chunk alone, with no model, 25. Prompt tokens of a request: prompt 92, retrieve 504, fine-tune 33.</desc>
 <g fill="currentColor">
 <text x="33.2" y="22.4" font-size="10.5" font-weight="600">right lessons, of 32 test questions</text>
 <text x="111.2" y="45.9" font-size="9.5" text-anchor="end">prompt</text>
-<rect x="117.2" y="34.4" width="93.8" height="16" fill="#00a07a" fill-opacity="0.85" />
-<text x="217" y="46.4" font-size="10" font-weight="600">15</text>
+<rect x="117.2" y="34.4" width="175" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="298.2" y="46.4" font-size="10" font-weight="600">28</text>
 <text x="111.2" y="67.9" font-size="9.5" text-anchor="end">retrieve</text>
-<rect x="117.2" y="56.4" width="150" height="16" fill="#00a07a" fill-opacity="0.85" />
-<text x="273.2" y="68.4" font-size="10" font-weight="600">24</text>
+<rect x="117.2" y="56.4" width="137.5" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="260.7" y="68.4" font-size="10" font-weight="600">22</text>
 <text x="111.2" y="89.9" font-size="9.5" text-anchor="end">best chunk, no model</text>
 <rect x="117.2" y="78.4" width="156.2" height="16" fill="none" stroke="#00a07a" stroke-width="1.5" stroke-dasharray="4 3" />
 <text x="279.5" y="90.4" font-size="10" font-weight="600">25</text>
 <text x="111.2" y="111.9" font-size="9.5" text-anchor="end">fine-tune</text>
-<rect x="117.2" y="100.4" width="175" height="16" fill="#00a07a" fill-opacity="0.85" />
-<text x="298.2" y="112.4" font-size="10" font-weight="600">28</text>
+<rect x="117.2" y="100.4" width="181.2" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="304.5" y="112.4" font-size="10" font-weight="600">29</text>
 <text x="33.2" y="136.4" font-size="10.5" font-weight="600">prompt tokens of one request</text>
 <text x="111.2" y="159.9" font-size="9.5" text-anchor="end">prompt</text>
-<rect x="117.2" y="148.4" width="35.4" height="16" fill="#0072b2" fill-opacity="0.85" />
-<text x="158.6" y="160.4" font-size="10" font-weight="600">92</text>
+<rect x="117.2" y="148.4" width="36.5" height="16" fill="#0072b2" fill-opacity="0.85" />
+<text x="159.7" y="160.4" font-size="10" font-weight="600">92</text>
 <text x="111.2" y="181.9" font-size="9.5" text-anchor="end">retrieve</text>
 <rect x="117.2" y="170.4" width="200" height="16" fill="#0072b2" fill-opacity="0.85" />
-<text x="323.2" y="182.4" font-size="10" font-weight="600">520</text>
+<text x="323.2" y="182.4" font-size="10" font-weight="600">504</text>
 <text x="111.2" y="203.9" font-size="9.5" text-anchor="end">fine-tune</text>
-<rect x="117.2" y="192.4" width="12.7" height="16" fill="#0072b2" fill-opacity="0.85" />
-<text x="135.9" y="204.4" font-size="10" font-weight="600">33</text>
+<rect x="117.2" y="192.4" width="13.1" height="16" fill="#0072b2" fill-opacity="0.85" />
+<text x="136.3" y="204.4" font-size="10" font-weight="600">33</text>
 </g>
 </svg>
 </figure>
@@ -470,11 +474,11 @@ The three approaches on the 32 test questions, and the best chunk alone.
 | | prompt | retrieve | fine-tune |
 |---|---|---|---|
 | data needed | the eight names | the lesson texts | 96 labeled questions, 16 to watch |
-| prompt tokens per request | 92 | 520 | 33 |
+| prompt tokens per request | 92 | 504 | 33 |
 | when the facts change | edit the prompt | change the text and embed it again | label again and train again |
-| how it failed here | valid names, often the wrong one | the best chunk decides | a name off the list, and no answers outside its task |
+| how it failed here | one reply that was not JSON, three wrong names | six replies with no key, four wrong names | three wrong names, and JSON around an answer outside its task |
 
-The OpenAI guide on accuracy, a vendor page, recommends starting with the prompt, adding retrieval when the model lacks facts or has outdated ones, and tuning for consistent behavior such as format and tone; it adds that the quality of the training data matters more than the amount. The deep dive *Fine-tuning a small model with LoRA, for real* goes further.
+On this task the prompt alone came within one question of the tuned model. The OpenAI guide on accuracy, a vendor page, recommends starting with the prompt, adding retrieval when the model lacks facts or has outdated ones, and tuning for consistent behavior such as format and tone; it adds that the quality of the training data matters more than the amount. The deep dive *Fine-tuning a small model with LoRA, for real* goes further.
 
 <Aside type="tip" title="Remember">
 
@@ -484,7 +488,7 @@ The OpenAI guide on accuracy, a vendor page, recommends starting with the prompt
 - Read a run in three places: the configuration, the validation loss beside the training loss, and a score on questions kept out of training, with the questions where two approaches differ counted.
 - Start with the prompt, add retrieval for facts the model lacks, and tune for behavior you have many labeled examples of.
 
-**Common trap:** a tuned model that scores best on one test has learned the task. This one named 28 of 32 lessons on one run, from 96 questions written by one author; its lead over retrieval (28 against 24) is within chance, and it answered a question outside its task with broken JSON.
+**Common trap:** a tuned model that scores best on one test has learned the task. This one named 29 of 32 lessons on one run, from 96 questions written by one author; its lead over retrieval (29 against 22) is clear on a sign test, its lead over the prompt (29 against 28) is one question, and it put JSON around an answer to a question outside its task.
 
 </Aside>
 
@@ -492,11 +496,11 @@ The OpenAI guide on accuracy, a vendor page, recommends starting with the prompt
 
 <Exercise id="ml-engineer-fine-tuning-or-not-1">
 
-**Count the numbers an adapter trains** The adapter of unit 3 has rank 8 and wraps the four attention layers. Suppose it had rank 16 and wrapped the three layers of the feed-forward block as well: `gate_proj` and `up_proj` map 1,536 numbers to 8,960, and `down_proj` maps 8,960 back to 1,536. Put in `answer_1` how many numbers the adapter would train in all 28 layers of the model. A layer of shape (n_in, n_out) gets two small matrices, `R x n_in` and `n_out x R`. Expected: `answer_1` is a whole number above 10 million.
+**Count the numbers an adapter trains** The adapter of unit 3 has rank 8 and wraps the four attention layers. Suppose it had rank 16 and wrapped the two layers of the feed-forward block as well: `input_linear` maps 2,048 numbers to 8,192, and `output_linear` maps 4,096 back to 2,048. Put in `answer_1` how many numbers the adapter would train in all 40 layers of the model. A layer of shape (n_in, n_out) gets two small matrices, `R x n_in` and `n_out x R`. Expected: `answer_1` is a whole number above 10 million.
 
 ```python
 R = 16
-shapes = {**SHAPES, "gate_proj": (1536, 8960), "up_proj": (1536, 8960), "down_proj": (8960, 1536)}      # the four attention layers of unit 3 and the three layers of the feed-forward block
+shapes = {**SHAPES, "input_linear": (2048, 8192), "output_linear": (4096, 2048)}                          # the four attention layers of unit 3 and the two layers of the feed-forward block
 per_layer = sum(R * (n_in + n_out) for n_in, n_out in shapes.values())                                    # given: the numbers trained in one transformer layer
 answer_1 = None  # replace None with the numbers trained in all the layers
 ```
@@ -504,7 +508,7 @@ answer_1 = None  # replace None with the numbers trained in all the layers
 <details>
 <summary>Hint</summary>
 
-Each wrapped layer adds `R * n_in + n_out * R` numbers. `per_layer` already adds that up for the seven layers of one transformer layer.
+Each wrapped layer adds `R * n_in + n_out * R` numbers. `per_layer` already adds that up for the six layers of one transformer layer.
 
 </details>
 
@@ -522,12 +526,12 @@ answer_1 = per_layer * ...
 
 ```python
 R = 16
-shapes = {**SHAPES, "gate_proj": (1536, 8960), "up_proj": (1536, 8960), "down_proj": (8960, 1536)}
+shapes = {**SHAPES, "input_linear": (2048, 8192), "output_linear": (4096, 2048)}
 per_layer = sum(R * (n_in + n_out) for n_in, n_out in shapes.values())
 answer_1 = per_layer * N_LAYERS
 ```
 
-The answer is 18464768. One layer trains 16 x 9,728 = 155,648 numbers in the attention layers and 16 x 3 x 10,496 = 503,808 in the feed-forward block, 659,456 in all; 28 layers give 18,464,768, about 1.2 percent of the model. The rank and the number of wrapped layers set the size.
+The answer is 19005440. One layer trains 16 x 13,312 = 212,992 numbers in the attention layers and 16 x 16,384 = 262,144 in the feed-forward block, 475,136 in all; 40 layers give 19,005,440, about 1.2 percent of the model. The rank and the number of wrapped layers set the size.
 
 </Solution>
 

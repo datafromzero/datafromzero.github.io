@@ -1,6 +1,6 @@
 """The evaluation of the reference answer of the LLM half: the 16 capstone questions through the endpoint, scored, against a baseline that calls no model.
 
-    uv run python -m reference.evaluate        (from the llm/ folder; loads the models, about 6 GB of memory, and takes a few minutes)
+    uv run python -m reference.evaluate        (from the llm/ folder; loads the models, about 10 GB of memory at the peak, and takes a few minutes)
 """
 
 import re

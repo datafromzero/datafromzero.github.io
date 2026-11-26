@@ -1,11 +1,11 @@
 """The retrieval answerer of lessons MLE9 and MLE10, as a module: read the corpus, cut it into chunks, search it, ask the model, check the reply.
 
     from rag import System
-    system = System()                      # loads the two models: about 6 GB of memory, and one such process at a time
+    system = System()                      # loads the two models: about 10 GB of memory at the peak, and one such process at a time
     system.answer("What does PARTITION BY do?")
 
 The corpus is eight published lessons of the SQL stage (CC BY 4.0), read from the release tag v1.0.0 and kept in corpus/. The models are
-`sentence-transformers/all-MiniLM-L6-v2` (Apache 2.0) and `Qwen/Qwen2.5-1.5B-Instruct` (Apache 2.0), both at the revisions below, run on the CPU.
+`sentence-transformers/all-MiniLM-L6-v2` (Apache 2.0) and `ibm-granite/granite-4.0-1b` (made by IBM, Apache 2.0), both at the revisions below, run on the CPU.
 """
 
 import json
@@ -25,7 +25,7 @@ TEXT_BASE = "https://raw.githubusercontent.com/datafromzero/datafromzero.github.
 LESSONS = ["null-handling", "group-by-having", "inner-join", "left-join-anti-join", "window-functions", "ctes", "dates-and-time", "case-expressions"]
 SKIP_SECTIONS = {"Warm-up", "Finish it", "On your own", "Check yourself"}  # recall prompts and exercises are not teaching text
 EMB_NAME, EMB_REVISION = "sentence-transformers/all-MiniLM-L6-v2", "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
-LLM_NAME, LLM_REVISION = "Qwen/Qwen2.5-1.5B-Instruct", "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+LLM_NAME, LLM_REVISION = "ibm-granite/granite-4.0-1b", "6a7381ba1f54d684ff508d991aeb7dc580157103"
 CHUNK_WORDS = 120  # chunks of whole paragraphs, at most this many words
 THRESHOLD = 0.40  # the cosine below which the system refuses without calling the model
 PROMPT = ("Answer the question using only the numbered sources. Reply with JSON only, like {\"answer\": \"one or two sentences\", \"sources\": [1]}, "
@@ -94,7 +94,7 @@ class System:
         self.vectors = self.embedder.encode([chunk[2] for chunk in self.chunks])
         self.tokenizer = AutoTokenizer.from_pretrained(LLM_NAME, revision=LLM_REVISION)
         self.model = AutoModelForCausalLM.from_pretrained(LLM_NAME, revision=LLM_REVISION, dtype=torch.float32).eval()
-        self.end_marks = set(self.tokenizer.convert_tokens_to_ids(["<|im_end|>", "<|endoftext|>"]))
+        self.end_marks = {self.tokenizer.eos_token_id}  # the end-of-text marker: <|end_of_text|>
 
     def search(self, question, k=None):
         """The k chunks most similar to the question, as (cosine, number of the chunk)."""
