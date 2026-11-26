@@ -574,6 +574,7 @@ Written 2026-11-25 by the fourth ML writer. The later batches keep these on top 
 - **Answers already used by MLE13 to MLE16** (do not reuse): 0.3222071663153564 (the person of `scripts/person.json`, version 1), 24 of 200 chances not equal to the last digit, 1.1e-16, the image of 1.28 GB with a venv of 699 MB, statuses 200, 422, 503; 12,194 requests, median 4.41 ms (4.09 to 4.57), $73 a month idle at $0.10 an hour; PSI 0.278, 0.586; weekly AUCs 0.583, 0.521, 0.569 (invented), 2026-06-23; gate 0.662 with `max_iter=1`, 1 failed 26 passed; version 2 of the rollback with `C` of 0.00001 (0.5165530684172346); [`platform`, 0.028]; 2026-04-14; 2026-03-02; `[503, 200]`; `50 29`; hits 851 / 862 / 867 of 1,113; gains +0.004 (-0.011 to +0.015), +0.010, +0.014; web AUC 0.626; latency 10.83 ms against 4.41 ms; +0.0032 (+0.0010 to +0.0056); 2,593 of 3,488 and 0.724; PSI 0.538 and 0.238.
 - **Not run.** A deployment to a host, Docker Desktop, Windows, macOS, Codespaces, a registry push, Colab, a GPU.
 - **Length.** Body words (everything except `<svg>`; code, output and the TODO paragraph counted): MLE13 4,049 for 37 minutes, MLE14 4,174 for 38, MLE15 3,755 for 90, MLE16 5,553 for 180.
+
 ### Batch 3 (MLE11 and MLE12): additions
 
 Written 2026-11-25 by the third ML batch (first writer); the later batches keep these on top of the sections above.
