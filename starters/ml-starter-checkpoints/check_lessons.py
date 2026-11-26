@@ -2,9 +2,9 @@
 
     python3 starters/ml-starter-checkpoints/check_lessons.py
 
-It covers three things, for each lesson that works in the repository (MLE2 and MLE3 so far; MLE1, MLE4 and MLE5 are Colab notebooks):
+It covers three things, for each lesson that works in the repository (MLE2, MLE3, MLE13 to MLE16; MLE1 and MLE4 to MLE12 are Colab notebooks or pages with no repository code):
 
-1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json` or `toml` block outside an `<Exercise>` must equal a file of
+1. Every fenced `python`, `markdown`, `sql`, `yaml`, `json`, `toml` or `dockerfile` block outside an `<Exercise>` must equal a file of
    the checkpoints (or the starter) or be a contiguous piece of one. A block that matches nothing is an error and the
    script exits with 1.
 2. Blocks inside an `<Exercise>` (the task's code, half-solutions, solutions, flawed code) are matched when they can be
@@ -27,10 +27,14 @@ LESSONS = HERE.parent.parent / "src" / "content" / "docs" / "ml-engineer"
 NAMES = [  # (label, checkpoint number, lesson file)
     ("MLE2", 2, "validating-model-data"),
     ("MLE3", 3, "experiment-tracking-and-reproducibility"),
+    ("MLE13", 13, "serving-a-model-api"),
+    ("MLE14", 14, "monitoring-drift-and-retraining"),
+    ("MLE15", 15, "build-and-evaluate-simulation"),
+    ("MLE16", 16, "ml-capstone"),
 ]
 FILE_SUFFIXES = {".py", ".md", ".json", ".sql", ".yml", ".sh", ".toml", ".lock"}
-FILE_NAMES = {".gitignore"}
-CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml"}
+FILE_NAMES = {".gitignore", ".dockerignore", "Dockerfile"}
+CHECKED_LANGUAGES = {"python", "markdown", "sql", "yaml", "json", "toml", "dockerfile"}
 FENCE = re.compile(r"^(`{3,})(\w+)\n(.*?)^\1$", re.S | re.M)  # a fence of four backticks may hold fences of three
 BAD_CONSOLE = re.compile(r"Traceback \(most recent call last\)|(?<![:/\s])//(?![/\s])")
 TAUGHT = {}  # signs that a lesson teaches on purpose, by lesson label
@@ -82,7 +86,7 @@ def check_console(label, block):
 def main():
     errors = 0
     for label, number, name in NAMES:
-        page = LESSONS / f"{name}.mdx"
+        page = next((path for path in (LESSONS / f"{name}.mdx", LESSONS / f"{name}.md") if path.exists()), LESSONS / f"{name}.mdx")
         if not page.exists():
             print(f"{label}: no page yet, skipped")
             continue

@@ -1,0 +1,657 @@
+---
+id: ml-engineer-serving-a-model-api
+title: Serving a model behind an API
+short_title: Serving a model
+description: Put the churn model behind a FastAPI service that checks its input, says whether it is ready, passes a test and runs in a container.
+stage: ml-engineer
+order: 130
+level: advanced
+duration: 39
+objectives:
+  - Write an endpoint that validates input and returns a prediction
+  - Add a health check that says whether the model is loaded
+  - Package the service in a container
+  - 'Make the service ready for a host: the port from the environment, and a health check the host can call'
+prerequisites:
+  - ml-engineer-experiment-tracking-and-reproducibility
+  - ml-engineer-validating-model-data
+  - core-cloud-storage-compute-and-access
+  - core-git-branches-and-pull-requests
+datasets:
+  - app-events
+reviewed: 2026-11-26
+sources:
+  - title: 'FastAPI documentation: Request Body (accessed 2026-11-25)'
+    url: https://fastapi.tiangolo.com/tutorial/body/
+  - title: 'FastAPI documentation: Lifespan Events (accessed 2026-11-25)'
+    url: https://fastapi.tiangolo.com/advanced/events/
+  - title: 'FastAPI documentation: Testing (accessed 2026-11-25)'
+    url: https://fastapi.tiangolo.com/tutorial/testing/
+  - title: 'FastAPI documentation: Testing Events, lifespan and startup (accessed 2026-11-25)'
+    url: https://fastapi.tiangolo.com/advanced/testing-events/
+  - title: 'Starlette documentation: Test Client (accessed 2026-11-25)'
+    url: https://starlette.dev/testclient/
+  - title: 'FastAPI documentation: FastAPI in Containers, Docker (accessed 2026-11-25)'
+    url: https://fastapi.tiangolo.com/deployment/docker/
+  - title: 'uv documentation: Using uv in Docker (accessed 2026-11-25)'
+    url: https://docs.astral.sh/uv/guides/integration/docker/
+  - title: 'uv documentation: Locking and syncing (accessed 2026-11-25)'
+    url: https://docs.astral.sh/uv/concepts/projects/sync/
+  - title: 'Docker documentation: Dockerfile reference, HEALTHCHECK (accessed 2026-11-25)'
+    url: https://docs.docker.com/reference/dockerfile/
+  - title: 'scikit-learn documentation: Model persistence (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/model_persistence.html
+  - title: 'Google for Developers: Rules of Machine Learning, Rule 37 (accessed 2026-11-25)'
+    url: https://developers.google.com/machine-learning/guides/rules-of-ml
+status: published
+---
+
+## The question
+
+A teammate building the app says: *Send me ten values about a person and I will show their chance of leaving.* The churn model of lesson [*Tracking experiments and making runs reproducible*](/ml-engineer/experiment-tracking-and-reproducibility/) (MLE3) sits in a registry on your laptop, and a program in the app cannot open that. *What do we put around the model so that another program can ask it, and so that we know when it cannot answer?* The ten values of one person of the test part, which is the request this lesson sends again and again:
+
+| channel | platform | region | sessions_7d | expenses_7d | recent_3d | active_days_7d | onboarded | saw_paywall | bought_plus |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| organic_search | android | europe | 3 | 6 | 7 | 2 | 1 | 1 | 0 |
+
+By the end you can write a service that checks what comes in, says whether it is ready, is tested as a client calls it, and runs in a container.
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Validating training and serving data*](/ml-engineer/validating-model-data/) (MLE2) the class `ChurnRequest` refused a request with a region the model never saw. The service uses the same class, so the refusal you wrote there is the one it makes.
+
+**Diverge.** In MLE2 a refusal was a Python error inside your own script. Here the caller is another program, so a refusal is an HTTP status the caller can read, and units 1 and 2 show two different ones.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In MLE2, what did you write to check whether the dictionary `row` was a valid request, and what happened when its region was `"africa"`?
+
+   <details>
+   <summary>answer</summary>
+
+   `ChurnRequest(**row)`. For a region that is not in the list it raised a `ValidationError`, and the model never saw the row.
+
+   </details>
+
+2. In MLE3, what did the alias `champion` let a service do?
+
+   <details>
+   <summary>answer</summary>
+
+   Ask for the version the alias names, so that the service can follow the alias while the version behind it changes.
+
+   </details>
+
+## The big idea
+
+A service is a model with a door: the door checks what comes in, says when the model cannot answer, and names the model that did.
+
+## Learn by doing
+
+About 37 minutes, 4 new ideas: checking the request at the door, saying whether the service is ready, a test that calls it like a client, a container. This lesson works in the starter repository `ml-starter`, as MLE3 did (catch up with `git checkout mle-13-start`). The commands run in its folder. If your tracking store has no champion yet, run `uv run python -m ml_starter.train --C 0.1` and then `uv run python -m ml_starter.runs register` first.
+
+Add the three libraries of the service and `httpx2`, which the tests use, fetch the files of this lesson from the tag `mle-13-done`, and commit them:
+
+```bash
+uv add fastapi==0.165.0 uvicorn==0.54.0 skops==0.16.0
+uv add --dev httpx2==2.16.2
+git show mle-13-done:.gitignore > .gitignore
+git show mle-13-done:.dockerignore > .dockerignore
+git show mle-13-done:Dockerfile > Dockerfile
+git show mle-13-done:src/ml_starter/serve.py > src/ml_starter/serve.py
+git show mle-13-done:src/ml_starter/export.py > src/ml_starter/export.py
+git show mle-13-done:tests/test_serve.py > tests/test_serve.py
+git show mle-13-done:scripts/person.json > scripts/person.json
+git show mle-13-done:scripts/compare_service.py > scripts/compare_service.py
+uv run pytest -q -W ignore::DeprecationWarning
+git add -A
+git commit -m "MLE13: serve the model"
+```
+
+`-W ignore::DeprecationWarning` hides one warning that MLflow's database code raises in `test_train`.
+
+```console
+...................                                                      [100%]
+19 passed in 10.40s
+```
+
+The service reads a model file, not the tracking store, so it can run where the store is not. `export` writes the registered champion to `model/churn.skops` with a small card beside it. The file is in the skops format: the scikit-learn persistence page says that loading a pickle file can run arbitrary code, and that loading a skops file does not run arbitrary code automatically and can be partly checked before loading. A service loads a file it did not write, so that matters.
+
+```bash
+uv run python -m ml_starter.export
+```
+
+```console
+Wrote model/churn.skops: version 1, run C=0.1 seed=2026, cv_auc_mean 0.691687, data_sha256 4342d7d93418
+```
+
+### 1. Check the request at the door
+
+**Idea.** A request *body* is the data a client sends with its call. When a function takes a pydantic model as a parameter, the FastAPI request-body page says FastAPI reads the body as JSON, converts the types, validates the data, and, if the data is invalid, returns an error that says exactly where and what was wrong. The model of the request is the class of MLE2, so the check is written once.
+
+```python
+class Prediction(BaseModel):
+    churn_chance: float
+    model_version: str
+```
+
+```python
+@app.post("/predict", response_model=Prediction)
+def predict(person: ChurnRequest, request: Request):
+    model = ready_model(request)
+    row = pd.DataFrame([person.model_dump()])[FEATURES]
+    chance = float(model.predict_proba(row)[0, 1])
+    return Prediction(churn_chance=chance, model_version=version_of(request))
+```
+
+**Try it:** start the service in one terminal and leave it running; Windows uses Git Bash. In a second terminal send three requests: the person as they are, the same person with the region changed to `africa`, and the same person with one extra field, `sessions_14d`. `-w` adds a line with the status.
+
+```bash
+uv run uvicorn ml_starter.serve:app --port 8000
+```
+
+```bash
+curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+sed "s/europe/africa/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @-
+sed "s/}/, \"sessions_14d\": 3}/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @-
+```
+
+**Predict:** What status will each of the three requests get? For the two that fail, which field will the error name, and what will its `type` be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @scripts/person.json
+{"churn_chance":0.3222071663153564,"model_version":"1"}
+status 200
+$ sed "s/europe/africa/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @-
+{"detail":[{"type":"literal_error","loc":["body","region"],"msg":"Input should be 'asia_pacific', 'europe', 'latin_america' or 'north_america'","input":"africa","ctx":{"expected":"'asia_pacific', 'europe', 'latin_america' or 'north_america'"}}]}
+status 422
+$ sed "s/}/, \"sessions_14d\": 3}/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8000/predict -H "content-type: application/json" -d @-
+{"detail":[{"type":"extra_forbidden","loc":["body","sessions_14d"],"msg":"Extra inputs are not permitted","input":3}]}
+status 422
+```
+
+</details>
+
+*Why:* The first request gets 200 and a chance with the version of the model that made it. The other two get 422, which uvicorn's log calls "Unprocessable Content": the server understood the request, and its content is not valid. `loc` names the field, `body` then `region` or `sessions_14d`, and `type` says why: `literal_error` for a value outside the list, `extra_forbidden` for a field the contract does not have. Neither request reached the model.
+
+### 2. Say whether the service can answer
+
+**Idea.** A service can be running and still unable to answer. A *health check* is an endpoint that says which. The model is loaded once, when the service starts, in a `lifespan` function: the FastAPI lifespan page says this code runs once before the application starts receiving requests, and names loading a shared machine learning model as an example. `ready_model` is the one place that says no model is loaded, and both endpoints call it.
+
+```python
+@asynccontextmanager
+async def lifespan(app):
+    """Load the model once, when the service starts, not on every request."""
+    app.state.model, app.state.card = load_model(model_path())
+    yield
+
+
+app = FastAPI(title="churn", lifespan=lifespan)
+
+
+def ready_model(request: Request):
+    """The loaded pipeline, or a 503 answer: the service is up, but it cannot score anyone."""
+    if request.app.state.model is None:
+        raise HTTPException(status_code=503, detail="model not loaded")
+    return request.app.state.model
+```
+
+```python
+@app.get("/health")
+def health(request: Request):
+    ready_model(request)
+    return {"status": "ok", "model_version": version_of(request)}
+```
+
+**Try it:** stop the first service with Ctrl+C. Start one on port 8001 whose model file is not there, and send it the `africa` request, a valid request and a health check.
+
+```bash
+MODEL_FILE=model/missing.skops uv run uvicorn ml_starter.serve:app --port 8001
+```
+
+```bash
+curl -s -w "\nstatus %{http_code}\n" localhost:8001/health
+sed "s/europe/africa/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8001/predict -H "content-type: application/json" -d @-
+curl -s -w "\nstatus %{http_code}\n" localhost:8001/predict -H "content-type: application/json" -d @scripts/person.json
+```
+
+**Predict:** Will the service start with no model file? What status will `/health` give, and which status will the `africa` request get, now that there is no model to answer it?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8001/health
+{"detail":"model not loaded"}
+status 503
+$ sed "s/europe/africa/" scripts/person.json | curl -s -w "\nstatus %{http_code}\n" localhost:8001/predict -H "content-type: application/json" -d @-
+{"detail":[{"type":"literal_error","loc":["body","region"],"msg":"Input should be 'asia_pacific', 'europe', 'latin_america' or 'north_america'","input":"africa","ctx":{"expected":"'asia_pacific', 'europe', 'latin_america' or 'north_america'"}}]}
+status 422
+$ curl -s -w "\nstatus %{http_code}\n" localhost:8001/predict -H "content-type: application/json" -d @scripts/person.json
+{"detail":"model not loaded"}
+status 503
+```
+
+</details>
+
+*Why:* The service started and kept running; it only cannot answer. `/health` and the valid request get 503, "service unavailable", with `model not loaded`. The `africa` request still gets 422: FastAPI checks the body before it calls the function, so the door is checked first and the model second. A caller that polls `/health` learns that this service should receive no traffic yet.
+
+The three outcomes of a request, in the order the service decides them:
+
+<figure>
+<svg viewBox="0 0 360 275" width="360" role="img" aria-labelledby="mle13-door-t mle13-door-d">
+<title id="mle13-door-t">The three outcomes of a request to the churn service, in the order the service decides them</title>
+<desc id="mle13-door-d">A column of three steps. A request with ten values reaches the door, which checks it with the class ChurnRequest: a region of africa or a field sessions&#95;14d is refused with status 422, and the model never runs. A valid request next reaches a question, is a model loaded: with no model file the service answers 503 with model not loaded. Otherwise the model scores the person and the service answers 200 with churn&#95;chance and model&#95;version.</desc>
+<g fill="currentColor">
+<text x="14" y="22.4" font-size="10.5" font-weight="600">What the service decides, in order</text>
+<rect x="14" y="38.4" width="150" height="34" rx="4" fill="#0072b2" fill-opacity="0.2" />
+<rect x="14" y="38.4" width="150" height="34" rx="4" fill="none" stroke="#0072b2" stroke-width="1.5" />
+<text x="89" y="53.4" font-size="10" font-weight="600" text-anchor="middle">request</text>
+<text x="89" y="66.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">ten values, as JSON</text>
+<path d="M89 72.4 L89 92.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M86 87.4 L89 92.4 L92 87.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="14" y="92.4" width="150" height="34" rx="4" fill="#0072b2" fill-opacity="0.2" />
+<rect x="14" y="92.4" width="150" height="34" rx="4" fill="none" stroke="#0072b2" stroke-width="1.5" />
+<text x="89" y="107.4" font-size="10" font-weight="600" text-anchor="middle">the door</text>
+<text x="89" y="120.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">ChurnRequest</text>
+<path d="M166 109.4 L196 109.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M191 106.4 L196 109.4 L191 112.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="198" y="92.4" width="148" height="34" rx="4" fill="#9a6be0" fill-opacity="0.2" />
+<rect x="198" y="92.4" width="148" height="34" rx="4" fill="none" stroke="#9a6be0" stroke-width="1.5" />
+<text x="272" y="107.4" font-size="10" font-weight="600" text-anchor="middle">422</text>
+<text x="272" y="120.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">refused, the model never ran</text>
+<path d="M89 126.4 L89 146.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M86 141.4 L89 146.4 L92 141.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="14" y="146.4" width="150" height="34" rx="4" fill="#0072b2" fill-opacity="0.2" />
+<rect x="14" y="146.4" width="150" height="34" rx="4" fill="none" stroke="#0072b2" stroke-width="1.5" />
+<text x="89" y="161.4" font-size="10" font-weight="600" text-anchor="middle">is a model loaded?</text>
+<text x="89" y="174.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">ready&#95;model</text>
+<path d="M166 163.4 L196 163.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M191 160.4 L196 163.4 L191 166.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="198" y="146.4" width="148" height="34" rx="4" fill="#9a6be0" fill-opacity="0.2" />
+<rect x="198" y="146.4" width="148" height="34" rx="4" fill="none" stroke="#9a6be0" stroke-width="1.5" />
+<text x="272" y="161.4" font-size="10" font-weight="600" text-anchor="middle">503</text>
+<text x="272" y="174.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">model not loaded</text>
+<path d="M89 180.4 L89 200.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M86 195.4 L89 200.4 L92 195.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="14" y="200.4" width="150" height="34" rx="4" fill="#00a07a" fill-opacity="0.2" />
+<rect x="14" y="200.4" width="150" height="34" rx="4" fill="none" stroke="#00a07a" stroke-width="1.5" />
+<text x="89" y="215.4" font-size="10" font-weight="600" text-anchor="middle">the model scores</text>
+<text x="89" y="228.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">predict&#95;proba</text>
+<path d="M166 217.4 L196 217.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M191 214.4 L196 217.4 L191 220.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="198" y="200.4" width="148" height="34" rx="4" fill="#00a07a" fill-opacity="0.2" />
+<rect x="198" y="200.4" width="148" height="34" rx="4" fill="none" stroke="#00a07a" stroke-width="1.5" />
+<text x="272" y="215.4" font-size="10" font-weight="600" text-anchor="middle">200</text>
+<text x="272" y="228.4" font-size="8.5" text-anchor="middle" fill-opacity="0.9">churn&#95;chance, model&#95;version</text>
+<text x="14" y="258.4" font-size="9" fill-opacity="0.85">not valid, not ready, answered: three different statuses</text>
+</g>
+</svg>
+</figure>
+
+### 3. Test the service like a client calls it
+
+**Idea.** A service is tested through its HTTP interface, not through its functions. `TestClient` calls the application in this process, so nothing has to be started. The FastAPI testing page says "To use TestClient, first install httpx", but the Starlette page says the client is built on `httpx2` and "Plain httpx is still supported, but deprecated - install httpx2 (included in starlette[full]) instead"; the lesson follows the Starlette page. The FastAPI testing-events page says that when lifespan code must run in a test, you use the client with a `with` statement, so the model is loaded inside `with TestClient(app) as client:`. The most useful test sends people through the service and through the model file and compares. Rule 37 of Google's Rules of Machine Learning says that a model applied to an example in the training data and to the same example at serving "should give you exactly the same result", and that a discrepancy probably indicates an engineering error.
+
+```python
+def test_a_person_is_scored_as_the_pipeline_scores_them(client):
+    chances = PIPELINE.predict_proba(PEOPLE[FEATURES])[:, 1]
+    for position in range(50):
+        answer = client.post("/predict", json=as_request(position))
+        assert answer.status_code == 200
+        assert answer.json()["churn_chance"] == pytest.approx(chances[position], abs=1e-9)
+```
+
+**Try it:** the given script sends 200 people of the test part through the service one at a time, and gives the model file the same 200 in a single call. It counts the chances that differ at all.
+
+```bash
+uv run python scripts/compare_service.py
+```
+
+**Predict:** The service answers 200 requests; the model file answers one. How many of the 200 chances will be equal to the last digit, and how large will the largest difference be?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ uv run python scripts/compare_service.py
+200 people, model version 1
+largest difference between served and offline chance: 1.1e-16
+people whose two chances are not equal to the last digit: 24
+```
+
+</details>
+
+*Why:* 24 of 200 chances differ, by at most 1.1e-16: a rounding difference between scoring one row and scoring 200 rows in one call. That is not skew: a rounded answer or a column in another order would differ by a visible amount. Rule 37's "exactly the same result" holds to the precision that floating-point rounding allows, so the test compares with a tolerance of 1e-9 (the lesson's own choice) and not with `==`, and it fails when the service and the model disagree at the third decimal.
+
+### 4. Package it in a container
+
+**Idea.** A container image holds the service, its libraries and the model file, and runs the same wherever Docker runs. The file below is read from top to bottom, and its order is the point. The FastAPI Docker page says to copy the file with the dependencies first, so that Docker reuses the cached step, and that after the code is copied the cache "won't be used for this or any following steps easily"; the uv Docker page says the same for `uv sync --no-install-project`, because the project changes often and its dependencies do not. `uv sync` installs what `uv.lock` says, `--no-dev` leaves out the development libraries, and `--locked` makes it fail when the lock file is out of date: "If the lockfile is not up-to-date, uv will raise an error instead of updating the lockfile". The port comes from the variable `PORT` (8000 by default). `HEALTHCHECK` calls `/health`: the Dockerfile reference says the command's exit status gives the health, 0 for healthy and 1 for unhealthy, and a request that gets 503 makes the command exit with 1. The command is already a JSON array, the exec form that the FastAPI page asks for so that the service can shut down gracefully, but it starts `sh -c` so that `$PORT` is expanded. `exec` inside that string is what removes the shell: uvicorn replaces it and becomes the main process.
+
+```dockerfile
+# The churn service as a container. Build it after `uv run python -m ml_starter.export`, so that model/ exists.
+FROM python:3.13-slim
+
+RUN pip install --no-cache-dir uv==0.11.32
+WORKDIR /app
+
+# The libraries first: this layer is rebuilt only when pyproject.toml or uv.lock change.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+
+# Then the code and the model file, which change more often.
+COPY src ./src
+COPY model ./model
+
+ENV PYTHONPATH=/app/src PATH="/app/.venv/bin:$PATH" PORT=8000
+EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health')"
+# exec makes uvicorn the main process, so that `docker stop` reaches it and it can shut down cleanly.
+CMD ["sh", "-c", "exec uvicorn ml_starter.serve:app --host 0.0.0.0 --port $PORT"]
+```
+
+**Try it:** build the image, look at its size, add a comment line to the end of `src/ml_starter/serve.py`, and build again. `grep -c CACHED` counts the lines of the build log marked CACHED, the steps that Docker took from its cache; the log numbers seven steps, `1/7` to `7/7`. Undo the comment afterwards with `git checkout src/ml_starter/serve.py`.
+
+```bash
+docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
+docker images churn-service
+echo "# edited" >> src/ml_starter/serve.py
+docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
+```
+
+**Predict:** Is the image under or over 1 GB? After the one-line edit, how many of the seven steps does the log mark CACHED, and does the second build take seconds or minutes?
+
+<details>
+<summary>Reveal the result</summary>
+
+```console
+$ docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
+0
+$ docker images churn-service
+IMAGE                  ID             DISK USAGE   CONTENT SIZE   EXTRA
+churn-service:latest   8bfe141fe002       1.28GB          293MB        
+$ docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
+4
+```
+
+</details>
+
+*Why:* The image takes 1.28 GB of disk (`DISK USAGE`; `CONTENT SIZE` is 293 MB); of that, the virtual environment is 699 MB, with `pyarrow` at 165 MB, `scipy` 81, `duckdb` 65 and `mlflow` 51, because `uv sync` installs every non-dev library the project lists, while the service's own files import five of them: FastAPI, pydantic, pandas, skops and pandera. On the writing machine, a Linux sandbox where the build used host networking, the first build took 39.7 seconds with no step from the cache; yours will differ. After the edit the log marks steps 2 to 5 CACHED. Step 6, `COPY src`, changed, and step 7, `COPY model`, follows it, so both ran again; step 1, `FROM`, only names the base image and is never marked, which is why `grep` misses it and 4 + 2 + 1 makes seven. The second build took 1.2 seconds there. That is why the libraries are installed before the code is copied.
+
+Now run three containers: the service on port 8000, the same image told to use port 9000, and one whose model file is not there. Wait about 45 seconds, ask one for its health and list them.
+
+```bash
+docker run -d --name churn -p 8000:8000 churn-service
+docker run -d --name churn9 -e PORT=9000 -p 9000:9000 churn-service
+docker run -d --name nomodel -e MODEL_FILE=/app/model/missing.skops -p 8002:8000 churn-service
+curl -s -w "\nstatus %{http_code}\n" localhost:9000/health
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker stop churn churn9 nomodel
+```
+
+```console
+$ docker run -d --name churn -p 8000:8000 churn-service
+978cf05b105a82bcde2938118e4395b9a7e0161ddbd7dd939676f50ba974cb44
+$ docker run -d --name churn9 -e PORT=9000 -p 9000:9000 churn-service
+d711a944cf1e4e406b0f505976d5f401ac060fe4e39072a5bf974e98e8de1907
+$ docker run -d --name nomodel -e MODEL_FILE=/app/model/missing.skops -p 8002:8000 churn-service
+4fc8be5f06b23269ddd26dfd7a0a53e21027ae687063103c9cfdd2a23997d308
+$ curl -s -w "\nstatus %{http_code}\n" localhost:9000/health
+{"status":"ok","model_version":"1"}
+status 200
+$ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+NAMES     STATUS                      PORTS
+nomodel   Up 45 seconds (unhealthy)   0.0.0.0:8002->8000/tcp
+churn9    Up 45 seconds (healthy)     8000/tcp, 0.0.0.0:9000->9000/tcp
+churn     Up 45 seconds (healthy)     0.0.0.0:8000->8000/tcp
+$ docker stop churn churn9 nomodel
+churn
+churn9
+nomodel
+```
+
+The same image answers on the port it is given, and the container with no model is marked unhealthy by the health check, with nobody reading a log. On the writing machine, the same Linux sandbox, stopping the three took 1.1 seconds. A run with the command written without `exec`, which leaves the shell as the main process, took 10.3 seconds to stop the three (one run each; yours will differ), the kind of wait the FastAPI page links an explanation for.
+
+<Aside type="tip" title="Remember">
+
+- A request is checked by the same class that checks the table, before the model sees it: a bad body gets 422.
+- A service that is up can still be unable to answer; `/health` says which, and a missing model gives 503.
+- The model is loaded once at startup, not for every request.
+- Test the service through its interface and compare its answers with the model file's, with a tolerance.
+- An image is built from the top down: put what changes least first, and let the port and the model file come from the environment.
+
+**Common trap:** a service whose answers nobody compared with the notebook's. Send the same people through both before anyone depends on it.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-serving-a-model-api-1">
+
+**Score many people in one call.** Save the file below as `exercises/mle13_ex1.py`. It defines a second service of its own, with one route that takes a list of requests, each checked by the same contract. Write the body of the route: one table with a row for each person, one call of the model, and a list of plain Python floats. The given lines send the first 50 people of the test part and count the chances above 0.5. Expected: it prints two numbers, how many chances came back and how many of them are above 0.5.
+
+```python
+import json
+
+import pandas as pd
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+
+from ml_starter.config import FEATURES
+from ml_starter.contract import ChurnRequest
+from ml_starter.data import load_table, split
+from ml_starter.serve import lifespan, ready_model
+
+batch = FastAPI(lifespan=lifespan)  # given: loads the model file when the service starts
+
+
+@batch.post("/predict_batch")
+def predict_batch(people: list[ChurnRequest], request: Request):  # given: a list of requests, each checked by the contract
+    model = ready_model(request)  # given
+    chances = None  # replace None: a table with a row for each person, one call of the model, a list of floats
+    return chances
+
+
+X_train, X_test, y_train, y_test = split(load_table())  # given
+body = json.loads(X_test.head(50).to_json(orient="records"))  # given: 50 people of the test part, as a client would send them
+with TestClient(batch) as client:  # given
+    chances = client.post("/predict_batch", json=body).json()
+answer_1 = sum(chance > 0.5 for chance in chances)  # given: how many of the 50 have a chance above 0.5
+print(len(chances), answer_1)
+```
+
+<details>
+<summary>Hint</summary>
+
+The single-person endpoint builds `pd.DataFrame([person.model_dump()])`. Here `people` is a list, so build the table from one dictionary for each person, then call `predict_proba` once and keep the second column.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+table = pd.DataFrame([person.model_dump() for person in people])[FEATURES]
+chances = [float(chance) for chance in ...]
+```
+
+</details>
+
+<Solution>
+
+The lines that change are the body of the route; the rest is as given.
+
+```python
+@batch.post("/predict_batch")
+def predict_batch(people: list[ChurnRequest], request: Request):
+    model = ready_model(request)
+    table = pd.DataFrame([person.model_dump() for person in people])[FEATURES]
+    return [float(chance) for chance in model.predict_proba(table)[:, 1]]
+```
+
+```console
+$ uv run python exercises/mle13_ex1.py
+50 29
+```
+
+All 50 chances came back, and 29 of them are above 0.5. The route called the model once, and every person in the list was checked by the contract on the way in.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-serving-a-model-api-2">
+
+**Read the contract the service publishes.** Before you start, say in one sentence what you expect: the paths of the service, how many fields of `ChurnRequest` are required, and one number that a field may not exceed. FastAPI builds an OpenAPI document from the application; `app.openapi()` returns it as a dictionary. Save a file as `exercises/mle13_ex2.py`, import `app` from `ml_starter.serve`, and print the sorted list of paths, the number of required fields of `ChurnRequest`, and the largest value `active_days_7d` may take. Expected: it prints a list, then two numbers.
+
+<details>
+<summary>Hint</summary>
+
+The dictionary has a key `paths`. The classes the service uses are under `components`, then `schemas`; each property of `ChurnRequest` has its own entry, with the limits the contract sets.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+Expected output in words: *"The two routes, ten required fields, and the limit 8."*
+
+```python
+schema = app.openapi()
+request_schema = schema["components"]["schemas"]["ChurnRequest"]
+paths = sorted(schema["paths"])
+```
+
+</details>
+
+<Solution>
+
+```python
+from ml_starter.serve import app
+
+schema = app.openapi()
+request_schema = schema["components"]["schemas"]["ChurnRequest"]
+paths = sorted(schema["paths"])
+required = len(request_schema["required"])
+largest = request_schema["properties"]["active_days_7d"]["maximum"]
+print(paths, required, largest)
+```
+
+```console
+$ uv run python exercises/mle13_ex2.py
+['/health', '/predict'] 10 8.0
+```
+
+The two routes are `/health` and `/predict`, all ten fields are required, and `active_days_7d` may not exceed 8.0. The limits come from the class of MLE2 and nowhere else: the document that other programs read cannot drift from the check the service makes.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: name the three statuses a request to `/predict` can get from the service, and what causes each.
+
+   <details>
+   <summary>answer</summary>
+
+   200: the request is valid and a model answered. 422: the body is not valid, and the model never ran. 503: the body is valid, but no model is loaded.
+
+   </details>
+
+<Exercise id="ml-engineer-serving-a-model-api-3">
+
+**Spot the flaw.** A colleague wants the service never to fail and wraps the work of `/predict` in a `try` that returns a chance of 0.5 on any error. Save the file below as `exercises/mle13_ex3.py` and run it: it asks the service for one person twice, once with no model file and once with the real one, and prints the two statuses. It prints `[200, 200]`, and the first should be a refusal. Change the route so that it prints the statuses a caller needs. Expected: it prints a list of two numbers.
+
+```python
+import json
+import os
+import tempfile
+
+import pandas as pd
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+
+from ml_starter.config import FEATURES
+from ml_starter.contract import ChurnRequest
+from ml_starter.data import load_table
+from ml_starter.serve import lifespan, ready_model
+
+flawed = FastAPI(lifespan=lifespan)
+
+
+@flawed.post("/predict")
+def predict(person: ChurnRequest, request: Request):
+    try:
+        model = ready_model(request)
+        row = pd.DataFrame([person.model_dump()])[FEATURES]
+        return {"churn_chance": float(model.predict_proba(row)[0, 1])}
+    except Exception:
+        return {"churn_chance": 0.5}  # colleague: "the service should always answer"
+
+
+body = json.loads(load_table().head(1)[FEATURES].to_json(orient="records"))[0]  # given: one person
+statuses = []
+for model_file in [os.path.join(tempfile.mkdtemp(), "missing.skops"), os.environ.get("MODEL_FILE", "model/churn.skops")]:  # given: no model file, then the real one
+    os.environ["MODEL_FILE"] = model_file
+    with TestClient(flawed) as client:
+        statuses.append(client.post("/predict", json=body).status_code)
+print(statuses)  # prints [200, 200]; with no model file the service should refuse
+```
+
+<details>
+<summary>Hint</summary>
+
+Look at what the `except` catches: `ready_model` raises an exception on purpose, and the `try` turns it into a normal answer.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+@flawed.post("/predict")
+def predict(person: ChurnRequest, request: Request):
+    model = ready_model(request)
+    ...
+```
+
+</details>
+
+<Solution>
+
+Only the route changes; the rest is as given (the app is called `flawed` there).
+
+```python
+@flawed.post("/predict")
+def predict(person: ChurnRequest, request: Request):
+    model = ready_model(request)
+    row = pd.DataFrame([person.model_dump()])[FEATURES]
+    return {"churn_chance": float(model.predict_proba(row)[0, 1])}
+```
+
+```console
+$ uv run python exercises/mle13_ex3.py
+[503, 200]
+```
+
+The flawed route printed `[200, 200]`: with no model it answered 0.5 to everyone, which looks like a chance and is a made-up number, and `/health` would have said the opposite. Without the `try`, the error stays an error: the first status is 503. A caller can act on a refusal, and cannot tell a made-up answer from a real one.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can put a model behind an API that checks its input with the contract, says whether it can answer, is tested through its interface against the model file, and runs in a container that follows a port from the environment.*
+Test: Exercise ml-engineer-serving-a-model-api-2, done in the repository without opening the hints.
+
+The pattern to remember: **check at the door, say when you cannot answer, and compare the service's answers with the model's own.** The next lesson, *Monitoring, drift and retraining* (MLE14), watches this service from its request log and decides when to retrain or roll back.

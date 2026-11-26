@@ -1,0 +1,638 @@
+---
+id: ml-engineer-fine-tuning-or-not
+title: Fine-tune, prompt or retrieve?
+short_title: Prompt, retrieve, tune
+description: Decide when fine-tuning beats prompting or retrieval, and read one LoRA run without training anything large.
+stage: ml-engineer
+order: 110
+level: intermediate
+duration: 43
+objectives:
+  - Compare prompting, retrieval and fine-tuning on cost, data needed and failure modes
+  - 'Read one LoRA run: its configuration, its loss curve and its evaluation'
+  - Decide which of the three a stated problem needs
+prerequisites:
+  - ml-engineer-llm-and-rag-evaluation
+  - ml-engineer-deep-learning-training-practice
+  - ml-engineer-llm-apis-and-structured-output
+  - ml-engineer-rag-retrieval-pipeline
+notebook: notebooks/ml-engineer/ml-engineer-fine-tuning-or-not.ipynb
+reviewed: 2026-11-26
+sources:
+  - title: 'Hugging Face PEFT documentation: LoRA, conceptual guide (accessed 2026-11-25)'
+    url: https://huggingface.co/docs/peft/main/en/conceptual_guides/lora
+  - title: 'Hu et al., LoRA: Low-Rank Adaptation of Large Language Models, abstract (accessed 2026-11-25)'
+    url: https://arxiv.org/abs/2106.09685
+  - title: 'OpenAI: Optimizing LLM accuracy (accessed 2026-11-25)'
+    url: https://developers.openai.com/api/docs/guides/optimizing-llm-accuracy
+status: published
+---
+
+## The question
+
+The help box of the site sends each learner question to the lesson that answers it. In lesson MLE8 a prompt did that, and named the right lesson for 8 of 16 questions. To do better you can say more to the model, show it text, or change the model. *Which one pays for this job, and what does each cost?* Three of the 32 test questions, with the lesson that answers each:
+
+| question | lesson |
+|---|---|
+| Why does a NOT IN list that holds a NULL return no rows? | null-handling |
+| How do I add a running count of orders for each customer? | window-functions |
+| Which test should come first in a CASE when two tests overlap? | case-expressions |
+
+<Aside type="note" title="You already know this">
+
+**Match.** In [*Training deep models well: regularization and transfer learning*](/ml-engineer/deep-learning-training-practice/) (MLE6) you kept a trained network, trained a small new part, and read a training curve beside a validation curve. A LoRA run is the same loop.
+
+**Diverge.** There the new part was a last layer. Here small matrices are added inside the layers, and units 3 and 4 show what that changes.
+
+</Aside>
+
+## Warm-up
+
+From memory first, then click to check.
+
+1. In lesson MLE4 (*Tuning hyperparameters and handling imbalanced classes*), the test part was scored once, after the search was over. Why once, and not after every try? Write one sentence.
+
+   <details>
+   <summary>answer</summary>
+
+   A score on questions that helped to choose something is no longer an honest estimate for new questions, so the test part is scored once, after every choice is made.
+
+   </details>
+
+2. In lesson MLE8, which two counts does a reply carry, and what does a provider do with them?
+
+   <details>
+   <summary>answer</summary>
+
+   The prompt tokens and the completion tokens. A hosted API usually prices them separately.
+
+   </details>
+
+## The big idea
+
+A prompt changes what you say to the model, retrieval changes what it can read, and fine-tuning changes the model itself: each costs something else, and each fails in its own way.
+
+Where each approach acts: the words of the request, the text it carries, or the model.
+
+<figure>
+<svg viewBox="0 0 360 201" width="360" role="img" aria-labelledby="mle11-levers-t mle11-levers-d">
+<title id="mle11-levers-t">Where prompting, retrieval and fine-tuning act</title>
+<desc id="mle11-levers-d">A request is made of three parts that go into the model: instructions, chunks of text and the question. The model answers with a reply. Prompting changes the instructions, retrieval adds the chunks, and fine-tuning adds a small adapter inside the model.</desc>
+<g fill="currentColor">
+<rect x="14" y="14" width="128" height="32" rx="4" fill="#0072b2" fill-opacity="0.2" />
+<rect x="14" y="14" width="128" height="32" rx="4" fill="none" stroke="#0072b2" stroke-width="1.5" />
+<text x="78" y="28" font-size="10" font-weight="600" text-anchor="middle">instructions</text>
+<text x="78" y="40.5" font-size="9.5" text-anchor="middle" fill-opacity="0.9">the eight names</text>
+<rect x="14" y="54" width="128" height="32" rx="4" fill="#00a07a" fill-opacity="0.2" />
+<rect x="14" y="54" width="128" height="32" rx="4" fill="none" stroke="#00a07a" stroke-width="1.5" />
+<text x="78" y="68" font-size="10" font-weight="600" text-anchor="middle">chunks</text>
+<text x="78" y="80.5" font-size="9.5" text-anchor="middle" fill-opacity="0.9">from the lessons</text>
+<rect x="14" y="94" width="128" height="32" rx="4" fill="currentColor" fill-opacity="0.2" />
+<rect x="14" y="94" width="128" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="78" y="113.5" font-size="10" font-weight="600" text-anchor="middle">the question</text>
+<path d="M142 30 L174 50" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M171.1 44.8 L174 50 L168 49.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M142 70 L174 70" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M168.7 67.1 L174 70 L168.7 72.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M142 110 L174 90" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M168 90.4 L174 90 L171.1 95.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="174" y="32" width="100" height="80" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="224" y="50" font-size="10" font-weight="600" text-anchor="middle">the model</text>
+<text x="224" y="63" font-size="9.5" text-anchor="middle" fill-opacity="0.9">its own numbers</text>
+<rect x="189" y="76" width="70" height="26" rx="4" fill="#9a6be0" fill-opacity="0.2" />
+<rect x="189" y="76" width="70" height="26" rx="4" fill="none" stroke="#9a6be0" stroke-width="1.5" />
+<text x="224" y="92.5" font-size="10" font-weight="600" text-anchor="middle">adapter</text>
+<path d="M274 72 L294 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" />
+<path d="M288.7 69.1 L294 72 L288.7 74.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="294" y="56" width="52" height="32" rx="4" fill="currentColor" fill-opacity="0.2" />
+<rect x="294" y="56" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+<text x="320" y="75.5" font-size="10" font-weight="600" text-anchor="middle">reply</text>
+<rect x="14" y="144" width="10" height="10" fill="#0072b2" />
+<text x="31" y="153" font-size="9.5">prompt: you change the words</text>
+<rect x="14" y="160" width="10" height="10" fill="#00a07a" />
+<text x="31" y="169" font-size="9.5">retrieve: you change what it reads</text>
+<rect x="14" y="176" width="10" height="10" fill="#9a6be0" />
+<text x="31" y="185" font-size="9.5">fine-tune: you change the model</text>
+</g>
+</svg>
+</figure>
+
+## Learn by doing
+
+About 43 minutes, 5 units: a prompt and its cost, retrieved text, a LoRA adapter and its training, what the adapter is, the bill. No key is needed. The setup cells loaded `Qwen2.5-1.5B-Instruct` with the `chat` function of lesson MLE8, the encoder of lesson MLE9, 96 questions to train on (`TRAIN`, written for this lesson), 16 to watch the loss (`DEV`, the questions of lesson MLE9) and 32 for the test (`TEST`: the 16 golden questions of lesson MLE10 and 16 new ones). Each approach is scored once on `TEST`, and nothing is chosen on it. On the run shown (two CPU threads, no GPU, not timed on Colab) unit 1 took 97 seconds, unit 2 262 and the training of unit 3 599: start it, then read on.
+
+<OpenInColab />
+
+### 1. Prompt it
+
+**Idea.** A prompt changes the words of the request. The instruction and the eight lesson names travel with every question, so every request counts and pays for them (the prompt tokens of lesson MLE8). A prompt needs no labeled data, and nothing guarantees that the reply follows it.
+
+**Try it:** ask the 32 test questions with a system prompt that lists the eight names, and print the numbers of the approach: replies that pass the `Route` schema, right lessons, mean tokens, dollars for 1,000 requests at the assumed prices of lesson MLE8, and median seconds.
+
+```python
+SYSTEM = ("You route learner questions to lessons. Reply with JSON only, like {\"lesson\": \"ctes\"}. "
+          "The value of lesson must be exactly one of: " + ", ".join(LESSONS) + ".")
+
+
+def ask_prompt(question):
+    """Prompting: the instructions and the eight names travel with every question."""
+    return checked(chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}], max_new_tokens=30))
+
+
+runs = {"prompt": [ask_prompt(question) for question, _ in TEST]}
+print(report(runs["prompt"], TEST))
+print(sorted({r["error"] for r in runs["prompt"] if r["error"]}))
+```
+
+**Predict:** How many of the 32 replies will pass the check, how many will name the right lesson, and how many tokens will a request count on average?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'pass': 32, 'right': 15, 'prompt': 92, 'completion': 8, 'cost': 0.131, 'seconds': 3.0}
+[]
+```
+
+</details>
+
+*Why:* The first line gives the replies that pass (32), the right lessons (15), the mean prompt and completion tokens (92 and 8), the dollars for 1,000 requests ($0.131) and the median seconds (3.0). The second line lists the error types: none. Every reply is valid JSON with a name from the list, and fewer than half name the right lesson: the prompt fixed the form, and the model chooses by the eight names alone.
+
+### 2. Retrieve for it
+
+**Idea.** Retrieval changes what the model can read. The three most similar chunks of the lessons go in with the question (the search of lesson MLE9), each starting with the name of its lesson. The model can use text it was never trained on, and text you changed today is read today. The request grows by the chunks, and a wrong search brings the wrong text.
+
+**Try it:** the same instruction with three chunks added to each question, and the count of questions whose best chunk comes from the right lesson, with no model.
+
+```python
+SYSTEM_R = SYSTEM + " Sources follow the question: each one starts with the name of the lesson it comes from."
+
+
+def ask_retrieval(question, k=3):
+    """Retrieval: the three most similar chunks of the lessons go in with the question."""
+    sources = "\n".join(f"[{CHUNKS[i][0]}] {CHUNKS[i][2]}" for _, i in search(question, k))
+    return checked(chat([{"role": "system", "content": SYSTEM_R}, {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}], max_new_tokens=30))
+
+
+runs["retrieval"] = [ask_retrieval(question) for question, _ in TEST]
+print(report(runs["retrieval"], TEST))
+top_chunk = [CHUNKS[search(question, 1)[0][1]][0] for question, _ in TEST]                 # no model: the lesson of the best chunk
+print(sum(lesson == expected for lesson, (_, expected) in zip(top_chunk, TEST)))
+```
+
+**Predict:** Will the replies name more right lessons than in unit 1, and how many tokens will a request count now? How many questions would the best chunk alone get right?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'pass': 32, 'right': 24, 'prompt': 520, 'completion': 8, 'cost': 0.559, 'seconds': 8.3}
+25
+```
+
+</details>
+
+*Why:* The right lessons rise from 15 to 24 of 32, and the request from 92 to 520 prompt tokens: $0.559 for 1,000 requests against $0.131, and a median of 8.3 seconds against 3.0. The last line is the best chunk alone, with no model: 25. The model added nothing to the search here (24 against 25), so retrieval did the work.
+
+### 3. Tune it with LoRA
+
+**Idea.** Fine-tuning changes the model. LoRA (low-rank adaptation) freezes the model's numbers and adds two small matrices beside each layer you choose; only those are trained, and the PEFT documentation says the original and the adapted weights are combined to give the output. The rank `r` sets how small the matrices are: a layer with `n_in` inputs and `n_out` outputs gets `r x (n_in + n_out)` new numbers. `lora_alpha` scales the update, and `target_modules` names the layers: the documentation says LoRA is typically applied to the attention blocks only. `lora_dropout` drops a share of the adapter's values while training, as the dropout of lesson [MLE6](/ml-engineer/deep-learning-training-practice/) does. Training needs labeled examples: here a question with its reply, 96 of them.
+
+**Try it:** wrap the four attention layers of all 28 layers of the model, with rank 8, and count the numbers that will be trained.
+
+```python
+SHAPES = {}                                                                   # the shape of each layer the adapter will wrap, read before wrapping
+layer = llm.model.layers[0]
+for name, module in [("q_proj", layer.self_attn.q_proj), ("k_proj", layer.self_attn.k_proj), ("v_proj", layer.self_attn.v_proj), ("o_proj", layer.self_attn.o_proj)]:
+    SHAPES[name] = (module.in_features, module.out_features)
+N_LAYERS = len(llm.model.layers)
+print(SHAPES, N_LAYERS)
+
+config = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05, target_modules=list(SHAPES), task_type="CAUSAL_LM")
+torch.manual_seed(SEED)                                                       # the first of the two small matrices starts random
+llm = get_peft_model(llm, config)
+trainable = sum(p.numel() for p in llm.parameters() if p.requires_grad)
+total = sum(p.numel() for p in llm.parameters())
+print(config.r, config.lora_alpha, config.lora_dropout, sorted(config.target_modules))
+print(trainable, total, round(100 * trainable / total, 3))
+```
+
+**Predict:** How many numbers will the adapter train, out of how many in the model?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'q_proj': (1536, 1536), 'k_proj': (1536, 256), 'v_proj': (1536, 256), 'o_proj': (1536, 1536)} 28
+8 16 0.05 ['k_proj', 'o_proj', 'q_proj', 'v_proj']
+2179072 1545893376 0.141
+```
+
+</details>
+
+*Why:* The first line is the shape of each wrapped layer and the number of layers. The second is `r`, `lora_alpha`, `lora_dropout` and the layers: the configuration of the run. The third is the numbers trained, the numbers in the model and the share: 8 x (3,072 + 1,792 + 1,792 + 3,072) = 77,824 for one layer, 2,179,072 for 28, which is 0.141 percent of 1,545,893,376. The paper reports 10,000 times fewer trainable parameters than full tuning of GPT-3 175B with Adam.
+
+**Idea.** A training example is the request followed by the reply, and the loss counts the reply only. An epoch is one pass over the 96 questions, in batches of 8. After each epoch the loss on `DEV`, which the model never trains on, says whether what it learns carries over (the validation loss of lesson MLE6). The rate 5e-4 and the 4 epochs were chosen on `DEV`: a first run at 2e-4 for 3 epochs left only 8 of 16 `DEV` questions right. `TEST` chose nothing.
+
+**Try it:** train for 4 epochs. The cell loops over the batches and scores `DEV` after each epoch; these five lines are one step. It prints the loss of each of the 48 steps, and the validation loss before the first step and after each epoch.
+
+```python
+ids, mask, labels = batch([TRAIN[i] for i in order[first:first + BATCH]])
+loss = llm(input_ids=ids, attention_mask=mask, labels=labels).loss
+loss.backward()
+optimizer.step()
+optimizer.zero_grad()
+```
+
+**Predict:** Will the validation loss keep falling through the 4 epochs?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+48 steps 599 seconds
+[5.216, 4.008, 2.888, 2.335, 1.671, 1.53, 1.142, 0.869, 0.804, 0.589, 0.756, 0.401, 0.533, 0.402, 0.312, 0.213, 0.114, 0.253, 0.263, 0.148, 0.129, 0.209, 0.193, 0.144, 0.14, 0.145, 0.1, 0.272, 0.037, 0.084, 0.091, 0.093, 0.241, 0.243, 0.054, 0.039, 0.023, 0.027, 0.109, 0.028, 0.069, 0.03, 0.022, 0.037, 0.008, 0.085, 0.038, 0.044]
+{'epoch': 0, 'validation': 4.836}
+{'epoch': 1, 'train': 1.851, 'validation': 0.458}
+{'epoch': 2, 'train': 0.243, 'validation': 0.224}
+{'epoch': 3, 'train': 0.128, 'validation': 0.058}
+{'epoch': 4, 'train': 0.043, 'validation': 0.076}
+keep the adapter of epoch 3
+```
+
+</details>
+
+*Why:* The first line is 48 steps in 599 seconds, five passes over `DEV` included. The step losses fall from 5.216 to about 0.04, with noise from batch to batch. The rows are the epoch, the mean training loss of its steps (dropout on) and the validation loss. The validation loss falls from 4.836 to 0.058 after epoch 3, then rises to 0.076 while the training loss still falls: the adapter has begun to fit the 96 questions rather than the task. The adapter of epoch 3 is kept.
+
+The run of unit 3: the loss of every step, and the validation loss after each epoch.
+
+<figure>
+<svg viewBox="0 0 360 247" width="360" role="img" aria-labelledby="mle11-loss-t mle11-loss-d">
+<title id="mle11-loss-t">The loss of the LoRA run, step by step, and the validation loss after each epoch</title>
+<desc id="mle11-loss-d">A line chart on a log scale. The training loss of each of 48 steps falls from 5.216 to 0.044. The validation loss is 4.836 before training and 0.458, 0.224, 0.058 and 0.076 after epochs 1 to 4: lowest after epoch 3, so that epoch's adapter is kept.</desc>
+<g fill="currentColor">
+<path d="M54.1 152.4 L330.1 152.4" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.1" y="155.9" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.01</text>
+<path d="M54.1 108.8 L330.1 108.8" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.1" y="112.3" font-size="9.5" text-anchor="end" fill-opacity="0.8">0.1</text>
+<path d="M54.1 65.1 L330.1 65.1" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.15" />
+<text x="48.1" y="68.6" font-size="9.5" text-anchor="end" fill-opacity="0.8">1</text>
+<path d="M54.1 165.6 L54.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="54.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">0</text>
+<path d="M123.1 165.6 L123.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="123.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">12</text>
+<path d="M192.1 165.6 L192.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="192.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">24</text>
+<path d="M261.1 165.6 L261.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="261.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">36</text>
+<path d="M330.1 165.6 L330.1 169.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="330.1" y="181.6" font-size="9.5" text-anchor="middle" fill-opacity="0.8">48</text>
+<path d="M54.1 165.6 L330.1 165.6" fill="none" stroke="currentColor" stroke-width="1" stroke-opacity="0.5" />
+<text x="192.1" y="195.6" font-size="9.5" text-anchor="middle" fill-opacity="0.9">step (12 steps make one epoch)</text>
+<text x="24.1" y="21.6" font-size="9.5" fill-opacity="0.9">loss, log scale</text>
+<path d="M59.9 33.7 L65.6 38.7 L71.4 44.9 L77.1 49 L82.9 55.3 L88.6 57 L94.4 62.5 L100.1 67.7 L105.9 69.2 L111.6 75.1 L117.4 70.4 L123.1 82.4 L128.9 77 L134.6 82.4 L140.4 87.2 L146.1 94.4 L151.9 106.3 L157.6 91.1 L163.4 90.4 L169.1 101.3 L174.9 103.9 L180.6 94.8 L186.4 96.3 L192.1 101.8 L197.9 102.4 L203.6 101.7 L209.4 108.8 L215.1 89.8 L220.9 127.6 L226.6 112.1 L232.4 110.5 L238.1 110.1 L243.9 92.1 L249.6 91.9 L255.4 120.4 L261.1 126.6 L266.9 136.6 L272.6 133.6 L278.4 107.1 L284.1 132.9 L289.9 115.8 L295.6 131.6 L301.4 137.5 L307.1 127.6 L312.9 156.7 L318.6 111.8 L324.4 127.1 L330.1 124.3" fill="none" stroke="#0072b2" stroke-width="1.5" stroke-opacity="0.85" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M54.1 35.2 L123.1 79.9 L192.1 93.4 L261.1 119.1 L330.1 114" fill="none" stroke="#00a07a" stroke-width="2" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="54.1" cy="35.2" r="3.5" fill="#00a07a" />
+<circle cx="123.1" cy="79.9" r="3.5" fill="#00a07a" />
+<circle cx="192.1" cy="93.4" r="3.5" fill="#00a07a" />
+<circle cx="261.1" cy="119.1" r="3.5" fill="#00a07a" />
+<circle cx="330.1" cy="114" r="3.5" fill="#00a07a" />
+<text x="62.1" y="29.2" font-size="9.5" font-weight="600">4.836</text>
+<text x="129.1" y="73.9" font-size="9.5" font-weight="600">0.458</text>
+<text x="198.1" y="87.4" font-size="9.5" font-weight="600">0.224</text>
+<text x="326.1" y="104" font-size="9.5" font-weight="600" text-anchor="end">0.076</text>
+<circle cx="261.1" cy="119.1" r="7" fill="none" stroke="#ad9100" stroke-width="2" />
+<rect x="54.1" y="207.6" width="14" height="3" fill="#0072b2" />
+<text x="73.1" y="211.6" font-size="9.5">training loss of each step</text>
+<rect x="210.1" y="207.6" width="14" height="3" fill="#00a07a" />
+<text x="229.1" y="211.6" font-size="9.5">validation loss</text>
+<circle cx="60.1" cy="227.6" r="5" fill="none" stroke="#ad9100" stroke-width="2" />
+<text x="73.1" y="230.6" font-size="9.5" font-weight="600">epoch 3 kept: validation loss 0.058</text>
+</g>
+</svg>
+</figure>
+
+**Try it:** ask the 32 test questions with the tuned model: no list of names, only the short system message it was trained with. Then print the replies that were wrong.
+
+```python
+llm.eval()
+
+
+def ask_tuned(question):
+    """The tuned model: no names, no instructions, only the short system message it was trained with."""
+    return checked(chat([{"role": "system", "content": SHORT}, {"role": "user", "content": question}], max_new_tokens=30))
+
+
+runs["tuned"] = [ask_tuned(question) for question, _ in TEST]
+print(report(runs["tuned"], TEST))
+print(sorted({r["error"] for r in runs["tuned"] if r["error"]}))
+wrong = [i for i, (r, (_, lesson)) in enumerate(zip(runs["tuned"], TEST)) if r["lesson"] != lesson]
+for i in wrong:
+    print(i, TEST[i][1], "->", runs["tuned"][i]["text"])
+```
+
+**Predict:** How many replies will pass the check, how many will name the right lesson, and how many tokens will a request count?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+{'pass': 31, 'right': 28, 'prompt': 33, 'completion': 8, 'cost': 0.075, 'seconds': 2.6}
+['literal_error']
+2 group-by-having -> {"lesson": "group-by"}
+25 window-functions -> {"lesson": "group-by-having"}
+26 ctes -> {"lesson": "window-functions"}
+27 ctes -> {"lesson": "window-functions"}
+```
+
+</details>
+
+*Why:* The tuned model names the right lesson for 28 of the 32 questions, against 15 for the prompt and 24 for retrieval, and a request counts 33 tokens against 92 and 520. Whether those gaps are more than chance is the question of unit 5. One reply fails the schema: its type is `literal_error`, JSON with a name that is not one of the eight (lesson MLE8). The lines below are the four questions it got wrong: `group-by` is a near miss that is not on the list, and three name another lesson. This is one run with one seed.
+
+### 4. What the adapter is
+
+**Idea.** The adapter is a separate small file, and the model's own numbers stay as they were. The PEFT documentation says an adapter can be merged into the model, and that this adds no delay when the model answers. Switching the adapter off gives the old model back.
+
+**Try it:** save the adapter and print its size. Then ask one question that is not a routing request, twice: with the adapter switched off and with it on.
+
+```python
+ADAPTER_DIR = tempfile.mkdtemp()
+llm.save_pretrained(ADAPTER_DIR)
+print(round(os.path.getsize(ADAPTER_DIR + "/adapter_model.safetensors") / 1e6, 1), "MB in the adapter file")
+question = [{"role": "user", "content": "In one sentence, what does COALESCE do in SQL?"}]
+with llm.disable_adapter():                                                   # the same model, the adapter switched off
+    print(repr(chat(question, max_new_tokens=40)["text"]))
+print(repr(chat(question, max_new_tokens=40)["text"]))                       # the adapter on
+```
+
+**Predict:** How large is the file, and what will the tuned model answer to a question that has nothing to do with routing?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+8.7 MB in the adapter file
+'The COALESCE function in SQL returns the first non-null value in a list of expressions.'
+'{"{"": "left-join-outer"}"}'
+```
+
+</details>
+
+*Why:* The adapter file holds 8.7 MB, next to a model that downloads at about 3 GB (lesson MLE8). With the adapter off, the model answers in a sentence. With it on, the same question gets a reply in the shape it was trained for and no answer: on this one request, the tuned model answered a question outside its task with broken JSON.
+
+### 5. The bill
+
+**Idea.** The bill has three parts. A request costs its tokens, at the assumed prices of lesson MLE8 ($1.00 per million prompt tokens, $5.00 per million completion tokens). Tuning adds a price paid once: labeled data and a training run. Every change in the facts has a price too: an edit, new text to embed, or new labeled examples and a new run. Two scores can differ by chance. If two approaches were equally good, each question on which they differ would fall to either side like a coin flip, and the exact sign test adds up the chances of a split at least as uneven as the one seen, in either direction.
+
+**Try it:** put the three runs side by side, compute how many requests the shorter prompt of the tuned model needs to repay the labeling of the 112 questions (an invented $200), count the questions on which two approaches differ, and run the sign test on those counts.
+
+```python
+reports = {name: report(rows, TEST) for name, rows in runs.items()}
+for name, row in reports.items():
+    print(name, row)
+LABELING = 200.00                                                             # dollars to write and check 112 labeled questions: invented for this lesson
+saved = (reports["prompt"]["cost"] - reports["tuned"]["cost"]) / 1000       # dollars saved on one request by the shorter prompt
+print(round(saved, 6), round(LABELING / saved))                              # requests until the shorter prompt has repaid the labeling
+print(round(LABELING / saved / 400_000, 1))                                  # months at 400,000 requests a month, the invented volume of lesson MLE8
+right = {name: [r["lesson"] == lesson for r, (_, lesson) in zip(rows, TEST)] for name, rows in runs.items()}
+
+
+def differ(a, b):
+    """The questions that a gets right and b gets wrong, and the questions that b gets right and a gets wrong."""
+    return sum(x and not y for x, y in zip(right[a], right[b])), sum(y and not x for x, y in zip(right[a], right[b]))
+
+
+print(differ("tuned", "retrieval"), differ("tuned", "prompt"), differ("retrieval", "prompt"))
+
+
+def sign_test(a, b):
+    """The exact two-sided sign test: if the two approaches were equally good, how often would the questions where they differ split at least this unevenly?"""
+    n, k = a + b, min(a, b)
+    return round(min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n), 3)
+
+
+print(sign_test(*differ("tuned", "retrieval")), sign_test(*differ("tuned", "prompt")))
+```
+
+**Predict:** After how many requests has the shorter prompt repaid the labeling, on how many questions do the tuned model and retrieval differ, and is that gap more than chance?
+
+<details>
+<summary>Reveal the result</summary>
+
+```text
+prompt {'pass': 32, 'right': 15, 'prompt': 92, 'completion': 8, 'cost': 0.131, 'seconds': 3.0}
+retrieval {'pass': 32, 'right': 24, 'prompt': 520, 'completion': 8, 'cost': 0.559, 'seconds': 8.3}
+tuned {'pass': 31, 'right': 28, 'prompt': 33, 'completion': 8, 'cost': 0.075, 'seconds': 2.6}
+5.6e-05 3571429
+8.9
+(5, 1) (14, 1) (10, 1)
+0.219 0.001
+```
+
+</details>
+
+*Why:* The tuned prompt saves $0.056 per 1,000 requests, so $200 takes 3,571,429 requests, about 3.6 million, or 8.9 months at the 400,000 requests a month invented in lesson MLE8. The cost of the training run is not counted, and the shorter prompt alone is a slow way to repay a labeling bill. The next line holds three pairs: the questions the first approach gets right and the second wrong, then the reverse. The tuned model gets 5 right that retrieval gets wrong and retrieval gets 1 right that the tuned model gets wrong: they differ on 6 questions, and the gap of four is those two counts. The last line is the sign test of two pairs. For 5 against 1, 14 of the 64 equally likely splits of 6 flips are that uneven or more, so p = 0.22 (two-sided): too few questions to call 28 better than 24. For the tuned model against the prompt, 14 against 1 gives p = 0.001: that gap is clear.
+
+The three approaches on the 32 test questions, and the best chunk alone.
+
+<figure>
+<svg viewBox="0 0 360 222" width="360" role="img" aria-labelledby="mle11-compare-t mle11-compare-d">
+<title id="mle11-compare-t">Right lessons and prompt tokens of the three approaches</title>
+<desc id="mle11-compare-d">Two panels. Right lessons of the 32 test questions: prompt 15, retrieve 24, fine-tune 28; the best chunk alone, with no model, 25. Prompt tokens of a request: prompt 92, retrieve 520, fine-tune 33.</desc>
+<g fill="currentColor">
+<text x="33.2" y="22.4" font-size="10.5" font-weight="600">right lessons, of 32 test questions</text>
+<text x="111.2" y="45.9" font-size="9.5" text-anchor="end">prompt</text>
+<rect x="117.2" y="34.4" width="93.8" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="217" y="46.4" font-size="10" font-weight="600">15</text>
+<text x="111.2" y="67.9" font-size="9.5" text-anchor="end">retrieve</text>
+<rect x="117.2" y="56.4" width="150" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="273.2" y="68.4" font-size="10" font-weight="600">24</text>
+<text x="111.2" y="89.9" font-size="9.5" text-anchor="end">best chunk, no model</text>
+<rect x="117.2" y="78.4" width="156.2" height="16" fill="none" stroke="#00a07a" stroke-width="1.5" stroke-dasharray="4 3" />
+<text x="279.5" y="90.4" font-size="10" font-weight="600">25</text>
+<text x="111.2" y="111.9" font-size="9.5" text-anchor="end">fine-tune</text>
+<rect x="117.2" y="100.4" width="175" height="16" fill="#00a07a" fill-opacity="0.85" />
+<text x="298.2" y="112.4" font-size="10" font-weight="600">28</text>
+<text x="33.2" y="136.4" font-size="10.5" font-weight="600">prompt tokens of one request</text>
+<text x="111.2" y="159.9" font-size="9.5" text-anchor="end">prompt</text>
+<rect x="117.2" y="148.4" width="35.4" height="16" fill="#0072b2" fill-opacity="0.85" />
+<text x="158.6" y="160.4" font-size="10" font-weight="600">92</text>
+<text x="111.2" y="181.9" font-size="9.5" text-anchor="end">retrieve</text>
+<rect x="117.2" y="170.4" width="200" height="16" fill="#0072b2" fill-opacity="0.85" />
+<text x="323.2" y="182.4" font-size="10" font-weight="600">520</text>
+<text x="111.2" y="203.9" font-size="9.5" text-anchor="end">fine-tune</text>
+<rect x="117.2" y="192.4" width="12.7" height="16" fill="#0072b2" fill-opacity="0.85" />
+<text x="135.9" y="204.4" font-size="10" font-weight="600">33</text>
+</g>
+</svg>
+</figure>
+
+| | prompt | retrieve | fine-tune |
+|---|---|---|---|
+| data needed | the eight names | the lesson texts | 96 labeled questions, 16 to watch |
+| prompt tokens per request | 92 | 520 | 33 |
+| when the facts change | edit the prompt | change the text and embed it again | label again and train again |
+| how it failed here | valid names, often the wrong one | the best chunk decides | a name off the list, and no answers outside its task |
+
+The OpenAI guide on accuracy, a vendor page, recommends starting with the prompt, adding retrieval when the model lacks facts or has outdated ones, and tuning for consistent behavior such as format and tone; it adds that the quality of the training data matters more than the amount. The deep dive *Fine-tuning a small model with LoRA, for real* goes further.
+
+<Aside type="tip" title="Remember">
+
+- A prompt changes the words; every request carries them, and nothing guarantees that the reply follows them.
+- Retrieval changes what the model can read: new text works once it is embedded, and every request carries the chunks.
+- LoRA trains small matrices beside frozen layers; the adapter is a small file, and the model comes back with it switched off.
+- Read a run in three places: the configuration, the validation loss beside the training loss, and a score on questions kept out of training, with the questions where two approaches differ counted.
+- Start with the prompt, add retrieval for facts the model lacks, and tune for behavior you have many labeled examples of.
+
+**Common trap:** a tuned model that scores best on one test has learned the task. This one named 28 of 32 lessons on one run, from 96 questions written by one author; its lead over retrieval (28 against 24) is within chance, and it answered a question outside its task with broken JSON.
+
+</Aside>
+
+## Finish it
+
+<Exercise id="ml-engineer-fine-tuning-or-not-1">
+
+**Count the numbers an adapter trains** The adapter of unit 3 has rank 8 and wraps the four attention layers. Suppose it had rank 16 and wrapped the three layers of the feed-forward block as well: `gate_proj` and `up_proj` map 1,536 numbers to 8,960, and `down_proj` maps 8,960 back to 1,536. Put in `answer_1` how many numbers the adapter would train in all 28 layers of the model. A layer of shape (n_in, n_out) gets two small matrices, `R x n_in` and `n_out x R`. Expected: `answer_1` is a whole number above 10 million.
+
+```python
+R = 16
+shapes = {**SHAPES, "gate_proj": (1536, 8960), "up_proj": (1536, 8960), "down_proj": (8960, 1536)}      # the four attention layers of unit 3 and the three layers of the feed-forward block
+per_layer = sum(R * (n_in + n_out) for n_in, n_out in shapes.values())                                    # given: the numbers trained in one transformer layer
+answer_1 = None  # replace None with the numbers trained in all the layers
+```
+
+<details>
+<summary>Hint</summary>
+
+Each wrapped layer adds `R * n_in + n_out * R` numbers. `per_layer` already adds that up for the seven layers of one transformer layer.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+per_layer = sum(R * (n_in + n_out) for n_in, n_out in shapes.values())
+answer_1 = per_layer * ...
+```
+
+</details>
+
+<Solution>
+
+```python
+R = 16
+shapes = {**SHAPES, "gate_proj": (1536, 8960), "up_proj": (1536, 8960), "down_proj": (8960, 1536)}
+per_layer = sum(R * (n_in + n_out) for n_in, n_out in shapes.values())
+answer_1 = per_layer * N_LAYERS
+```
+
+The answer is 18464768. One layer trains 16 x 9,728 = 155,648 numbers in the attention layers and 16 x 3 x 10,496 = 503,808 in the feed-forward block, 659,456 in all; 28 layers give 18,464,768, about 1.2 percent of the model. The rank and the number of wrapped layers set the size.
+
+</Solution>
+
+</Exercise>
+
+## On your own
+
+<Exercise id="ml-engineer-fine-tuning-or-not-2">
+
+**Which of the three?** Before you start, say in one sentence which of prompt, retrieve and fine-tune you expect for each problem. All three are invented. (a) A cafe chain wants replies about its loyalty rewards, which change on the first of every month; it has no labeled replies. (b) A support team has 40,000 replies in its house style and sends 2 million requests a month; a prompt with the style guide and six examples carries 900 tokens and is accepted for 70 percent of requests, and the team needs 90 percent. (c) An intern needs a one-off summary of 30 customer notes in a format given today, with no labeled data. Then write the cell yourself, in the empty cell of the notebook: put in `answer_2` a list of three words, one for each problem, each one of `'prompt'`, `'retrieve'` or `'fine-tune'`. Expected: `answer_2` is a list of three words.
+
+<details>
+<summary>Hint</summary>
+
+Ask of each problem what has to change: the facts the model can see, the behavior the model shows, or only the instruction. Then ask how often the thing changes and how many labeled examples exist.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+answer_2 = [..., ..., ...]
+```
+
+</details>
+
+<Solution>
+
+```python
+answer_2 = ["retrieve", "fine-tune", "prompt"]
+```
+
+The answer is retrieve, fine-tune, prompt. In (a) the facts change every month and nothing is labeled: retrieved text is new the day it is written, and a tuned model would hold last month's rewards. In (b) the behavior is the problem (70 percent against 90), 40,000 examples exist, and each request carries 900 tokens that a tuned model would not need. In (c) one instruction is enough for a one-off job.
+
+</Solution>
+
+</Exercise>
+
+## Check yourself
+
+1. Without looking back: which three things do you read in a LoRA run before you trust its score?
+
+   <details>
+   <summary>answer</summary>
+
+   The configuration (rank, alpha, layers, share of numbers trained), the validation loss beside the training loss and the epoch kept, and the score on questions never trained on, beside a prompt and a retrieval baseline.
+
+   </details>
+
+<Exercise id="ml-engineer-fine-tuning-or-not-3">
+
+**Spot the flaw** A colleague builds a test set from 35 candidate questions and keeps those that are not in the training file, comparing the exact text. Change the code so that it counts the candidates that are really not in the training file, and put the number in `answer_3`. Expected: `answer_3` is a whole number.
+
+```python
+pool = [question for question, _ in TEST] + [TRAIN[0][0].lower().rstrip("?"), TRAIN[7][0].upper(), TRAIN[20][0] + " "]      # a colleague's 35 candidates for a new test set
+trained_on = {question for question, _ in TRAIN}
+held_out = [question for question in pool if question not in trained_on]                                                  # colleague: "not in the training file"
+answer_3 = len(held_out)
+# change the code so that it counts the candidates that are really not in the training file
+```
+
+<details>
+<summary>Hint</summary>
+
+Three of the candidates are training questions with a small change. Compare the words, not the exact text.
+
+</details>
+
+<details>
+<summary>Half-solution</summary>
+
+```python
+def plain(text):
+    return ...
+
+
+trained_on = {plain(question) for question, _ in TRAIN}
+```
+
+</details>
+
+<Solution>
+
+```python
+pool = [question for question, _ in TEST] + [TRAIN[0][0].lower().rstrip("?"), TRAIN[7][0].upper(), TRAIN[20][0] + " "]
+
+
+def plain(text):
+    """The words of a question in lower case, without punctuation or extra spaces."""
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", text.lower()).split())
+
+
+trained_on = {plain(question) for question, _ in TRAIN}
+held_out = [question for question in pool if plain(question) not in trained_on]
+answer_3 = len(held_out)
+```
+
+The answer is 32. Three candidates are training questions in lower case without the question mark, in capitals, and with a trailing space; the exact comparison keeps them, so the model would be scored on questions it trained on, which shows what it remembers. Comparing the words after lower-casing and removing punctuation keeps only the 32 questions of `TEST`. A paraphrase is not caught by this: compare embeddings for that.
+
+</Solution>
+
+</Exercise>
+
+**Can you do it?** *I can try a task with a prompt, with retrieved text and with a LoRA adapter, read the configuration, the loss curves and the held-out score of the run, and say which of the three a stated problem needs.*
+Test: Exercise ml-engineer-fine-tuning-or-not-2, done from the notebook without opening the hints.
+
+The pattern to remember: **change the request, then the context, then the model, and read each one on questions it never saw.** The next lesson is *Agents, tool use and guardrails* (MLE12).
