@@ -15,8 +15,8 @@ replaces. The lesson pages quote them, and `check_lessons.py` compares every quo
 
 Every commit has the same author and date (below), so a rebuild gives the same hashes. `PUBLISHED` holds the hashes of
 commits that were pushed; the script stops if a rebuild of a published lesson gives another one, because the files of a
-published checkpoint never change (a change would not be a fast-forward of what learners already cloned). Lessons 0 (the starter), 2 and 3 were pushed
-on 2026-11-25; 13 to 16 were published on 2026-11-26.
+published checkpoint never change (a change would not be a fast-forward of what learners already cloned). The starter (lesson 0) was pushed on
+2026-11-25; lessons 2, 3 and 13 to 16 were rebuilt and force-pushed on 2026-11-26.
 """
 
 import os
@@ -34,13 +34,14 @@ DATE = "2026-11-25T12:00:00+0000"
 PUBLISHED = {
     # Pushed to datafromzero/ml-starter on 2026-11-25.
     0: "0123560c9ba02a70f4a375677feb9b2dd2cb7c84",
-    2: "82f82985e64e5a5330dcf869e66c839b9fe244a2",
-    3: "6641a1797bf098329c18a8ff52a47620a1392dbb",
-    # Published with the lessons on 2026-11-26.
-    13: "01248303741baa83c80d2e40b06e90fced994ea2",
-    14: "d8bcadf1529a6a9d430742d8cf42af9fc2f60476",
-    15: "81d2ff23bd61c34ee7f9bdb7102d6ef0ba543307",
-    16: "8569101464c24c30f9b755588672f045ca310096",
+    # Rebuilt on 2026-11-26: MLE2's example channel and MLE16's model changed, so every commit from lesson 2 on is
+    # new; the owner force-pushed main and the tags, and earlier clones must clone again.
+    2: "8266a2451b9d5839b291c4f30258aa716e698a18",
+    3: "7a44e973b082e3135c99210ebf2f06c640b770d0",
+    13: "356b4c674580042622a2472af847071bfcbc72d9",
+    14: "dc1f4aca1f5b9f170c80288f68392a9f428e23ca",
+    15: "b6a687db921a7cb97444f2fd8f0ee3795cefb264",
+    16: "856860b21118563c62e06af017d3dc7054d1e82c",
 }
 IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc", "mlflow.db", "mlruns")
 
