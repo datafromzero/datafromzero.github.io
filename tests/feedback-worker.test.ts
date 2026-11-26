@@ -163,11 +163,12 @@ describe('countries and crawlers (D62)', () => {
 		assert.equal(blockedCountry({ country: 'cn' }), true);
 		for (const cf of [{ country: 'VN' }, { country: 'US' }, {}, undefined]) assert.equal(blockedCountry(cf), false, JSON.stringify(cf));
 	});
-	test('the Worker answers 403 to a post from China before reading it', async () => {
+	test('the Worker answers 403 to a post from a blocked country before reading it', async () => {
 		const req = new Request('https://feedback.example/', { method: 'POST', headers: { Origin: 'https://datafromzero.github.io', 'Content-Type': 'application/x-www-form-urlencoded' }, body: form({}).toString() });
 		Object.defineProperty(req, 'cf', { value: { country: 'CN' } });
 		const res = await worker.fetch(req, {});
 		assert.equal(res.status, 403);
+		assert.equal(req.bodyUsed, false);
 	});
 	test('robots.txt keeps the crawlers of Chinese companies out and lets the rest in', async () => {
 		const { readFileSync } = await import('node:fs');

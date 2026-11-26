@@ -12,6 +12,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Git and process (lead)
 
+- 2026-11-26 — D62 changed the feedback Worker but left D58, SPEC §11 and `/privacy/` unchanged (spec review). → **Any change to what the Worker reads or decides about a sender updates D58, §11 and `/privacy/` in the same change; public text (the changelog summary, project pages) stays neutral and names no country.**
 - 2026-11-17 — A new cloud environment had git user "Claude"; the first commit was authored by it.
   → **Before the first commit in a session, run `git config user.name`; it must be `johnha912`
   (`johnha912@users.noreply.github.com`).** Fix with `git config` and amend only your own unpushed or own-branch commits.
