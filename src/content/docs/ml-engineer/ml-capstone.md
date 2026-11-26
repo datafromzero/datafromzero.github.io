@@ -18,7 +18,7 @@ prerequisites:
   - ml-engineer-agents-tools-and-guardrails
 datasets:
   - app-events
-reviewed: 2026-11-25
+reviewed: 2026-11-26
 sources:
   - title: 'FastAPI documentation: Request Body (accessed 2026-11-25)'
     url: https://fastapi.tiangolo.com/tutorial/body/
@@ -26,10 +26,8 @@ sources:
     url: https://scikit-learn.org/stable/model_persistence.html
   - title: 'Google for Developers: Rules of Machine Learning, Rules 9 and 37 (accessed 2026-11-25)'
     url: https://developers.google.com/machine-learning/guides/rules-of-ml
-status: draft
+status: published
 ---
-
-TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3, FastAPI 0.165.0 and skops 0.16.0 in the starter at `mle-16-start`; half B in `llm/` with transformers 5.24.1, sentence-transformers 6.3.0, PyTorch 2.15.0 (CPU), `Qwen/Qwen2.5-1.5B-Instruct` (Apache 2.0, revision 989aa798...) and `sentence-transformers/all-MiniLM-L6-v2` (Apache 2.0, revision 1110a243...), the corpus read from the release tag v1.0.0. Every console block is pasted from a run (half A in a clean clone at `mle-16-start`; half B in the `llm/` environment, one language-model process at a time, with two lines of loader progress bars removed). Invented: Priya Nair and her requests; the date July 1 (every outcome of May 11 to 31 is known on June 30); the bars (10 of 12, interval above 0); the 16 held-out questions of `llm/questions.py` (written for this capstone, each phrase checked against the lessons, the four trap words, ALTER, concat, Canada and forest, absent from the eight lessons); the prices of $1.00 and $5.00 per million tokens and $0.10 an hour are assumptions. Not repeated: the answers of MLE1 to MLE15. Timings: half A's 7-run latency of version 2 on the writing machine, a Linux sandbox; half B's 14.0 s median is one run, not a median of seven, and the model was run once (the answer to the SEMI and ANTI JOIN question was the same in the evaluation and in the service run, which is the only repeat check). Not run: Colab, a GPU, Windows, macOS, a hosted API, a deployment, `llm/` in a container. The reference graders were not edited after the run. Fix pass of 2026-11-25: half A's reference was run again (it now prints the gate floor line); half B's `evaluate.py` was changed to pair the answerer and the baseline on one grader, but the models were not run again (memory), so its console block is the first run's with the old paired line removed and the interval is bounded from the counts in the text. Stub changes: none to the slug, objectives or prerequisites; the brief adds that half B has its own folder and environment, `llm/`.
 
 ## The question
 

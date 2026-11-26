@@ -18,16 +18,14 @@ prerequisites:
   - ml-engineer-monitoring-drift-and-retraining
 datasets:
   - app-events
-reviewed: 2026-11-25
+reviewed: 2026-11-26
 sources:
   - title: 'scikit-learn documentation: Pipelines and composite estimators (accessed 2026-11-25)'
     url: https://scikit-learn.org/stable/modules/compose.html
   - title: 'scikit-learn documentation: RandomForestClassifier (accessed 2026-11-25)'
     url: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
-status: draft
+status: published
 ---
-
-TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3, skops 0.16.0 and the starter at `mle-15-start`; every console block is pasted from a run in a clean clone, and the file and request counts are exact. Invented: Priya Nair and her request. The decision (phone the top quarter, 1,113 of the 4,454 held-out people) and the measure (hits) are this lesson's own, so no answer of lessons MLE1 to MLE14 repeats. Seed check: on 20 other splits (seeds 100 to 119) the random forest's gain over the champion at the top quarter had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16, and the champion's web AUC was below its android AUC every time (median -0.062); the headline split (+0.004, interval -0.011 to +0.015) sits at the middle. Timings: seven runs of the 200 requests gave a median latency of 10.83 ms (10.59 to 11.62) for the forest and 4.41 ms (4.03 to 4.64) for the champion, on a machine that another job was using; the run shown is slower for both. The 90 minutes are the sum of the time plan, and the reference was not timed. Not run: Colab, Windows, macOS, a different CPU. Stub changes: objective 2 now says "a working model with baselines, served by the starter's service" (the stub said "a working model or RAG answerer"; the language-model route is graded in the capstone under the same rubric, because a 6 GB model would take most of a 90-minute box to load and run); the prerequisite `ml-engineer-monitoring-drift-and-retraining` was added (the cost line and the gate come from it); the source list holds the two scikit-learn pages the reference answer uses (an earlier list had the HistGradientBoosting page, but the candidate is a random forest). The reference answer's refusal of the forest file by skops (`sklearn.tree._tree.Tree`) is a real message of skops 0.16.0.
 
 ## The question
 

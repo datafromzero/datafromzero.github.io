@@ -9,14 +9,14 @@ with these tags (the lessons say "check out mle-03-start to catch up"):
     mle-NN-done                      the starter after lesson MLE NN, with the files the lesson saves
     mle-NN-start                     the same commit as the done tag of the lesson before it
 
-Only lessons that work in the repository have a folder: MLE2 and MLE3 so far (MLE1, MLE4 and MLE5 work in Colab notebooks).
+Only lessons that work in the repository have a folder: MLE2, MLE3 and MLE13 to MLE16 (the others work in Colab notebooks).
 The files of each lesson are the folder `mle-NN-done/` next to this script: only the files the lesson adds or
 replaces. The lesson pages quote them, and `check_lessons.py` compares every quoted block.
 
 Every commit has the same author and date (below), so a rebuild gives the same hashes. `PUBLISHED` holds the hashes of
 commits that were pushed; the script stops if a rebuild of a published lesson gives another one, because the files of a
 published checkpoint never change (a change would not be a fast-forward of what learners already cloned). Lessons 0 (the starter), 2 and 3 were pushed
-on 2026-11-25.
+on 2026-11-25; 13 to 16 were published on 2026-11-26.
 """
 
 import os
@@ -36,6 +36,11 @@ PUBLISHED = {
     0: "0123560c9ba02a70f4a375677feb9b2dd2cb7c84",
     2: "82f82985e64e5a5330dcf869e66c839b9fe244a2",
     3: "6641a1797bf098329c18a8ff52a47620a1392dbb",
+    # Published with the lessons on 2026-11-26.
+    13: "01248303741baa83c80d2e40b06e90fced994ea2",
+    14: "d8bcadf1529a6a9d430742d8cf42af9fc2f60476",
+    15: "81d2ff23bd61c34ee7f9bdb7102d6ef0ba543307",
+    16: "8569101464c24c30f9b755588672f045ca310096",
 }
 IGNORED = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache", "*.pyc", "mlflow.db", "mlruns")
 

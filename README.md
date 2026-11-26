@@ -8,8 +8,8 @@ Excel / Google Sheets → SQL → Python → advanced core → four data careers
 
 ## Status
 
-Version **1.0.0** was released on 2026-11-25. All four core stages are complete in this release, and three of the career
-tracks are published. Cite it with the DOI [10.5281/zenodo.24523880](https://doi.org/10.5281/zenodo.24523880), which
+Version **1.0.0** was released on 2026-11-25. All four core stages and the main paths of the four career tracks are
+published. Cite it with the DOI [10.5281/zenodo.24523880](https://doi.org/10.5281/zenodo.24523880), which
 always points to the latest version. The [cite page](https://datafromzero.github.io/cite/) has APA and BibTeX for each
 version.
 
@@ -22,7 +22,7 @@ version.
 | Data Analyst | 18 |
 | Data Engineer | 20, plus an 11-lesson optional deep dive |
 | Data Scientist | 16 |
-| ML/AI Engineer | 10 of 24, in progress |
+| ML/AI Engineer | 16, the main path; an 8-lesson optional deep dive is in progress |
 
 The [What's new](https://datafromzero.github.io/changelog/) page lists recent changes. The full history is in
 [`CHANGELOG.md`](CHANGELOG.md).
