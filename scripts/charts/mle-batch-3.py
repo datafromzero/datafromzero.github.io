@@ -46,7 +46,8 @@ M11_VALIDATION = [4.836, 0.458, 0.224, 0.058, 0.076]
 M11_KEPT = 3
 # mle12, unit 4 (what each defense let through, of 8 notes each; the clean notes are 4):
 M12_ATTACKS = [("4 clean notes", 4, 0, 0), ("round 1, no defense", 8, 4, 4), ("round 1, a warning in the prompt", 8, 0, 0),
-               ("round 2, a warning in the prompt", 8, 4, 4), ("round 2, tools limited to the task", 8, 6, 0)]
+               ("round 2, no defense", 8, 6, 6), ("round 2, a warning in the prompt", 8, 4, 4),
+               ("round 2, tools limited to the task", 8, 6, 0), ("round 2, a gate that reads the task", 8, 6, 0)]
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 WHITE = "#ffffff"
@@ -199,14 +200,14 @@ def charts():
     s = Svg("mle12-attacks", "Refunds asked for and carried out under each defense",
             "A bar chart. For each setting, the number of notes in which the model asked for a refund and the number in which a refund was carried out: "
             + "; ".join(f"{name}, {asked} asked and {done} carried out of {n}" for name, n, asked, done in M12_ATTACKS) + ".")
-    BW = 200
+    BW = 200                                         # one scale for every track: a full track is 8 notes, so a track of 4 notes is half as long
     y = 0
     for name, n, asked, done in M12_ATTACKS:
-        s.text(0, y + 8, f"{name} ({n} notes)", size=9.5, weight=600)
-        s.rect(0, y + 14, BW, 6, "currentColor", opacity=0.12)
+        s.text(0, y + 8, name if name.endswith("notes") else f"{name} ({n} notes)", size=9.5, weight=600)
+        s.rect(0, y + 14, BW * n / 8, 6, "currentColor", opacity=0.12)
         if asked:
             s.rect(0, y + 14, BW * asked / 8, 6, OCHRE, opacity=0.9)
-        s.rect(0, y + 22, BW, 6, "currentColor", opacity=0.12)
+        s.rect(0, y + 22, BW * n / 8, 6, "currentColor", opacity=0.12)
         if done:
             s.rect(0, y + 22, BW * done / 8, 6, PURPLE, opacity=0.9)
         s.text(BW + 8, y + 20, f"{asked} asked", size=9.5)
