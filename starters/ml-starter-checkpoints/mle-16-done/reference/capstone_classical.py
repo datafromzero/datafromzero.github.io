@@ -22,6 +22,7 @@ from ml_starter.pipeline import build_pipeline
 
 warnings.filterwarnings("ignore")
 V2_UNTIL, QUARTER = "2026-05-11", 0.25
+GATE_FLOOR = 0.68  # the floor of the quality gate of MLE14 (tests/test_quality_gate.py); the rollback plan names a held-out AUC under it
 
 
 def fit(people):
@@ -53,6 +54,8 @@ def report():
     print(f"version 1 learned from {len(v1_people):,} people, version 2 from {len(v2_people):,}; scored on {len(y):,} people of May 11 to 31, {y.mean():.3f} churned")
     for name, p in (("version 1", p1), ("version 2", p2)):
         print(f"{name}: AUC {roc_auc_score(y, p):.3f}, Brier {brier_score_loss(y, p):.4f}, mean chance {p.mean():.3f}")
+    auc1, auc2 = roc_auc_score(y, p1), roc_auc_score(y, p2)
+    print(f"against the gate's floor of {GATE_FLOOR} (the rollback trigger), on these people: version 1 {auc1 - GATE_FLOOR:+.3f}, version 2 {auc2 - GATE_FLOOR:+.3f}")
     gain, low, high = paired(roc_auc_score, p2, p1, y)
     print(f"AUC gain of version 2: {gain:+.4f} (95% interval {low:+.4f} to {high:+.4f}, 2,000 resamples of the people, seed {SEED})")
     gain, low, high = paired(lambda truth, score: -brier_score_loss(truth, score), p2, p1, y)

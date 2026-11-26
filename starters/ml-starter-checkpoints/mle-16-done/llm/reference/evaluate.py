@@ -38,10 +38,11 @@ def main():
     print(f"answers that match every pattern: {sum(ok)} of {len(CAPSTONE)}; with a cited source that holds the phrase: {sum(cited(i, r) for i, r in zip(CAPSTONE, replies))}")
     print(f"baseline, the best chunk holds the phrase: {sum(baseline)} of {len(CAPSTONE)}")
     rng = np.random.default_rng(SEED)
-    pairs = np.array([[a, b] for a, b in zip(ok, baseline)], dtype=int)
+    # one grader for both sides: a source the system shows holds a phrase that answers the question (the answerer's cited source, the baseline's best chunk)
+    pairs = np.array([[cited(item, reply), shown] for item, reply, shown in zip(CAPSTONE, replies, baseline)], dtype=int)
     gains = [(pairs[pick, 0] - pairs[pick, 1]).mean() for pick in (rng.integers(0, len(pairs), len(pairs)) for _ in range(2000))]
     low, high = np.percentile(gains, [2.5, 97.5])
-    print(f"answerer minus baseline: {(pairs[:, 0] - pairs[:, 1]).mean() * len(CAPSTONE):+.0f} of {len(CAPSTONE)} questions "
+    print(f"answerer minus baseline, both by 'a source shown holds the phrase': {(pairs[:, 0] - pairs[:, 1]).mean() * len(CAPSTONE):+.0f} of {len(CAPSTONE)} questions "
           f"(95% interval {low * len(CAPSTONE):+.1f} to {high * len(CAPSTONE):+.1f}, 2,000 resamples of the questions, seed {SEED})")
     print(f"traps refused: {sum(r['refused'] for r in trap_replies)} of {len(TRAPS)}, {sum(r['prompt_tokens'] == 0 for r in trap_replies)} of them before the model was called")
     for (question, kind), reply in zip(TRAPS, trap_replies):

@@ -51,17 +51,22 @@ def scores(X_train, y_train, X_test):
     return {"channel rule": rule, "champion": champion.predict_proba(X_test)[:, 1], "candidate": forest.predict_proba(X_test)[:, 1]}, forest
 
 
-def paired_gain(first, second, y, k_share=QUARTER, resamples=2000, seed=SEED):
-    """The gain in precision at the top share, first minus second, with a 95 percent percentile interval over resamples of the same people."""
+def paired_gain(first, second, y, k_share=QUARTER, resamples=2000, seed=SEED, measure=None):
+    """The gain at the top share, first minus second, with a 95 percent percentile interval over resamples of the same people.
+
+    By default the gain is in hits out of k (how many more of the top k really churned); measure=roc_auc_score gives the gain in AUC.
+    Every call with the same seed draws the same resamples, so two gains are comparable.
+    """
     rng = np.random.default_rng(seed)
     n = len(y)
     k = int(k_share * n)
+    one = (lambda score, answer: hits(score, answer, k)) if measure is None else (lambda score, answer: measure(answer, score))
     gains = []
     for _ in range(resamples):
         pick = rng.integers(0, n, n)
-        gains.append((hits(first[pick], y[pick], k) - hits(second[pick], y[pick], k)) / k)
+        gains.append(one(first[pick], y[pick]) - one(second[pick], y[pick]))
     low, high = np.percentile(gains, [2.5, 97.5])
-    return (hits(first, y, k) - hits(second, y, k)) / k, low, high
+    return one(first, y) - one(second, y), low, high
 
 
 def report():
@@ -75,9 +80,13 @@ def report():
     print(f"flat guess (any {k:,} people): {y.mean():.3f}")
     for name, score in chosen.items():
         print(f"{name:<13} hits {hits(score, y, k):,} of {k:,} = {hits(score, y, k) / k:.3f}   AUC {roc_auc_score(y, score):.3f}")
-    for first, second in (("candidate", "champion"), ("champion", "channel rule"), ("candidate", "channel rule")):
+    pairs = (("candidate", "champion"), ("champion", "channel rule"), ("candidate", "channel rule"))
+    for first, second in pairs:
         gain, low, high = paired_gain(chosen[first], chosen[second], y)
-        print(f"{first} minus {second}: {gain:+.3f} (95% interval {low:+.3f} to {high:+.3f}, 2,000 resamples, seed {SEED})")
+        print(f"{first} minus {second}: {gain:+d} hits of {k:,} = {gain / k:+.3f} (95% interval {low:+.0f} to {high:+.0f} hits, {low / k:+.3f} to {high / k:+.3f}, 2,000 resamples, seed {SEED})")
+    for first, second in pairs:
+        gain, low, high = paired_gain(chosen[first], chosen[second], y, measure=roc_auc_score)
+        print(f"AUC, {first} minus {second}: {gain:+.3f} (95% interval {low:+.3f} to {high:+.3f}, the same 2,000 resamples)")
     print("by platform (AUC of each score, within the platform):")
     for platform in sorted(X_test["platform"].unique()):
         mask = (X_test["platform"] == platform).to_numpy()
@@ -120,7 +129,7 @@ def checks():
         print("3. the service refuses the file:", str(error).splitlines()[0])
     chosen, _ = scores(X_train, y_train, X_test)
     gain, low, high = paired_gain(chosen["candidate"], chosen["champion"], y)
-    print(f"4. candidate minus champion at the top quarter: {gain:+.3f}, interval {low:+.3f} to {high:+.3f}")
+    print(f"4. candidate minus champion at the top quarter: {gain:+d} hits, interval {low:+.0f} to {high:+.0f}")
 
 
 if __name__ == "__main__":

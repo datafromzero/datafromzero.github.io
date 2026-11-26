@@ -22,16 +22,16 @@ reviewed: 2026-11-25
 sources:
   - title: 'scikit-learn documentation: Pipelines and composite estimators (accessed 2026-11-25)'
     url: https://scikit-learn.org/stable/modules/compose.html
-  - title: 'scikit-learn documentation: HistGradientBoostingClassifier (accessed 2026-11-25)'
-    url: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.HistGradientBoostingClassifier.html
+  - title: 'scikit-learn documentation: RandomForestClassifier (accessed 2026-11-25)'
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
 status: draft
 ---
 
-TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3, skops 0.16.0 and the starter at `mle-15-start`; every console block is pasted from a run in a clean clone, and the file and request counts are exact. Invented: Priya Nair and her request. The decision (phone the top quarter, 1,113 of the 4,454 held-out people) and the measure (hits) are this lesson's own, so no answer of lessons MLE1 to MLE14 repeats. Seed check: on 20 other splits (seeds 100 to 119) the random forest's gain over the champion at the top quarter had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16, and the champion's web AUC was below its android AUC every time (median -0.062); the headline split (+0.004, interval -0.011 to +0.015) sits at the middle. Timings: seven runs of the 200 requests gave a median latency of 10.83 ms (10.59 to 11.62) for the forest and 4.41 ms (4.03 to 4.64) for the champion, on a machine that another job was using; the run shown is slower for both. The 90 minutes are the sum of the time plan, and the reference was not timed. Not run: Colab, Windows, macOS, a different CPU. Stub changes: objective 2 now says "a working model with baselines, served by the starter's service" (the stub said "a working model or RAG answerer"; the language-model route is graded in the capstone under the same rubric, because a 6 GB model would take most of a 90-minute box to load and run); the prerequisite `ml-engineer-monitoring-drift-and-retraining` was added (the cost line and the gate come from it); the source list now holds the two scikit-learn pages the lesson uses. The reference answer's refusal of the forest file by skops (`sklearn.tree._tree.Tree`) is a real message of skops 0.16.0.
+TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3, skops 0.16.0 and the starter at `mle-15-start`; every console block is pasted from a run in a clean clone, and the file and request counts are exact. Invented: Priya Nair and her request. The decision (phone the top quarter, 1,113 of the 4,454 held-out people) and the measure (hits) are this lesson's own, so no answer of lessons MLE1 to MLE14 repeats. Seed check: on 20 other splits (seeds 100 to 119) the random forest's gain over the champion at the top quarter had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16, and the champion's web AUC was below its android AUC every time (median -0.062); the headline split (+0.004, interval -0.011 to +0.015) sits at the middle. Timings: seven runs of the 200 requests gave a median latency of 10.83 ms (10.59 to 11.62) for the forest and 4.41 ms (4.03 to 4.64) for the champion, on a machine that another job was using; the run shown is slower for both. The 90 minutes are the sum of the time plan, and the reference was not timed. Not run: Colab, Windows, macOS, a different CPU. Stub changes: objective 2 now says "a working model with baselines, served by the starter's service" (the stub said "a working model or RAG answerer"; the language-model route is graded in the capstone under the same rubric, because a 6 GB model would take most of a 90-minute box to load and run); the prerequisite `ml-engineer-monitoring-drift-and-retraining` was added (the cost line and the gate come from it); the source list holds the two scikit-learn pages the reference answer uses (an earlier list had the HistGradientBoosting page, but the candidate is a random forest). The reference answer's refusal of the forest file by skops (`sklearn.tree._tree.Tree`) is a real message of skops 0.16.0.
 
 ## The question
 
-Priya Nair, head of growth at the budgeting app, writes: *Support can phone one in four of the people who have just finished their first week. I have to decide whom they call, and I do not want to find out in a month that my list was no better than the rule we use today. Build me a ranking. Tell me how much better it is than that rule and than the model we already serve, where it does worse, and what it costs to run.* Priya and her request are invented; the data are the synthetic `app-events` people of the churn table.
+Priya Nair, head of growth at the budgeting app, writes: *Support can phone one in four of the people who have just finished their first week. I have to decide whom they call, and I do not want to find out in a month that my list was no better than the rule we use today: support ranks people by the share of their channel that has left, highest first, and calls from the top. Build me a ranking. Tell me how much better it is than that rule and than the model we already serve, where it does worse, and what it costs to run.* Priya and her request are invented; the data are the synthetic `app-events` people of the churn table.
 
 You have 90 minutes, and the rubric is below, so you can read it now. There is no single right model: a result that is reported as a tie earns full marks, and a gain that is not shown to be real earns none.
 
@@ -44,7 +44,7 @@ From memory first, then click to check.
    <details>
    <summary>answer</summary>
 
-   That the two ties: the data do not show that either is better. The difference is reported with its interval, and the choice is made on something else, such as cost or simplicity.
+   That the two tie: the data do not show that either is better. The difference is reported with its interval, and the choice is made on something else, such as cost or simplicity.
 
    </details>
 
@@ -76,7 +76,7 @@ From memory first, then click to check.
 **Hand in six things,** each as short as honesty allows:
 
 1. A **scope note**, at most 100 words, written before you build: the decision, what you will build in the time, three things you will not do, and the minutes for each part.
-2. **Two baselines**, scored on the held-out people: the flat guess, and one stronger one, either the model already served (`build_pipeline(0.1)`, the champion of MLE3) or a rule of your own.
+2. **Two baselines**, scored on the held-out people: the flat guess, and one stronger one: Priya's rule of today, the model already served (`build_pipeline(0.1)`, the champion of MLE3) or a rule of your own.
 3. A **candidate**: a model of your choice, learned from the 13,362 people only, saved with `save_model(pipeline, {"version": "candidate"}, "model/candidate.skops")` from `ml_starter.export`, that the service loads (`MODEL_FILE=model/candidate.skops`), answers one request with status 200 and refuses a bad one with 422.
 4. An **evaluation note**, at most 200 words: the hits of each model; the gain of your candidate over the best baseline, in hits out of 1,113, with a 95 percent interval from 2,000 resamples of the held-out people, the same people for both models, seed 2026; one failure slice, a group of people where the candidate does worst, with its count and the same number for everyone; and what you would tell Priya.
 5. A **cost line**: send 200 held-out people through the service for the candidate and for the champion with `scripts/compare_service.py`, set `REQUEST_LOG` to a file of its own each time, read each log with `monitor summary`, add the monthly cost of the machine standing idle at the assumed $0.10 an hour, and say what you did not measure.
@@ -88,7 +88,7 @@ From memory first, then click to check.
 
 ## Rubric
 
-Eight items, each scored 2 (full), 1 (partial) or 0 (none): 16 in all. The rubric grades the chain from question to recommendation: any model that your reasoning supports can score 16.
+Eight items, each scored 2 (full), 1 (partial) or 0 (none): 16 in all. The rubric grades the chain from question to recommendation, not the model: a candidate that ties the baseline or loses to it can score 16, if its AUC clears the 0.68 floor of item 3 and it is reported as it is.
 
 **1. Scope and time box.**
 
@@ -162,18 +162,21 @@ flat guess (any 1,113 people): 0.544
 channel rule  hits 851 of 1,113 = 0.765   AUC 0.661
 champion      hits 862 of 1,113 = 0.774   AUC 0.690
 candidate     hits 867 of 1,113 = 0.779   AUC 0.686
-candidate minus champion: +0.004 (95% interval -0.011 to +0.015, 2,000 resamples, seed 2026)
-champion minus channel rule: +0.010 (95% interval -0.004 to +0.024, 2,000 resamples, seed 2026)
-candidate minus channel rule: +0.014 (95% interval -0.003 to +0.028, 2,000 resamples, seed 2026)
+candidate minus champion: +5 hits of 1,113 = +0.004 (95% interval -12 to +17 hits, -0.011 to +0.015, 2,000 resamples, seed 2026)
+champion minus channel rule: +11 hits of 1,113 = +0.010 (95% interval -4 to +27 hits, -0.004 to +0.024, 2,000 resamples, seed 2026)
+candidate minus channel rule: +16 hits of 1,113 = +0.014 (95% interval -3 to +31 hits, -0.003 to +0.028, 2,000 resamples, seed 2026)
+AUC, candidate minus champion: -0.004 (95% interval -0.008 to +0.001, the same 2,000 resamples)
+AUC, champion minus channel rule: +0.029 (95% interval +0.019 to +0.039, the same 2,000 resamples)
+AUC, candidate minus channel rule: +0.025 (95% interval +0.015 to +0.037, the same 2,000 resamples)
 by platform (AUC of each score, within the platform):
   android  1,425 people, 0.615 churned, AUC champion 0.701, candidate 0.702
   ios      1,642 people, 0.557 churned, AUC champion 0.693, candidate 0.690
   web      1,387 people, 0.457 churned, AUC champion 0.632, candidate 0.626
 ```
 
-The top quarter is 1,113 people. The flat guess is the share of churners, 0.544: any 1,113 people. The stronger baselines are the channel rule (rank people by the churn rate of their channel among the 13,362 learning people), which hits 851, and the champion of MLE3 (`build_pipeline(0.1)`), which hits 862. The candidate is a random forest of 200 trees with at least 20 people in a leaf, on the same ten columns: 867 hits, a held-out AUC of 0.686, above the gate's floor of 0.68.
+The top quarter is 1,113 people. The flat guess is the share of churners, 0.544: any 1,113 people. The stronger baselines are Priya's channel rule (rank people by the churn rate of their channel among the 13,362 learning people), which hits 851, and the champion of MLE3 (`build_pipeline(0.1)`), which hits 862. The candidate is a random forest on the same ten columns: 867 hits, a held-out AUC of 0.686, above the gate's floor of 0.68. The RandomForestClassifier page describes a forest as a meta estimator that "fits a number of decision tree classifiers on various sub-samples of the dataset and uses averaging to improve the predictive accuracy and control over-fitting", and the candidate's chance is, in the page's words, "the mean predicted class probabilities of the trees in the forest". The reference sets `n_estimators=200`, the number of trees, and `min_samples_leaf=20`, which the page says may smooth the model. The Pipelines page says a pipeline lets you "call fit and predict once on your data to fit a whole sequence of estimators", so the one-hot encoding and the forest are fitted on the 13,362 people together.
 
-The gain of the candidate over the champion is 5 hits of 1,113, +0.004, and its interval, from 2,000 resamples of the same 4,454 people for both models, runs from -0.011 to +0.015. It includes 0: **a tie**. Over the channel rule the interval, -0.003 to +0.028, also includes 0. On 20 other splits the gain over the champion had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16 splits:
+The gain of the candidate over the champion is 5 hits of 1,113 (+0.004), and its interval, from 2,000 resamples of the same 4,454 people for both models, runs from -12 to +17 hits (-0.011 to +0.015). It includes 0: **a tie**. Over the channel rule the gain is 16 hits, and its interval, -3 to +31 hits, also includes 0. The AUC, which scores the whole ranking, is not a tie against the channel rule: the same resamples give +0.029 for the champion (+0.019 to +0.039) and +0.025 for the candidate (+0.015 to +0.037), and a tie between the two models (-0.004, -0.008 to +0.001). On 20 other splits the gain over the champion had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16 splits:
 
 ```console
 $ uv run python reference/mle15_reference.py --seeds
@@ -185,7 +188,7 @@ So the real gain, if any, is a few tenths of a point, and the 4,454 held-out peo
 
 ### The failure slice
 
-The candidate does worst on web: AUC 0.626 on 1,387 people, against 0.702 on android (1,425 people) and 0.690 on ios (1,642 people), and 0.686 for everyone. The champion has the same gap (0.632 on web), and on 20 other splits its web AUC was below its android AUC every time, by a median of 0.062 (0.039 to 0.092): this is not a draw of the seed. Web people churn less (0.457 against 0.615), so a ranking built on week-1 activity separates them less. What to do: do not promise Priya the same lift on web, and ask for a column that web people have (for example, what they did on the web). The slice was chosen by AUC, the metric that covers every person, and not by looking for a number that looked good.
+The candidate does worst on web: AUC 0.626 on 1,387 people, against 0.702 on android (1,425 people) and 0.690 on ios (1,642 people), and 0.686 for everyone. The champion has the same gap (0.632 on web), and on 20 other splits its web AUC was below its android AUC every time, by a median of 0.062 (0.039 to 0.092): this is not a draw of the seed. Web people churn less (0.457 against 0.615), so a ranking built on week-1 activity may separate them less. What to do: do not promise Priya the same lift on web, and ask for a column that web people have (for example, what they did on the web). The slice was chosen by AUC, the metric that covers every person, and not by looking for a number that looked good.
 
 ### The service takes the candidate only after a reviewed change
 
@@ -196,7 +199,7 @@ $ uv run python reference/mle15_reference.py --checks
 1. RandomForestClassifier(n_trees=200): RandomForestClassifier.__init__() got an unexpected keyword argument 'n_trees'
 2. precision_score at a chance above 0.5: 0.643 for 2,760 people; hits at the top quarter: 862 of 1,113 = 0.774
 3. the service refuses the file: Untrusted types found in the file: ['sklearn.tree._tree.Tree'].
-4. candidate minus champion at the top quarter: +0.004, interval -0.011 to +0.015
+4. candidate minus champion at the top quarter: +5 hits, interval -12 to +17
 ```
 
 Line 3 is the refusal: skops names `sklearn.tree._tree.Tree` and says why it is not trusted by default: it stores raw node indices that scikit-learn uses without bounds checking, so a malicious file could crash the process or read memory it should not. It also says to add only the types you have reviewed and trust. The file was made by this script in this folder, so one type is added to `TRUSTED_TYPES` in `src/ml_starter/serve.py`:
@@ -244,20 +247,20 @@ The seven earlier runs of the same 200 requests gave a median of 10.83 ms for th
 
 ### The recommendation
 
-> **Do not ship the candidate; keep the champion.** Over the champion it hits 5 more of 1,113, +0.004 with an interval of -0.011 to +0.015, which is a tie, and it takes 2.5 times as long and a file 100 times larger. On this measure the channel rule Priya uses today is not worse than either model (the champion's gain over it is +0.010, interval -0.004 to +0.024); the models keep an edge in AUC, 0.690 and 0.686 against 0.661, which is a different measure. Web is the weak spot. What would change this: a gain whose interval excludes 0 on a new split of labeled people. The way back if a model is released: `uv run python -m ml_starter.rollback back` (MLE14).
+> **Do not ship the candidate; keep the champion.** Over the champion it hits 5 more of 1,113, with an interval of -12 to +17, which is a tie, and it takes 2.5 times as long and a file 100 times larger. At the top quarter the channel rule Priya uses today ties with both models (the champion's gain over it is 11 hits, interval -4 to +27); over the whole ranking both models score a higher AUC than the rule, 0.690 and 0.686 against 0.661, with intervals for the differences that exclude 0, but support phones only one person in four. Web is the weak spot. What would change this: a gain whose interval excludes 0 on a new split of labeled people. The way back if a model is released: `uv run python -m ml_starter.rollback back` (MLE14).
 
 It scores 2 on item 7: the decision in one sentence, the evidence with its interval, what would change it and the way back.
 
 ### A graded AI log
 
-The context pack, in order: the schema (the ten columns and `churned`); the grain (one row is one person at day 7); five real sample rows; a dictionary (`churned` is 1 when the person does not come back from day 8 to day 30). The rows are illustrations written for the lesson, in the style of an assistant; the checks are real runs, and the numbers they print are the ones of line 1, 2, 3 and 4 of the block above.
+The context pack, in order: the schema (the ten columns and `churned`); the grain (one row is one person at day 7); five real sample rows; a dictionary (`churned` is 1 when the person does not come back from day 8 to day 30). The rows are illustrations written for the lesson, in the style of an assistant; the checks are real runs, and the numbers they print are the ones of lines 1 to 4 of the block above.
 
 | AI output | Checks run | Verdict | Reason |
 |---|---|---|---|
 | `RandomForestClassifier(n_trees=200, min_samples_leaf=20)` | ran it: `TypeError: ... unexpected keyword argument 'n_trees'` (check 4, confirm every name) | revise | the argument is `n_estimators` |
 | "Precision at the top quarter is `precision_score(y, chance > 0.5)`" | counted the hits of the top 1,113 by hand: 862, 0.774, against 0.643 for the 2,760 people above 0.5 (check 3, reconcile a second way) | revise | a threshold flags 2,760 people, not the quarter support can phone; rank, take 1,113, count |
 | "Load the file with `trusted=get_untrusted_types(file=...)`" | loaded the candidate in the service and read the message: one type, `sklearn.tree._tree.Tree` (check 4, confirm in the source) | revise | trusting everything the file reports defeats the check; trust the one reviewed type |
-| "The candidate beats the champion at the top quarter, so ship it" | the paired interval of the gain: +0.004, -0.011 to +0.015 (check 3, a second way: the interval) | reject | the interval includes 0, so it is a tie, and the candidate costs 2.5 times the time |
+| "The candidate beats the champion at the top quarter, so ship it" | the paired interval of the gain: +5 hits, -12 to +17 (check 3, a second way: the interval) | reject | the interval includes 0, so it is a tie, and the candidate costs 2.5 times the time |
 
 *Signed: your name, the date. Not checked: other settings of the forest, other slices, the memory the forest needs.*
 

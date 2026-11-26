@@ -6,7 +6,7 @@ description: Put the churn model behind a FastAPI service that checks its input,
 stage: ml-engineer
 order: 130
 level: advanced
-duration: 37
+duration: 39
 objectives:
   - Write an endpoint that validates input and returns a prediction
   - Add a health check that says whether the model is loaded
@@ -35,6 +35,8 @@ sources:
     url: https://fastapi.tiangolo.com/deployment/docker/
   - title: 'uv documentation: Using uv in Docker (accessed 2026-11-25)'
     url: https://docs.astral.sh/uv/guides/integration/docker/
+  - title: 'uv documentation: Locking and syncing (accessed 2026-11-25)'
+    url: https://docs.astral.sh/uv/concepts/projects/sync/
   - title: 'Docker documentation: Dockerfile reference, HEALTHCHECK (accessed 2026-11-25)'
     url: https://docs.docker.com/reference/dockerfile/
   - title: 'scikit-learn documentation: Model persistence (accessed 2026-11-25)'
@@ -44,7 +46,7 @@ sources:
 status: draft
 ---
 
-TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, FastAPI 0.165.0 (Starlette 1.10.0), uvicorn 0.54.0, skops 0.16.0, httpx2 2.16.2, pydantic 2.14.4, scikit-learn 1.9.1, MLflow 3.18.0 and Docker Engine 29.9.2 (`python:3.13-slim`); every console block is pasted from a run in a clean clone at `mle-13-start`, and ids and times are from one run. FastAPI, uvicorn and skops were already locked (MLflow needs them); the new lock lines are the three direct pins, `httpx2`, `httpcore2` and `truststore` (licenses checked on PyPI: MIT or BSD-3-Clause). The FastAPI testing page still says `uv add httpx`; the Starlette page says its test client is built on `httpx2` and plain `httpx` is deprecated, so the lesson pins `httpx2`. Not run: a deployment to a host (so objective 4, "deploy it and put the live URL at the top of the README", became "make it ready for a host"), Docker Desktop on Windows or macOS, Codespaces, a registry push. The writing machine had no bridge network for builds, so `docker build` ran with host networking, and its `docker run` printed a line about IPv4 forwarding that is left out. `docker images` columns are those of Docker 29. Stub changes: objectives 2 and 4 reworded; `ml-engineer-validating-model-data` added to the prerequisites; duration 35 to 37 by the length rule.
+TODO(owner): Draft for your edit. Run on Linux with Python 3.13.18, uv 0.11.32, FastAPI 0.165.0 (Starlette 1.10.0), uvicorn 0.54.0, skops 0.16.0, httpx2 2.16.2, pydantic 2.14.4, scikit-learn 1.9.1, MLflow 3.18.0 and Docker Engine 29.9.2 (`python:3.13-slim`); every console block is pasted from a run in a clean clone at `mle-13-start`, and ids and times are from one run. FastAPI, uvicorn and skops were already locked (MLflow needs them); the new lock lines are the three direct pins, `httpx2`, `httpcore2` and `truststore` (MIT or BSD-3-Clause on PyPI). Not run: a deployment to a host (so objective 4, "deploy it and put the live URL at the top of the README", became "make it ready for a host"), Docker Desktop on Windows or macOS, Codespaces, a registry push. The writing machine had no bridge network for builds, so `docker build` ran with host networking. The cache count was run again on 2026-11-25: 0 marked CACHED, then 4 after the edit. Stub changes: objectives 2 and 4 reworded; `ml-engineer-validating-model-data` added to the prerequisites; duration 35 to 37 by the length rule.
 
 ## The question
 
@@ -111,6 +113,8 @@ uv run pytest -q -W ignore::DeprecationWarning
 git add -A
 git commit -m "MLE13: serve the model"
 ```
+
+`-W ignore::DeprecationWarning` hides one warning that MLflow's database code raises in `test_train`.
 
 ```console
 ...................                                                      [100%]
@@ -296,7 +300,7 @@ The three outcomes of a request, in the order the service decides them:
 
 ### 3. Test the service like a client calls it
 
-**Idea.** A service is tested through its HTTP interface, not through its functions. The FastAPI testing page uses `TestClient`, and the Starlette page says it is built on `httpx2`; it calls the application in this process, so nothing has to be started. The FastAPI testing-events page says that when lifespan code must run in a test, you use the client with a `with` statement, so the model is loaded inside `with TestClient(app) as client:`. The most useful test sends people through the service and through the model file and compares. Rule 37 of Google's Rules of Machine Learning says to make sure that the model in the training environment gives the same score as in the serving environment.
+**Idea.** A service is tested through its HTTP interface, not through its functions. `TestClient` calls the application in this process, so nothing has to be started. The FastAPI testing page says "To use TestClient, first install httpx", but the Starlette page says the client is built on `httpx2` and "Plain httpx is still supported, but deprecated - install httpx2 (included in starlette[full]) instead"; the lesson follows the Starlette page. The FastAPI testing-events page says that when lifespan code must run in a test, you use the client with a `with` statement, so the model is loaded inside `with TestClient(app) as client:`. The most useful test sends people through the service and through the model file and compares. Rule 37 of Google's Rules of Machine Learning says that a model applied to an example in the training data and to the same example at serving "should give you exactly the same result", and that a discrepancy probably indicates an engineering error.
 
 ```python
 def test_a_person_is_scored_as_the_pipeline_scores_them(client):
@@ -327,11 +331,11 @@ people whose two chances are not equal to the last digit: 24
 
 </details>
 
-*Why:* 24 of 200 chances differ, by at most 1.1e-16: a rounding difference between scoring one row and scoring 200 rows in one call. That is not skew: a rounded answer or a column in another order would differ by a visible amount. The test therefore compares with a tolerance of 1e-9 and not with `==`, and it fails when the service and the model disagree at the third decimal.
+*Why:* 24 of 200 chances differ, by at most 1.1e-16: a rounding difference between scoring one row and scoring 200 rows in one call. That is not skew: a rounded answer or a column in another order would differ by a visible amount. Rule 37's "exactly the same result" holds to the precision that floating-point rounding allows, so the test compares with a tolerance of 1e-9 (the lesson's own choice) and not with `==`, and it fails when the service and the model disagree at the third decimal.
 
 ### 4. Package it in a container
 
-**Idea.** A container image holds the service, its libraries and the model file, and runs the same wherever Docker runs. The file below is read from top to bottom, and its order is the point. The FastAPI Docker page says to copy the file with the dependencies first, so that Docker reuses the cached step; the uv Docker page says the same for `uv sync --no-install-project`, because the project changes often and its dependencies do not. `--locked` installs what `uv.lock` says. The port comes from the variable `PORT` (8000 by default). `HEALTHCHECK` calls `/health`: the Dockerfile reference says the command's exit status gives the health, 0 for healthy and 1 for unhealthy, and a request that gets 503 makes the command exit with 1. The command ends in `exec` so that uvicorn is the main process: the FastAPI page asks for the exec form so that the service can shut down gracefully.
+**Idea.** A container image holds the service, its libraries and the model file, and runs the same wherever Docker runs. The file below is read from top to bottom, and its order is the point. The FastAPI Docker page says to copy the file with the dependencies first, so that Docker reuses the cached step, and that after the code is copied the cache "won't be used for this or any following steps easily"; the uv Docker page says the same for `uv sync --no-install-project`, because the project changes often and its dependencies do not. `uv sync` installs what `uv.lock` says, `--no-dev` leaves out the development libraries, and `--locked` makes it fail when the lock file is out of date: "If the lockfile is not up-to-date, uv will raise an error instead of updating the lockfile". The port comes from the variable `PORT` (8000 by default). `HEALTHCHECK` calls `/health`: the Dockerfile reference says the command's exit status gives the health, 0 for healthy and 1 for unhealthy, and a request that gets 503 makes the command exit with 1. The command is already a JSON array, the exec form that the FastAPI page asks for so that the service can shut down gracefully, but it starts `sh -c` so that `$PORT` is expanded. `exec` inside that string is what removes the shell: uvicorn replaces it and becomes the main process.
 
 ```dockerfile
 # The churn service as a container. Build it after `uv run python -m ml_starter.export`, so that model/ exists.
@@ -356,7 +360,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 CMD ["sh", "-c", "exec uvicorn ml_starter.serve:app --host 0.0.0.0 --port $PORT"]
 ```
 
-**Try it:** build the image, look at its size, add a comment line to the end of `src/ml_starter/serve.py`, and build again. `grep -c CACHED` counts the steps that Docker took from its cache. Undo the comment afterwards with `git checkout src/ml_starter/serve.py`.
+**Try it:** build the image, look at its size, add a comment line to the end of `src/ml_starter/serve.py`, and build again. `grep -c CACHED` counts the lines of the build log marked CACHED, the steps that Docker took from its cache; the log numbers seven steps, `1/7` to `7/7`. Undo the comment afterwards with `git checkout src/ml_starter/serve.py`.
 
 ```bash
 docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
@@ -365,7 +369,7 @@ echo "# edited" >> src/ml_starter/serve.py
 docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
 ```
 
-**Predict:** Is the image under or over 1 GB? After the one-line edit, how many of the seven steps come from the cache, and does the second build take seconds or minutes?
+**Predict:** Is the image under or over 1 GB? After the one-line edit, how many of the seven steps does the log mark CACHED, and does the second build take seconds or minutes?
 
 <details>
 <summary>Reveal the result</summary>
@@ -382,7 +386,7 @@ $ docker build --progress=plain -t churn-service . 2>&1 | grep -c CACHED
 
 </details>
 
-*Why:* The image takes 1.28 GB of disk (`DISK USAGE`; `CONTENT SIZE` is 293 MB); of that, the virtual environment is 699 MB, with `pyarrow` at 165 MB, `scipy` 81, `duckdb` 65 and `mlflow` 51, because `--locked` installs every library the project lists and the service uses four of them. The first build took 39.7 seconds here, with no step from the cache. The edit changed only the steps from `COPY src` on: four steps came from the cache and the second build took 1.2 seconds. That is why the libraries are installed before the code is copied.
+*Why:* The image takes 1.28 GB of disk (`DISK USAGE`; `CONTENT SIZE` is 293 MB); of that, the virtual environment is 699 MB, with `pyarrow` at 165 MB, `scipy` 81, `duckdb` 65 and `mlflow` 51, because `uv sync` installs every non-dev library the project lists, while the service's own files import five of them: FastAPI, pydantic, pandas, skops and pandera. On the writing machine, a Linux sandbox where the build used host networking, the first build took 39.7 seconds with no step from the cache; yours will differ. After the edit the log marks steps 2 to 5 CACHED. Step 6, `COPY src`, changed, and step 7, `COPY model`, follows it, so both ran again; step 1, `FROM`, only names the base image and is never marked, which is why `grep` misses it and 4 + 2 + 1 makes seven. The second build took 1.2 seconds there. That is why the libraries are installed before the code is copied.
 
 Now run three containers: the service on port 8000, the same image told to use port 9000, and one whose model file is not there. Wait about 45 seconds, ask one for its health and list them.
 
@@ -416,7 +420,7 @@ churn9
 nomodel
 ```
 
-The same image answers on the port it is given, and the container with no model is marked unhealthy by the health check, with nobody reading a log. Stopping the three took 1.1 seconds here. A run with the command written without `exec`, which leaves the shell as the main process, took 10.3 seconds to stop the three (one run each), the kind of wait the FastAPI page links an explanation for.
+The same image answers on the port it is given, and the container with no model is marked unhealthy by the health check, with nobody reading a log. On the writing machine, the same Linux sandbox, stopping the three took 1.1 seconds. A run with the command written without `exec`, which leaves the shell as the main process, took 10.3 seconds to stop the three (one run each; yours will differ), the kind of wait the FastAPI page links an explanation for.
 
 <Aside type="tip" title="Remember">
 
