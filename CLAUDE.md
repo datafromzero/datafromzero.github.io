@@ -15,6 +15,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 4. `design/logo/` — final logo files and `logo-animation.js`; `logo-animation.mp4` is the reference motion.
 
 ## Hard rules
+- **Nothing from China (D62).** No Chinese-made AI models (Qwen, DeepSeek, GLM, Kimi, Yi, MiniMax, ERNIE, Hunyuan, Doubao, InternLM, BGE and the like), tools, libraries, cloud services, apps or brands in lessons, notebooks, Colab files, starters, datasets, examples, figures or sources, not even as an example value (a channel named after a Chinese app counts). LLM lessons use IBM Granite (`ibm-granite/granite-4.0-1b`, Apache 2.0). Before adding any model, dataset, package or service, check who makes it on its official page. Never write about China in the lessons; just do not use these things.
 - **No AI attribution anywhere.** The owner is the sole author. Never add `Co-Authored-By`,
   `Generated with …`, session links, or any mention of Claude, Muse or other AI tools in commits,
   commit messages, PR titles/descriptions, issues, comments, code, docs or the changelog.

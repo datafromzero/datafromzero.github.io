@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../workers/feedback/worker.js';
 
-const { buildIssue, clean, fence, fromSite, hashIp, makeLimiter, neutralizeTitle, parseForm, safePath } = worker.logic;
+const { blockedCountry, buildIssue, clean, fence, fromSite, hashIp, makeLimiter, neutralizeTitle, parseForm, safePath } = worker.logic;
 const ZW = String.fromCharCode(0x200b);
 const U = (...c: number[]) => String.fromCharCode(...c);
 
@@ -154,5 +154,28 @@ describe('reporting from the site (D37, D58)', () => {
 			});
 		const hits = walk('src').filter((p) => readFileSync(p, 'utf8').includes('github.com/datafromzero/datafromzero.github.io/issues') || /\$\{(GITHUB_REPO|repoUrl|repo)\}\/issues/.test(readFileSync(p, 'utf8')));
 		assert.deepEqual(hits, []);
+	});
+});
+
+describe('countries and crawlers (D62)', () => {
+	test('a post from China is refused, one from Vietnam or with no country is not', () => {
+		assert.equal(blockedCountry({ country: 'CN' }), true);
+		assert.equal(blockedCountry({ country: 'cn' }), true);
+		for (const cf of [{ country: 'VN' }, { country: 'US' }, {}, undefined]) assert.equal(blockedCountry(cf), false, JSON.stringify(cf));
+	});
+	test('the Worker answers 403 to a post from a blocked country before reading it', async () => {
+		const req = new Request('https://feedback.example/', { method: 'POST', headers: { Origin: 'https://datafromzero.github.io', 'Content-Type': 'application/x-www-form-urlencoded' }, body: form({}).toString() });
+		Object.defineProperty(req, 'cf', { value: { country: 'CN' } });
+		const res = await worker.fetch(req, {});
+		assert.equal(res.status, 403);
+		assert.equal(req.bodyUsed, false);
+	});
+	test('robots.txt keeps the crawlers of Chinese companies out and lets the rest in', async () => {
+		const { readFileSync } = await import('node:fs');
+		const robots = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8');
+		for (const bot of ['Bytespider', 'Baiduspider', 'PetalBot', 'YisouSpider']) assert.match(robots, new RegExp('^User-agent: ' + bot + '$', 'm'));
+		assert.match(robots, /^Disallow: \/$/m);
+		assert.match(robots, /^User-agent: \*\nAllow: \/$/m);
+		assert.match(robots, /^Sitemap: https:\/\/datafromzero\.github\.io\/sitemap-index\.xml$/m);
 	});
 });

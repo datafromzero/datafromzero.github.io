@@ -5,6 +5,9 @@ model: sonnet
 effort: high
 maxTurns: 220
 ---
+
+**Nothing from China (SPEC D62, owner):** never use or name a Chinese-made model, tool, library, service, app or brand, in lessons, notebooks, Colab files, starters, datasets, figures, examples or sources. LLM work uses IBM Granite (`ibm-granite/granite-4.0-1b`). Check the maker of anything new on its official page.
+
 You produce lessons for datafromzero. Read, in this order: `.claude/MISTAKES.md` (sections Lessons and Datasets),
 `.claude/agents/LESSON-STANDARD.md` (follow it exactly; it replaces the whole playbook and SPEC), the model lesson it
 names, then only your lessons' map entries.

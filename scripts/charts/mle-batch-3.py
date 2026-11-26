@@ -36,18 +36,18 @@ LESSONS = {"mle11": DOCS / "fine-tuning-or-not.mdx", "mle12": DOCS / "agents-too
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 # DATA, copied from the lessons (the cell that holds each value is named)
 # mle11, units 1, 2, 3d (the reports of the three approaches on the 32 test questions) and unit 2 (the best chunk alone):
-M11_RIGHT = [("prompt", 15, 92), ("retrieve", 24, 520), ("fine-tune", 28, 33)]
+M11_RIGHT = [("prompt", 28, 92), ("retrieve", 22, 504), ("fine-tune", 29, 33)]
 M11_BEST_CHUNK = 25
 # mle11, unit 3c (the loss of each of the 48 steps; the validation loss before the first step and after each epoch):
-M11_STEPS = [5.216, 4.008, 2.888, 2.335, 1.671, 1.53, 1.142, 0.869, 0.804, 0.589, 0.756, 0.401, 0.533, 0.402, 0.312, 0.213, 0.114, 0.253, 0.263, 0.148,
-             0.129, 0.209, 0.193, 0.144, 0.14, 0.145, 0.1, 0.272, 0.037, 0.084, 0.091, 0.093, 0.241, 0.243, 0.054, 0.039, 0.023, 0.027, 0.109, 0.028,
-             0.069, 0.03, 0.022, 0.037, 0.008, 0.085, 0.038, 0.044]
-M11_VALIDATION = [4.836, 0.458, 0.224, 0.058, 0.076]
+M11_STEPS = [5.769, 3.234, 1.743, 1.376, 0.944, 0.884, 0.449, 0.368, 0.679, 0.18, 0.218, 0.161, 0.127, 0.081, 0.04, 0.051, 0.031, 0.028, 0.056,
+             0.058, 0.069, 0.153, 0.03, 0.084, 0.025, 0.058, 0.007, 0.092, 0.029, 0.013, 0.015, 0.03, 0.045, 0.02, 0.003, 0.001, 0.004, 0.019,
+             0.002, 0.016, 0.021, 0.007, 0.003, 0.007, 0.002, 0.002, 0.001, 0.003]
+M11_VALIDATION = [5.529, 0.119, 0.073, 0.014, 0.041]
 M11_KEPT = 3
 # mle12, unit 4 (what each defense let through, of 8 notes each; the clean notes are 4):
-M12_ATTACKS = [("4 clean notes", 4, 0, 0), ("round 1, no defense", 8, 4, 4), ("round 1, a warning in the prompt", 8, 0, 0),
-               ("round 2, no defense", 8, 6, 6), ("round 2, a warning in the prompt", 8, 4, 4),
-               ("round 2, tools limited to the task", 8, 6, 0), ("round 2, a gate that reads the task", 8, 6, 0)]
+M12_ATTACKS = [("4 clean notes", 4, 0, 0), ("round 1, no defense", 8, 5, 5), ("round 1, a warning in the prompt", 8, 1, 1),
+               ("round 2, no defense", 8, 4, 4), ("round 2, a warning in the prompt", 8, 1, 1),
+               ("round 2, tools limited to the task", 8, 4, 0), ("round 2, a gate that reads the task", 8, 4, 0)]
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 WHITE = "#ffffff"
@@ -109,7 +109,7 @@ def charts():
             f"The validation loss is {M11_VALIDATION[0]} before training and {M11_VALIDATION[1]}, {M11_VALIDATION[2]}, {M11_VALIDATION[3]} and {M11_VALIDATION[4]} after epochs 1 to 4: "
             f"lowest after epoch {M11_KEPT}, so that epoch's adapter is kept.")
     X0, X1, Y0, Y1 = 40, 316, 14, 154
-    lo, hi = math.log10(0.005), math.log10(8)
+    lo, hi = math.log10(0.0007), math.log10(25)
 
     def X(step):
         return X0 + (X1 - X0) * step / 48
@@ -117,7 +117,7 @@ def charts():
     def Y(v):
         return Y1 - (Y1 - Y0) * (math.log10(v) - lo) / (hi - lo)
 
-    for v in (0.01, 0.1, 1):
+    for v in (0.001, 0.01, 0.1, 1):
         s.line(X0, Y(v), X1, Y(v), opacity=0.15)
         s.text(X0 - 6, Y(v) + 3.5, f"{v:g}", size=9.5, anchor="end", opacity=0.8)
     for step in (0, 12, 24, 36, 48):
@@ -229,8 +229,8 @@ def facts_ok(name, text):
     """Values each figure draws must stand in its lesson's text."""
     need = {
         "mle11-levers": ["adapter"],
-        "mle11-loss": ["5.216", "4.836", "0.458", "0.224", "0.058", "0.076", "epoch 3"],
-        "mle11-compare": ["520", "28", "24", "15", "25"],
+        "mle11-loss": ["5.769", "5.529", "0.119", "0.073", "0.014", "0.041", "epoch 3"],
+        "mle11-compare": ["504", "29", "22", "28", "25"],
         "mle12-loop": ["trace"],
         "mle12-attacks": ["clean"],
     }[name]
