@@ -21,6 +21,9 @@ the header.
   more through. This is a speed bump, not a wall.
 - Optional extra: Cloudflare's Rate Limiting binding (3 a minute per address, per Cloudflare location). It needs
   wrangler (see "Deploy with wrangler"); the dashboard path below does not use it.
+- Country block (SPEC D62): posts that Cloudflare places in China (`request.cf.country` is `CN`) get a 403 before
+  anything is read. Vietnam and every other country are not affected. The country is not stored or logged. A VPN gets
+  around it; it only keeps casual traffic out.
 - Other protection: the origin check, the hidden field and the size limits. If someone still floods the repository,
   revoke the token (step 4 of "Rotate the token"), close or delete the issues and add a stricter rule later.
 - Free plan: Cloudflare's free plan allows 100,000 Worker requests a day, far more than this form needs.

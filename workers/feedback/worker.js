@@ -9,6 +9,13 @@ const DEFAULT_REPO = 'datafromzero/datafromzero.github.io';
 const SENT = SITE_ORIGIN + '/feedback/sent/';
 const NOT_SENT = SITE_ORIGIN + '/feedback/not-sent/';
 const MAX_BODY = 16 * 1024;
+// Countries whose posts are refused (SPEC D62): ISO codes from Cloudflare's request.cf.country, which is not stored.
+const BLOCKED_COUNTRIES = new Set(['CN']);
+
+/** True when Cloudflare places the sender in a blocked country. */
+function blockedCountry(cf) {
+	return BLOCKED_COUNTRIES.has(String(cf?.country ?? '').toUpperCase());
+}
 
 // The select's values; the label goes into the issue title.
 const CATEGORIES = { mistake: 'mistake', unclear: 'unclear', broken: 'code or data', idea: 'idea' };
@@ -170,6 +177,7 @@ const redirect = (to) => new Response(null, { status: 303, headers: { Location: 
 
 export default {
 	async fetch(request, env) {
+		if (blockedCountry(request.cf)) return new Response('Forbidden', { status: 403 });
 		if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
 		if (!fromSite(request.headers.get('Origin'), request.headers.get('Referer'))) return new Response('Forbidden', { status: 403 });
 		if (!(request.headers.get('Content-Type') ?? '').startsWith('application/x-www-form-urlencoded'))
@@ -217,5 +225,5 @@ export default {
 		}
 	},
 	// Exposed for tests/feedback-worker.test.ts; Cloudflare ignores extra properties.
-	logic: { clean, oneLine, neutralizeTitle, fence, safePath, parseForm, buildIssue, fromSite, makeLimiter, hashIp },
+	logic: { blockedCountry, clean, oneLine, neutralizeTitle, fence, safePath, parseForm, buildIssue, fromSite, makeLimiter, hashIp },
 };
