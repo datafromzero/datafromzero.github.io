@@ -20,7 +20,7 @@ def test_repair_fixes_typed_text_and_counts_the_rows(small):
 
 def test_every_row_is_kept_or_quarantined_once(small):
     small.loc[5, "sessions_7d"] = -1
-    small.loc[5, "channel"] = "tiktok"
+    small.loc[5, "channel"] = "podcast"
     small.loc[9, "onboarded"] = 2
     result = triage(small)
     assert len(result.quarantined) == 2

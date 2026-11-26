@@ -26,7 +26,7 @@ def main():
     negative = take(0, 40)
     table.loc[negative, "sessions_7d"] = -1  # a sign slip upstream
     unknown = take(40, 15).union(negative[:10])
-    table.loc[unknown, "channel"] = "tiktok"  # a channel the model never saw; 10 of these rows also have the sign slip
+    table.loc[unknown, "channel"] = "podcast"  # a channel the model never saw; 10 of these rows also have the sign slip
     table.loc[take(55, 30), "platform"] = np.nan  # a field that did not arrive
     table.loc[take(85, 15), "onboarded"] = 2  # a flag that is not a flag
     inflated = take(100, 20)
