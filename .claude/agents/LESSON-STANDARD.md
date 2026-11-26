@@ -98,6 +98,7 @@ headings are gone: their content moves as below.
 
 ## Rules the reviews kept catching
 
+- **Nothing from China (SPEC D62, owner).** No Chinese-made model, tool, library, service, app or brand in a lesson, notebook, Colab file, starter, dataset, figure, example value or source. LLM work uses IBM Granite `ibm-granite/granite-4.0-1b`. Check the maker of every new model, dataset or package on its official page; reviewers grep for it. Do not write about China; just leave these things out.
 - **Exercises never overwrite** the worked example's sheet, cells or output. Each exercise has its own pre-built
   sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`). Anything the text calls "done for you"
   must exist in the file.

@@ -3,6 +3,8 @@
 Files in this folder define Claude Code subagents (frontmatter `name`, `model`, `effort`). This README and
 `LESSON-STANDARD.md` have no `name`, so they are not loaded as agents.
 
+**Nothing from China (SPEC D62, owner):** never use or name a Chinese-made model, tool, library, service, app or brand, in lessons, notebooks, Colab files, starters, datasets, figures, examples or sources. LLM work uses IBM Granite (`ibm-granite/granite-4.0-1b`). Check the maker of anything new on its official page. Reviewers grep every batch for it and report any hit as must-fix.
+
 ## Roster
 
 | Agent | Model · effort | Role | When |

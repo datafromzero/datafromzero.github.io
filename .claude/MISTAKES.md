@@ -216,6 +216,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Lessons (details in LESSON-STANDARD.md)
 
+- 2026-11-26 — The ML lessons MLE8 to MLE12 and MLE16 used Qwen2.5-1.5B (Alibaba), and MLE2 named a channel `tiktok` as its unseen-channel example; the owner does not use Chinese products (owner correction). → **Before adding any model, dataset, package, service or brand, even as an example value, check its maker on the official page; nothing Chinese (SPEC D62). LLM lessons use IBM Granite. Reviewers grep every batch for Chinese models and brands.**
 - 2026-11-19 — Vietnamese crept back in while the language is paused (D30): a Vietnamese UI string in `vi.json` and a
   Vietnamese menu data file planned for a Python trap (owner correction). → **No Vietnamese anywhere (strings, data,
   examples, research-driven "Vietnamese" lessons) until English and then Spanish are complete; generalize to
