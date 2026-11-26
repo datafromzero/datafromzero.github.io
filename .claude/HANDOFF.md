@@ -59,6 +59,14 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## What comes next (build plan item 8, content)
 
+0. **3D figures in track lessons (owner decisions, 2026-11-26), after the Granite migration ships:** build-time SVG
+   drawn with the homepage figures' projection (`src/scripts/home/careers-figures.ts`), fixed angle, motion only by
+   CSS and the D41 step buttons; no JavaScript in lessons (the canvas option was declined). Pilot three lessons first,
+   MLE70 (embedding space), DE30 (row and column blocks, partitions) and DS60 (loss bowl with the L1 and L2
+   constraints), then a PDF for the owner to approve the style. After approval, nine more: DE10, DE130, DE150,
+   DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
+   MLE80, MLE100), not yet approved. Record the figure type in SPEC (amend D41) with the pilot.
+
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu
