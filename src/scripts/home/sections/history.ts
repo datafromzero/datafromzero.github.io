@@ -1,5 +1,6 @@
 import { gsap, willChange } from '../gsap';
-import { opacityAt, scaleAt, STEP_WIDTH } from '../history-curve';
+import { FAN, FAN_EDGE, PHONE_MAX_PX, lookAt, shadeFor } from '../history-curve';
+import type { Fan } from '../history-curve';
 import type { Step } from './index';
 import type { Draggable as DraggablePlugin } from 'gsap/Draggable';
 
@@ -11,61 +12,30 @@ export const load = () =>
 		Draggable = m.Draggable;
 	});
 
-/** Time between two cards on the loop: one card's whole pass (right edge to left edge) takes 1. */
-const SPACING = 0.1;
+/** Drag distance, in card widths, that moves the fan by one card. */
+const DRAG_CARD = 0.6;
+/** Pointer travel (px) above which a press counts as a drag, not a click on a card. */
+const CLICK_SLOP = 6;
 
 /**
- * One card's pass across the stage: it slides from 400% to -400% of its width while it grows to full size at
- * the center and shrinks again (power1.in both ways). Opacity has its own curve (history-curve.ts): the
- * neighbors stay readable, the cards further out fade. Transforms and opacity only.
- */
-const half = { duration: 0.5, yoyo: true, repeat: 1, immediateRender: false };
-const pass = (el: HTMLElement) =>
-	gsap
-		.timeline()
-		.fromTo(el, { scale: 0 }, { scale: 1, ease: scaleAt, ...half })
-		.fromTo(el, { opacity: 0 }, { opacity: 1, ease: opacityAt, ...half }, 0)
-		.fromTo(el, { xPercent: 400 }, { xPercent: -400, duration: 1, ease: 'none', immediateRender: false }, 0);
-
-/**
- * The seamless loop of the GSAP "Infinite card slider" demo: every card's pass is laid out on a raw timeline,
- * SPACING apart, with extra copies before and after so that every moment of the loop has its neighbors on
- * both sides. A second timeline scrubs a window of exactly one lap of the raw one and repeats forever, so
- * time t centers card t / SPACING and the end of the lap is the same picture as its start.
- * The demo jumps back over a second segment; with fewer than 15 cards that segment would have a negative
- * length, so here the window is one plain segment, which needs at least 0.5 / SPACING cards (5).
- */
-function seamlessLoop(items: HTMLElement[]) {
-	const n = items.length;
-	const extra = Math.ceil(1 / SPACING);
-	const raw = gsap.timeline({ paused: true });
-	for (let i = 0; i < 2 * n + extra; i++) raw.add(pass(items[i % n]), i * SPACING);
-	// At raw time T the card at index j sits at progress T - j * SPACING; 0.5 is the center, so this start
-	// centers the copy of card 0 at index n.
-	const start = n * SPACING + 0.5;
-	const lap = n * SPACING;
-	raw.time(start);
-	return gsap
-		.timeline({ paused: true, repeat: -1 })
-		.fromTo(raw, { time: start }, { time: start + lap, duration: lap, ease: 'none', immediateRender: false });
-}
-
-/**
- * 04: the history slider. The center card is full size, the side cards scale down and fade; the loop has no
- * end. It moves by drag (Draggable), the Previous / Next buttons and ←/→ while the slider has focus, always
- * coming to rest on a card, and a polite live region names the centered card after each move. It starts on
- * the first card (1804). Nothing runs between moves: the only per-frame work is the scrub tween, which
- * writes transform and opacity (z-index only when the order of two cards changes, once per card passed).
+ * 04: the history slider, a 3D cover-flow fan (history-curve.ts has its numbers). The center card is flat and in
+ * front; every side card is tilted toward it, pushed back and out per card of distance, and stacked behind.
+ * It moves by drag (Draggable), the Previous / Next buttons, a click on a side card and ←/→ while the slider has
+ * focus, always coming to rest on a card, and a polite live region names the centered card after each move. It
+ * starts on the first card (1804). Nothing runs between moves: the only per-frame work is one tween on the
+ * playhead (a position in cards), which writes each card's transform (opacity and z-index only when they change; the shade when it comes to rest)
+ * (z-index only when the order of two cards changes). The loop is endless: a card leaving one edge enters at
+ * the other, fully faded, so nothing pops.
  *
- * Two frame slots: .is-live first turns the list into the slider's first frame (CSS only, from --d, --s,
- * --o), then the loop is built on it. Without .is-live, whatever the reason, the cards stay a list.
+ * Two frame slots: .is-live first turns the list into the slider's first frame (CSS only, from the same
+ * numbers), then this takes over with the same values. Without .is-live, whatever the reason, the cards stay a list.
  */
 export function init(section: HTMLElement, onCleanup: (fn: () => void) => void): Step[] | void {
 	const gallery = section.querySelector<HTMLElement>('.gallery');
 	const list = gallery?.querySelector<HTMLElement>('.cards');
 	if (!gallery || !list) return;
 	const cards = gsap.utils.toArray<HTMLElement>('.card', list);
-	if (cards.length < 5) return;
+	if (cards.length < 2 * FAN_EDGE + 1) return;
 	gallery.classList.add('is-live');
 	let undo: (() => void) | undefined;
 	onCleanup(() => {
@@ -79,66 +49,93 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 	const controls = gallery.querySelector<HTMLElement>('.hist-controls');
 	const say = gallery.querySelector<HTMLElement>('.hist-live');
 	const n = cards.length;
-	// GSAP takes over from the CSS first frame: x, y and scale are given so the CSS transform it parses
-	// first is not kept as an offset.
-	gsap.set(cards, { x: 0, y: 0, xPercent: 400, scale: 0, opacity: 0 });
-	const loop = seamlessLoop(cards);
-	const wrapTime = gsap.utils.wrap(0, loop.duration());
+	// The shade the build wrote on each card, put back on cleanup.
+	const shade0 = cards.map((c) => c.style.getPropertyValue('--k'));
 	const wrapIndex = gsap.utils.wrap(0, n);
-	const snap = gsap.utils.snap(SPACING);
+	const wrapDist = gsap.utils.wrap(-n / 2, n / 2);
+	const snap = gsap.utils.snap(1);
 
-	// Stacking: the card nearer the center is on top. Rounded distance, so a value changes only when the
-	// center passes the midpoint between two cards; written only on change.
+	// Sizes are measured here and when the window resizes, never inside the tween.
+	const phone = matchMedia(`(max-width: ${PHONE_MAX_PX}px)`);
+	let cw = cards[0].offsetWidth || 240;
+	let fan: Fan = phone.matches ? FAN.phone : FAN.desktop;
+	const measure = () => {
+		cw = cards[0].offsetWidth || cw;
+		fan = phone.matches ? FAN.phone : FAN.desktop;
+		render();
+	};
+
+	// Stacking: written only when a card's value changes.
 	const z = cards.map(() => -1);
-	const stack = () => {
-		const c = loop.time() / SPACING;
-		for (let i = 0; i < n; i++) {
-			let d = Math.abs(i - c) % n;
-			if (d > n / 2) d = n - d;
-			const v = n - Math.round(d);
-			if (v !== z[i]) cards[i].style.zIndex = String((z[i] = v));
-		}
+	// will-change only on the cards that can be seen at the start or the end of a move (the fan's width around
+	// each), not on all of them: every hinted card keeps its own layer.
+	let hinted = new Set<HTMLElement>();
+	const settle = (on: boolean, ...around: number[]) => {
+		const next = new Set<HTMLElement>(on ? cards.filter((_, i) => around.some((p) => Math.abs(wrapDist(i - p)) < FAN_EDGE)) : []);
+		willChange(cards.filter((c) => hinted.has(c) && !next.has(c)), null);
+		willChange(cards.filter((c) => next.has(c) && !hinted.has(c)), 'transform, opacity');
+		hinted = next;
 	};
 
-	let moving = false;
-	const settle = (on: boolean) => {
-		if (on === moving) return;
-		moving = on;
-		willChange(cards, on ? 'transform, opacity' : null);
-	};
-	// The playhead eases toward a target offset (seconds on the loop; it may grow past one lap either way).
-	const playhead = { offset: 0 };
+	// The playhead: a position on the loop in cards (it may grow past one lap either way); it eases to a target.
+	const playhead = { pos: 0 };
+	let target = 0;
 	const announce = () => {
-		const card = cards[wrapIndex(Math.round(playhead.offset / SPACING))];
+		const card = cards[wrapIndex(Math.round(playhead.pos))];
 		if (say && card) say.textContent = `${card.querySelector('.yr')?.textContent ?? ''}: ${card.querySelector('h3')?.textContent ?? ''}`;
 	};
 	// The pill's counter ("05 / 14") follows the card nearest the center while the slider moves.
 	const count = controls?.querySelector<HTMLElement>('.hist-count b');
 	let shown = -1;
-	const render = () => {
-		loop.time(wrapTime(playhead.offset));
-		stack();
-		const i = wrapIndex(Math.round(playhead.offset / SPACING));
+	// Per frame: one transform per visible card; opacity and z-index only when their value changes; a card past
+	// the edge of the fan that was already hidden is skipped. The shade (--k, painted by .card::after in the
+	// card's own layer; a shade element or a per-frame shade costs a layer or a repaint per card per frame) is
+	// written when the fan comes to rest (and once at the start, so it is right after a rebuild).
+	const op = cards.map(() => -1);
+	const sh = cards.map(() => -1);
+	function shade() {
+		for (let i = 0; i < n; i++) {
+			const k = shadeFor(Math.abs(wrapDist(i - playhead.pos)));
+			if (k !== sh[i]) cards[i].style.setProperty('--k', String((sh[i] = k)));
+		}
+	}
+	function render() {
+		for (let i = 0; i < n; i++) {
+			const d = wrapDist(i - playhead.pos);
+			const l = lookAt(d, fan);
+			const el = cards[i];
+			const o = +l.opacity.toFixed(3);
+			if (o === 0 && op[i] === 0) continue;
+			el.style.transform = `translate3d(${(l.x * cw).toFixed(1)}px,0,${(l.z * cw).toFixed(1)}px) rotateY(${l.rotateY.toFixed(2)}deg)`;
+			if (o !== op[i]) el.style.opacity = String((op[i] = o));
+			if (l.zIndex !== z[i]) el.style.zIndex = String((z[i] = l.zIndex));
+		}
+		const i = wrapIndex(Math.round(playhead.pos));
 		if (count && i !== shown) count.textContent = String((shown = i) + 1).padStart(2, '0');
-	};
+	}
 	const scrub = gsap.to(playhead, {
-		offset: 0,
-		duration: 0.6,
+		pos: 0,
+		duration: 0.65,
 		ease: 'power3',
 		paused: true,
 		onUpdate: render,
 		onComplete: () => {
 			settle(false);
+			shade();
 			announce();
 		},
 	});
-	const goTo = (offset: number) => {
-		settle(true);
-		scrub.vars.offset = offset;
+	const goTo = (pos: number) => {
+		settle(true, playhead.pos, pos);
+		target = pos;
+		scrub.vars.pos = pos;
 		scrub.invalidate().restart();
 	};
-	const step = (by: number) => goTo(snap(scrub.vars.offset as number) + by * SPACING);
+	const step = (by: number) => goTo(snap(target) + by);
 	render();
+	shade();
+	phone.addEventListener('change', measure);
+	addEventListener('resize', measure);
 
 	const onClick = (e: MouseEvent) => {
 		const b = (e.target as Element).closest<HTMLElement>('[data-step]');
@@ -150,53 +147,83 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		e.preventDefault();
 		step(e.key === 'ArrowRight' ? 1 : -1);
 	};
-	// Keyboard focus on a link inside a side card (the last card's "Start here") brings that card to the
-	// center, the shortest way round, so the focused link is never small or faded.
-	const onFocus = (e: FocusEvent) => {
-		const i = cards.indexOf((e.target as Element).closest('.card') as HTMLElement);
-		if (i < 0) return;
-		const at = Math.round((scrub.vars.offset as number) / SPACING);
+	// A card to the center, the shortest way round.
+	const bring = (i: number) => {
+		const at = Math.round(target);
 		let d = wrapIndex(i - at);
 		if (d > n / 2) d -= n;
-		if (d) goTo((at + d) * SPACING);
+		if (d) goTo(at + d);
+	};
+	// Keyboard focus on a link inside a side card (the last card's "Start here") brings that card to the
+	// center, so the focused link is never small or shaded. A mouse press focuses the link too, but the card
+	// must not slide away under the pointer before the click lands, so only :focus-visible counts.
+	const onFocus = (e: FocusEvent) => {
+		if (!(e.target as Element).matches(':focus-visible')) return;
+		const i = cards.indexOf((e.target as Element).closest('.card') as HTMLElement);
+		if (i >= 0) bring(i);
+	};
+	// A click on a side card brings it to the center (not after a drag, not on a link).
+	let downX = 0;
+	let dragged = false;
+	const onDown = (e: PointerEvent) => {
+		downX = e.clientX;
+		dragged = false;
+	};
+	const onMove = (e: PointerEvent) => {
+		if (Math.abs(e.clientX - downX) > CLICK_SLOP) dragged = true;
+	};
+	const onCardClick = (e: MouseEvent) => {
+		const el = (e.target as Element).closest<HTMLElement>('.card');
+		if (!el || dragged || (e.target as Element).closest('a')) return;
+		bring(cards.indexOf(el));
 	};
 	controls?.addEventListener('click', onClick);
 	gallery.addEventListener('keydown', onKey);
 	gallery.addEventListener('focusin', onFocus);
+	list.addEventListener('pointerdown', onDown);
+	list.addEventListener('pointermove', onMove);
+	list.addEventListener('click', onCardClick);
 	if (controls) controls.hidden = false;
 
 	let drag: DraggablePlugin | undefined;
 	if (Draggable) {
-		// A proxy element is dragged; its x only measures the gesture. One card width of drag moves one
-		// card along, so the cards follow the finger.
+		// A proxy element is dragged; its x only measures the gesture. DRAG_CARD of a card width moves one card.
 		let from = 0;
-		let perPx = 0;
 		[drag] = Draggable.create(document.createElement('div'), {
 			type: 'x',
 			trigger: list,
 			onPress() {
-				from = scrub.vars.offset as number;
-				perPx = SPACING / (STEP_WIDTH * (cards[0].offsetWidth || 240));
+				from = target;
 			},
-			onDragStart: () => settle(true),
+			onDragStart: () => settle(true, target - 2, target + 2),
 			onDrag() {
-				scrub.vars.offset = from + (this.startX - this.x) * perPx;
+				target = from + (this.startX - this.x) / (DRAG_CARD * cw);
+				scrub.vars.pos = target;
 				scrub.invalidate().restart();
 			},
-			onDragEnd: () => goTo(snap(scrub.vars.offset as number)),
+			onDragEnd: () => goTo(snap(target)),
 		});
 	}
 
 	return () => {
 		drag?.kill();
 		scrub.kill();
-		loop.kill();
+		phone.removeEventListener('change', measure);
+		removeEventListener('resize', measure);
 		controls?.removeEventListener('click', onClick);
 		gallery.removeEventListener('keydown', onKey);
 		gallery.removeEventListener('focusin', onFocus);
+		list.removeEventListener('pointerdown', onDown);
+		list.removeEventListener('pointermove', onMove);
+		list.removeEventListener('click', onCardClick);
 		if (controls) controls.hidden = true;
 		if (say) say.textContent = '';
-		willChange(cards, null);
-		gsap.set(cards, { clearProps: 'transform,opacity,zIndex' });
+		settle(false);
+		for (const [i, el] of cards.entries()) {
+			el.style.removeProperty('transform');
+			el.style.removeProperty('opacity');
+			el.style.removeProperty('z-index');
+			el.style.removeProperty('--k');
+		}
 	};
 }
