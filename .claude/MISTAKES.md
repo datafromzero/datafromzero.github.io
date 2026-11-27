@@ -12,6 +12,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Git and process (lead)
 
+- 2026-11-27 — The 3D figure work named lessons by their `order` (DS60, DE30, DS100) instead of the code the site shows (DS6, DE3, DS10), in SPEC, the changelog and messages to the owner (owner correction). → **A lesson code is the stage letter plus `order` / 10 (`lessonCode` in `src/lib/lessons.ts`): order 60 in the DS track is DS6. Never write an order number as a code.**
 - 2026-11-26 — D62 changed the feedback Worker but left D58, SPEC §11 and `/privacy/` unchanged (spec review). → **Any change to what the Worker reads or decides about a sender updates D58, §11 and `/privacy/` in the same change; public text (the changelog summary, project pages) stays neutral and names no country.**
 - 2026-11-17 — A new cloud environment had git user "Claude"; the first commit was authored by it.
   → **Before the first commit in a session, run `git config user.name`; it must be `johnha912`

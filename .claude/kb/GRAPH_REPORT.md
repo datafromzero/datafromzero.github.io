@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1602 nodes, 2038 edges, 204 communities (625 isolated nodes).
+- 1602 nodes, 2039 edges, 204 communities (625 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 62, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 200, skill 1, spec-section 25, starlight-component 6, style 7, symbol 321, template 2, token 12.
-- Edges: defines 321, imports 51, mentions 1018, overrides 6, references 30, runs 15, specified-by 4, uses 556, uses-token 32, validated-by 5.
+- Edges: defines 321, imports 51, mentions 1019, overrides 6, references 30, runs 15, specified-by 4, uses 556, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -21,7 +21,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 6 | `.claude/HANDOFF.md` | doc | 66 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 37 | .claude/agents/LESSON-STANDARD.md:1 |
-| 9 | `.claude/MISTAKES.md` | doc | 34 | .claude/MISTAKES.md:1 |
+| 9 | `.claude/MISTAKES.md` | doc | 35 | .claude/MISTAKES.md:1 |
 | 10 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 11 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
 | 12 | `S6` Authoring components | spec-section | 31 | SPEC.md:284 |

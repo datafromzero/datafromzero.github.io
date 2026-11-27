@@ -60,11 +60,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 ## What comes next (build plan item 8, content)
 
 0. **3D figures in track lessons: settled (owner decisions 2026-11-26 and 2026-11-27, SPEC D41 and D63).** Pilot of three, then nine more were built
-   (DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90), reviewed, and NOT published: a team review (learner reading, multimedia-learning evidence,
+   (DE1, DE13, DE15, DE16, DS4, DS10, MLE5, MLE6, MLE9), reviewed, and NOT published: a team review (learner reading, multimedia-learning evidence,
    figure-density count) found most restated a table or printed output or drew a 2D idea in perspective, and the owner chose to keep only MLE7
-   (`concept-embedding-space`) and DS60 (`concept-loss-bowl`); DE30's 3D figure was removed, with `scripts/lib/figure3d.mjs` and the `.ed` style. New rule D63
+   (`concept-embedding-space`) and DS6 (`concept-loss-bowl`); DE3's 3D figure was removed, with `scripts/lib/figure3d.mjs` and the `.ed` style. New rule D63
    (LESSON-STANDARD "When a lesson earns a figure"): name what a figure adds before building it; one concept animation per lesson; no new figure where a lesson has
-   three or more. Open, not approved: 2D steppers for DE40, DE80, DE90, DE100, MLE80, MLE100 (check each against D63 first). Not done: a pass over the densest
+   three or more. Open, not approved: 2D steppers for DE4, DE8, DE9, DE10, MLE8, MLE10 (check each against D63 first). Not done: a pass over the densest
    existing lessons (python charts lessons 8-9 figures, core statistics lessons 5-7); the owner chose to apply D63 to new figures only.
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
