@@ -8,11 +8,15 @@
  *   - a placeholder line left in a written lesson (`XX`, `TBD`, `TODO` outside a TODO(owner) note)
  *   - a source that points at this repository's GitHub issues (learners need primary sources, owner rule 2026-11-20)
  *   - a published lesson whose name in the sidebar (short_title, else title) too wide for one line (D47; measured glyph widths)
+ *   - a warm-up that does not open with the standard line, or a warm-up question that names an earlier lesson (a code such as
+ *     S18, or "(chapter 3)") without a link to it (D66; scripts/lib/warmup-links.mjs)
  * Code spans, fenced code and SVG text (which shows data values as they are) are ignored for the spelling check.
  * Lessons that are still unwritten stubs are skipped: their planned datasets may not exist yet.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { lessonCode } from '../src/lib/roadmap.ts';
+import { headingIds, warmupExempt, warmupProblems } from './lib/warmup-links.mjs';
 
 const STAGES = ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer'];
 const DOCS = 'src/content/docs';
@@ -22,6 +26,32 @@ const SIDEBAR_LINE_PX = 185;
 
 const BRITISH = /\b(grey(ed|s)?|colour(s|ed|ful)?|favour(s|ite)?|behaviour(s)?|centre(s|d)?|licence|cancelled|cancelling|organis(e|ed|es|ing|ation)|analys(e|ed|es|ing)|summaris(e|ed|es|ing)|recognis(e|ed|es|ing)|optimis(e|ed|es|ing))\b/i;
 const FIRST_PERSON = /\bI (could not|couldn't|did not|didn't|was not able|wasn't able|have not|haven't) (find|verify|run|test|open|confirm|check)\b|\bchecked as SQL\b/i;
+
+// The published lessons by code and by URL, with the titles they go by and their heading ids: the warm-up check needs them (D66).
+// A draft has no page yet, so it cannot be linked.
+const index = { byCode: {}, byUrl: {} };
+for (const stage of STAGES) {
+	const dir = join(DOCS, stage);
+	if (!existsSync(dir)) continue;
+	for (const name of readdirSync(dir)) {
+		if (!/\.mdx?$/.test(name)) continue;
+		const text = readFileSync(join(dir, name), 'utf8');
+		const fm = text.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? '';
+		const order = Number(fm.match(/^order:\s*(\d+)\s*$/m)?.[1]);
+		const code = Number.isNaN(order) ? undefined : lessonCode(stage, order);
+		if (!code || /^status:\s*draft\s*$/m.test(fm)) continue;
+		const field = (key) => {
+			const v = fm.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))?.[1]?.trim();
+			if (v === undefined) return undefined;
+			return /^'.*'$/.test(v) ? v.slice(1, -1).replace(/''/g, "'") : /^".*"$/.test(v) ? v.slice(1, -1) : v;
+		};
+		const url = `/${stage}/${name.replace(/\.mdx?$/, '')}/`;
+		const info = { code, url, title: field('title'), short: field('short_title'), ids: headingIds(text.slice(fm.length + 8).split('\n')) };
+		index.byCode[code] = info;
+		index.byUrl[url] = info;
+	}
+}
+const notTaught = [];
 
 const problems = [];
 const report = (file, line, msg) => problems.push(`${file}:${line}: ${msg}`);
@@ -63,6 +93,9 @@ for (const stage of STAGES) {
 			}
 		}
 
+		for (const p of warmupProblems(lines, stage, index)) report(file, p.line, p.msg);
+		for (const e of warmupExempt(lines)) notTaught.push(`${file}:${e.line}`);
+
 		let inFence = false;
 		let inSvg = false;
 		let inMath = false; // a $$ display block (SPEC D51): TeX source is not prose
@@ -102,3 +135,4 @@ if (problems.length) {
 	process.exit(1);
 }
 console.log('Lesson checks passed.');
+if (notTaught.length) console.log(`Warm-up questions marked "not taught earlier" (${notTaught.length}; SPEC D66, no earlier lesson teaches them):\n${notTaught.map((n) => `  - ${n}`).join('\n')}`);

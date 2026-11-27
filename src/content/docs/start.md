@@ -20,7 +20,10 @@ Study the stages in this order:
 4. **Advanced core:** statistics, Git, data modeling and cloud basics.
 5. **One career branch:** Data Analyst, Data Engineer, Data Scientist, or ML / AI Engineer.
 
-You can skip a stage you already know. Read its last lessons first: if they feel easy, move on.
+You can skip a stage you already know. Excel / Sheets, SQL, Python and the advanced core each end their stage page with a
+placement test: [Excel / Sheets](/excel/#placement-test), [SQL](/sql/#placement-test), [Python](/python/#placement-test)
+and [Advanced core](/core/#placement-test). Answer without looking anything up. If every answer is right, go on to the next stage;
+if not, the test tells you which lesson to start at.
 
 ## Two ways to read
 

@@ -37,9 +37,9 @@ You have 3 hours, 4 at most. You choose **half A, the classical model**, or **ha
 
 ## Warm-up
 
-From memory first, then click to check.
+Try each one from memory, then open the answer. Forgot? Follow the link back to that part of the lesson: looking back is part of the review.
 
-1. In *Monitoring, drift and retraining* (MLE14), against which people is the drift of a model's inputs measured, and why does it matter?
+1. In [*Monitoring, drift and retraining*](/ml-engineer/monitoring-drift-and-retraining/#2-data-drift-the-inputs-have-changed) (MLE14), against which people is the drift of a model's inputs measured, and why does it matter?
 
    <details>
    <summary>answer</summary>
@@ -48,12 +48,12 @@ From memory first, then click to check.
 
    </details>
 
-2. In [*Evaluating LLM and RAG systems*](/ml-engineer/llm-and-rag-evaluation/) (MLE10), why were the golden questions used only once?
+2. In [*Tuning hyperparameters and handling imbalanced classes*](/ml-engineer/tuning-and-class-imbalance/#2-a-baseline-and-a-test-part-scored-once) (MLE4), why is the test part scored only once, and what is the same for a golden set?
 
    <details>
    <summary>answer</summary>
 
-   A set used to choose a prompt or a threshold no longer measures a new question: the choice has fitted it. It is used once, at the end, and nothing is tuned against it.
+   A set used to choose a setting no longer measures new data: the choice has fitted it, so the test part is scored once, at the end. The same holds for a golden set: if a prompt or a threshold is tuned against it, it is no longer a fair test, so it is used once, at the end, and nothing is tuned against it.
 
    </details>
 
@@ -61,7 +61,7 @@ From memory first, then click to check.
 
 **Time.** About 3 hours, 4 at most: the context pack 15 minutes; building and serving 45; the evaluation 40; the cost line, drift check and rollback plan 20; the memo 15; the AI log 15 (a row each time you use an output); the explain-back 10; scoring yourself 20. At 4 hours stop and hand in what you have, and say what is missing.
 
-**Tools.** Half A works in your own `ml-starter` as MLE15 left it (`git checkout mle-16-start` to catch up). Half B works in its folder `llm/`, which has an environment of its own: fetch its five given files with `git show mle-16-done:llm/FILE > llm/FILE` for `pyproject.toml`, `uv.lock`, `.gitignore`, `rag.py` and `questions.py`, then `cd llm` and `uv sync`. It downloads about 3.4 GB of model files the first time and needs about 10 GB of memory at the peak; run one language-model process at a time. It reuses the answerer of lessons MLE8 to MLE10: `ibm-granite/granite-4.0-1b` (made by IBM, Apache 2.0, downloaded without an account) and `sentence-transformers/all-MiniLM-L6-v2`, on the CPU. Do not open the `reference/` folders of `mle-16-done` until you have scored yourself.
+**Tools.** Half A works in your own `ml-starter` as [*Simulation: build and evaluate in a time box*](/ml-engineer/build-and-evaluate-simulation/) (MLE15) left it (`git checkout mle-16-start` to catch up: a checkpoint, explained in [MLE2](/ml-engineer/validating-model-data/#learn-by-doing)). Half B works in its folder `llm/`, which has an environment of its own: fetch its five given files with `git show mle-16-done:llm/FILE > llm/FILE` (`git show TAG:PATH` prints a file as it was saved at that checkpoint, and `>` writes it into your folder) for `pyproject.toml`, `uv.lock`, `.gitignore`, `rag.py` and `questions.py`, then `cd llm` and `uv sync`. It downloads about 3.4 GB of model files the first time and needs about 10 GB of memory at the peak; run one language-model process at a time. It reuses the answerer of lessons MLE8 to MLE10: `ibm-granite/granite-4.0-1b` (made by IBM, Apache 2.0, downloaded without an account) and `sentence-transformers/all-MiniLM-L6-v2`, on the CPU. Do not open the `reference/` folders of `mle-16-done` until you have scored yourself.
 
 **AI is allowed at every step.** Using it is free; using it without checking is what costs points. Start from a context pack as in [*Prompting with the data in the room*](/core/prompting-with-the-data-in-the-room/) (C37), run the five checks of [*Trust, but verify: checking AI output*](/core/trust-but-verify-ai-output/) (C38) on every output, and log a verdict for each, in the format of [*RAG and agents: what they are and how to judge them*](/core/ai-literacy-rag-and-agents/) (C43).
 
@@ -149,7 +149,7 @@ Do the work first. The reference gives a full answer for each half, a graded log
 <details>
 <summary>Open only after you finish</summary>
 
-The numbers of half A come from runs on 2026-11-25 with Python 3.13.18, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3 and the starter of `mle-16-done`; the numbers of half B come from runs on 2026-11-26 with Python 3.13.18, transformers 5.24.1, sentence-transformers 6.3.0 and PyTorch 2.15.0 (CPU) in the folder `llm/` of `mle-16-done`. The code is in `mle-16-done`: `git show mle-16-done:reference/capstone_classical.py` for half A, and the folder `llm/reference/` for half B.
+The numbers of half A come from runs on 2026-11-25 with Python 3.13.18, scikit-learn 1.9.1, pandas 3.0.5, NumPy 2.5.3 and the starter of `mle-16-done`; the numbers of half B come from runs on 2026-11-26 with Python 3.13.18, transformers 5.24.1, sentence-transformers 6.3.0 (the library that loads the text encoder) and PyTorch 2.15.0 (CPU) in the folder `llm/` of `mle-16-done`. The code is in `mle-16-done`: `git show mle-16-done:reference/capstone_classical.py` for half A, and the folder `llm/reference/` for half B.
 
 ### Half A: version 2 against version 1
 
@@ -236,7 +236,7 @@ $ curl -s -w "\nstatus %{http_code}\n" localhost:8020/health
 {"status":"ok"}
 status 200
 $ curl -s -w "\nstatus %{http_code}\n" localhost:8020/ask -H "content-type: application/json" -d "{\"question\": \"What do SEMI JOIN and ANTI JOIN return in DuckDB?\"}"
-{"answer":"In DuckDB, SEMI JOIN returns the left rows with at least one match, while ANTI JOIN returns the left rows with no match.","refused":false,"sources":[{"lesson":"left-join-anti-join","section":"2. Find the rows with no partner","text":"DuckDB can also write it directly: ANTI JOIN gives the left rows with no match, and SEMI JOIN the left rows with at least one. Neither returns more rows than the left table has. Try it: the anti-join with LEFT JOIN and IS NULL. Expected: 3 columns. Why: 5 rows: customers 140, 147, 148, 149 and 150, who all signed up between June 10 and June 26. That answers the first question. Try it: a second route, with ANTI JOIN. Expected: 1 column, the same customers as the LEFT JOIN query above. Why: the same list, with no NULL test to write."},{"lesson":"left-join-anti-join","section":"5. Check the numbers","text":"Common trap: \"NOT IN is just another way to write an anti join.\" DuckDB's page says an anti join has the logic of NOT IN, except that it ignores NULL values from the right table. That exception matters here: the customer ids of orders include a NULL (the walk-in order 1335), and a comparison with NULL is never true, so a NOT IN over those ids gives wrong results, although some customers never ordered. Subqueries and EXISTS (S24) goes further."}],"prompt_tokens":432,"completion_tokens":42,"seconds":19.523499753999204}
+{"answer":"In DuckDB, SEMI JOIN returns the left rows with at least one match, while ANTI JOIN returns the left rows with no match.","refused":false,"sources":[{"lesson":"left-join-anti-join","section":"2. Find the rows with no partner","text":"DuckDB can also write it directly: ANTI JOIN gives the left rows with no match, and SEMI JOIN the left rows with at least one. Neither returns more rows than the left table has. Try it: the anti-join with LEFT JOIN and IS NULL. Expected: 3 columns. Why: 5 rows: customers 140, 147, 148, 149 and 150, who all signed up between June 10 and June 26. That answers the first question. Try it: a second route, with ANTI JOIN. Expected: 1 column, the same customers as the LEFT JOIN query above. Why: the same list, with no NULL test to write."},{"lesson":"left-join-anti-join","section":"5. Check the numbers","text":"Common trap: \"NOT IN is just another way to write an anti join.\" DuckDB's page says an anti join has the logic of NOT IN, except that it ignores NULL values from the right table. That exception matters here: the customer ids of orders include a NULL (the walk-in order 1335, from a customer without a loyalty card), and a comparison with NULL is never true, so a NOT IN over those ids gives wrong results, although some customers never ordered. Subqueries and EXISTS (S24) goes further."}],"prompt_tokens":432,"completion_tokens":42,"seconds":19.523499753999204}
 status 200
 $ curl -s -w "\nstatus %{http_code}\n" localhost:8020/ask -H "content-type: application/json" -d "{\"question\": \"\"}"
 {"detail":[{"type":"string_too_short","loc":["body","question"],"msg":"String should have at least 3 characters","input":"","ctx":{"min_length":3}}]}

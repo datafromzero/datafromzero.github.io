@@ -10,6 +10,7 @@ const steps = [
 	['markdown style (markdownlint)', 'npm', ['run', '--silent', 'lint:md']],
 	['knowledge graph is current', 'npm', ['run', '--silent', 'check:kb']],
 	['lesson rules from the mistakes log', 'npm', ['run', '--silent', 'check:lessons']],
+	['lesson durations are at least 80% of the model (D65)', 'npm', ['run', '--silent', 'check:durations']],
 	['lesson figures match their generators and are centered in their viewBox', 'npm', ['run', '--silent', 'check:figures']],
 	['build + schema + internal links', 'npm', ['run', '--silent', 'build']],
 	['noindex pages are not in the sitemap', 'npm', ['run', '--silent', 'check:sitemap']],

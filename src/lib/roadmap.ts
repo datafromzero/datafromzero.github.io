@@ -38,6 +38,19 @@ export const CHEATSHEETS: Readonly<Record<string, { label: string; href: string 
 };
 
 /**
+ * Placement tests (SPEC D67): a stage with an entry here has a "## Placement test" section in
+ * `src/content/docs/{stage}/index.md`, and its page says so above the lesson list. `next` is the lesson a learner who
+ * answers everything right is sent to (the first lesson of the next stage, or of Part 2 for the core); the page's rule
+ * must link it. `tests/placement.test.ts` keeps the entries, the pages and the lessons they link in step.
+ */
+export const PLACEMENT_TESTS: Readonly<Record<string, { next: string }>> = {
+	excel: { next: '/sql/from-spreadsheet-to-sql/' },
+	sql: { next: '/python/first-notebook/' },
+	python: { next: '/core/study-design-and-data-types/' },
+	core: { next: '/core/hypothesis-testing/' },
+};
+
+/**
  * Optional deep dives (SPEC D55): lessons of a stage whose `order` is at least `fromOrder` form a separate, labeled
  * group after the main path. No schema field: the order band is the marker. The sidebar, /start/ and the lesson
  * header read this one constant; no main-path lesson may depend on a deep-dive lesson (`npm run check:graph`).

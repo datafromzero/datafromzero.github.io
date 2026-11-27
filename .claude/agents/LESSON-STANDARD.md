@@ -19,7 +19,38 @@ Warm-up · The question · The picture · **How it works (SQL lessons only)** ·
 Check yourself.
 
 - **Warm-up:** 2–3 recall prompts from earlier lessons (use their frontmatter objectives), at least one asks the
-  learner to produce something; answers in lowercase `<details>`.
+  learner to produce something; answers in lowercase `<details>`. Both shapes follow **the warm-up links rule (D66,
+  owner-approved 2026-11-27)**, which `npm run check:lessons` enforces:
+  - **The opening line** is the same in every written lesson, word for word (a stub that says "Draft: the owner writes
+    this section." keeps its line until the owner writes it):
+    `Try each one from memory, then open the answer. Forgot? Follow the link back to that part of the lesson: looking back is part of the review.`
+  - **Every question links to the earlier lesson that teaches the fact it asks**, as
+    `In [*Tables, keys and grain*](/sql/relational-model/#2-a-primary-key-identifies-each-row) (S18), which column…`:
+    the lesson's title as the link text, the URL with the Starlight heading id (the slug of the unit's heading, for
+    example `#2-a-primary-key-identifies-each-row`) of the **unit that teaches the fact asked**, and the code after the
+    title. Choose the anchor by reading the target section, not by its heading alone; when no single section
+    teaches the fact, link the lesson without an anchor. In an Excel lesson, which has no numbered units, the anchor
+    is `#the-picture` (the idea) or `#worked-example` (the steps). A question that names no lesson gets the link
+    appended before its question mark: `… Which value does a formula use (from [*Title*](/excel/slug/#the-picture), E4)?`
+    (two lessons: `(from [*A*](url), E5, and [*B*](url), E15)`).
+  - **The link text is a title the lesson goes by:** its full title, the part before the first colon (`Center and
+    spread`, for `Center and spread: mean, median and standard deviation`), or its `short_title`. Nothing else
+    (not `Inner join` for `INNER JOIN: pairing rows on a key`).
+  - **The code and the URL must agree.** A code is the stage letters plus the lesson's `order` divided by ten (`DS6` is
+    order 60; split lessons `DA8a`, `DE6b`), never an order number. A code anywhere in a question (not inside a code
+    span) must come right after the link to that lesson: never `In S8,` or a title without its link; inside parentheses
+    write `([*Title*](url), S11)`. A Data Analyst "(chapter 3)" reference is linked the same way. A draft lesson is
+    not linked (it has no page yet): name it in italics without a link.
+  - **The link must be honest.** The linked section states the fact the question asks (grep it). If it does not,
+    change the question or the link; never link a section that does not say it. When a question needs a lesson
+    that does not exist, **do not make up a link**: change the question to a fact an earlier lesson teaches, or end
+    it with the marker `{/*warmup: not-taught-earlier*/}` (in a `.md` lesson, `<!-- warmup: not-taught-earlier -->`),
+    which renders nothing. The marker is for a question that no earlier lesson teaches, such as the two questions of
+    the first lesson of the roadmap; it excludes a link, `npm run check:lessons` lists every marked question, and the
+    lesson's report says why.
+  - **What the check verifies** (`scripts/lib/warmup-links.mjs`): the opening line; a link in every question (or the
+    marker); every link goes to a published lesson, to a heading that exists in it (computed with the Starlight slug
+    rule), with an allowed title; every code and "(chapter N)" follows a link to that very lesson.
 - **The question:** one business question with the data visible (a small table); promise the answer.
 - **The picture:** one static inline SVG (at most two stacked), labels on the grid itself. A concept where rows move may use
   a step animation instead of one of them (see Step-by-step figures below).
@@ -64,7 +95,9 @@ above (rules, figures, files, done means) applies unchanged.
 headings are gone: their content moves as below.
 
 - **The question:** as above, in one or two human sentences, with the data visible. No "by the end you will" paragraph.
-- **Warm-up:** at most 2 recall prompts (use earlier lessons' objectives), at least one that produces something.
+- **Warm-up:** at most 2 recall prompts (use earlier lessons' objectives), at least one that produces something. The
+  warm-up links rule above (D66) applies unchanged: the standard opening line, and a link with title, anchor and code for
+  every earlier lesson a question names.
 - **The big idea:** one plain sentence saying what the tool does to the rows, then the concept animation on its own
   line as an MDX comment marker, `{/* CONCEPT: concept-name */}`, which the lead replaces with the generated markup.
   No other text between the sentence and the animation.
@@ -98,6 +131,7 @@ headings are gone: their content moves as below.
 
 ## Rules the reviews kept catching
 
+- **Duration comes from the model (SPEC D65, owner).** After writing or changing a lesson, run `node scripts/lesson-duration.mjs --detail` and set `duration` to the `new` value of its row (rounded to 5 minutes); `npm run check:durations` fails when the stated value is more than 20% below the model. The model counts prose at 165 words a minute, code, RunSQL runs, Predict prompts, exercises, figures and setup; it assumes a beginner, so never shorten a lesson's duration by hand to look lighter. The "About N minutes" line of Learn by doing (rule 1 of the shape) must equal `duration`: `node scripts/lesson-duration.mjs --write` rewrites both, and the check fails on a mismatch. A lesson that needs a tool with an account or an installer is added to `SETUP` in the script. Simulations and capstones are timeboxed (`TIMEBOXED` in the script): their duration is the clock the lesson sets.
 - **Nothing from China (SPEC D62, owner).** No Chinese-made model, tool, library, service, app or brand in a lesson, notebook, Colab file, starter, dataset, figure, example value or source. LLM work uses IBM Granite `ibm-granite/granite-4.0-1b`. Check the maker of every new model, dataset or package on its official page; reviewers grep for it. Do not write about China; just leave these things out.
 - **Exercises never overwrite** the worked example's sheet, cells or output. Each exercise has its own pre-built
   sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`). Anything the text calls "done for you"
@@ -613,6 +647,26 @@ Written 2026-11-25 by the third ML batch (first writer); the later batches keep 
 - **Figures** (`scripts/charts/mle-batch-3.py`, `--out`, `--paste`, `--check`, the `Svg` class of `da-batch-1.py`): MLE11 three (where each approach acts, the loss curve on a log scale from 0.0007 to 25, right lessons and tokens), MLE12 two (workflow against agent loop; refunds asked and carried out in seven settings on one scale: a full track is 8 notes, the 4 clean notes are half a track). Values are copied from reveals and `--check` fails when one is missing from the lesson text.
 - **Answers already used by MLE11 and MLE12** (do not reuse): 19,005,440 (rank 16 on six layers of 40), `['retrieve', 'fine-tune', 'prompt']`, 32 (candidates really held out); `[True, False, False]` (a gate with a 20 dollar limit), `[2, 2, 2, None, None, 2, 2, 2]`, `[True, False, True, False]` (a gate that keeps one yes for a whole task). Exercise classes taken: counting adapter numbers, choosing a method for a stated problem, near-duplicate test questions, a limit in a gate, finding the first refused step of a trace, a gate that reuses one answer for several calls. Do not use an approver that reads tool results again: its fix equals the `human` function of unit 2.
 - **Not run.** Colab, a GPU, Windows, macOS, a second seed of the LoRA run, any hosted API.
+
+## Placement tests (SPEC D67): keep them in step with the lessons
+
+The stage pages `src/content/docs/{excel,sql,python,core}/index.md` each end with a `## Placement test` (6 to 8 questions; the core test
+covers Part 1 only). A lesson change can make a question wrong, so **the PR that does any of the following also fixes the test**:
+
+- **Retitles, renumbers, splits, moves, drafts or deletes a lesson that a question links.** Each answer ends with `Missed it? Study [*Title*](/stage/slug/) (code).`
+  with the exact title and the code from `lessonCode` (stage letter plus `order` / 10, never an order number). `tests/placement.test.ts` fails on a wrong title,
+  code, stage or draft link; after a stage renumbering, read every question again as well, because a lower code changes which lesson a learner starts at.
+- **Changes what a lesson teaches**: a rule, a function, a pandas default, a menu name, or the engine version behind an SQL answer. If the lesson no longer teaches the
+  skill a question checks, move the question to the lesson that does, or replace it. A new lesson that adds a skill later stages need may add a question (stay within 8).
+- **Changes a dataset** (`datasets/cafe-sales/v1`) or a number the question uses: recompute every number in the question and its answer from the data with a script, and
+  say which rows count (completed orders only or all 1,800). Numbers that are made up say so in the question.
+- **Reorders a stage so that the first lesson of the next stage changes**: update `PLACEMENT_TESTS` in `src/lib/roadmap.ts` and the rule link.
+
+Writing a question: one skill that a later stage depends on; predict-the-result, spot-the-flaw or "which is right", never trivia (no names, dates or history); plain
+words for readers of English as a second language; no worked example copied from the lesson (a changed value is enough); the answer, one line of why, then the
+"Missed it?" line. The rule at the top says: no looking anything up, all right means the next stage's first lesson, otherwise start at the earliest lesson linked
+from the questions missed. A stage with a new test also gets its line in `PLACEMENT_TESTS`, which draws "Know some of this already? Take the placement test" above its
+lesson list. The other stage pages (the four career branches) have no test.
 
 ## Markup
 

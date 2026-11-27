@@ -30,7 +30,7 @@ export default function make({ id = 'thr' } = {}) {
 			[1, 'Rows ranked by score', { role: 'src', key: 'Each row has a score, and its true outcome is Y or N.', changes: [['+', '10 rows, 4 Y and 6 N']] }],
 			[3, 'A high threshold flags few', { role: 'flt', key: 'Rows at or above the threshold are flagged; the others are not.', changes: [['+', 'a threshold'], ['+', '2 rows flagged']] }],
 			[5, 'A lower threshold flags more', { role: 'flt', key: 'Moving the threshold changes which rows are flagged.', changes: [['~', 'threshold moved down'], ['+', '2 more rows flagged']] }],
-			[7, 'A still lower one flags most', { role: 'out', key: 'Each threshold sorts every row into one of four counts: TP, FP, FN or TN.', changes: [['~', 'threshold moved down'], ['+', '3 more rows flagged']] }],
+			[7, 'A still lower one flags most', { role: 'out', key: 'Each threshold sorts every row into one of four counts, named in unit 1.', changes: [['~', 'threshold moved down'], ['+', '3 more rows flagged']] }],
 		],
 		counters: [
 			{ label: 'flagged', role: 'flt', values: [[3, 2], [5, 4], [7, 7]] },
