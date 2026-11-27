@@ -151,7 +151,7 @@ headings are gone: their content moves as below.
 
 ## Glossary links (SPEC D68)
 
-The glossary (`/reference/glossary/`, 41 entries in `src/content/docs/reference/glossary/`) is the second layer under the plain gloss you
+The glossary (`/reference/glossary/`, 69 entries in `src/content/docs/reference/glossary/`) is the second layer under the plain gloss you
 write at a word's first use: the learner taps a dotted word and reads one short sentence, or follows it to a page.
 
 - **When to use `<Term id="glossary-slug">word</Term>`:** at the first use in the lesson of a word that has an entry, when the learner may

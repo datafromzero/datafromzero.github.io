@@ -44,7 +44,8 @@ Where you practice depends on the stage:
 - **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
   and nothing you type is sent anywhere.
 - **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (you sign in
-  with a Google account; Colab is free of charge). A notebook is easier on a computer or tablet than on a phone.
+  with a Google account; Colab is free of charge, even when it shows a banner about paid plans). Python lessons are written
+  for a computer or tablet: on a phone you can read them, but running a notebook is hard.
 - **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
   a Colab notebook, or, for some, tools you install on your own computer.
 - Practice datasets are in the project repository and are free to reuse (see the license page).
@@ -69,8 +70,9 @@ Each stage also has a page with its lessons in order: [Excel / Sheets](/excel/),
 
 ## Report a problem
 
-Every lesson ends with a **Report an issue** form, and the **Report a problem** button in the bar at the bottom of
-every page opens the same form: write what is wrong or unclear and send it, no account needed.
+Every lesson ends with a **Report an issue** form, and the **Report a problem** button (a small flag) in the menu at the
+bottom of every page opens the same form: open the menu, tap the flag, write what is wrong or unclear and send it, no
+account needed.
 
 ## The roadmap map
 
