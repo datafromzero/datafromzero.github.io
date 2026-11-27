@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1716 nodes, 2264 edges, 212 communities (676 isolated nodes).
-- Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 30, npm-script 30, page 5, research-section 500, rule 11, script 205, skill 1, spec-section 25, starlight-component 6, style 8, symbol 362, template 2, token 12.
-- Edges: defines 362, imports 52, mentions 1154, overrides 6, references 31, runs 17, specified-by 4, uses 597, uses-token 36, validated-by 5.
+- 1732 nodes, 2310 edges, 216 communities (676 isolated nodes).
+- Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 31, npm-script 30, page 6, research-section 500, rule 11, script 207, skill 1, spec-section 25, starlight-component 6, style 9, symbol 373, template 2, token 12.
+- Edges: defines 373, imports 55, mentions 1181, overrides 6, references 33, runs 17, specified-by 4, uses 597, uses-token 39, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -19,49 +19,49 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `src/components/content/OpenInColab.astro` | component | 78 | src/components/content/OpenInColab.astro:1 |
 | 5 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
 | 6 | `.claude/HANDOFF.md` | doc | 72 | .claude/HANDOFF.md:1 |
-| 7 | `astro.config.mjs` | config | 46 | astro.config.mjs:1 |
+| 7 | `astro.config.mjs` | config | 49 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 44 | .claude/agents/LESSON-STANDARD.md:1 |
-| 9 | `src/components/content/Term.astro` | component | 42 | src/components/content/Term.astro:1 |
-| 10 | `.claude/MISTAKES.md` | doc | 41 | .claude/MISTAKES.md:1 |
-| 11 | `S6` Authoring components | spec-section | 33 | SPEC.md:290 |
-| 12 | `src/site.ts` | module | 33 | src/site.ts:1 |
-| 13 | `D42` In-page SQL runner | decision | 32 | SPEC.md:69 |
-| 14 | `README.md` | doc | 29 | README.md:1 |
-| 15 | `S3.1` Route map | spec-section | 29 | SPEC.md:115 |
+| 9 | `.claude/MISTAKES.md` | doc | 42 | .claude/MISTAKES.md:1 |
+| 10 | `src/components/content/Term.astro` | component | 42 | src/components/content/Term.astro:1 |
+| 11 | `D64` Learner progress in the brows… | decision | 34 | SPEC.md:90 |
+| 12 | `S6` Authoring components | spec-section | 33 | SPEC.md:290 |
+| 13 | `src/site.ts` | module | 33 | src/site.ts:1 |
+| 14 | `D42` In-page SQL runner | decision | 32 | SPEC.md:69 |
+| 15 | `README.md` | doc | 29 | README.md:1 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (214): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/components/content/Term.astro; src/content/docs/core/designing-a-star-schema.mdx
-- **C2 HANDOFF.md** (39): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…; D32 Four career branches
-- **C3 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
-- **C4 MISTAKES.md** (19): .claude/MISTAKES.md; README.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer
-- **C5 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
-- **C6 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
-- **C7 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C8 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C9 progress.ts** (16): src/lib/progress.ts; src/lib/progress.ts#DONE_KEY; src/lib/progress.ts#LAST_KEY; src/lib/progress.ts#Last; src/lib/progress.ts#MAX_DONE; src/lib/progress.ts#MAX_RAW
+- **C2 HANDOFF.md** (37): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…; D32 Four career branches
+- **C3 progress.ts** (22): src/lib/progress.ts; src/lib/progress.ts#DONE_KEY; src/lib/progress.ts#LAST_KEY; src/lib/progress.ts#Last; src/lib/progress.ts#MAX_DONE; src/lib/progress.ts#MAX_RAW
+- **C4 README.md** (20): design/README.md; src/styles/tokens.css; S10 Design & motion; D9 Theme; D51 Math in lessons; src/styles/sql-runner.css
+- **C5 MISTAKES.md** (19): .claude/MISTAKES.md; README.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer
+- **C6 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
+- **C7 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C8 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
+- **C9 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
 - **C10 roadmap.ts** (16): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#PLACEMENT_TESTS
 - **C11 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C12 Route map** (13): S3.1 Route map; D64 Learner progress in the browser; D34 Navigation for learners (amended…; D58 Feedback form; src/scripts/progress.ts; S15 Explicitly out of scope (for now)
+- **C12 Learner progress in the brows…** (13): D64 Learner progress in the browser; S3.1 Route map; D34 Navigation for learners (amended…; src/scripts/progress.ts; D58 Feedback form; S15 Explicitly out of scope (for now)
 
 ## Surprising connections
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C91 to C89, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C108 to C82, scripts/animations/concept-columnar-scan.mjs:2)
-- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C4 to C45, research/curriculum/02-syllabus-inventory.md:319)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C136 to C28, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C27 to C80, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C199 to C196, src/layouts/HomeLayout.astro:39)
-- `M8` -mentions-> `D24` (C86 to C4, CLAUDE.md:69)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C59, design/README.md:181)
-- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C144 to C30, scripts/animations/concept-loss-bowl.mjs:2)
-- `M6` -mentions-> `D27` (C63 to C58, CLAUDE.md:65)
-- `scripts/check-placeholders.mjs` -mentions-> `D18` (C190 to C2, scripts/check-placeholders.mjs:2)
-- `src/lib/content-validation.ts` -mentions-> `scripts/check-graph.ts` (C201 to C188, src/lib/content-validation.ts:123)
+- `ctype:career` -specified-by-> `S5.4` (C92 to C90, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C109 to C82, scripts/animations/concept-columnar-scan.mjs:2)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C5 to C46, research/curriculum/02-syllabus-inventory.md:319)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C137 to C23, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C28 to C81, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C201 to C198, src/layouts/HomeLayout.astro:39)
+- `M8` -mentions-> `D24` (C87 to C5, CLAUDE.md:69)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C35 to C58, design/README.md:181)
+- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C145 to C30, scripts/animations/concept-loss-bowl.mjs:2)
+- `src/styles/pages.css` -mentions-> `src/scripts/placement.ts` (C4 to C83, src/styles/pages.css:5)
+- `M6` -mentions-> `D27` (C62 to C57, CLAUDE.md:65)
+- `scripts/check-placeholders.mjs` -mentions-> `D18` (C191 to C2, scripts/check-placeholders.mjs:2)
 
 ## Decisions (SPEC §1)
 
@@ -159,7 +159,7 @@ term: id — file:line
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R6` — CLAUDE.md:28
 - gsap: `pkg:gsap` — package.json:60
-- scroll: `S12` — SPEC.md:430
+- scroll: `src/styles/scroll-cues.css` — src/styles/scroll-cues.css:1
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:53
 - dark: `src/components/starlight/ThemeProvider.astro` — src/components/starlight/ThemeProvider.astro:1
@@ -180,7 +180,7 @@ term: id — file:line
 - mdx: `pkg:@astrojs/mdx` — package.json:45
 - auto-import: `pkg:astro-auto-import` — package.json:59
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
-- quality gates: `M6` — CLAUDE.md:59
+- quality gates: `S12` — SPEC.md:430
 - cspell: `pkg:cspell` — package.json:67
 - markdownlint: `pkg:markdownlint-cli2` — package.json:32
 - migration: `S14` — SPEC.md:501

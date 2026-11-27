@@ -24,11 +24,25 @@ function distance(a: string, b: string): number {
 }
 const close = (a: string, b: string) => distance(a, b) <= Math.max(2, Math.floor(b.length / 3));
 
-export function explain(message: string): Explained {
+const CURLY = /[‘’“”]/;
+// Words that start a clause: after a stray ";" they begin a new statement, which the engine cannot parse.
+const CLAUSE = /^(WHERE|FROM|GROUP|ORDER|LIMIT|HAVING|JOIN|INNER|LEFT|RIGHT|FULL|CROSS|ON|UNION|OFFSET)$/i;
+
+/** `query` is what the learner ran, when known: a few mistakes are visible in it and not in the engine's message. */
+export function explain(message: string, query = ''): Explained {
 	const lines = message.split('\n');
 	const head = lines[0].replace(/^[A-Za-z ]+ Error: /, '').trim();
 	const tip = (t?: string): Explained => ({ head, tip: t });
 	let m: RegExpMatchArray | null;
+
+	// Curly quotes (a phone keyboard's smart punctuation, or text pasted from notes) are not quotes to SQL, whatever the message says.
+	if (CURLY.test(query) || CURLY.test(message)) {
+		return tip("The query has curly quotes (‘ ’ “ ”). SQL needs straight ones: text goes between plain single quotes, like 'tea'. Retype the quotes with the ' key.");
+	}
+	// "SELECT * FROM t; WHERE x = 1": the ";" ended the query, so WHERE has nothing to belong to.
+	if ((m = lines[0].match(/^Parser Error: syntax error at or near "(\w+)"/)) && CLAUSE.test(m[1]) && new RegExp(`;\\s*${m[1]}\\b`, 'i').test(query)) {
+		return tip(`A semicolon ends the query, so ${m[1]} starts a new one by itself. Remove the ; before ${m[1]} and keep one ; only at the very end.`);
+	}
 
 	// Binder Error: Referenced column "x" not found in FROM clause! / Candidate bindings: "a", "b"
 	if ((m = lines[0].match(/Referenced column "(.+)" not found/))) {
@@ -72,4 +86,28 @@ export function explain(message: string): Explained {
 		return tip(`Look just before ${m[1]}: a comma, a closing parenthesis, or a keyword such as FROM or WHERE may be missing or misspelled.`);
 	}
 	return tip();
+}
+
+/** A text comparison in a one-table query that returned no rows: the column, the table and the text, or `null` when it is not that simple. */
+export function textLookup(sql: string): { col: string; table: string; text: string } | null {
+	const q = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, ' ');
+	if (q.split(';').filter((x) => x.trim()).length !== 1) return null;
+	if ((q.match(/\b(from|join)\b/gi) ?? []).length !== 1) return null;
+	const table = q.match(/\bfrom\s+([a-z_]\w*)\b/i)?.[1];
+	const m = q.match(/\b([a-z_]\w*)\s*=\s*'([^']*[A-Za-z][^']*)'/i);
+	return table && m ? { col: m[1], table, text: m[2] } : null;
+}
+
+/**
+ * The query that checks a `textLookup` result: how many rows hold exactly that text (when some do, the empty result has
+ * another cause and no tip is given), and a stored value that differs from it only by capitals.
+ */
+export const caseQuery = ({ col, table, text }: { col: string; table: string; text: string }) =>
+	`SELECT (SELECT count(*) FROM ${table} WHERE ${col} = '${text}'), (SELECT min(${col}) FROM ${table} WHERE lower(${col}) = lower('${text}') AND ${col} <> '${text}')`;
+
+/** The tip for a result with no rows when the query compares text; `found` is the stored value that differs only by capitals. */
+export function emptyTip(text: string, found?: string): string {
+	return found
+		? `No rows. Text must match exactly, including capitals: did you mean '${found}'?`
+		: `No rows. Text must match exactly, including capitals and spaces: check how '${text}' is spelled in the table.`;
 }

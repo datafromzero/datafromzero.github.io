@@ -3,7 +3,7 @@
 // (sql-runtime.ts) which it imports lazily. Nothing is stored and nothing is sent anywhere.
 import type { Result } from './sql-runtime';
 import type { Editor } from './sql-editor';
-import { explain } from './sql-errors';
+import { caseQuery, emptyTip, explain, textLookup } from './sql-errors';
 
 export interface Block {
 	act(name: string, from: HTMLElement): void;
@@ -70,8 +70,8 @@ function drawResult(out: HTMLElement, r: Result, title?: string) {
 	if (more > 0) out.append(el('p', `${plural(more, 'more row')} not shown.`, 'dfz-sql-more'));
 }
 
-function drawError(out: HTMLElement, message: string, quiet: boolean) {
-	const { head, tip } = explain(message);
+function drawError(out: HTMLElement, message: string, quiet: boolean, sql: string) {
+	const { head, tip } = explain(message, sql);
 	const box = el('div', undefined, 'dfz-sql-err');
 	// A manual run announces its error; an auto-run (quiet) one does not interrupt the learner.
 	if (!quiet) box.setAttribute('role', 'alert');
@@ -160,9 +160,29 @@ export function wire(box: HTMLElement): Block {
 		status.hidden = true;
 		note.textContent = '';
 		try {
-			drawResult(out, await rt.run(sql, LIMIT), opts.title);
+			const r = await rt.run(sql, LIMIT);
+			drawResult(out, r, opts.title);
+			if (r.columns.length && r.total === 0 && !opts.title) await emptyHint(rt, sql);
 		} catch (e) {
-			drawError(out, e instanceof Error ? e.message : String(e), !!opts.quiet);
+			drawError(out, e instanceof Error ? e.message : String(e), !!opts.quiet, sql);
+		}
+		// On a phone the result sits below the editor and the keyboard hides it: bring it into view after a manual run.
+		if (!opts.quiet) out.scrollIntoView({ block: 'nearest' });
+	};
+
+	// A text comparison that matched nothing (`category = 'Tea'`): say that capitals count, and name the stored spelling when it is found.
+	const emptyHint = async (rt: typeof import('./sql-runtime'), sql: string) => {
+		const look = READ_ONLY.test(sql.replace(/^(\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, '')) ? textLookup(sql) : null;
+		if (!look) return;
+		try {
+			const [count, found] = (await rt.run(caseQuery(look), 1)).rows[0];
+			if (count !== '0') return; // the text exists, so something else emptied the result
+			const p = el('p', undefined, 'dfz-sql-more');
+			p.append(el('strong', 'Tip: '), emptyTip(look.text, found ?? undefined));
+			p.translate = true;
+			out.append(p);
+		} catch {
+			// No hint: the result above already says what happened.
 		}
 	};
 

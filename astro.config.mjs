@@ -76,6 +76,7 @@ export default defineConfig({
 				'@fontsource/geist-mono/500.css',
 				'./src/styles/tokens.css',
 				'./src/styles/math.css',
+				'./src/styles/scroll-cues.css',
 				'./src/styles/step-animation.css',
 				'./src/styles/transitions.css',
 				'./src/styles/pages.css',
@@ -93,6 +94,8 @@ export default defineConfig({
 					},
 				},
 			},
+			// Previous / Next at the end of a lesson show the full title, not the sidebar's short one (SPEC D47).
+			routeMiddleware: './src/route-data.ts',
 			// SPEC D9: dark by default, dark/light picker only.
 			components: {
 				Head: './src/components/starlight/Head.astro',

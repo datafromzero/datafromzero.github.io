@@ -6,7 +6,7 @@ import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers, pl
 import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
 import { HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { PostgreSQL, sql } from '@codemirror/lang-sql';
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import { tags as t } from '@lezer/highlight';
 
 export interface Editor {
@@ -68,7 +68,7 @@ export function mountEditor(
 				highlightActiveLine(),
 				indentOnInput(),
 				closeBrackets(),
-				autocompletion({ activateOnTyping: true, icons: false }),
+				autocompletion({ activateOnTyping: true, icons: false, defaultKeymap: false }),
 				lang.of(sql({ dialect: PostgreSQL, schema: opts.schema, upperCaseKeywords: true })),
 				syntaxHighlighting(highlight),
 				placeholder('Write your query here'),
@@ -97,7 +97,11 @@ export function mountEditor(
 				),
 				keymap.of([
 					...closeBracketsKeymap,
-					...completionKeymap,
+					// Enter always makes a new line (on a phone the suggestion list is nearly always open while typing and
+					// Enter used to accept it, gluing "orders" to the next word). A suggestion is accepted with Tab, a tap
+					// or the arrow keys then Tab; Escape closes the list.
+					...completionKeymap.filter((k) => k.key !== 'Enter'),
+					{ key: 'Tab', run: acceptCompletion },
 					{ key: 'Tab', run: tab(indentMore), shift: tab(indentLess) },
 					{
 						key: 'Escape',
