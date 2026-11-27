@@ -1,12 +1,12 @@
 // Concept animation (SPEC D41) for correlation, lesson C10, shown after the data answer of unit 3. A made-up miniature, labeled as such on the
-// page: 15 people in three groups. Metaphor: a line through the whole cloud rises, but the dots sit in three clumps along it and inside each
+// page: 15 people in three groups. Metaphor: a line through the whole cloud rises, but the dots sit in three bunches along it and inside each
 // clump the line is flat, so the rise is made by which group a person is in.
-// Facts (computed by hand): each clump is 5 dots with pixel offsets from its center (dx, dy) of (-12, 4), (-6, -6), (0, 8), (6, -6), (12, 4) for
+// Facts (computed by hand): each bunch is 5 dots with pixel offsets from its center (dx, dy) of (-12, 4), (-6, -6), (0, 8), (6, -6), (12, 4) for
 // the first and third clump and (-12, -4), (-6, 6), (0, -8), (6, 6), (12, -4) for the second; the sum of dx times dy is 0 in both, so the
 // correlation inside every clump is exactly 0 (a flat line). Centers: (90, 160), (190, 120), (290, 80); the line through all dots
 // goes from (50, 176) to (330, 64) and passes through the three centers.
 // 8 s loop of 8 phases: 1 fifteen gray dots; 2 the line through all of them is drawn (3 hold); 4 the dots take three colors (5 the letters
-// A B C appear); 6 a flat line is drawn inside each clump; 7 the closing text; 8 hold.
+// A B C appear); 6 a flat line is drawn inside each bunch; 7 the closing text; 8 hold.
 // Live counters and Key idea (D41): each counter shows the dots, groups or lines drawn at that phase and appears with it.
 import { anim, tint } from '../lib/step-animation.mjs';
 
@@ -25,12 +25,12 @@ export default function make({ id = 'cfs' } = {}) {
 		loop: { cycle: 8 },
 		title: 'A line through the whole cloud can rise while the line inside every group is flat',
 		desc:
-			'Fifteen dots in one cloud with a blue line rising through them. The dots take three colors, green, purple and magenta, and sit in three clumps along the line, labeled A, B and C. A short flat line is drawn inside each clump. The text says the rise comes from the groups.',
+			'Fifteen dots in one cloud with a blue line rising through them. The dots take three colors, green, purple and magenta, and sit in three bunches along the line, labeled A, B and C. A short flat line is drawn inside each bunch. The text says the rise comes from the groups.',
 		caption: 'A made-up miniature: 15 people in three groups. The line through all of them rises; inside each group it is flat.',
 		phases: [
 			[1, 'Fifteen dots in one cloud', { role: 'src', key: 'Each dot is a person: more activity to the right, more buying higher up.', changes: [['+', '15 dots']] }],
 			[2, 'A line through all of them', { role: 'src', key: 'Through the whole cloud the line rises: more activity goes with more buying.', changes: [['+', '1 rising line']] }],
-			[4, 'Colored by a third thing', { role: 'grp', key: 'A third thing, the group, sorts the dots into three clumps, and the clumps sit along the line.', changes: [['~', '3 groups, 3 colors']] }],
+			[4, 'Colored by a third thing', { role: 'grp', key: 'A third thing, the group, sorts the dots into three bunches, and the bunches sit along the line.', changes: [['~', '3 groups, 3 colors']] }],
 			[6, 'A line inside each group', { role: 'mat', key: 'Inside each group the line is flat: the rise came from which group a person is in.', changes: [['+', '3 flat lines']] }],
 		],
 		counters: [

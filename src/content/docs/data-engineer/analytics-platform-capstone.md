@@ -39,9 +39,9 @@ You have built the pieces over the track; here you put them in one repository a 
 
 ## Warm-up
 
-From memory first, then click to check.
+Try each one from memory, then open the answer. Forgot? Follow the link back to that part of the lesson: looking back is part of the review.
 
-1. In [*CI for dbt: checks on every pull request*](/data-engineer/ci-and-deployment-for-dbt/) (DE14), what does a green check prove?
+1. In [*CI for dbt: checks on every pull request*](/data-engineer/ci-and-deployment-for-dbt/#3-what-a-green-check-proves) (DE14), what does a green check prove?
 
    <details>
    <summary>answer</summary>
@@ -50,7 +50,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In [*Dimensional models and slowly changing dimensions*](/data-engineer/dimensional-models-and-scd/) (DE13), which version of a product does a line of `fct_order_lines` point to?
+2. In [*Dimensional models and slowly changing dimensions*](/data-engineer/dimensional-models-and-scd/#2-dimensions-with-surrogate-keys-and-a-fact-that-points-at-a-version) (DE13), which version of a product does a line of `fct_order_lines` point to?
 
    <details>
    <summary>answer</summary>
@@ -63,7 +63,7 @@ From memory first, then click to check.
 
 **Time.** About 3 hours, 4 at most: the clean-clone check 20 minutes, the README's grain and keys 35, tests and CI 30, backfill 25, cost note 15, the three questions 25, the run book 10, the AI log 10, scoring 10.
 
-**Tools.** Your own `de-pipeline-starter` as the track built it, or `git checkout de-15-start` to start from the same point. Fetch only the check script: `git show de-18-done:scripts/clean_clone_check.sh > scripts/clean_clone_check.sh`. Do not open the rest of `de-18-done` until you have scored yourself.
+**Tools.** Your own `de-pipeline-starter` as the track built it, or `git checkout de-15-start` (a checkpoint, explained in [DE2](/data-engineer/ingest-apis-and-files/#learn-by-doing)) to start from the same point. Fetch only the check script: `git show de-18-done:scripts/clean_clone_check.sh > scripts/clean_clone_check.sh`. Do not open the rest of `de-18-done` until you have scored yourself.
 
 **AI is allowed at every step.** Start from a context pack as in [*Prompting with the data in the room*](/core/prompting-with-the-data-in-the-room/) (C37), run the five checks of [*Trust, but verify: checking AI output*](/core/trust-but-verify-ai-output/) (C38) on every output, and log a verdict for each, in the format of [*RAG and agents: what they are and how to judge them*](/core/ai-literacy-rag-and-agents/) (C43).
 

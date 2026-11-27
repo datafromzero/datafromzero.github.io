@@ -30,7 +30,7 @@ export default function make({ id = 'gbr' } = {}) {
 		counters: [
 			{ label: 'on main', role: 'src', values: [[1, 2], [7, 3]] },
 			{ label: 'feature', role: 'grp', values: [[1, 0], [3, 2]] },
-			{ label: 'open PR', role: 'mat', values: [[1, 0], [5, 1], [7, 0]] },
+			{ label: 'pull requests', role: 'mat', values: [[1, 0], [5, 1], [7, 0]] },
 		],
 	});
 	a.text(10, 14, 'Branch, ask, merge', 'f11 b');

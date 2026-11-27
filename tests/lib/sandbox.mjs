@@ -3,7 +3,7 @@
  * fixture documents are placed. The real repository is never modified. Fixtures live under
  * tests/fixtures/ and never under src/content, so they cannot be deployed.
  */
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +48,15 @@ export function useDocs(sandbox, ...fixtureDirs) {
 			return !(segs.length > (segs[0] === 'vi' ? 2 : 1) && CONTENT_DIRS.has(first)) || (segs[0] !== 'vi' && segs.length === 2 && segs[1] === 'index.md');
 		},
 	});
+	// A stage page's placement test (SPEC D67) links the real lessons, which the sandbox leaves out: keep its heading (the
+	// anchor `/start/` links) and cut the questions from the copy.
+	for (const stage of CONTENT_DIRS) {
+		const page = join(docs, stage, 'index.md');
+		if (!existsSync(page)) continue;
+		const text = readFileSync(page, 'utf8');
+		const at = text.indexOf('\n## Placement test\n');
+		if (at >= 0) writeFileSync(page, `${text.slice(0, at)}\n## Placement test\n\nStub for the sandbox.\n`);
+	}
 	for (const f of fixtureDirs) cpSync(join(f, 'docs'), docs, { recursive: true });
 	return docs;
 }

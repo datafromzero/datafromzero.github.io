@@ -35,9 +35,9 @@ You have 90 minutes, and the rubric is below, so you can read it now. There is n
 
 ## Warm-up
 
-From memory first, then click to check.
+Try each one from memory, then open the answer. Forgot? Follow the link back to that part of the lesson: looking back is part of the review.
 
-1. In [*Evaluating LLM and RAG systems*](/ml-engineer/llm-and-rag-evaluation/) (MLE10), what did you write when the paired interval of a difference included 0?
+1. In [*Decision trees and random forests*](/data-scientist/decision-trees-and-forests/#5-the-verdict-on-the-test-part) (DS7), what did you write when the paired interval of a difference included 0?
 
    <details>
    <summary>answer</summary>
@@ -46,7 +46,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In *Monitoring, drift and retraining* (MLE14), which two columns of the request log give the speed and the compute cost of a request?
+2. In [*Monitoring, drift and retraining*](/ml-engineer/monitoring-drift-and-retraining/#1-log-what-the-service-saw) (MLE14), which two columns of the request log give the speed and the compute cost of a request?
 
    <details>
    <summary>answer</summary>
@@ -59,7 +59,7 @@ From memory first, then click to check.
 
 **Time.** 90 minutes: the scope note 8; the baselines 12; the candidate 20; the evaluation 20 (the numbers 10, the failure slice 10); serving and the cost line 12; the recommendation 5; the AI log 3 (write each row as you use an output); scoring yourself 10. Use a timer, not this page.
 
-**Tools.** Your own `ml-starter`, as it was left by MLE14 (`git checkout mle-15-start` to catch up), and `uv run`. Nothing has to be fetched. The reference answer is the folder `reference/` of the tag `mle-15-done`: do not open it until you have scored yourself.
+**Tools.** Your own `ml-starter`, as it was left by [*Monitoring, drift and retraining*](/ml-engineer/monitoring-drift-and-retraining/) (MLE14) (`git checkout mle-15-start` to catch up: a checkpoint, explained in [MLE2](/ml-engineer/validating-model-data/#learn-by-doing)), and `uv run`. Nothing has to be fetched. The reference answer is the folder `reference/` of the tag `mle-15-done`: do not open it until you have scored yourself.
 
 **AI.** Allowed, as at work. Start from a context pack as in [*Prompting with the data in the room*](/core/prompting-with-the-data-in-the-room/) (C37), run the five checks of [*Trust, but verify: checking AI output*](/core/trust-but-verify-ai-output/) (C38) on every output, and log a verdict for each, in the format of [*RAG and agents: what they are and how to judge them*](/core/ai-literacy-rag-and-agents/) (C43). The capstone grades the log at length; here it is one rubric item.
 
@@ -172,7 +172,7 @@ by platform (AUC of each score, within the platform):
   web      1,387 people, 0.457 churned, AUC champion 0.632, candidate 0.626
 ```
 
-The top quarter is 1,113 people. The flat guess is the share of churners, 0.544: any 1,113 people. The stronger baselines are Priya's channel rule (rank people by the churn rate of their channel among the 13,362 learning people), which hits 851, and the champion of MLE3 (`build_pipeline(0.1)`), which hits 862. The candidate is a random forest on the same ten columns: 867 hits, a held-out AUC of 0.686, above the gate's floor of 0.68. The RandomForestClassifier page describes a forest as a meta estimator that "fits a number of decision tree classifiers on various sub-samples of the dataset and uses averaging to improve the predictive accuracy and control over-fitting", and the candidate's chance is, in the page's words, "the mean predicted class probabilities of the trees in the forest". The reference sets `n_estimators=200`, the number of trees, and `min_samples_leaf=20`, which the page says may smooth the model. The Pipelines page says a pipeline lets you "call fit and predict once on your data to fit a whole sequence of estimators", so the one-hot encoding and the forest are fitted on the 13,362 people together.
+The top quarter is 1,113 people. The flat guess is the share of churners, 0.544: any 1,113 people. The stronger baselines are Priya's channel rule (rank people by the churn rate of their channel among the 13,362 learning people), which hits 851, and the champion of MLE3 (`build_pipeline(0.1)`), which hits 862. The candidate is a random forest on the same ten columns: 867 hits, a held-out AUC of 0.686, above the gate's floor of 0.68. The RandomForestClassifier page describes a forest as a meta estimator (in scikit-learn, an estimator is any object that learns with `fit`) that "fits a number of decision tree classifiers on various sub-samples of the dataset and uses averaging to improve the predictive accuracy and control over-fitting", and the candidate's chance is, in the page's words, "the mean predicted class probabilities of the trees in the forest". The reference sets `n_estimators=200`, the number of trees, and `min_samples_leaf=20`, which the page says may smooth the model. The Pipelines page says a pipeline lets you "call fit and predict once on your data to fit a whole sequence of estimators", so the one-hot encoding and the forest are fitted on the 13,362 people together.
 
 The gain of the candidate over the champion is 5 hits of 1,113 (+0.004), and its interval, from 2,000 resamples of the same 4,454 people for both models, runs from -12 to +17 hits (-0.011 to +0.015). It includes 0: **a tie**. Over the channel rule the gain is 16 hits, and its interval, -3 to +31 hits, also includes 0. The AUC, which scores the whole ranking, is not a tie against the channel rule: the same resamples give +0.029 for the champion (+0.019 to +0.039) and +0.025 for the candidate (+0.015 to +0.037), and a tie between the two models (-0.004, -0.008 to +0.001). On 20 other splits the gain over the champion had a median of +0.004 and a range of -0.005 to +0.013, above 0 in 16 splits:
 

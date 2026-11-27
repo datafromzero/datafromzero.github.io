@@ -41,9 +41,9 @@ You have 90 minutes, and the rubric is below, so you can read it now. There is n
 
 ## Warm-up
 
-From memory first, then click to check.
+Try each one from memory, then open the answer. Forgot? Follow the link back to that part of the lesson: looking back is part of the review.
 
-1. In [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/) (DE6a), what did the contract of `order_lines` list, and what did a check do when the data broke it?
+1. In [*Data quality checks that fail loudly*](/data-engineer/data-quality-checks/#1-a-contract-and-the-checks-it-makes) (DE6a), what did the contract of `order_lines` list, and what did a check do when the data broke it?
 
    <details>
    <summary>answer</summary>
@@ -52,7 +52,7 @@ From memory first, then click to check.
 
    </details>
 
-2. In [*Backfills, reruns and recovering from failure*](/data-engineer/backfills-and-failure-recovery/) (DE8), what must be true of a run for a rerun of the same days to be safe?
+2. In [*Backfills, reruns and recovering from failure*](/data-engineer/backfills-and-failure-recovery/#3-rerun-what-failed-and-prove-nothing-doubled) (DE8), what must be true of a run for a rerun of the same days to be safe?
 
    <details>
    <summary>answer</summary>
@@ -322,4 +322,4 @@ It scores 2 on item 8 with the self-score of every item and the minutes.
 
 </details>
 
-That is the last practice before the capstone, [*Capstone: a pipeline repo someone else can run*](/data-engineer/analytics-platform-capstone/) (DE18), where you ship the whole project.
+That is the last practice before the capstone, [*Capstone: a pipeline repo someone else can run*](/data-engineer/analytics-platform-capstone/) (DE18), where you ship the whole project as one repository (*repo* for short: a project folder kept with Git).
