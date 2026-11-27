@@ -218,7 +218,8 @@ npm run check            # every blocking gate
 Single gates: `npm run spell`, `lint:md`, `check:lessons`, `check:graph`, `check:figures`, `check:kb`,
 `check:notebooks`, `test:unit`, `test:fixtures`.
 
-- `npm run kb` rebuilds the knowledge graph after changes to SPEC, CLAUDE.md, `src/`, `scripts/` or config. Search it
+- `npm run kb` rebuilds the knowledge graph after changes to SPEC, CLAUDE.md, `src/`, `scripts/` or config. A pre-commit
+  hook (`.githooks/pre-commit`, set up by `npm ci` or `npm run setup-hooks`) does it for you when the graph is stale. Search it
   with `node scripts/kb.mjs query <terms>` before opening big files.
 - `npm run durations` shows the model behind each lesson's `duration` (D65).
 - `npm run perf` checks homepage frame times; `npm run lighthouse` runs Lighthouse CI on the fixture site.

@@ -5,8 +5,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1714 nodes, 2264 edges, 212 communities (674 isolated nodes).
-- Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 30, npm-script 28, page 5, research-section 500, rule 11, script 205, skill 1, spec-section 25, starlight-component 6, style 8, symbol 362, template 2, token 12.
+- 1716 nodes, 2264 edges, 212 communities (676 isolated nodes).
+- Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 30, npm-script 30, page 5, research-section 500, rule 11, script 205, skill 1, spec-section 25, starlight-component 6, style 8, symbol 362, template 2, token 12.
 - Edges: defines 362, imports 52, mentions 1154, overrides 6, references 31, runs 17, specified-by 4, uses 597, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
@@ -158,7 +158,7 @@ term: id — file:line
 - analytics: `R10` — CLAUDE.md:41
 - lighthouse: `scripts/lighthouse.mjs` — scripts/lighthouse.mjs:1
 - motion: `R6` — CLAUDE.md:28
-- gsap: `pkg:gsap` — package.json:58
+- gsap: `pkg:gsap` — package.json:60
 - scroll: `S12` — SPEC.md:430
 - print: `src/styles/print.css` — src/styles/print.css:1
 - theme: `DG2:light-theme-every-page-the-homepage-included` — design/README.md:53
@@ -175,14 +175,14 @@ term: id — file:line
 - colab: `R:issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d#9-addendum-2026-11-18-learning-environment-colab-decided` — research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md:179
 - sheets: `src/data/cheatsheets/index.ts#SHEETS` — src/data/cheatsheets/index.ts:12
 - term: `src/components/content/Term.astro` — src/components/content/Term.astro:1
-- katex: `pkg:katex` — package.json:59
+- katex: `pkg:katex` — package.json:61
 - math: `src/data/track-skills.ts#MATH` — src/data/track-skills.ts:126
-- mdx: `pkg:@astrojs/mdx` — package.json:43
-- auto-import: `pkg:astro-auto-import` — package.json:57
+- mdx: `pkg:@astrojs/mdx` — package.json:45
+- auto-import: `pkg:astro-auto-import` — package.json:59
 - deploy: `.github/workflows/deploy.yml` — .github/workflows/deploy.yml:1
 - quality gates: `M6` — CLAUDE.md:59
-- cspell: `pkg:cspell` — package.json:65
-- markdownlint: `pkg:markdownlint-cli2` — package.json:31
+- cspell: `pkg:cspell` — package.json:67
+- markdownlint: `pkg:markdownlint-cli2` — package.json:32
 - migration: `S14` — SPEC.md:501
 - license: `R:issues/52-sql-core-academic-depth-interleaved-with-query-practice#5-citation-and-license-rules-for-whoever-builds-this` — research/issues/52-sql-core-academic-depth-interleaved-with-query-practice.md:71
 - changelog: `scripts/check-changelog.ts` — scripts/check-changelog.ts:1
