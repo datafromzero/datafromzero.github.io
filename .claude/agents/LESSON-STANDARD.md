@@ -137,6 +137,7 @@ headings are gone: their content moves as below.
   sheet (`calc_ex1`, `calc_ex2`, `calc_ex3`). Anything the text calls "done for you"
   must exist in the file.
 - **Raw data is never edited**, not in examples and not in solutions (`raw_*` sheets, source CSVs).
+- **A file the learner must obtain is a link** (SPEC D69): write the file name as a link to its raw address, for example `orders.csv` linking `https://raw.githubusercontent.com/datafromzero/datafromzero.github.io/v0.1.0/datasets/cafe-sales/v1/orders.csv`, not the bare name or only a folder; use the release tag the lesson already uses for that dataset, else `main`, and check each new address with `curl -sI` (200). A SQL load script that reads CSV files from its own folder is linked together with those files.
 - **Summary cells sit where a filter cannot hide them** (above the data or on another sheet).
 - **Every number is computed by a script you ran** from `datasets/cafe-sales/v1/` or the lesson file. State which
   rows count (for example completed orders only vs all 1,800, including the canceled \$5.00 order) and say whether a

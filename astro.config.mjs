@@ -54,8 +54,10 @@ export default defineConfig({
 				light: './src/assets/logo/logo-light-bg.svg',
 				alt: '',
 			},
-			// SPEC §12: broken internal links and anchors fail the build.
-			plugins: [starlightLinksValidator()],
+			// SPEC §12: broken internal links and anchors fail the build. `/completion/` (D69) is a page in src/pages, which the
+			// validator cannot see, so the links to it from the career pages are left out of the check; the test
+			// `tests/career-route.test.ts` keeps those links and the page's own checks in step.
+			plugins: [starlightLinksValidator({ exclude: ['/completion/'] })],
 			favicon: '/favicon.svg',
 			head: [
 				{ tag: 'script', attrs: { type: 'speculationrules' }, content: SPECULATION_RULES },

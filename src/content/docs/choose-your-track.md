@@ -12,6 +12,11 @@ Engineer track is about software and systems more than math. The table further d
 
 Think carefully before you choose. The track decides what you study next, and the four careers lean on very different skills.
 
+Each track page ends its lesson list with **What you finish with**: the hours from the first Excel lesson to the capstone, the
+project you hand in, and what employers screen for. Want to build the tables a dashboard reads, with dbt? Analytics engineer is
+not a fifth track, but there is an [analytics engineer route](/data-analyst/#analytics-engineer-route) from the Data Analyst
+track into the dbt lessons of the Data Engineer track, and it says what it skips.
+
 Not sure yet? [Take the career quiz](/career-quiz/) again. It asks ten questions about how you like to work and suggests a
 direction. Then come back and compare it with the charts below.
 
