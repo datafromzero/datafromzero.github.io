@@ -41,11 +41,11 @@ export default function make({ id = 'emb' } = {}) {
 		loop: { cycle: 8 },
 		title: 'Texts as vectors from the origin: the angle between two is their cosine similarity',
 		desc:
-			'Four texts drawn as arrows of length 1 from one point, the origin, in three dimensions: 1 the question about rows with no match, 2 the join question in other words, 3 the phone question that shares words with the first, and 4 the capital of Australia. First the four arrows. Then the angle between 1 and 2 is drawn, a small one, with the cosine 0.62. Then the angle between 1 and 4, close to a right angle, with the cosine 0.012. The model has 384 dimensions; three are drawn.',
+			'Four texts drawn as arrows of length 1 from one point, the origin, in three dimensions: 1 the question about rows with no match, 2 the join question in other words, 3 the phone question that shares words with the first, and 4 the capital of Australia. First the four arrows. Then the angle between 1 and 2 is drawn, the narrowest of the three, with the cosine 0.62. Then the angle between 1 and 4, close to a right angle, with the cosine 0.012. The model has 384 dimensions; three are drawn.',
 		caption: 'Each text is a vector from the origin. The smaller the angle between two vectors, the nearer their cosine is to 1. (The model has 384 dimensions; this drawing has three.)',
 		phases: [
 			[1, 'Four texts, four vectors', { role: 'src', key: 'An embedding is a list of numbers: here each text is an arrow of length 1 from the origin.', changes: [['+', '4 vectors, one for each text']] }],
-			[3, 'A close pair: a small angle', { role: 'grp', key: 'Texts 1 and 2 ask for the same thing in other words, so their arrows point almost the same way.', changes: [['+', 'angle between 1 and 2'], ['+', 'cosine 0.62']] }],
+			[3, 'A close pair: a narrower angle', { role: 'grp', key: 'Texts 1 and 2 ask the same thing in other words, so their arrows are closer than 1 and 3, or 1 and 4.', changes: [['+', 'angle between 1 and 2'], ['+', 'cosine 0.62']] }],
 			[6, 'A far pair: nearly a right angle', { role: 'flt', key: 'Texts 1 and 4 are about different things, so their arrows are nearly at a right angle: cosine near 0.', changes: [['+', 'angle between 1 and 4'], ['+', 'cosine 0.012']] }],
 		],
 		counters: [

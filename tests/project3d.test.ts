@@ -17,7 +17,7 @@ test('the homepage projection is found in careers-figures.ts', () => {
 });
 
 test('camera().P matches the homepage P for the same angle, tilt and canvas', () => {
-	const homepage = new Function('W', 'H', 'x', 'y', 'z', 'a', 'tilt', body!.replace(/: number/g, '') + '')
+	const homepage = new Function('W', 'H', 'x', 'y', 'z', 'a', 'tilt', body!.replace(/: number/g, '') + '');
 	const run = (W: number, H: number, x: number, y: number, z: number, a: number, tilt: number) => homepage(W, H, x, y, z, a, tilt) as number[];
 	for (const [a, tilt] of [[0, 0], [0.5, 0.42], [-0.55, 0.38], [1.2, -0.3]]) {
 		const W = 360;
