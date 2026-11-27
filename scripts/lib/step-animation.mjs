@@ -41,6 +41,8 @@
  *   Nothing may spoil a Predict: a count, key idea or change belongs to the step that shows it; step 1 shows inputs only.
  *   Print shows the final counter values and, in a block before the caption list, every step's Key idea and What changed.
  *
+ * A stepper may also give `caption`: one plain line under the picture (`<p class="ca-cap">`), for what the drawing leaves out.
+ *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
 
@@ -469,7 +471,8 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				? `\n<div class="sa-now sa-st">\n${steps.map((s, i) => `<div class="z${i + 1} c-${s.role}">${keyMarkup(s)}</div>`).join('\n')}\n</div>`
 				: '';
 			// not-content keeps Starlight's own list and form styling off the figure
-			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
+			const cap = caption ? `\n<p class="ca-cap">${esc(caption)}</p>` : ''; // optional: one line under the picture (a note on what the drawing leaves out)
+			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}${cap}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
 			return { markup, steps: N };
 		},
 	};

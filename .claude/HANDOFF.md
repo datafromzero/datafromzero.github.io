@@ -66,6 +66,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
    (LESSON-STANDARD "When a lesson earns a figure"): name what a figure adds before building it; one concept animation per lesson; no new figure where a lesson has
    three or more. Open, not approved: 2D steppers for DE4, DE8, DE9, DE10, MLE8, MLE10 (check each against D63 first). Not done: a pass over the densest
    existing lessons (python charts lessons 8-9 figures, core statistics lessons 5-7); the owner chose to apply D63 to new figures only.
+   MLE5 later got one learner-stepped 3D figure (owner decision 2026-11-27, spec `step-learning-rate`: a loss bowl and the real 20-epoch loss at three learning rates) in place of its curves chart.
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu

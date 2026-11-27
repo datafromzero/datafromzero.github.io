@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { camera, boxFaces } from '../scripts/lib/project3d.mjs';
 import emb from '../scripts/animations/concept-embedding-space.mjs';
 import reg from '../scripts/animations/concept-loss-bowl.mjs';
+import lr from '../scripts/animations/step-learning-rate.mjs';
 
 const src = readFileSync(new URL('../src/scripts/home/careers-figures.ts', import.meta.url), 'utf8');
 const body = src.match(/const P = \(x: number, y: number, z: number, a: number, tilt: number\): Pt => \{([\s\S]*?)\n\t\};/)?.[1];
@@ -48,4 +49,14 @@ test('the 3D figures are plain markup of about 15 KB or less, with no script, st
 		assert.match(m, /<input class="ca-pp" type="checkbox"/); // the Pause / Play button of D41
 		assert.match(m, /class="sa-now"/); // a Key idea for every step
 	}
+});
+
+test('the learning-rate figure is a learner-stepped 3D figure of three steps, plain markup under 15 KB, with a key idea per step and no autoplay', () => {
+	const m = lr().build().markup as string;
+	assert.ok(m.length < 15000, `step-learning-rate: ${m.length} bytes`);
+	assert.doesNotMatch(m, /<script|<style|style="|<filter|<image|<foreignObject|ca-pp|type="checkbox"/);
+	assert.match(m, /<title id="[^"]+">[^<]+<\/title>\n<desc id="[^"]+">[^<]+<\/desc>/);
+	assert.equal((m.match(/type="radio"/g) ?? []).length, 3);
+	assert.equal((m.match(/<div class="z\d c-/g) ?? []).length, 3); // a Key idea for every step
+	assert.match(m, /169 numbers/); // the caption says the drawing has two of them
 });

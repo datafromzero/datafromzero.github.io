@@ -95,7 +95,7 @@ M4_BEFORE, M4_INSIDE = 0.56, 0.218
 M5_INPUTS, M5_HIDDEN = 19, 8
 M5_NEURON, M5_SMALL = 20, 169
 M5_BEST_EPOCH, M5_BEST_LOSS, M5_END = 28, 0.638, (0.330, 0.874)
-M5_FLAT_HALF, M5_FLAT_SHARE = 0.693, 0.689
+M5_FLAT_SHARE = 0.689
 M5_LR_ENDS = {0.01: 0.672, 0.1: 0.631, 1.0: 0.632, 10.0: 1.215}
 
 
@@ -569,51 +569,10 @@ def charts(torch_charts=True):
         assert int(min(range(300), key=val.__getitem__)) + 1 == M5_BEST_EPOCH and round(val[M5_BEST_EPOCH - 1], 3) == M5_BEST_LOSS
         assert (round(curves[-1][0], 3), round(curves[-1][1], 3)) == M5_END
 
-        # ---- mle5-lr: the loss on the fitting people over 20 epochs at four learning rates ----
-        hist = {}
+        # ---- the 20-epoch losses drawn by scripts/animations/step-learning-rate.mjs (a stepper, no longer a chart of this file): check that the run still ends where the lesson says ----
         for lr in M5_LR_ENDS:
             _, h = ns["fit_network"](ns["Xf"], ns["yf"], 8, lr, 20)
-            hist[lr] = [p[0] for p in h]
-            assert round(hist[lr][-1], 3) == M5_LR_ENDS[lr], (lr, hist[lr][-1])
-        top = math.ceil(max(max(h) for h in hist.values()) * 5) / 5
-        s = Svg("mle5-lr", "Loss on the fitting people over 20 epochs at four learning rates, with the loss of a flat chance of 0.5",
-                "Two line charts of the loss on the 10,021 fitting people after each of 20 epochs, drawn from the run of unit 3. "
-                f"The first shows all four learning rates on a scale from 0.6 to {top:.1f}: the rate 10.0 jumps up and down and ends at {M5_LR_ENDS[10.0]}, above a dashed line at "
-                f"{M5_FLAT_HALF}, the loss of a chance of 0.5 for everyone. The second zooms on the three other rates on a scale from 0.62 to 0.72: the rate 0.01 ends at "
-                f"{M5_LR_ENDS[0.01]} and is still falling, and the rates 0.1 and 1.0 end at {M5_LR_ENDS[0.1]} and {M5_LR_ENDS[1.0]}.")
-        title_line(s, "Loss after each epoch, four learning rates", 8, 10)
-        X0, X1 = 40, 262
-        X = Axis(1, 20, X0, X1)
-        cols = dict(zip(M5_LR_ENDS, (BLUE, GREEN, PURPLE, OCHRE)))
-
-        def panel(y0, y1, lo, hi, step, rates, head):
-            Y = Axis(lo, hi, y1, y0)
-            s.text(8, y0 - 8, head, size=9.5, weight=600)
-            v = lo
-            while v <= hi + 1e-9:
-                s.line(X0, Y(v), X1, Y(v), opacity=0.5 if abs(v - lo) < 1e-9 else 0.13)
-                s.text(X0 - 5, Y(v) + 3.5, f"{v:.2f}" if step < 0.1 else f"{v:.1f}", size=9, anchor="end", opacity=0.8)
-                v += step
-            s.line(X0, Y(M5_FLAT_HALF), X1, Y(M5_FLAT_HALF), w=1.2, opacity=0.7, dash="4 3")
-            for lr in rates:
-                s.poly([(X(e + 1), Y(val)) for e, val in enumerate(hist[lr])], cols[lr], w=2)
-            return Y
-
-        Y1 = panel(34, 130, 0.6, top, 0.2, list(M5_LR_ENDS), "all four rates")
-        s.text(X1 + 6, Y1(hist[10.0][-1]) + 3.5, f"{M5_LR_ENDS[10.0]}", size=9.5, weight=600)
-        Y2 = panel(168, 238, 0.62, 0.72, 0.02, [0.01, 0.1, 1.0], "zoom on the three other rates")
-        s.text(X1 + 6, Y2(hist[0.01][-1]) + 3.5, f"{M5_LR_ENDS[0.01]}", size=9.5, weight=600)
-        s.text(X1 + 6, Y2(hist[0.1][-1]) + 3.5, f"{M5_LR_ENDS[0.1]}, {M5_LR_ENDS[1.0]}", size=9.5, weight=600)
-        for e in (1, 5, 10, 15, 20):
-            s.text(X(e), 252, str(e), size=9, anchor="middle", opacity=0.8)
-        s.text((X0 + X1) / 2, 265, "epoch", size=9, anchor="middle", opacity=0.85)
-        for k, lr in enumerate(M5_LR_ENDS):
-            x = 8 + k * 84
-            s.rect(x, 281, 14, 3, cols[lr])
-            s.text(x + 19, 286, f"rate {lr:g}", size=9.5)
-        s.line(8, 303, 22, 303, w=1.2, opacity=0.7, dash="4 3")
-        s.text(27, 306, f"loss of a flat chance of 0.5: {M5_FLAT_HALF}", size=9.5)
-        out["mle5-lr"] = s.render()
+            assert round(h[-1][0], 3) == M5_LR_ENDS[lr], (lr, h[-1][0])
 
         # ---- mle5-curves: the two curves of the 500-person pilot over 300 epochs ----
         s = Svg("mle5-curves", "Loss on the 500 people the network learns from and on the 3,341 validation people, over 300 epochs",
@@ -670,7 +629,6 @@ def facts_ok(name, text):
         "mle4-routes": ["balanced 0.566 0.16", "0.104 0.566 0.167"],
         "mle4-folds": ["0.56 0.218", "5 times each"],
         "mle5-network": ["20 169", "160", "8 weights and a bias"],
-        "mle5-lr": ["0.672", "0.631", "0.632", "1.215", "0.693"],
         "mle5-curves": ["28 0.638", "0.330", "0.874", "0.689"],
     }[name]
     return [n for n in need if n not in text]

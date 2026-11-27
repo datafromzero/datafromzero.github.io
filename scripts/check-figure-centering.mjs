@@ -13,7 +13,7 @@ import { figureCentering } from './lib/figure-extent.mjs';
 const root = new URL('../', import.meta.url);
 const maker = new URL('scripts/make-animation.mjs', root).pathname;
 const TOL = 3;
-const names = execFileSync('node', [maker, '--list'], { encoding: 'utf8' }).split('\n').filter((n) => n.startsWith('concept-') || n.startsWith('sql-'));
+const names = execFileSync('node', [maker, '--list'], { encoding: 'utf8' }).split('\n').filter((n) => n.startsWith('concept-') || n.startsWith('sql-') || n.startsWith('step-'));
 const keys = names.flatMap((n) => (n === 'concept-join' ? ['inner', 'left', 'right', 'full', 'cross', 'all'].map((v) => `${n}:${v}`) : [n]));
 
 const bad = [];
