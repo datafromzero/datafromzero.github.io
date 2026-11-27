@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1591 nodes, 2020 edges, 201 communities (625 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 61, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 197, skill 1, spec-section 25, starlight-component 6, style 7, symbol 314, template 2, token 12.
-- Edges: defines 314, imports 51, mentions 1007, overrides 6, references 30, runs 15, specified-by 4, uses 556, uses-token 32, validated-by 5.
+- 1606 nodes, 2044 edges, 206 communities (625 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 61, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 202, skill 1, spec-section 25, starlight-component 6, style 7, symbol 324, template 2, token 12.
+- Edges: defines 324, imports 51, mentions 1021, overrides 6, references 30, runs 15, specified-by 4, uses 556, uses-token 32, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,12 +15,12 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `src/components/content/Solution.astro` | component | 207 | src/components/content/Solution.astro:1 |
 | 2 | `src/components/content/Exercise.astro` | component | 206 | src/components/content/Exercise.astro:1 |
-| 3 | `D41` Lesson step-by-step figures | decision | 104 | SPEC.md:68 |
+| 3 | `D41` Lesson step-by-step figures | decision | 110 | SPEC.md:68 |
 | 4 | `src/components/content/OpenInColab.astro` | component | 78 | src/components/content/OpenInColab.astro:1 |
 | 5 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
 | 6 | `.claude/HANDOFF.md` | doc | 66 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
-| 8 | `agent:LESSON-STANDARD` | agent | 35 | .claude/agents/LESSON-STANDARD.md:1 |
+| 8 | `agent:LESSON-STANDARD` | agent | 37 | .claude/agents/LESSON-STANDARD.md:1 |
 | 9 | `.claude/MISTAKES.md` | doc | 33 | .claude/MISTAKES.md:1 |
 | 10 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 11 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
@@ -50,18 +50,18 @@ Label propagation; each community is named by its top-degree node.
 
 Edges that cross communities, lowest combined degree first (peripheral nodes bridging topics).
 
-- `ctype:career` -specified-by-> `S5.4` (C82 to C80, src/lib/content-schemas.ts:98)
-- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C98 to C2, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C125 to C24, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C43 to C69, src/scripts/run-sql.ts:2)
-- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C187 to C184, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C72 to C11, src/styles/math.css:17)
+- `ctype:career` -specified-by-> `S5.4` (C84 to C82, src/lib/content-schemas.ts:98)
+- `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C100 to C2, scripts/animations/concept-columnar-scan.mjs:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C128 to C24, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C44 to C71, src/scripts/run-sql.ts:2)
+- `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C192 to C189, src/layouts/HomeLayout.astro:39)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C11, src/styles/math.css:17)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C7 to C20, .claude/skills/kb/SKILL.md:3)
-- `M8` -mentions-> `D24` (C76 to C20, CLAUDE.md:67)
+- `M8` -mentions-> `D24` (C78 to C20, CLAUDE.md:67)
 - `D46` -mentions-> `README.md` (C2 to C7, SPEC.md:73)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C32 to C52, design/README.md:181)
-- `M6` -mentions-> `D26` (C2 to C71, CLAUDE.md:63)
-- `scripts/check-lessons.mjs` -mentions-> `D47` (C176 to C2, scripts/check-lessons.mjs:10)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C53, design/README.md:181)
+- `M6` -mentions-> `D26` (C2 to C73, CLAUDE.md:63)
+- `scripts/check-lessons.mjs` -mentions-> `D47` (C181 to C2, scripts/check-lessons.mjs:10)
 
 ## Decisions (SPEC §1)
 
