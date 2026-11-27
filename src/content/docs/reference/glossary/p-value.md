@@ -6,7 +6,7 @@ aliases: [p value, p-values]
 reviewed: 2026-11-27
 ---
 
-A p-value is the share of luck-only results that are as far from "no effect" as the one you saw. A small p-value means the data are hard to explain by luck alone; a large one means luck could easily have produced them. The American Statistical Association says what it is not: it does not measure the probability that the hypothesis is true, and it does not measure the size or the importance of an effect. A tiny gap can have a tiny p-value when there are very many people, so report the gap too.
+A p-value is the share of luck-only results that are as far or farther from "no effect" than the one you saw. A small p-value means the data are hard to explain by luck alone; a large one means luck could easily have produced them. The American Statistical Association says what it is not: it does not measure the probability that the hypothesis is true, and it does not measure the size or the importance of an effect. A tiny gap can have a tiny p-value when there are very many people, so report the gap too.
 
 ## Where you meet it
 

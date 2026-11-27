@@ -10,9 +10,9 @@ A baseline is the reference result that a new number or model has to beat. Googl
 
 ## Where you meet it
 
+- [*Tables, sorting and filtering*](/excel/tables-sort-filter/) (E5): the starting numbers you compare a filter with.
 - [*Framing a prediction problem, splitting and a baseline*](/core/framing-split-and-baseline/) (C19): a fair baseline beside the first model.
 - [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2): a baseline of more than one rung.
-- [*Tables, sorting and filtering*](/excel/tables-sort-filter/) (E5): the starting numbers you compare a filter with.
 
 ## Source
 

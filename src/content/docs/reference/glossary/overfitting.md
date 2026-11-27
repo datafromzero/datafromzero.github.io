@@ -10,8 +10,8 @@ Overfitting is when a model learns the quirks of the rows it was built from inst
 
 ## Where you meet it
 
-- [*Overfitting and cross-validation*](/data-scientist/cross-validation-and-overfitting/) (DS5): overfitting is a gap.
 - [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2): score the model on the rows it learned from as well.
+- [*Overfitting and cross-validation*](/data-scientist/cross-validation-and-overfitting/) (DS5): overfitting is a gap.
 
 ## Source
 

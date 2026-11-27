@@ -1,7 +1,7 @@
 ---
 id: glossary-schema
 term: Schema
-short: 'The plan of a database: which tables it has, what columns each holds, and how the tables link.'
+short: 'The plan of a database: its tables, columns and links. Also a named folder that groups tables inside a database.'
 aliases: [database schema]
 reviewed: 2026-11-27
 ---
@@ -10,8 +10,8 @@ A schema is the plan of a database: which tables it holds, which columns each ta
 
 ## Where you meet it
 
-- [*Star schema: facts and dimensions*](/sql/star-schema/) (S31): a star schema, with the plan defined in a sentence.
 - [*Who can see what: roles, grants and SQL injection*](/sql/access-and-injection/) (S30): a schema as a named folder of tables.
+- [*Star schema: facts and dimensions*](/sql/star-schema/) (S31): a star schema, with the plan defined in a sentence.
 - [*Designing a star schema from business questions*](/core/designing-a-star-schema/) (C18): designing a star schema from business questions.
 
 ## Source

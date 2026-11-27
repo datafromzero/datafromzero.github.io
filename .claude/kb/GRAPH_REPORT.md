@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1714 nodes, 2239 edges, 211 communities (674 isolated nodes).
+- 1714 nodes, 2240 edges, 211 communities (674 isolated nodes).
 - Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 30, npm-script 28, page 5, research-section 500, rule 11, script 205, skill 1, spec-section 25, starlight-component 6, style 8, symbol 362, template 2, token 12.
-- Edges: defines 362, imports 52, mentions 1130, overrides 6, references 31, runs 17, specified-by 4, uses 596, uses-token 36, validated-by 5.
+- Edges: defines 362, imports 52, mentions 1130, overrides 6, references 31, runs 17, specified-by 4, uses 597, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -21,8 +21,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 6 | `.claude/HANDOFF.md` | doc | 71 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 46 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 44 | .claude/agents/LESSON-STANDARD.md:1 |
-| 9 | `.claude/MISTAKES.md` | doc | 41 | .claude/MISTAKES.md:1 |
-| 10 | `src/components/content/Term.astro` | component | 41 | src/components/content/Term.astro:1 |
+| 9 | `src/components/content/Term.astro` | component | 42 | src/components/content/Term.astro:1 |
+| 10 | `.claude/MISTAKES.md` | doc | 41 | .claude/MISTAKES.md:1 |
 | 11 | `S6` Authoring components | spec-section | 33 | SPEC.md:290 |
 | 12 | `src/site.ts` | module | 33 | src/site.ts:1 |
 | 13 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |

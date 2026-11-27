@@ -10,8 +10,8 @@ Apache Parquet is an open source, column-oriented data file format designed for 
 
 ## Where you meet it
 
-- [*File formats and partitioning*](/data-engineer/file-formats-and-partitioning/) (DE3): JSON, CSV and Parquet compared on size, types and speed.
 - [*Data beyond tables: nested JSON, events and formats*](/core/data-beyond-tables/) (C31): choosing a file format and adding a Parquet export.
+- [*File formats and partitioning*](/data-engineer/file-formats-and-partitioning/) (DE3): JSON, CSV and Parquet compared on size, types and speed.
 
 ## Source
 
