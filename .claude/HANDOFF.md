@@ -59,12 +59,13 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## What comes next (build plan item 8, content)
 
-0. **3D figures in track lessons (owner decisions, 2026-11-26): the pilot is built and approved by the owner (PDF, 2026-11-27).** Build-time SVG drawn with the homepage figures' projection
-   (`scripts/lib/project3d.mjs`), fixed angle, CSS-only motion as D41 concept animations (SPEC D41 amended); no JavaScript in lessons (the canvas option was declined). Pilot lessons, one figure each:
-   MLE7 (`concept-embedding-space`, after unit 2), DE30 (`concept-table-block`, after unit 2) and DS60 (`concept-loss-bowl`, after unit 1). Style and lead-in sentences approved; next, nine more (same flow: build, PDF, owner approval, merge): DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
-   MLE80, MLE100), not yet approved. Writing a new 3D figure: copy a spec, draw with `slab` and `byDepth` (`figure3d.mjs`) or `camera().P`, keep the markup at 15 KB or less, run
-   `node scripts/refresh-concept-figures.mjs`, then look at it at 390 and 1280 px in both themes.
-
+0. **3D figures in track lessons: settled (owner decisions 2026-11-26 and 2026-11-27, SPEC D41 and D63).** Pilot of three, then nine more were built
+   (DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90), reviewed, and NOT published: a team review (learner reading, multimedia-learning evidence,
+   figure-density count) found most restated a table or printed output or drew a 2D idea in perspective, and the owner chose to keep only MLE7
+   (`concept-embedding-space`) and DS60 (`concept-loss-bowl`); DE30's 3D figure was removed, with `scripts/lib/figure3d.mjs` and the `.ed` style. New rule D63
+   (LESSON-STANDARD "When a lesson earns a figure"): name what a figure adds before building it; one concept animation per lesson; no new figure where a lesson has
+   three or more. Open, not approved: 2D steppers for DE40, DE80, DE90, DE100, MLE80, MLE100 (check each against D63 first). Not done: a pass over the densest
+   existing lessons (python charts lessons 8-9 figures, core statistics lessons 5-7); the owner chose to apply D63 to new figures only.
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).
    Open work is in issue #41: the owner checks steps that could not be run here (Power Query, Sheets `QUERY`, some menu

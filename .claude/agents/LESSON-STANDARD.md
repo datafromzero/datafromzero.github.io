@@ -135,6 +135,14 @@ Hints, half-solutions and solutions stay fenced blocks. Rules:
 - The SQL stage has no notebooks and no Colab link (D43): every query runs in the page. Never write `con.sql`, `.show()`,
   `%pip`, "notebook" or "Colab" in a SQL lesson, and never add a `notebook` field or `<OpenInColab />`.
 
+## When a lesson earns a figure (SPEC D63)
+
+- **Name what it adds.** Before adding any figure (chart, stepper, concept animation, 3D figure), write down the one thing the
+  learner cannot get from the page as it stands: the text, a table, printed output or an earlier figure. If you cannot, add none.
+- **At most one concept animation per lesson**, and no new figure in a lesson that already has three or more.
+- **Once across the roadmap.** A concept drawn in an earlier lesson is linked, not redrawn (link the earlier lesson's figure; do not draw it again).
+- **No number that an exercise asks for.** Grep the lesson's On your own and Check yourself for every number on the figure.
+
 ## Step-by-step figures (SPEC D41)
 
 Pictures and animations are **original work**, drawn from our own cafe-sales rows and our design tokens; external
@@ -255,16 +263,18 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   check that its frame equals the running loop paused at the end of the last phase of that step.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
-## 3D figures (SPEC D41, pilot 2026-11-26)
+## 3D figures (SPEC D41, D63)
 
-A concept animation may be drawn in 3D when the idea is a shape in space (vectors and angles, a table as a block of cells, a loss bowl). It is the same figure
-type with the same controls, steps, Key idea and fallbacks; only the drawing differs: shapes are projected at build time at ONE fixed angle with
-`scripts/lib/project3d.mjs` (the homepage projection) and drawn by `scripts/lib/figure3d.mjs` (`slab`, `byDepth`) or with `camera().P` into `a.path` and `a.circle`.
-Motion is the shared CSS only (fades, `draw`, `move`). Rules: markup 15 KB or less (whole pixels, a few paths, merge faces of one tint); a number on it comes from the
-lesson or is left out, and a caption says when the drawing has fewer dimensions than the real thing; neutral gray for what has no clause meaning; draw far to near;
-labels sit where no part of the figure passes at any phase (a leader line is fine); place it after the Why of the unit it illustrates, with one short lead-in sentence.
-Spec files: `concept-embedding-space`, `concept-table-block`, `concept-loss-bowl`. After a change, `node scripts/refresh-concept-figures.mjs`, then look at it at 390 and
-1280 px in both themes.
+A concept animation may be drawn in 3D **only when the third dimension does real work**: a quantity over two inputs (a loss bowl over two
+coefficients) or an angle between vectors (MLE7). A stack, block, tower, layers, a table or a bar chart is drawn flat: depth that encodes
+nothing adds load and distorts what the learner compares. The team review of 2026-11-27 kept two of twelve built figures (MLE7, DS60).
+It is the same figure type with the same controls, steps, Key idea and fallbacks; shapes are projected at build time at ONE fixed angle with
+`camera().P` from `scripts/lib/project3d.mjs` (the homepage projection) into `a.path` and `a.circle`. Motion is the shared CSS only (fades, `draw`, `move`).
+Rules: markup 15 KB or less (whole pixels, a few paths); every quantity is also written as text, so the learner never reads one off the projection;
+a number on it comes from the lesson or is left out, and a caption says when the drawing has fewer dimensions than the real thing; words for size fit the
+drawn number; neutral gray for what has no clause meaning; draw far to near; labels sit where no part of the figure passes at any phase; place it after the
+Why of the unit it illustrates, with one short lead-in sentence. Spec files: `concept-embedding-space`, `concept-loss-bowl`. After a change,
+`node scripts/refresh-concept-figures.mjs`, then look at it at 390 and 1280 px in both themes.
 
 ## Entity-relationship diagrams (crow's foot)
 
