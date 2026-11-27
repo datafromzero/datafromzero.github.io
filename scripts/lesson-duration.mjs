@@ -204,6 +204,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			for (const m of l.text.matchAll(new RegExp(ABOUT.source, 'gm'))) {
 				if (Number(m[2]) !== l.old) bad.push(`${l.file}: the line "About ${m[2]} minutes" disagrees with duration ${l.old} (run node scripts/lesson-duration.mjs --write)`);
 			}
+			// Any other sentence that starts "About N minutes" must agree too (P1 once said 25 beside a 40-minute header).
+			for (const m of l.text.matchAll(/(?<=[.!?]\s+|\*\*\s*)About (\d+) minutes\b/g)) {
+				if (Number(m[1]) !== l.old) bad.push(`${l.file}: the sentence "About ${m[1]} minutes" disagrees with duration ${l.old}`);
+			}
 		}
 		for (const m of bad) console.error(m);
 		console.log(bad.length ? `${bad.length} duration problem(s)` : `durations honest: ${all.filter((l) => l.est).length} lessons at or above 80% of the model, "About N minutes" lines agree`);

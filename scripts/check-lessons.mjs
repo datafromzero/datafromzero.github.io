@@ -10,6 +10,8 @@
  *   - a published lesson whose name in the sidebar (short_title, else title) too wide for one line (D47; measured glyph widths)
  *   - a warm-up that does not open with the standard line, or a warm-up question that names an earlier lesson (a code such as
  *     S18, or "(chapter 3)") without a link to it (D66; scripts/lib/warmup-links.mjs)
+ *   - a `<Term>` with an unknown glossary id, in a heading, code, figure, details, exercise, warm-up or answer, used twice for the same
+ *     word in one lesson, or more than six times in a lesson (D68; scripts/lib/term-rules.mjs)
  * Code spans, fenced code and SVG text (which shows data values as they are) are ignored for the spelling check.
  * Lessons that are still unwritten stubs are skipped: their planned datasets may not exist yet.
  */
@@ -17,6 +19,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lessonCode } from '../src/lib/roadmap.ts';
 import { headingIds, warmupExempt, warmupProblems } from './lib/warmup-links.mjs';
+import { termProblems } from './lib/term-rules.mjs';
 
 const STAGES = ['excel', 'sql', 'python', 'core', 'data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer'];
 const DOCS = 'src/content/docs';
@@ -52,6 +55,13 @@ for (const stage of STAGES) {
 	}
 }
 const notTaught = [];
+// The glossary ids a `<Term>` may name (D68): the `id` of every entry file in the glossary folder.
+const glossaryIds = new Set();
+for (const name of existsSync(join(DOCS, 'reference', 'glossary')) ? readdirSync(join(DOCS, 'reference', 'glossary')) : []) {
+	if (name === 'index.md' || !name.endsWith('.md')) continue;
+	const id = readFileSync(join(DOCS, 'reference', 'glossary', name), 'utf8').match(/^id:\s*(\S+)\s*$/m)?.[1];
+	if (id) glossaryIds.add(id);
+}
 
 const problems = [];
 const report = (file, line, msg) => problems.push(`${file}:${line}: ${msg}`);
@@ -95,6 +105,7 @@ for (const stage of STAGES) {
 
 		for (const p of warmupProblems(lines, stage, index)) report(file, p.line, p.msg);
 		for (const e of warmupExempt(lines)) notTaught.push(`${file}:${e.line}`);
+		for (const p of termProblems(lines, glossaryIds)) report(file, p.line, p.msg);
 
 		let inFence = false;
 		let inSvg = false;

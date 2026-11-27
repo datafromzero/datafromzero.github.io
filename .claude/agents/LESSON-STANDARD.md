@@ -149,6 +149,25 @@ headings are gone: their content moves as below.
 - **Quotes are exact**, or they are paraphrases without quote marks.
 - **SVG pictures match the real data** (codes, store numbers, results).
 
+## Glossary links (SPEC D68)
+
+The glossary (`/reference/glossary/`, 41 entries in `src/content/docs/reference/glossary/`) is the second layer under the plain gloss you
+write at a word's first use: the learner taps a dotted word and reads one short sentence, or follows it to a page.
+
+- **When to use `<Term id="glossary-slug">word</Term>`:** at the first use in the lesson of a word that has an entry, when the learner may
+  not know it, and only in an `.mdx` lesson (convert nothing). **Keep your own gloss** and wrap the word: "a `<Term>till</Term>` (the cash register)". Do not
+  repeat the entry's definition in a second sentence.
+- **Never** in a heading, a code block or span you want to stay code, a figure, an `<svg>`, a `<details>` (hints, half-solutions, answers, self-explanation
+  boxes), an `<Exercise>`, the Warm-up, Finish it, On your own or Check yourself, a "Can you skip Part N?" test, a Predict, Why or Expected line. A Term
+  there would hint at an answer or crowd a question. `npm run check:lessons` fails these.
+- **One Term for each word in a lesson, at most six in a lesson.** A page full of dotted underlines is noise: link the words that trip a beginner
+  (`till`, `walk-in`, `grain`, `NULL`, `notebook`, `terminal`, `commit`, `p-value`), not every technical word.
+- **Which entry:** the word's meaning in the sentence decides. `commit` in Git is `glossary-commit-git`, in a database `glossary-commit-database`;
+  "branch" of a `CASE` is not `glossary-branch` (a Git branch); "model" of a data model is not `glossary-model`. When no entry fits, write no Term.
+- **A new recurring word** (three or more lessons, beginners trip on it) gets an entry in the same PR: `id: glossary-{slug}`, `short` of at most 140
+  characters, aliases, a 2 to 5 sentence body, `## Where you meet it` (title, code) and `## Source`; check the definition against an official page you
+  opened and the lesson that teaches it. Quote any YAML value that YAML reads as a non-string (`'NULL'`, `'yes'`). Run `npm test`.
+
 ## Runnable SQL (SPEC D42)
 
 In every SQL lesson, a query the learner should run is a `<RunSQL query={`...`} />` (no import; SPEC §6), not a fenced block:
