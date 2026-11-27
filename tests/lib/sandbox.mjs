@@ -57,6 +57,17 @@ export function useDocs(sandbox, ...fixtureDirs) {
 		const at = text.indexOf('\n## Placement test\n');
 		if (at >= 0) writeFileSync(page, `${text.slice(0, at)}\n## Placement test\n\nStub for the sandbox.\n`);
 	}
+	// The career pages' box "What you finish with" and the analytics engineer route (SPEC D69) link real lessons too: keep
+	// their headings (anchors that `/start/` and `/choose-your-track/` link) and cut the text.
+	for (const stage of ['data-analyst', 'data-engineer', 'data-scientist', 'ml-engineer']) {
+		const page = join(docs, stage, 'index.md');
+		if (!existsSync(page)) continue;
+		const text = readFileSync(page, 'utf8');
+		const at = text.indexOf('\n## What you finish with\n');
+		if (at < 0) continue;
+		const route = stage === 'data-analyst' ? '\n## Analytics engineer route\n\nStub for the sandbox.\n' : '';
+		writeFileSync(page, `${text.slice(0, at)}\n## What you finish with\n\nStub for the sandbox.\n${route}`);
+	}
 	for (const f of fixtureDirs) cpSync(join(f, 'docs'), docs, { recursive: true });
 	return docs;
 }

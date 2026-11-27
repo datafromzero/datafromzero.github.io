@@ -69,6 +69,14 @@ Each stage also has a page with its lessons in order: [Excel / Sheets](/excel/),
 [Advanced core](/core/), [Data Analyst](/data-analyst/), [Data Engineer](/data-engineer/),
 [Data Scientist](/data-scientist/) and [ML / AI Engineer](/ml-engineer/).
 
+## When you finish
+
+Each career page ([Data Analyst](/data-analyst/#what-you-finish-with), [Data Engineer](/data-engineer/#what-you-finish-with),
+[Data Scientist](/data-scientist/#what-you-finish-with) and [ML / AI Engineer](/ml-engineer/#what-you-finish-with)) has a
+section, **What you finish with**: the hours for the whole route from the first Excel lesson, the capstone you hand in, and what
+employers screen for. datafromzero gives no verified certificate, because it has no accounts. The [completion page](/completion/)
+prints on one page for your own use, and says on it that it is not a certificate.
+
 ## Report a problem
 
 Every lesson ends with a **Report an issue** form, and the **Report a problem** button (a small flag) in the menu at the
