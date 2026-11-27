@@ -40,8 +40,8 @@ Where you practice depends on the stage:
   it to Google Drive and open it with Google Sheets.
 - **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
   and nothing you type is sent anywhere.
-- **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (a free
-  Google account is needed). A notebook is easier on a computer or tablet than on a phone.
+- **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (you sign in
+  with a Google account; Colab is free of charge). A notebook is easier on a computer or tablet than on a phone.
 - **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
   a Colab notebook, or, for some, tools you install on your own computer.
 - Practice datasets are in the project repository and are free to reuse (see the license page).
