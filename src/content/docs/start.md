@@ -3,9 +3,10 @@ title: Start here
 description: How to use datafromzero, a free, open roadmap for learning data from zero, and a map of the whole path.
 ---
 
-datafromzero is a free, open roadmap for people who only know Microsoft Office. It goes from
-Excel and Google Sheets to SQL, then Python, then an advanced core, and finally four data careers.
-The site is still being written, so lessons appear stage by stage.
+datafromzero is a free, open roadmap that starts where most people start, with spreadsheets. It goes
+from Excel and Google Sheets to SQL, then Python, then an advanced core of statistics, Git, data
+modeling and cloud basics, and finally the skills of four data careers. Every stage and every career branch is
+published; lessons are still reviewed and improved, and the [changelog](/changelog/) lists each change.
 
 Not an English reader yet? [Read in your language](/translate/) shows how to translate the pages with Chrome.
 
@@ -33,10 +34,16 @@ You can skip a stage you already know. Read its last lessons first: if they feel
 Try each exercise before you open its solution. Solutions are hidden directly under the exercise
 and open with a click; this works without JavaScript.
 
-Practice happens outside this site, so nothing you type here is run or saved:
+Where you practice depends on the stage:
 
-- Excel lessons link to a Google Sheets template. Use **Make a copy** to get your own.
-- Python and SQL lessons link to a Google Colab notebook. Use **Open in Colab** and run the cells.
+- **Excel:** each lesson has a practice workbook (`.xlsx`) to download. Open it in Excel, or upload
+  it to Google Drive and open it with Google Sheets.
+- **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
+  and nothing you type is sent anywhere.
+- **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (a free
+  Google account is needed). A notebook is easier on a computer or tablet than on a phone.
+- **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
+  a Colab notebook, or, for some, tools you install on your own computer.
 - Practice datasets are in the project repository and are free to reuse (see the license page).
 
 ## Prerequisites and "Unlocks next"

@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1605 nodes, 2048 edges, 205 communities (625 isolated nodes).
+- 1605 nodes, 2049 edges, 204 communities (625 isolated nodes).
 - Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 62, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 201, skill 1, spec-section 25, starlight-component 6, style 8, symbol 322, template 2, token 12.
-- Edges: defines 322, imports 51, mentions 1023, overrides 6, references 31, runs 15, specified-by 4, uses 556, uses-token 35, validated-by 5.
+- Edges: defines 322, imports 51, mentions 1023, overrides 6, references 31, runs 15, specified-by 4, uses 556, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -35,7 +35,7 @@ Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (212): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
 - **C2 HANDOFF.md** (50): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S3.1 Route map
-- **C3 README.md** (19): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
+- **C3 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
 - **C4 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C5 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
 - **C6 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
@@ -53,15 +53,15 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `ctype:career` -specified-by-> `S5.4` (C84 to C82, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C100 to C2, scripts/animations/concept-columnar-scan.mjs:2)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C128 to C23, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C43 to C71, src/scripts/run-sql.ts:2)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C43 to C72, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C191 to C188, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C8 to C19, .claude/skills/kb/SKILL.md:3)
 - `M8` -mentions-> `D24` (C78 to C19, CLAUDE.md:67)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C74 to C3, src/styles/math.css:17)
 - `D46` -mentions-> `README.md` (C2 to C8, SPEC.md:73)
 - `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C32 to C52, design/README.md:181)
-- `M6` -mentions-> `D26` (C2 to C73, CLAUDE.md:63)
+- `M6` -mentions-> `D26` (C2 to C74, CLAUDE.md:63)
 - `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C136 to C27, scripts/animations/concept-loss-bowl.mjs:2)
+- `scripts/check-lessons.mjs` -mentions-> `D47` (C180 to C2, scripts/check-lessons.mjs:10)
 
 ## Decisions (SPEC §1)
 
