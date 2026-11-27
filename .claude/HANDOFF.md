@@ -30,7 +30,7 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
   here, Career quiz and the light/dark switch. On phones it replaces Starlight's menu button and "On this page" bar.
 - **Project pages:** `/start/`, `/about/`, `/cite/`, `/changelog/`, `/license/`, `/privacy/`, `/career-quiz/` (D33).
 - **Dataset:** `datasets/cafe-sales/` v1 (D29), built by `scripts/build-cafe-sales.py`; not released until `v1.0.0`.
-- **Curriculum (D29, D32, D40, D45, D49, D61):** 222 lessons in 8 stages (Excel, SQL, Python, Data Analyst, Data Scientist and Data Engineer published, the rest `status: draft`, never deployed; the Python lesson `charts-plotly`, P22b, D61, published 2026-11-25; ML Engineer MLE1 to MLE10 published 2026-11-25 and MLE11 to MLE16 on 2026-11-26 (main path complete), the 8 deep-dive lessons drafts; **done (D62, owner approval 2026-11-26): MLE8 to MLE12 and MLE16 run on IBM Granite 4.0 1B, MLE2 `tiktok` → `podcast`, ml-starter rebuilt (new `PUBLISHED` hashes from lesson 2 on; the owner force-pushes main and the tags from a Codespace); the owner still redeploys the feedback Worker (D62 country check)**):
+- **Curriculum (D29, D32, D40, D45, D49, D61):** 222 lessons in 8 stages (Excel, SQL, Python, Data Analyst, Data Scientist and Data Engineer published, the rest `status: draft`, never deployed; the Python lesson `charts-plotly`, P22b, D61, published 2026-11-25; ML Engineer MLE1 to MLE10 published 2026-11-25 and MLE11 to MLE16 on 2026-11-26 (main path complete), the 8 deep-dive lessons drafts; **done (D62, owner approval 2026-11-26): MLE8 to MLE12 and MLE16 run on IBM Granite 4.0 1B, MLE2 `tiktok` → `podcast`, ml-starter rebuilt (new `PUBLISHED` hashes from lesson 2 on) and force-pushed by the owner on 2026-11-26 (`mle-16-done` = `856860b`, 12 tags); the feedback Worker with the D62 country check is live (version ed75dca8, typed in by hand, so diff it against `workers/feedback/worker.js` once)**):
   Excel 22, SQL 39, Python 28, core 44 (six parts and a capstone, D49), Data Analyst 18 (DA8b published 2026-11-25; split lessons read a, b, c: `SPLITS` in `src/lib/roadmap.ts`), Data Engineer 31 (20 plus an 11-lesson optional deep dive, published 2026-11-25),
   Data Scientist 16, ML Engineer 24 (16 plus an 8-lesson optional deep dive); track shape is D55, lesson codes DA, DE, DS and MLE.
   The map is `research/curriculum/06-curriculum-map.yaml` (its track stages match the files; other stages were not re-synced); lesson frontmatter is the source of truth.
@@ -59,13 +59,11 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## What comes next (build plan item 8, content)
 
-0. **3D figures in track lessons (owner decisions, 2026-11-26), after the Granite migration ships:** build-time SVG
-   drawn with the homepage figures' projection (`src/scripts/home/careers-figures.ts`), fixed angle, motion only by
-   CSS and the D41 step buttons; no JavaScript in lessons (the canvas option was declined). Pilot three lessons first,
-   MLE70 (embedding space), DE30 (row and column blocks, partitions) and DS60 (loss bowl with the L1 and L2
-   constraints), then a PDF for the owner to approve the style. After approval, nine more: DE10, DE130, DE150,
-   DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
-   MLE80, MLE100), not yet approved. Record the figure type in SPEC (amend D41) with the pilot.
+0. **3D figures in track lessons (owner decisions, 2026-11-26): the pilot is built and approved by the owner (PDF, 2026-11-27).** Build-time SVG drawn with the homepage figures' projection
+   (`scripts/lib/project3d.mjs`), fixed angle, CSS-only motion as D41 concept animations (SPEC D41 amended); no JavaScript in lessons (the canvas option was declined). Pilot lessons, one figure each:
+   MLE7 (`concept-embedding-space`, after unit 2), DE30 (`concept-table-block`, after unit 2) and DS60 (`concept-loss-bowl`, after unit 1). Style and lead-in sentences approved; next, nine more (same flow: build, PDF, owner approval, merge): DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
+   MLE80, MLE100), not yet approved. Writing a new 3D figure: copy a spec, draw with `slab` and `byDepth` (`figure3d.mjs`) or `camera().P`, keep the markup at 15 KB or less, run
+   `node scripts/refresh-concept-figures.mjs`, then look at it at 390 and 1280 px in both themes.
 
 1. **Excel stage (22 lessons): published** on 2026-11-17 at the owner's request. Each lesson links its practice
    workbook in `sheets/excel/{lesson-id}.xlsx` (built by `scripts/lesson_sheets/`, one pre-built sheet per exercise).

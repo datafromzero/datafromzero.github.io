@@ -255,6 +255,17 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
   check that its frame equals the running loop paused at the end of the last phase of that step.
 - **Caption:** one short line under the figure (`caption`), in plain words; it is part of the page, not an alt text.
 
+## 3D figures (SPEC D41, pilot 2026-11-26)
+
+A concept animation may be drawn in 3D when the idea is a shape in space (vectors and angles, a table as a block of cells, a loss bowl). It is the same figure
+type with the same controls, steps, Key idea and fallbacks; only the drawing differs: shapes are projected at build time at ONE fixed angle with
+`scripts/lib/project3d.mjs` (the homepage projection) and drawn by `scripts/lib/figure3d.mjs` (`slab`, `byDepth`) or with `camera().P` into `a.path` and `a.circle`.
+Motion is the shared CSS only (fades, `draw`, `move`). Rules: markup 15 KB or less (whole pixels, a few paths, merge faces of one tint); a number on it comes from the
+lesson or is left out, and a caption says when the drawing has fewer dimensions than the real thing; neutral gray for what has no clause meaning; draw far to near;
+labels sit where no part of the figure passes at any phase (a leader line is fine); place it after the Why of the unit it illustrates, with one short lead-in sentence.
+Spec files: `concept-embedding-space`, `concept-table-block`, `concept-loss-bowl`. After a change, `node scripts/refresh-concept-figures.mjs`, then look at it at 390 and
+1280 px in both themes.
+
 ## Entity-relationship diagrams (crow's foot)
 
 Owner decisions, 2026-11-21: tables joined by lines follow the convention of dbdiagram, DBeaver, Lucidchart and MySQL Workbench (crow's foot,
