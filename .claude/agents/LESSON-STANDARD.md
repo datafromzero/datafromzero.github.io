@@ -693,8 +693,7 @@ depend on are covered first (`prerequisites` in the other stages show which); do
 a core Part test also has `data-not-tested="C11 ..."`), and `<div hidden data-placement-stage="excel" data-not-tested="E2 E12 ..."></div>` once in each two-part stage intro. Codes are
 space separated, in study order. Never leave the sentence and the element different; the test checks both against the targets.
 
-**Routing.** Part 1 all right: go on to part 2. Part 2 all right (and part 1 all right too): skip the stage and go to the first lesson of the next stage; the not-tested lessons stay
-to read. Any miss: start at the earliest lesson linked from the questions missed (the lowest code) and study the stage from there, in order. A Part test sends an all-right learner to the
+**Routing.** Part 1 all right: go on to part 2. Part 2 all right (and part 1 all right too): go on to the first lesson of the next stage, and say "before you rely on the lessons that are not tested (listed above part 1), skim each one"; never write "you can skip this stage" next to "passing does not skip those". Any miss: start at the earliest lesson linked from the questions missed (the lowest code) and study the stage from there, in order. A Part test sends an all-right learner to the
 next part's first lesson (Part 6: the capstone, then `/choose-your-track/`). Put the questions in lesson order.
 
 **Writing a question:** one skill that a later stage depends on; predict-the-result, spot-the-flaw or "which is right", never trivia (no names, dates or history); plain

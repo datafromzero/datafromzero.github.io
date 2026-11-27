@@ -171,7 +171,7 @@ This part covers P10, P13, P17, P19, P20, P23, P24 and P27.
 
 <div hidden data-placement-test="python-2" data-covers="P10 P13 P17 P19 P20 P23 P24 P27"></div>
 
-- **All eight right:** if part 1 was all right too, you can skip this stage. Go to the first lesson of the advanced core, [*Data types, units and how data was collected*](/core/study-design-and-data-types/) (C1). The 12 lessons that are not tested are listed above the first part.
+- **All eight right:** if part 1 was all right too, go on to the first lesson of the advanced core, [*Data types, units and how data was collected*](/core/study-design-and-data-types/) (C1). Before you rely on the lessons that are not tested (listed above part 1), skim each one, and study it if it is new to you.
 - **One or more wrong:** open the answer of each question you missed. Find the lesson in its "Missed it?" line. Start at the earliest of those lessons (the lowest code), and study the stage from there, in order.
 
 1. What do the three `print` lines show? The numbers are the first six line amounts of the practice data.

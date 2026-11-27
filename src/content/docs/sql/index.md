@@ -192,7 +192,7 @@ This part covers S24, S25, S27, S29, S33, S34, S36 and S38.
 
 <div hidden data-placement-test="sql-2" data-covers="S24 S25 S27 S29 S33 S34 S36 S38"></div>
 
-- **All eight right:** if part 1 was all right too, you can skip this stage. Go to the first Python lesson, [*From a query to your first notebook*](/python/first-notebook/) (P1). The 23 lessons that are not tested are listed above the first part.
+- **All eight right:** if part 1 was all right too, go on to the first Python lesson, [*From a query to your first notebook*](/python/first-notebook/) (P1). Before you rely on the lessons that are not tested (listed above part 1), skim each one, and study it if it is new to you.
 - **One or more wrong:** open the answer of each question you missed. Find the lesson in its "Missed it?" line. Start at the earliest of those lessons (the lowest code), and study the stage from there, in order.
 
 1. One order, 1335, is a walk-in sale at store 1 with an empty `customer_id` (NULL). How many rows does each of these queries return?

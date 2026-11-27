@@ -258,8 +258,10 @@ describe('placement tests (SPEC D67)', () => {
 				checked.push(checkOneTest({ name: `${stage} part 2`, stage, sec: part2, id: `${stage}-2`, next, range: lessons, listsUntested: false, count: [6, 8] }));
 			});
 
-			test('part 2 tells a learner who is right everywhere to skip the stage and go to the next stage', () => {
-				assert.match(part2, /if part 1 was all right too, you can skip this stage/, 'the skip sentence names both parts');
+			test('part 2 tells a learner who is right everywhere to go on to the next stage, after skimming the lessons not tested', () => {
+				assert.match(part2, /if part 1 was all right too, go on to the first/, 'the all-right sentence names both parts');
+				assert.match(part2, /Before you rely on the lessons that are not tested \(listed above part 1\), skim each one/, 'and says to skim the lessons not tested');
+				assert.doesNotMatch(part2, /you can skip this stage/, 'it does not contradict "passing does not skip"');
 			});
 
 			test('every lesson of the stage is covered by a question or listed as not tested, and none is both', () => {

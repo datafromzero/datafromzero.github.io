@@ -36,7 +36,7 @@ This test covers C1, C2, C3, C4, C5, C6 and C7, all seven lessons of Part 1.
 
    The median stays 11.75 and the IQR stays 9.50. The mean falls a little, from 12.65 to 12.54. The standard deviation falls a lot, from 8.62 to 7.44.
 
-   *Why:* the mean and the standard deviation use the size of every value, so the biggest one pulls on them. The median and the quartiles are read from places in the sorted list, and removing one value moves each place by only about half a step. Here many orders share the same total (16 orders cost exactly 11.75, 38 cost exactly 7.00 and 19 cost exactly 16.50, where the median and the two quartiles sit), so the value at the new place is the same. With other data they could move a little, but never by how large the removed value was.
+   *Why:* the mean and the standard deviation use the size of every value, so the biggest one pulls on them. The median and the quartiles are read from places in the sorted list, and removing one value moves each cut point by less than one place in the list. Here many orders share the same total (16 orders cost exactly 11.75, 38 cost exactly 7.00 and 19 cost exactly 16.50, where the median and the two quartiles sit), so the value at the new place is the same. With other data they could move a little, but never by how large the removed value was.
 
    Missed it? Study [*Center and spread: mean, median and standard deviation*](/core/center-and-spread/) (C2).
 

@@ -128,7 +128,7 @@ This part covers E5, E6, E8, E10, E13, E15, E17 and E19.
 
 <div hidden data-placement-test="excel-2" data-covers="E5 E6 E8 E10 E13 E15 E17 E19"></div>
 
-- **All eight right:** if part 1 was all right too, you can skip this stage. Go to the first SQL lesson, [*From a spreadsheet to SQL: your first queries*](/sql/from-spreadsheet-to-sql/) (S1). The seven lessons that are not tested are listed above the first part.
+- **All eight right:** if part 1 was all right too, go on to the first SQL lesson, [*From a spreadsheet to SQL: your first queries*](/sql/from-spreadsheet-to-sql/) (S1). Before you rely on the lessons that are not tested (listed above part 1), skim each one, and study it if it is new to you.
 - **One or more wrong:** open the answer of each question you missed. Find the lesson in its "Missed it?" line. Start at the earliest of those lessons (the lowest code), and study the stage from there, in order.
 
 1. Six order lines are in rows 2 to 7 of a sheet, with the store in column B and the line amount in column F. You filter column B to show only Old Town, so the Campus row is hidden. What do `=SUM(F2:F7)` and `=SUBTOTAL(109, F2:F7)` show?
@@ -218,7 +218,7 @@ This part covers E5, E6, E8, E10, E13, E15, E17 and E19.
 
    </details>
 
-6. A PivotTable built from the 3,287 order lines shows the sum of `line_amount_usd` for each store: Old Town 9,144.25, Campus 9,003.75 and Harbor 4,606.25. One Harbor line was typed as 3.00 and should be 4.00. You fix that cell in the source table. What does the pivot show for Harbor right after the fix, and after you click **Refresh**?
+6. A PivotTable built from the 3,287 order lines shows the sum of `line_amount_usd` for each store: Old Town 9,144.25, Campus 9,003.75 and Harbor 4,606.25. Suppose one Harbor line was typed as 3.00 and should be 4.00; this typo is made up. You fix that cell in the source table. What does the pivot show for Harbor right after the fix, and after you click **Refresh**?
 
    <details>
    <summary>Answer</summary>
