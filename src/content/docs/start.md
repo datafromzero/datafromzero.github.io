@@ -22,8 +22,9 @@ Study the stages in this order:
 
 You can skip a stage you already know. Excel / Sheets, SQL, Python and the advanced core each end their stage page with a
 placement test: [Excel / Sheets](/excel/#placement-test), [SQL](/sql/#placement-test), [Python](/python/#placement-test)
-and [Advanced core](/core/#placement-test). Answer without looking anything up. If every answer is right, go on to the next stage;
-if not, the test tells you which lesson to start at.
+and [Advanced core](/core/#placement-test). Excel, SQL and Python have two parts each. Answer without looking anything up. If every
+answer is right, go on to the next stage; if not, the test tells you which lesson to start at, and it lists the lessons it does not
+test. New to statistics? Skip the advanced core's test and start at its first lesson; that is normal.
 
 ## Two ways to read
 

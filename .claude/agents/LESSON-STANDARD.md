@@ -669,23 +669,42 @@ Written 2026-11-25 by the third ML batch (first writer); the later batches keep 
 
 ## Placement tests (SPEC D67): keep them in step with the lessons
 
-The stage pages `src/content/docs/{excel,sql,python,core}/index.md` each end with a `## Placement test` (6 to 8 questions; the core test
-covers Part 1 only). A lesson change can make a question wrong, so **the PR that does any of the following also fixes the test**:
+The stage pages `src/content/docs/{excel,sql,python}/index.md` end with a `## Placement test` in two parts, `### Placement test, part 1` and
+`### Placement test, part 2` (6 to 8 questions each). `core/index.md` holds the gate test for Part 1 (C1 to C7, one test), and Parts 2 to 6 open
+with `## Can you skip Part N?` in C8, C16, C22, C30 and C36 (5 to 8 questions each). A lesson change can make a question wrong, so **the PR that
+does any of the following also fixes the tests**:
 
 - **Retitles, renumbers, splits, moves, drafts or deletes a lesson that a question links.** Each answer ends with `Missed it? Study [*Title*](/stage/slug/) (code).`
   with the exact title and the code from `lessonCode` (stage letter plus `order` / 10, never an order number). `tests/placement.test.ts` fails on a wrong title,
   code, stage or draft link; after a stage renumbering, read every question again as well, because a lower code changes which lesson a learner starts at.
 - **Changes what a lesson teaches**: a rule, a function, a pandas default, a menu name, or the engine version behind an SQL answer. If the lesson no longer teaches the
   skill a question checks, move the question to the lesson that does, or replace it. A new lesson that adds a skill later stages need may add a question (stay within 8).
-- **Changes a dataset** (`datasets/cafe-sales/v1`) or a number the question uses: recompute every number in the question and its answer from the data with a script, and
-  say which rows count (completed orders only or all 1,800). Numbers that are made up say so in the question.
+- **Changes a dataset** (`datasets/cafe-sales/v1`) or a number the question uses: recompute every number in the question and its answer from the data with a script
+  (SQL in DuckDB, Python in pandas, statistics from the order totals), and say which rows count (completed orders only or all 1,800). Numbers that are made up say so in the question.
+- **Adds, removes or reorders a lesson of a stage**: the "Not tested" list of the stage page (or of the Part test) changes, and so do its count and the "Together the two
+  parts test N of the M lessons" sentence. `tests/placement.test.ts` fails until every lesson is covered by a question or listed, never both.
 - **Reorders a stage so that the first lesson of the next stage changes**: update `PLACEMENT_TESTS` in `src/lib/roadmap.ts` and the rule link.
 
-Writing a question: one skill that a later stage depends on; predict-the-result, spot-the-flaw or "which is right", never trivia (no names, dates or history); plain
-words for readers of English as a second language; no worked example copied from the lesson (a changed value is enough); the answer, one line of why, then the
-"Missed it?" line. The rule at the top says: no looking anything up, all right means the next stage's first lesson, otherwise start at the earliest lesson linked
-from the questions missed. A stage with a new test also gets its line in `PLACEMENT_TESTS`, which draws "Know some of this already? Take the placement test" above its
-lesson list. The other stage pages (the four career branches) have no test.
+**Coverage (the honest part).** A lesson is covered when a question's "Missed it?" line names it, and a test cannot cover a lesson it does not ask about. Each part says
+`This part covers E1, E3 ...` (exactly the lessons its questions name, in study order), the stage intro says `**Not tested in either part:** E2, E12 ... Passing does not skip those 7.`
+(ranges as `E20 to E22`), and a core Part test says `This test covers ... It does not test ..., so passing does not skip them`. Choose the questions so that the lessons later stages
+depend on are covered first (`prerequisites` in the other stages show which); do not add a question just to shorten the list. The same lists sit in a hidden element for scripts:
+`<div hidden data-placement-test="excel-1" data-covers="E1 E3 ..."></div>` under each part (ids `excel-1`, `excel-2`, `sql-1`, `sql-2`, `python-1`, `python-2`, `core-1` to `core-6`;
+a core Part test also has `data-not-tested="C11 ..."`), and `<div hidden data-placement-stage="excel" data-not-tested="E2 E12 ..."></div>` once in each two-part stage intro. Codes are
+space separated, in study order. Never leave the sentence and the element different; the test checks both against the targets.
+
+**Routing.** Part 1 all right: go on to part 2. Part 2 all right (and part 1 all right too): go on to the first lesson of the next stage, and say "before you rely on the lessons that are not tested (listed above part 1), skim each one"; never write "you can skip this stage" next to "passing does not skip those". Any miss: start at the earliest lesson linked from the questions missed (the lowest code) and study the stage from there, in order. A Part test sends an all-right learner to the
+next part's first lesson (Part 6: the capstone, then `/choose-your-track/`). Put the questions in lesson order.
+
+**Writing a question:** one skill that a later stage depends on; predict-the-result, spot-the-flaw or "which is right", never trivia (no names, dates or history); plain
+words for readers of English as a second language, and never a term that only this site uses (ask for the skill, not for our name for it: "what facts do you give an assistant
+before it writes a query", not "name the four parts of a context pack"); no worked example copied from the lesson (a changed value is enough); the answer must be defensible
+only one way, so state the metric or the group a number is for (a rate "per customer" needs the group of customers said) and say whether draws are with or without replacement
+before asking for a standard error; give the reason for a result accurately (a median that does not move when the largest value goes does not move because of ties in this data,
+not because it ignores order); the answer, one line of why, then the "Missed it?" line. The rule at the top says: no looking anything up, all right means the next part, otherwise start
+at the earliest lesson linked from the questions missed. A stage with a new test also gets its line in `PLACEMENT_TESTS`, which draws "Know some of this already? Take the placement
+test" above its lesson list (the link is `#placement-test`, so keep one `## Placement test` heading and put the parts under it as `###`). The other stage pages (the four career
+branches) have no test. The core's gate test opens with the kind line "New to statistics? Skip this test and start at C1; that is normal."
 
 ## Markup
 
