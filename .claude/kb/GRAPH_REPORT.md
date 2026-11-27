@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1661 nodes, 2164 edges, 207 communities (632 isolated nodes).
-- Nodes: agent 8, build plan 9, component 44, config 10, content 242, content-type 5, decision 66, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 29, npm-script 28, page 5, research-section 500, rule 11, script 204, skill 1, spec-section 25, starlight-component 6, style 8, symbol 355, template 2, token 12.
-- Edges: defines 355, imports 51, mentions 1103, overrides 6, references 31, runs 17, specified-by 4, uses 556, uses-token 36, validated-by 5.
+- 1663 nodes, 2167 edges, 207 communities (632 isolated nodes).
+- Nodes: agent 8, build plan 9, component 44, config 10, content 242, content-type 5, decision 66, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 29, npm-script 28, page 5, research-section 500, rule 11, script 204, skill 1, spec-section 25, starlight-component 6, style 8, symbol 357, template 2, token 12.
+- Edges: defines 357, imports 51, mentions 1104, overrides 6, references 31, runs 17, specified-by 4, uses 556, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -34,7 +34,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (212): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
-- **C2 HANDOFF.md** (42): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…
+- **C2 HANDOFF.md** (44): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…
 - **C3 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
 - **C4 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C5 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
@@ -52,12 +52,12 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C86 to C84, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C103 to C2, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C131 to C27, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C39 to C78, src/scripts/run-sql.ts:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C131 to C28, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C38 to C78, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C194 to C191, src/layouts/HomeLayout.astro:39)
 - `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C10 to C15, .claude/skills/kb/SKILL.md:3)
 - `D46` -mentions-> `README.md` (C2 to C10, SPEC.md:73)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C36 to C57, design/README.md:181)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C35 to C57, design/README.md:181)
 - `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C139 to C31, scripts/animations/concept-loss-bowl.mjs:2)
 - `M6` -mentions-> `D27` (C61 to C56, CLAUDE.md:65)
 - `S3.3` -mentions-> `src/redirects.ts` (C82 to C199, SPEC.md:155)
