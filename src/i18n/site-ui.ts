@@ -48,6 +48,7 @@ export interface SiteUi {
 		start: string;
 		quiz: string;
 		playground: string;
+		glossary: string;
 		learn: string;
 		learnShort: string;
 		toLight: string;
@@ -101,6 +102,7 @@ const en: SiteUi = {
 		start: 'Start here',
 		quiz: 'Career quiz',
 		playground: 'SQL playground',
+		glossary: 'Glossary',
 		learn: 'Start learning',
 		learnShort: 'Learn',
 		toLight: 'Switch to light theme',
@@ -154,6 +156,7 @@ const vi: SiteUi = {
 		start: 'Bắt đầu',
 		quiz: 'Trắc nghiệm nghề',
 		playground: 'Sân thực hành SQL',
+		glossary: 'Glossary', // Vietnamese is paused (D30): no new Vietnamese text until it resumes
 		learn: 'Bắt đầu học',
 		learnShort: 'Học',
 		toLight: 'Chuyển sang giao diện sáng',

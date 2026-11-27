@@ -51,6 +51,9 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-27 — SPEC §5.3 defined glossary entries and §6 the `<Term>` component, and the component was built, but no entry existed and no lesson used a Term for months; a learner panel and the jargon sweep found it (0 uses, no `reference/glossary/` folder), and the build could not say so. → **A content type or component that SPEC defines ships with at least one real use in the same PR; `tests/glossary.test.ts` now fails a glossary entry that no lesson Term and no other entry links, and `check:lessons` checks every Term's place (`scripts/lib/term-rules.mjs`).**
+- 2026-11-27 — The glossary entry for NULL was written `term: NULL`, which YAML reads as the null value, and the build failed with "expected string, received null". → **Quote a frontmatter value that YAML reads as a non-string (`'NULL'`, `'yes'`, `'on'`); the glossary generator and LESSON-STANDARD say so.**
+
 - 2026-11-27 — The history fan wrote its desktop numbers into the gallery's `style` attribute and swapped in phone numbers with an `@media` rule on the same element; the attribute always won, so phone cards jumped 4–8 px when the loop took over (spec review). → **A custom property set in an element's `style` attribute beats every stylesheet rule on that element, `@media` included: swap per-breakpoint values on a child or under other names, and check the computed value at both widths.**
 - 2026-11-27 — The homepage history fan's cleanup removed the `--k` custom property the build wrote into each card, so after reduced motion was turned on and off every card was covered by a solid shade (spec review). → **A cleanup that undoes an effect restores the values the build wrote into the markup instead of deleting them; test by toggling emulated reduced motion with the page open.**
 

@@ -54,6 +54,8 @@ function stageItems(stage: string, includeDrafts: boolean): (Link | Group)[] {
 }
 
 export function buildSidebar(includeDrafts: boolean): Group[] {
+	// The glossary (D68) sits with the other ways in, once its page exists (the test sandbox leaves it out).
+	const glossary: Link[] = existsSync(join(DOCS, 'reference', 'glossary', 'index.md')) ? [{ label: 'Glossary', link: '/reference/glossary/' }] : [];
 	const stages = ROADMAP_STAGES.map((s) => ({ label: s.title, collapsed: true, items: stageItems(s.id, includeDrafts) })).filter(
 		(g) => g.items.length > 0,
 	);
@@ -65,6 +67,7 @@ export function buildSidebar(includeDrafts: boolean): Group[] {
 				{ label: 'Career quiz', link: '/career-quiz/' },
 				{ label: 'Choose your track', link: '/choose-your-track/' },
 				{ label: 'SQL playground', link: '/sql/playground/' },
+				...glossary,
 			],
 		},
 		...stages,
