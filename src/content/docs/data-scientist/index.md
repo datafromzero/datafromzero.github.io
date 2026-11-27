@@ -36,7 +36,7 @@ The capstone, [*Capstone: from model to decision*](/data-scientist/decision-prod
 
 ### Show your project
 
-A project does not promise an interview or a job. It is evidence you can point to, and the same issue ranks work samples among the best-supported ways to choose between candidates (its Finding 14).
+A project does not promise an interview or a job. It is evidence you can point to, and the same issue puts work samples among the stronger predictors of job performance, though structured interviews score higher (its Finding 14).
 
 1. Put the capstone in a public repository on GitHub: the notebook, the decision memo and the plan. Use only the synthetic data of the track, never real customer or employer data.
 2. Start the README with the decision you framed and the rule that would make it a success. Then give the baselines, the model's score on people it did not learn from, where it fails, and the limits.

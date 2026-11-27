@@ -36,7 +36,7 @@ The capstone, [*Capstone: ship it and prove it works*](/ml-engineer/ml-capstone/
 
 ### Show your project
 
-A project does not promise an interview or a job. It is evidence you can point to, and the same issue ranks work samples among the best-supported ways to choose between candidates (its Finding 14).
+A project does not promise an interview or a job. It is evidence you can point to, and the same issue puts work samples among the stronger predictors of job performance, though structured interviews score higher (its Finding 14).
 
 1. Put the repository on GitHub, public. The starter's code is MIT and its data is CC BY 4.0, so keep its `LICENSE` and credit datafromzero.
 2. Start the README with the decision the system serves and the number you needed before you ran the evaluation. Then give the baseline, the gain with its interval, one failure slice, the cost line and the way back.

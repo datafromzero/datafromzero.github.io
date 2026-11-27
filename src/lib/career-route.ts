@@ -204,5 +204,6 @@ export function aeSummaryRows(ae: AeRoute): string[] {
 		row('dbt lessons', ae.dbt, ae.minutes.dbt),
 		row('Read back', ae.back, ae.minutes.back),
 		row('Direct prerequisites in Excel, SQL, Python and the core', ae.foundation, ae.minutes.foundation),
+		row('Total', [...ae.da, ...ae.setup, ...ae.dbt, ...ae.back, ...ae.foundation], Object.values(ae.minutes).reduce((a, b) => a + b, 0)),
 	];
 }

@@ -36,7 +36,7 @@ The capstone, [*Capstone: a dashboard project and case study*](/data-analyst/por
 
 ### Show your project
 
-A project does not promise an interview or a job. It is evidence you can point to, and the same issue ranks work samples among the best-supported ways to choose between candidates (its Finding 14).
+A project does not promise an interview or a job. It is evidence you can point to, and the same issue puts work samples among the stronger predictors of job performance, though structured interviews score higher (its Finding 14).
 
 1. Put the capstone in a public repository on GitHub, with the link to your dashboard. Use only the synthetic cafe-sales data, never real customer or employer data.
 2. Start the README with the business problem in one sentence. Then give one chart or table for each claim, the limits, and how you checked each number.
@@ -67,7 +67,7 @@ Some analysts want to build the tables that a dashboard reads. The tool for that
 | DA11 | [*A KPI dictionary and a metrics layer*](/data-analyst/metrics-and-kpi-dictionary/) | 55 |
 | DA12 | [*Keeping a dashboard right*](/data-analyst/keeping-a-dashboard-right/) | 50 |
 
-**2. Have done the lessons of the foundation that the dbt lessons list as prerequisites.** Whoever studied every stage has done them. If you skipped stages with a placement test, these are the 13 lessons to have done, and each has its own "Before this lesson" list.
+**2. Have done the lessons of the foundation that the dbt lessons, DE1 and the four read-back lessons list as prerequisites.** Whoever studied every stage has done them. If you skipped stages with a placement test, these are the 13 lessons to have done, and each has its own "Before this lesson" list.
 
 <details>
 <summary>The 13 lessons</summary>
@@ -94,7 +94,7 @@ Some analysts want to build the tables that a dashboard reads. The tool for that
 |---|---|---:|
 | DE1 | [*What a data engineer owns: lifecycle, ETL, ELT and layers*](/data-engineer/role-and-lifecycle/) | 50 |
 
-**4. Start at DE9 from a checkpoint.** The starter repository, `de-pipeline-starter`, has a tag for the state after each lesson. `de-09-start` is the starter as it stands before DE9: the ingest and staging code of DE2 and DE3 is in it, so you do not write it. Git does not keep the data files (the starter's `.gitignore` leaves out everything the pipeline writes in `data/`), so make them with two commands. In the first terminal:
+**4. Start at DE9 from a checkpoint.** The starter repository, `de-pipeline-starter`, has a tag for the state after each lesson. `de-09-start` is the starter as DE8 left it, before DE9: the code of DE2 to DE8 is in it (ingest, staging, the checks and gates, the daily load, the Airflow DAG), so you do not write it. Git does not keep the data files (the starter's `.gitignore` leaves out everything the pipeline writes in `data/`), so make them with two commands. In the first terminal:
 
 ```bash
 git clone https://github.com/datafromzero/de-pipeline-starter.git
@@ -124,7 +124,7 @@ uv run python -m pipeline.stage
 | DE13 | [*Dimensional models and slowly changing dimensions*](/data-engineer/dimensional-models-and-scd/) | 55 |
 | DE14 | [*CI for dbt: checks on every pull request*](/data-engineer/ci-and-deployment-for-dbt/) | 50 |
 
-**6. Read back, as the warm-ups ask.** These four lessons are listed as prerequisites of the dbt lessons. The checkpoint saves you from writing their code, not from their ideas: the warm-ups and comparisons of DE10 and DE11a ask about DE6a, DE6b and DE4, and DE9 lists DE3. Each warm-up links to the part it asks about, so you can read only that part, or study the whole lesson.
+**6. Read back, as the warm-ups ask.** These four lessons are listed as prerequisites of the dbt lessons. The checkpoint saves you from writing their code, not from their ideas: the warm-ups and comparisons of DE10 and DE11a ask about DE6a, DE6b and DE4, and DE9 lists DE3. Each warm-up links to the part it asks about, so you can read only that part, or study the whole lesson. These lessons themselves name DE2 and DE5 under "Before this lesson" (DE3 and DE4 list DE2; DE6a and DE6b list DE5); the checkpoint's code stands in for those lessons, so expect some gaps.
 
 | Code | Lesson | Minutes |
 |---|---|---:|
@@ -142,6 +142,7 @@ The time of each part:
 | dbt lessons | 6 | 315 | 5 h 15 min |
 | Read back | 4 | 185 | 3 h 05 min |
 | Direct prerequisites in Excel, SQL, Python and the core | 13 | 685 | 11 h 25 min |
+| Total | 31 | 1,590 | 26 h 30 min |
 
 ### What you skip
 

@@ -38,7 +38,7 @@ The capstone, [*Capstone: a pipeline repo someone else can run*](/data-engineer/
 
 ### Show your project
 
-A project does not promise an interview or a job. It is evidence you can point to, and the same issue ranks work samples among the best-supported ways to choose between candidates (its Finding 14).
+A project does not promise an interview or a job. It is evidence you can point to, and the same issue puts work samples among the stronger predictors of job performance, though structured interviews score higher (its Finding 14).
 
 1. Put the repository on GitHub, public. The starter's code is MIT and its data is CC BY 4.0, so keep its `LICENSE` and credit datafromzero.
 2. Start the README with what the repository builds and the command that runs it. Then give the grain and key of every table, the backfill story, the cost note and the known limits, as the capstone asks.
