@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1716 nodes, 2264 edges, 212 communities (676 isolated nodes).
+- 1716 nodes, 2265 edges, 212 communities (676 isolated nodes).
 - Nodes: agent 8, build plan 9, component 45, config 10, content 284, content-type 5, decision 67, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 30, npm-script 30, page 5, research-section 500, rule 11, script 205, skill 1, spec-section 25, starlight-component 6, style 8, symbol 362, template 2, token 12.
-- Edges: defines 362, imports 52, mentions 1154, overrides 6, references 31, runs 17, specified-by 4, uses 597, uses-token 36, validated-by 5.
+- Edges: defines 362, imports 52, mentions 1155, overrides 6, references 31, runs 17, specified-by 4, uses 597, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -34,7 +34,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (214): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/components/content/Term.astro; src/content/docs/core/designing-a-star-schema.mdx
-- **C2 HANDOFF.md** (39): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…; D32 Four career branches
+- **C2 HANDOFF.md** (40): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…; D32 Four career branches
 - **C3 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
 - **C4 MISTAKES.md** (19): .claude/MISTAKES.md; README.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer
 - **C5 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
@@ -57,11 +57,11 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 - `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C27 to C80, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C199 to C196, src/layouts/HomeLayout.astro:39)
 - `M8` -mentions-> `D24` (C86 to C4, CLAUDE.md:69)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C59, design/README.md:181)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C58, design/README.md:181)
 - `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C144 to C30, scripts/animations/concept-loss-bowl.mjs:2)
-- `M6` -mentions-> `D27` (C63 to C58, CLAUDE.md:65)
+- `src/components/project/StageLessons.astro` -mentions-> `D67` (C75 to C2, src/components/project/StageLessons.astro:15)
+- `M6` -mentions-> `D27` (C62 to C57, CLAUDE.md:65)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C190 to C2, scripts/check-placeholders.mjs:2)
-- `src/lib/content-validation.ts` -mentions-> `scripts/check-graph.ts` (C201 to C188, src/lib/content-validation.ts:123)
 
 ## Decisions (SPEC §1)
 
