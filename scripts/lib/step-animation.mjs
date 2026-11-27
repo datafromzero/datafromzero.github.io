@@ -41,6 +41,8 @@
  *   Nothing may spoil a Predict: a count, key idea or change belongs to the step that shows it; step 1 shows inputs only.
  *   Print shows the final counter values and, in a block before the caption list, every step's Key idea and What changed.
  *
+ * A stepper may also give `caption`: one plain line under the picture (`<p class="ca-cap">`), for what the drawing leaves out.
+ *
  * Usage: see scripts/animations/*.mjs and `node scripts/make-animation.mjs <name>`.
  */
 
@@ -102,7 +104,7 @@ const checkChanges = (id, where, changes = []) =>
 /** The chips of "What changed"; the sign and its spoken word (Added, Removed, Changed) come from the stylesheet. */
 const chips = (changes) => (changes.length ? `<span class="sa-chs">${changes.map(([sg, t]) => `<span class="sa-ch ${SIGNS[sg]}">${esc(t)}</span>`).join('')}</span>` : '');
 
-export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters }) {
+export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters, countersLabel = 'Row counts at this step' }) {
 	if (w > 360) throw new Error(`${id}: viewBox width ${w} is over 360`);
 	if (loop && (!Number.isInteger(loop.cycle) || loop.cycle < 4 || loop.cycle > 8)) throw new Error(`${id}: loop.cycle is 4 to 8 seconds`);
 	if (loop && !caption) throw new Error(`${id}: a concept animation needs a caption`);
@@ -186,7 +188,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 			}
 			return counterMarkup(e.label, e.role, states.map((st) => ({ ...st, cls: st.ks.map((k) => `v${k}`).join(' ') })));
 		});
-		return `<div class="sa-cn sa-st" role="group" aria-label="Row counts at this step">${cells.join('')}</div>`;
+		return `<div class="sa-cn sa-st" role="group" aria-label="${esc(countersLabel)}">${cells.join('')}</div>`;
 	};
 	/** Concept counters follow the phases: values [[phase, text], ...]; a counter set in a step stays lit to the end of that step. */
 	const conceptStrip = () => {
@@ -469,7 +471,8 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 				? `\n<div class="sa-now sa-st">\n${steps.map((s, i) => `<div class="z${i + 1} c-${s.role}">${keyMarkup(s)}</div>`).join('\n')}\n</div>`
 				: '';
 			// not-content keeps Starlight's own list and form styling off the figure
-			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
+			const cap = caption ? `\n<p class="ca-cap">${esc(caption)}</p>` : ''; // optional: one line under the picture (a note on what the drawing leaves out)
+			const markup = `<figure class="sa not-content">\n${radios}\n${strip ? `${strip}\n` : ''}${svg}${cap}\n${ctl}${now}\n<ol class="sa-steps">\n${lis}\n</ol>\n</figure>`;
 			return { markup, steps: N };
 		},
 	};

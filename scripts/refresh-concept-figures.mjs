@@ -5,7 +5,7 @@
  *   node scripts/refresh-concept-figures.mjs --check  change nothing; exit 1 if a lesson is out of date
  * A "CONCEPT: <key>" MDX comment line becomes the generator's markup. A `<figure class="ca ...">` is found by the id of its
  * pause checkbox (`id="<id>-pp"`), matched to the key whose generated figure has that id, and replaced up to its `</figure>`.
- * A data stepper (`<figure class="sa not-content">`, a `sql-*.mjs` spec) is found by the `name` of its radios the same way.
+ * A data stepper (`<figure class="sa not-content">`, a `sql-*.mjs` or `step-*.mjs` spec) is found by the `name` of its radios the same way.
  * A hand-drawn static figure (`<figure class="sa not-content">` straight into its `<svg>`, no spec) keeps its drawing; only its viewBox
  * is set so that the drawing is centered (scripts/lib/figure-extent.mjs).
  * Several specs share an id (cs: concept-case and concept-columnar-scan; ij: concept-injection and sql-inner-join; rt:
@@ -37,7 +37,7 @@ const pick = (candidates, old, f, what) => {
 	return hit[0][1];
 };
 const conceptSpecs = keys.map((k) => [idOf(markup(k)), k]);
-const steppers = names.filter((n) => n.startsWith('sql-'));
+const steppers = names.filter((n) => n.startsWith('sql-') || n.startsWith('step-')); // step-*: a stepper that is not a SQL one (3D figures of D41)
 const nameOf = (m) => m.match(/<input class="sa-r r1" type="radio" name="([a-z0-9-]+)"/)?.[1];
 const stepperSpecs = steppers.map((k) => [nameOf(markup(k)), k]);
 
