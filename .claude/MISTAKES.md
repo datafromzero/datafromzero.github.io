@@ -217,6 +217,7 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Lessons (details in LESSON-STANDARD.md)
 
+- 2026-11-27 — Nine 3D figures were built for lessons whose point a table, printed output or an earlier figure already carried, or whose idea was 2D drawn in perspective (stacks, towers, a table as a block); the owner warned that figures everywhere overwhelm learners, and a team review kept 2 of 12. → **Before building any figure, name what the learner cannot get from the page as it stands; if you cannot, build none (SPEC D63). 3D only for a quantity over two inputs or an angle between vectors.**
 - 2026-11-27 — The MLE7 3D figure said texts 1 and 2 "point almost the same way" while it drew cos 0.62, about 52° (spec-reviewer finding). → **A word for size in a figure's key idea, caption or `<desc>` (small, almost, nearly) must fit the number the figure draws; convert it first (cosine to degrees, share to fraction).**
 - 2026-11-26 — The ML lessons MLE8 to MLE12 and MLE16 used Qwen2.5-1.5B (Alibaba), and MLE2 named a channel `tiktok` as its unseen-channel example; the owner does not use Chinese products (owner correction). → **Before adding any model, dataset, package, service or brand, even as an example value, check its maker on the official page; nothing Chinese (SPEC D62). LLM lessons use IBM Granite. Reviewers grep every batch for Chinese models and brands.**
 - 2026-11-19 — Vietnamese crept back in while the language is paused (D30): a Vietnamese UI string in `vi.json` and a

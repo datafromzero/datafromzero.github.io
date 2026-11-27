@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { camera, boxFaces } from '../scripts/lib/project3d.mjs';
-import blk from '../scripts/animations/concept-table-block.mjs';
 import emb from '../scripts/animations/concept-embedding-space.mjs';
 import reg from '../scripts/animations/concept-loss-bowl.mjs';
 
@@ -40,8 +39,8 @@ test('a box shows the faces that turn toward the eye', () => {
 	assert.deepEqual(boxFaces(none, { x: -1, y: -1, z: -1, w: 2, h: 2, d: 2 }).map((f) => f.name), ['front']);
 });
 
-test('the three 3D figures are plain markup of about 15 KB or less, with no script, style or filter, and a title and description', () => {
-	for (const [name, make] of [['concept-table-block', blk], ['concept-embedding-space', emb], ['concept-loss-bowl', reg]] as const) {
+test('the 3D figures are plain markup of about 15 KB or less, with no script, style or filter, and a title and description', () => {
+	for (const [name, make] of [['concept-embedding-space', emb], ['concept-loss-bowl', reg]] as const) {
 		const m = make().build().markup as string;
 		assert.ok(m.length < 15000, `${name}: ${m.length} bytes`);
 		assert.doesNotMatch(m, /<script|<style|style="|<filter|<image|<foreignObject/);
