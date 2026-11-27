@@ -140,7 +140,7 @@ Hints, half-solutions and solutions stay fenced blocks. Rules:
 - **Name what it adds.** Before adding any figure (chart, stepper, concept animation, 3D figure), write down the one thing the
   learner cannot get from the page as it stands: the text, a table, printed output or an earlier figure. If you cannot, add none.
 - **At most one concept animation per lesson**, and no new figure in a lesson that already has three or more.
-- **Once across the roadmap.** A concept drawn in an earlier lesson is linked, not redrawn (MLE90 points back to MLE7's angles).
+- **Once across the roadmap.** A concept drawn in an earlier lesson is linked, not redrawn (link the earlier lesson's figure; do not draw it again).
 - **No number that an exercise asks for.** Grep the lesson's On your own and Check yourself for every number on the figure.
 
 ## Step-by-step figures (SPEC D41)
