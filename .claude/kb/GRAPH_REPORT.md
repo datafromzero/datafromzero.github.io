@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1663 nodes, 2167 edges, 207 communities (632 isolated nodes).
+- 1663 nodes, 2190 edges, 207 communities (632 isolated nodes).
 - Nodes: agent 8, build plan 9, component 44, config 10, content 242, content-type 5, decision 66, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 29, npm-script 28, page 5, research-section 500, rule 11, script 204, skill 1, spec-section 25, starlight-component 6, style 8, symbol 357, template 2, token 12.
-- Edges: defines 357, imports 51, mentions 1104, overrides 6, references 31, runs 17, specified-by 4, uses 556, uses-token 36, validated-by 5.
+- Edges: defines 357, imports 51, mentions 1127, overrides 6, references 31, runs 17, specified-by 4, uses 556, uses-token 36, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -15,36 +15,36 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 |---|---|---|---|---|
 | 1 | `src/components/content/Solution.astro` | component | 207 | src/components/content/Solution.astro:1 |
 | 2 | `src/components/content/Exercise.astro` | component | 206 | src/components/content/Exercise.astro:1 |
-| 3 | `D41` Lesson step-by-step figures | decision | 110 | SPEC.md:68 |
+| 3 | `D41` Lesson step-by-step figures | decision | 111 | SPEC.md:68 |
 | 4 | `src/components/content/OpenInColab.astro` | component | 78 | src/components/content/OpenInColab.astro:1 |
 | 5 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 71 | .claude/HANDOFF.md:1 |
+| 6 | `.claude/HANDOFF.md` | doc | 72 | .claude/HANDOFF.md:1 |
 | 7 | `astro.config.mjs` | config | 46 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 43 | .claude/agents/LESSON-STANDARD.md:1 |
 | 9 | `.claude/MISTAKES.md` | doc | 38 | .claude/MISTAKES.md:1 |
 | 10 | `src/site.ts` | module | 33 | src/site.ts:1 |
-| 11 | `D42` In-page SQL runner | decision | 31 | SPEC.md:69 |
+| 11 | `D42` In-page SQL runner | decision | 32 | SPEC.md:69 |
 | 12 | `S6` Authoring components | spec-section | 31 | SPEC.md:289 |
 | 13 | `src/lib/roadmap.ts` | module | 29 | src/lib/roadmap.ts:1 |
-| 14 | `D31` Bottom taskbar (amended by D3… | decision | 26 | SPEC.md:58 |
-| 15 | `D64` Learner progress in the brows… | decision | 26 | SPEC.md:90 |
+| 14 | `README.md` | doc | 28 | README.md:1 |
+| 15 | `D31` Bottom taskbar (amended by D3… | decision | 27 | SPEC.md:58 |
 
 ## Communities
 
 Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (212): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/content/docs/core/designing-a-star-schema.mdx; src/content/docs/core/grain-facts-and-dimensions.mdx
-- **C2 HANDOFF.md** (44): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…
-- **C3 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
-- **C4 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
-- **C5 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
-- **C6 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C7 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C8 progress.ts** (16): src/lib/progress.ts; src/lib/progress.ts#DONE_KEY; src/lib/progress.ts#LAST_KEY; src/lib/progress.ts#Last; src/lib/progress.ts#MAX_DONE; src/lib/progress.ts#MAX_RAW
-- **C9 roadmap.ts** (16): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#PLACEMENT_TESTS
-- **C10 MISTAKES.md** (15): .claude/MISTAKES.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer; D54 What's new page
+- **C2 HANDOFF.md** (43): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…
+- **C3 MISTAKES.md** (22): .claude/MISTAKES.md; README.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer
+- **C4 README.md** (20): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
+- **C5 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
+- **C6 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
+- **C7 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
+- **C8 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
+- **C9 progress.ts** (16): src/lib/progress.ts; src/lib/progress.ts#DONE_KEY; src/lib/progress.ts#LAST_KEY; src/lib/progress.ts#Last; src/lib/progress.ts#MAX_DONE; src/lib/progress.ts#MAX_RAW
+- **C10 roadmap.ts** (16): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#PLACEMENT_TESTS
 - **C11 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C12 Learner progress in the brows…** (13): D64 Learner progress in the browser; S3.1 Route map; D34 Navigation for learners (amended…; D58 Feedback form; S15 Explicitly out of scope (for now); src/scripts/progress.ts
+- **C12 Learner progress in the brows…** (13): D64 Learner progress in the browser; S3.1 Route map; D34 Navigation for learners (amended…; D58 Feedback form; src/scripts/progress.ts; S15 Explicitly out of scope (for now)
 
 ## Surprising connections
 
@@ -52,16 +52,16 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C86 to C84, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C103 to C2, scripts/animations/concept-columnar-scan.mjs:2)
+- `research/curriculum/02-syllabus-inventory.md` -mentions-> `D3` (C3 to C45, research/curriculum/02-syllabus-inventory.md:319)
 - `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C131 to C28, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C38 to C78, src/scripts/run-sql.ts:2)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C36 to C77, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C194 to C191, src/layouts/HomeLayout.astro:39)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C10 to C15, .claude/skills/kb/SKILL.md:3)
-- `D46` -mentions-> `README.md` (C2 to C10, SPEC.md:73)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C35 to C57, design/README.md:181)
-- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C139 to C31, scripts/animations/concept-loss-bowl.mjs:2)
-- `M6` -mentions-> `D27` (C61 to C56, CLAUDE.md:65)
-- `S3.3` -mentions-> `src/redirects.ts` (C82 to C199, SPEC.md:155)
+- `M8` -mentions-> `D24` (C81 to C3, CLAUDE.md:69)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C33 to C58, design/README.md:181)
+- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C139 to C30, scripts/animations/concept-loss-bowl.mjs:2)
+- `M6` -mentions-> `D27` (C62 to C57, CLAUDE.md:65)
 - `scripts/check-placeholders.mjs` -mentions-> `D18` (C185 to C2, scripts/check-placeholders.mjs:2)
+- `src/lib/content-validation.ts` -mentions-> `scripts/check-graph.ts` (C196 to C183, src/lib/content-validation.ts:123)
 
 ## Decisions (SPEC §1)
 
