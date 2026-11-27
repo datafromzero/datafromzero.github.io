@@ -692,6 +692,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Agents and reviews
 
+- 2026-11-27 — Resolving merge conflicts in CHANGELOG.md by keeping both sides glued the new bullet onto the next one ("…numbers.- **2026-11-26: …"), so `/changelog/` showed an entry twice (spec review). → **After resolving a CHANGELOG or MISTAKES conflict, run `grep -n '[^ ]- \*\*20' CHANGELOG.md`, check each date bullet appears once and sits with its date at the top of its section.**
+
 - 2026-11-27 — A read-only content reviewer ran `git checkout` in the lead's working tree, moved HEAD off the integration branch and broke a running `npm run check`. → **Reviewers and other read-only agents never run `git checkout`/`switch` in the main checkout; they read with `git show <sha>:<path>` or extract files with `git archive <sha> <path> | tar -x -C <scratch>`. Say so in every review brief.**
 - 2026-11-27 — A sweep commit said "dearest" and "till" were replaced, but three uses were left, and a new claim ("Colab needs a free Google account") had no source saying it in words (content review). → **After a word replacement, grep all of `src/` for the old word; a new factual claim is cited or softened to what an official page states.**
 
