@@ -104,7 +104,7 @@ const checkChanges = (id, where, changes = []) =>
 /** The chips of "What changed"; the sign and its spoken word (Added, Removed, Changed) come from the stylesheet. */
 const chips = (changes) => (changes.length ? `<span class="sa-chs">${changes.map(([sg, t]) => `<span class="sa-ch ${SIGNS[sg]}">${esc(t)}</span>`).join('')}</span>` : '');
 
-export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters }) {
+export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases, tag = {}, counters, countersLabel = 'Row counts at this step' }) {
 	if (w > 360) throw new Error(`${id}: viewBox width ${w} is over 360`);
 	if (loop && (!Number.isInteger(loop.cycle) || loop.cycle < 4 || loop.cycle > 8)) throw new Error(`${id}: loop.cycle is 4 to 8 seconds`);
 	if (loop && !caption) throw new Error(`${id}: a concept animation needs a caption`);
@@ -188,7 +188,7 @@ export function anim({ id, w = 360, h, title, desc, steps, loop, caption, phases
 			}
 			return counterMarkup(e.label, e.role, states.map((st) => ({ ...st, cls: st.ks.map((k) => `v${k}`).join(' ') })));
 		});
-		return `<div class="sa-cn sa-st" role="group" aria-label="Row counts at this step">${cells.join('')}</div>`;
+		return `<div class="sa-cn sa-st" role="group" aria-label="${esc(countersLabel)}">${cells.join('')}</div>`;
 	};
 	/** Concept counters follow the phases: values [[phase, text], ...]; a counter set in a step stays lit to the end of that step. */
 	const conceptStrip = () => {

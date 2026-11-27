@@ -4,7 +4,7 @@
 // text says: the small rate stops with more than a quarter of its starting loss left, the right one ends under 1 % of it, the large one ends above its starting loss and changes side of the valley every step.
 // Below: the REAL loss on the 10,021 fitting people after each of 20 epochs, the run of unit 3 (`fit_network(Xf, yf, 8, lr, 20)` from the notebook, seed 42, PyTorch CPU; `python3 scripts/charts/ml-batch-1.py`
 // asserts the end values 0.672, 0.631, 0.632, 1.215 of the same run), rounded to 4 decimals, with the dashed 0.693 line (a flat chance of 0.5: -ln 0.5). The same y scale 0.6 to 1.4 in all three steps.
-// The rate 1.0 of the run is not drawn (it ends at 0.632, close behind 0.1); the figure says so. No digit is written for the end of 0.1 (0.631 is what On your own / Check yourself exercise 3 asks for).
+// The rate 1.0 of the run is not drawn (it ends at 0.632, close behind 0.1); the figure says so. No digit is written at the end of the 0.1 curve or in its counter (exercise 3 of Check yourself asks for the lowest of its 20 losses); the caption's "about 0.63" repeats the lesson's printed result, which already sits just above the figure.
 // No count strip beyond the rate and a word for how the run ends (the figure shows a path, not rows).
 import { anim } from '../lib/step-animation.mjs';
 import { camera, poly } from '../lib/project3d.mjs';
@@ -86,6 +86,7 @@ const STEP = [
 export default function make({ id = 'lr' } = {}) {
 	const a = anim({
 		id,
+		countersLabel: 'At this step',
 		h: 462,
 		title: 'Gradient descent on a loss bowl at three learning rates, and the loss of each run over 20 epochs',
 		desc:
