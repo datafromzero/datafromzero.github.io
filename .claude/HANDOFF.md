@@ -59,10 +59,9 @@ For the next lead session. Read `CLAUDE.md` first (rules, merging policy, comman
 
 ## What comes next (build plan item 8, content)
 
-0. **3D figures in track lessons (owner decisions, 2026-11-26): the pilot is built and waits for the owner's PDF approval.** Build-time SVG drawn with the homepage figures' projection
+0. **3D figures in track lessons (owner decisions, 2026-11-26): the pilot is built and approved by the owner (PDF, 2026-11-27).** Build-time SVG drawn with the homepage figures' projection
    (`scripts/lib/project3d.mjs`), fixed angle, CSS-only motion as D41 concept animations (SPEC D41 amended); no JavaScript in lessons (the canvas option was declined). Pilot lessons, one figure each:
-   MLE7 (`concept-embedding-space`, after unit 2), DE30 (`concept-table-block`, after unit 2) and DS60 (`concept-loss-bowl`, after unit 1). Next: the lead makes the PDF for the owner to approve the style (and the
-   three lead-in sentences). After approval, nine more: DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
+   MLE7 (`concept-embedding-space`, after unit 2), DE30 (`concept-table-block`, after unit 2) and DS60 (`concept-loss-bowl`, after unit 1). Style and lead-in sentences approved; next, nine more (same flow: build, PDF, owner approval, merge): DE10, DE130, DE150, DE160, DS40, DS100, MLE50, MLE60, MLE90. Six lessons need 2D D41 steppers instead (DE40, DE80, DE90, DE100,
    MLE80, MLE100), not yet approved. Writing a new 3D figure: copy a spec, draw with `slab` and `byDepth` (`figure3d.mjs`) or `camera().P`, keep the markup at 15 KB or less, run
    `node scripts/refresh-concept-figures.mjs`, then look at it at 390 and 1280 px in both themes.
 
