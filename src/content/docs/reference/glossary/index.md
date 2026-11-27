@@ -4,4 +4,4 @@ description: Plain-English meanings of the words that come back across the roadm
 tableOfContents: false
 ---
 
-These are the words the lessons use again and again. Each has a short, plain explanation and a link to the lesson that teaches it. In a lesson, a word with a dotted underline is in this list: hover it, or tap the small question mark next to it, to read its short meaning without leaving the page.
+These are the words the lessons use again and again. Each has a short, plain explanation and a link to the lesson that teaches it. In a lesson, a word with a dotted underline is in this list: hover over it (or, on a touch screen, tap the small question mark next to it) to read its short meaning without leaving the page.
