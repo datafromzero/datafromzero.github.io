@@ -133,7 +133,7 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 | D66 | Warm-ups link back | A warm-up keeps its recall questions but stops punishing forgetting (… | SPEC.md:91 |
 | D67 | Placement tests at stage gates | Each of the four main stages (Excel / Sheets, SQL, Python, advanced c… | SPEC.md:92 |
 | D65 | Lesson durations from a model | `duration` is no longer a guess: `scripts/lesson-duration.mjs` estima… | SPEC.md:93 §5.1 |
-| D68 | Glossary | A glossary of 41 plain-English words that recur across the roadmap, o… | SPEC.md:94 §3.1 §5.3 §6 |
+| D68 | Glossary | A glossary of 69 plain-English words that recur across the roadmap, o… | SPEC.md:94 §3.1 §5.3 §6 |
 
 ## CONTRACT sections
 

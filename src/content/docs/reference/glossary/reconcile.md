@@ -6,7 +6,7 @@ aliases: [reconciliation, tie out]
 reviewed: 2026-11-27
 ---
 
-To reconcile a number is to get it a second way and see that the two agree. If they differ, you find the rows that explain the gap, and you say so. In cafe-sales, all lines of all 1,800 orders come to 22,754.25 dollars and the completed orders to 22,749.25; the difference is the one canceled order of 5.00 dollars. A filled-down column of shares that must add up to 100 percent is a quick reconciliation.
+To reconcile a number is to get it a second way and see that the two agree. If they differ, you find the rows that explain the gap, and you say so. In cafe-sales, all lines of all 1,800 orders come to 22,754.25 dollars and the completed orders to 22,749.25; the difference is the one canceled order of 5.00 dollars. A filled-down column of shares that must add up to 100 percent is a quick reconciliation. UCLA's finance guidance describes a reconciliation as a comparison of different sets of data, identifying and investigating differences, and taking corrective action when necessary.
 
 ## Where you meet it
 
@@ -17,4 +17,5 @@ To reconcile a number is to get it a second way and see that the two agree. If t
 
 ## Source
 
+- [UCLA Business & Finance Solutions: Reconciliations (Detective)](https://tax.ucla.edu/corporate-accounting/controls-and-accountability/control-practices/reconciliations-detective)
 - [A cleaning workflow you can defend (the lesson that teaches the habit)](/excel/cleaning-workflow/)

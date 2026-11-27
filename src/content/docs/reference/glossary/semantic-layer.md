@@ -15,3 +15,4 @@ A semantic layer, also called a metrics layer, sits between the tables and the d
 ## Source
 
 - [dbt documentation: About MetricFlow and the Semantic Layer](https://docs.getdbt.com/docs/build/about-metricflow)
+- [A KPI dictionary and a metrics layer (the lesson that uses both names)](/data-analyst/metrics-and-kpi-dictionary/)

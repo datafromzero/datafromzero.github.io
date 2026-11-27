@@ -44,7 +44,7 @@ Where you practice depends on the stage:
 - **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
   and nothing you type is sent anywhere.
 - **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (you sign in
-  with a Google account; Colab is free of charge, even when it shows a banner about paid plans). Python lessons are written
+  with a Google account; Colab is free of charge; paid plans exist, and you do not need them). Python lessons are written
   for a computer or tablet: on a phone you can read them, but running a notebook is hard.
 - **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
   a Colab notebook, or, for some, tools you install on your own computer.
