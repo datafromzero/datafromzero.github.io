@@ -51,6 +51,8 @@ Lesson-writing rules also live in `.claude/agents/LESSON-STANDARD.md` (the stand
 
 ## Repo tooling and checks
 
+- 2026-11-27 — The homepage history fan's cleanup removed the `--k` custom property the build wrote into each card, so after reduced motion was turned on and off every card was covered by a solid shade (spec review). → **A cleanup that undoes an effect restores the values the build wrote into the markup instead of deleting them; test by toggling emulated reduced motion with the page open.**
+
 - 2026-11-27 — The progress feature (D64) showed ticks, a count line and a Continue link from a script after first paint, so rows shifted 34 px and the page moved (CLS 0.073 on a stage page, 0.036 on /start/); it was measured only without stored data, where nothing appears (spec review). → **Anything a script shows after paint has its space held first (render it `hidden` and, under `:root[data-theme]`, as `visibility:hidden` so the room stays only when JavaScript runs), and CLS is measured with the stored data present, on a slow network, before reporting.**
 - 2026-11-27 — The privacy text called `dfz-last` "storage you asked for" and "optional", but the taskbar writes it on every lesson visit, also right after Clear (spec review). → **Privacy text says when storage is written (automatically, on what event, and what Clear does about the next write), not only why it is kept; check it against the code that writes it.**
 

@@ -49,6 +49,8 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 	const controls = gallery.querySelector<HTMLElement>('.hist-controls');
 	const say = gallery.querySelector<HTMLElement>('.hist-live');
 	const n = cards.length;
+	// The shade the build wrote on each card, put back on cleanup.
+	const shade0 = cards.map((c) => c.style.getPropertyValue('--k'));
 	const wrapIndex = gsap.utils.wrap(0, n);
 	const wrapDist = gsap.utils.wrap(-n / 2, n / 2);
 	const snap = gsap.utils.snap(1);
@@ -65,11 +67,14 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 
 	// Stacking: written only when a card's value changes.
 	const z = cards.map(() => -1);
-	let moving = false;
-	const settle = (on: boolean) => {
-		if (on === moving) return;
-		moving = on;
-		willChange(cards, on ? 'transform, opacity' : null);
+	// will-change only on the cards that can be seen at the start or the end of a move (the fan's width around
+	// each), not on all of them: every hinted card keeps its own layer.
+	let hinted = new Set<HTMLElement>();
+	const settle = (on: boolean, ...around: number[]) => {
+		const next = new Set<HTMLElement>(on ? cards.filter((_, i) => around.some((p) => Math.abs(wrapDist(i - p)) < FAN_EDGE)) : []);
+		willChange(cards.filter((c) => hinted.has(c) && !next.has(c)), null);
+		willChange(cards.filter((c) => next.has(c) && !hinted.has(c)), 'transform, opacity');
+		hinted = next;
 	};
 
 	// The playhead: a position on the loop in cards (it may grow past one lap either way); it eases to a target.
@@ -85,7 +90,7 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 	// Per frame: one transform per visible card; opacity and z-index only when their value changes; a card past
 	// the edge of the fan that was already hidden is skipped. The shade (--k, painted by .card::after in the
 	// card's own layer; a shade element or a per-frame shade costs a layer or a repaint per card per frame) is
-	// written when the fan comes to rest, and CSS eases it in.
+	// written when the fan comes to rest (and once at the start, so it is right after a rebuild).
 	const op = cards.map(() => -1);
 	const sh = cards.map(() => -1);
 	function shade() {
@@ -121,13 +126,14 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		},
 	});
 	const goTo = (pos: number) => {
-		settle(true);
+		settle(true, playhead.pos, pos);
 		target = pos;
 		scrub.vars.pos = pos;
 		scrub.invalidate().restart();
 	};
 	const step = (by: number) => goTo(snap(target) + by);
 	render();
+	shade();
 	phone.addEventListener('change', measure);
 	addEventListener('resize', measure);
 
@@ -149,8 +155,10 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		if (d) goTo(at + d);
 	};
 	// Keyboard focus on a link inside a side card (the last card's "Start here") brings that card to the
-	// center, so the focused link is never small or shaded.
+	// center, so the focused link is never small or shaded. A mouse press focuses the link too, but the card
+	// must not slide away under the pointer before the click lands, so only :focus-visible counts.
 	const onFocus = (e: FocusEvent) => {
+		if (!(e.target as Element).matches(':focus-visible')) return;
 		const i = cards.indexOf((e.target as Element).closest('.card') as HTMLElement);
 		if (i >= 0) bring(i);
 	};
@@ -187,7 +195,7 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 			onPress() {
 				from = target;
 			},
-			onDragStart: () => settle(true),
+			onDragStart: () => settle(true, target - 2, target + 2),
 			onDrag() {
 				target = from + (this.startX - this.x) / (DRAG_CARD * cw);
 				scrub.vars.pos = target;
@@ -210,7 +218,7 @@ function build(gallery: HTMLElement, list: HTMLElement, cards: HTMLElement[]): (
 		list.removeEventListener('click', onCardClick);
 		if (controls) controls.hidden = true;
 		if (say) say.textContent = '';
-		willChange(cards, null);
+		settle(false);
 		for (const [i, el] of cards.entries()) {
 			el.style.removeProperty('transform');
 			el.style.removeProperty('opacity');

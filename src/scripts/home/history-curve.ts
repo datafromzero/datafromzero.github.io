@@ -34,7 +34,7 @@ const OPACITY = [1, 1, 1, 0.8, 0];
  * Opacity of the shade over a card (the page color on top of it), so the stack reads as depth while the center
  * stays dominant. The shade stays light at +-1 (their text keeps 4.5:1 in both themes) and deepens outward.
  */
-const SHADE = [0, 0.1, 0.22, 0.36, 0.5];
+const SHADE = [0, 0.1, 0.2, 0.26, 0.5];
 /** Distance at which a card has left the fan (opacity 0). */
 export const FAN_EDGE = OPACITY.length - 1;
 
@@ -70,7 +70,8 @@ export function lookAt(d: number, fan: Fan): Look {
 		// CSS rotateY(+) brings the left edge toward the viewer: left cards (d < 0) turn +, right cards -.
 		rotateY: -fan.rot * Math.max(-1, Math.min(1, d)),
 		scale: 1,
-		zIndex: 100 - 10 * Math.round(ad),
+		// Beyond +-3 cards are faded or gone and no longer change places, so they share one level (DOM order breaks the tie): fewer writes.
+		zIndex: 100 - 10 * Math.min(3, Math.round(ad)),
 		opacity: table(OPACITY, ad),
 		shade: table(SHADE, ad),
 	};
