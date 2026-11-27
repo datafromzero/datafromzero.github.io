@@ -54,8 +54,15 @@ lists the published lessons that build on it, so you can see where it leads.
 
 ## Your progress
 
-datafromzero has no accounts and does not save progress. Bookmark the lesson you are on, or note
-it down yourself.
+datafromzero has no accounts. Your browser remembers the lesson you opened last, and when you open a lesson and come
+back to this page or the home page you will see **Continue** with a link to it. Below, tick a lesson when you finish
+it; each stage shows how many you have done. This is kept in this browser only: it is never sent anywhere, and it is
+not shared between your devices. **Clear my progress** removes it (see [Privacy](/privacy/#progress)). If your browser
+blocks storage, nothing is remembered; bookmark the lesson you are on, or note it down yourself.
+
+Each stage also has a page with its lessons in order: [Excel / Sheets](/excel/), [SQL](/sql/), [Python](/python/),
+[Advanced core](/core/), [Data Analyst](/data-analyst/), [Data Engineer](/data-engineer/),
+[Data Scientist](/data-scientist/) and [ML / AI Engineer](/ml-engineer/).
 
 ## Report a problem
 

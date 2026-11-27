@@ -45,7 +45,7 @@ export function useDocs(sandbox, ...fixtureDirs) {
 		filter: (path) => {
 			const segs = path.slice(src.length + 1).split('/');
 			const first = segs[0] === 'vi' ? segs[1] : segs[0];
-			return !(segs.length > (segs[0] === 'vi' ? 2 : 1) && CONTENT_DIRS.has(first));
+			return !(segs.length > (segs[0] === 'vi' ? 2 : 1) && CONTENT_DIRS.has(first)) || (segs[0] !== 'vi' && segs.length === 2 && segs[1] === 'index.md');
 		},
 	});
 	for (const f of fixtureDirs) cpSync(join(f, 'docs'), docs, { recursive: true });

@@ -39,8 +39,10 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **Language:** American English only for now (D30); Vietnamese and other languages later. The old `/vi/` URLs redirect to English; SPEC §8 is paused.
 - **Licenses:** content CC BY 4.0, code MIT, datasets CC BY 4.0.
 - **Analytics:** Google Analytics 4 only after consent (Consent Mode v2 default denied) — SPEC §11.
-- **No** accounts, saved progress, comments or in-browser code execution (SPEC §15), except the in-page SQL runner of D42
+- **No** accounts, server-side saved progress, comments or in-browser code execution (SPEC §15), except the in-page SQL runner of D42
   (`<RunSQL>`): DuckDB-Wasm self-hosted, loaded in the background near a block, no storage, nothing sent anywhere.
+  Progress kept in the browser only is allowed (D64): `dfz-last` (written by the taskbar script on lessons) and `dfz-done`
+  (ticks on `/start/` and the stage pages, by `src/scripts/progress.ts`, under 2 KB gzipped); every access guarded, nothing sent.
 - Any change to a CONTRACT section or a decision in SPEC §1 must update `SPEC.md` in the same PR
   (add or amend the decision row) and `CHANGELOG.md`.
 
