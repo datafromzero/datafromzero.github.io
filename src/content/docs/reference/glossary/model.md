@@ -10,8 +10,8 @@ A model is a rule that a computer learns from data and then uses to make predict
 
 ## Where you meet it
 
-- [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2): your first honest model.
 - [*Framing a prediction problem, splitting and a baseline*](/core/framing-split-and-baseline/) (C19): framing a prediction problem, splitting and a baseline.
+- [*Your first honest model with scikit-learn*](/data-scientist/first-honest-model/) (DS2): your first honest model.
 
 ## Source
 

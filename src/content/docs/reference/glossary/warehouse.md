@@ -6,7 +6,7 @@ aliases: [warehouse, warehouses]
 reviewed: 2026-11-27
 ---
 
-A data warehouse is a central place where data is kept so that it can be analyzed. AWS defines it as a central repository of information that can be analyzed to make more informed decisions. The lessons describe it as a database built to read a few columns of many rows, unlike the till's own database, which writes one whole row each time a customer pays. A cloud warehouse bills by the data a query reads. A data lake is different: a store of raw files kept as they arrived.
+A data warehouse is a central place where data is kept so that it can be analyzed. AWS defines it as a central repository of information that can be analyzed to make more informed decisions. The lessons describe it as a database built to read a few columns of many rows, unlike the till's own database, which writes one whole row each time a customer pays. Some cloud warehouses, such as BigQuery on demand, bill by the data a query reads. A data lake is different: a store of raw files kept as they arrived.
 
 ## Where you meet it
 

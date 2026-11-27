@@ -15,6 +15,13 @@ import { MAX_TERMS, termProblems, termUses } from '../scripts/lib/term-rules.mjs
 const DOCS = 'src/content/docs';
 const GLOSSARY = `${DOCS}/reference/glossary`;
 
+// SPEC D62: the guard is built from fragments, so no Chinese brand or model name is stored as a word in the repository
+// (not here and not in project-words.txt).
+const FORBIDDEN_NAMES = new RegExp(
+	`\\b(${[['qw', 'en'], ['deep', 'seek'], ['gl', 'm'], ['ki', 'mi'], ['mini', 'max'], ['er', 'nie'], ['hun', 'yuan'], ['dou', 'bao'], ['intern', 'lm'], ['b', 'ge'], ['tik', 'tok'], ['we', 'chat'], ['ali', 'baba'], ['ten', 'cent'], ['bai', 'du'], ['byte', 'dance']].map((f) => f.join('')).join('|')})\\b`,
+	'i',
+);
+
 interface Entry {
 	file: string;
 	slug: string;
@@ -109,7 +116,7 @@ describe('glossary entries (SPEC §5.3)', () => {
 
 			test('it names nothing made in China (SPEC D62) and no Vietnamese', () => {
 				const text = readFileSync(`${GLOSSARY}/${e.file}`, 'utf8');
-				assert.doesNotMatch(text, /\b(qwen|deepseek|glm|kimi|minimax|ernie|hunyuan|doubao|internlm|bge|tiktok|wechat|alibaba|tencent|baidu|bytedance)\b/i);
+				assert.doesNotMatch(text, FORBIDDEN_NAMES);
 				assert.doesNotMatch(text, /[\u0102\u0103\u00C2\u00E2\u00CA\u00EA\u00D4\u00F4\u01A0\u01A1\u01AF\u01B0\u0110\u0111]/);
 			});
 		});

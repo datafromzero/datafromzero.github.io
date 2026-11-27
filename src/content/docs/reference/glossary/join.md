@@ -2,7 +2,7 @@
 id: glossary-join
 term: Join
 short: Combining the rows of two tables into one result by matching a key column, such as order_id.
-aliases: [joins, inner join]
+aliases: [joins]
 reviewed: 2026-11-27
 ---
 
