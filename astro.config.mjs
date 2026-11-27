@@ -78,6 +78,7 @@ export default defineConfig({
 				'./src/styles/math.css',
 				'./src/styles/step-animation.css',
 				'./src/styles/transitions.css',
+				'./src/styles/pages.css',
 				'./src/styles/print.css',
 			],
 			// Code blocks follow the site theme only (never the OS scheme), on gray backgrounds.

@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1602 nodes, 2039 edges, 204 communities (625 isolated nodes).
-- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 62, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 200, skill 1, spec-section 25, starlight-component 6, style 7, symbol 321, template 2, token 12.
-- Edges: defines 321, imports 51, mentions 1019, overrides 6, references 30, runs 15, specified-by 4, uses 556, uses-token 32, validated-by 5.
+- 1603 nodes, 2045 edges, 204 communities (625 isolated nodes).
+- Nodes: agent 8, build plan 9, component 40, config 10, content 234, content-type 5, decision 62, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 27, npm-script 26, page 5, research-section 500, rule 11, script 200, skill 1, spec-section 25, starlight-component 6, style 8, symbol 321, template 2, token 12.
+- Edges: defines 321, imports 51, mentions 1021, overrides 6, references 31, runs 15, specified-by 4, uses 556, uses-token 35, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -19,7 +19,7 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 4 | `src/components/content/OpenInColab.astro` | component | 78 | src/components/content/OpenInColab.astro:1 |
 | 5 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
 | 6 | `.claude/HANDOFF.md` | doc | 66 | .claude/HANDOFF.md:1 |
-| 7 | `astro.config.mjs` | config | 45 | astro.config.mjs:1 |
+| 7 | `astro.config.mjs` | config | 46 | astro.config.mjs:1 |
 | 8 | `agent:LESSON-STANDARD` | agent | 37 | .claude/agents/LESSON-STANDARD.md:1 |
 | 9 | `.claude/MISTAKES.md` | doc | 35 | .claude/MISTAKES.md:1 |
 | 10 | `src/site.ts` | module | 33 | src/site.ts:1 |
@@ -37,13 +37,13 @@ Label propagation; each community is named by its top-degree node.
 - **C2 Lesson step-by-step figures** (54): D41 Lesson step-by-step figures; .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets
 - **C3 track-skills.ts** (19): src/data/track-skills.ts; D50 Choose your track; src/components/project/TrackChooser.astro; src/data/track-skills.ts#AXES; src/data/track-skills.ts#Axis; src/data/track-skills.ts#AxisId
 - **C4 Tech stack** (18): S2 Tech stack; S4 Information architecture; S1 Decision record; S3 URL contract; research/issues/61-python-for-data-stage-check-sql-bridge-traps-and-the-colab-d.md; research/issues/32-career-quiz-data-careers.md
-- **C5 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
-- **C6 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
-- **C7 MISTAKES.md** (15): .claude/MISTAKES.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer; D54 What's new page
-- **C8 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
-- **C9 roadmap.ts** (15): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES
-- **C10 sync-research-issues.mjs** (13): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md
-- **C11 README.md** (10): design/README.md; DG5 Homepage (see `homepage-prototype…; DG4 Logo animation (approved — match…; src/components/home/Branches.astro; src/components/home/Hero.astro; D38 Career panel button
+- **C5 README.md** (18): design/README.md; src/styles/tokens.css; D9 Theme; S10 Design & motion; src/styles/step-animation.css; src/styles/sql-runner.css
+- **C6 career-quiz.ts** (18): src/lib/career-quiz.ts; D33 Career quiz page; src/components/project/CareerQuiz.astro; src/content/docs/career-quiz.md; src/lib/career-quiz.ts#CAREER_NAMES; src/lib/career-quiz.ts#DISCLAIMER
+- **C7 site.ts** (17): src/site.ts; DG7:link-preview-card Link preview card; scripts/build-og.mjs; src/site.ts#ANALYTICS_ENABLED; src/site.ts#AUTHOR_NAME; src/site.ts#CURRICULUM_VERSION
+- **C8 MISTAKES.md** (15): .claude/MISTAKES.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer; D54 What's new page
+- **C9 cheatsheet.ts** (15): src/lib/cheatsheet.ts; src/lib/cheatsheet.ts#CheatEntry; src/lib/cheatsheet.ts#CheatFigure; src/lib/cheatsheet.ts#CheatItem; src/lib/cheatsheet.ts#CheatNext; src/lib/cheatsheet.ts#CheatPart
+- **C10 roadmap.ts** (15): src/lib/roadmap.ts; src/lib/roadmap.ts#CHEATSHEETS; src/lib/roadmap.ts#DEEP_DIVES; src/lib/roadmap.ts#DeepDiveDef; src/lib/roadmap.ts#MapLesson; src/lib/roadmap.ts#ROADMAP_STAGES
+- **C11 sync-research-issues.mjs** (13): scripts/sync-research-issues.mjs; npm:research:sync npm run research:sync; research/issues/10-motion-technique-patterns-from-gsap-documentation-and-webflo.md; research/issues/11-vietnam-mobile-networks-median-230-mbps-sep-2026-common-data.md; research/issues/114-a-prompt-recipe-for-data-work-vendor-guidance-evidence-and-l.md; research/issues/118-what-employers-will-hire-for-in-2026-and-beyond-demand-entry.md
 - **C12 changelog.ts** (10): src/lib/changelog.ts; src/lib/changelog.ts#ChangelogEntry; src/lib/changelog.ts#ChangelogProblem; src/lib/changelog.ts#LessonRef; src/lib/changelog.ts#dayLabel; src/lib/changelog.ts#groupByDay
 
 ## Surprising connections
@@ -52,16 +52,16 @@ Edges that cross communities, lowest combined degree first (peripheral nodes bri
 
 - `ctype:career` -specified-by-> `S5.4` (C83 to C81, src/lib/content-schemas.ts:98)
 - `scripts/animations/concept-columnar-scan.mjs` -mentions-> `D4` (C99 to C2, scripts/animations/concept-columnar-scan.mjs:2)
-- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C127 to C34, scripts/animations/concept-join.mjs:1)
-- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C44 to C70, src/scripts/run-sql.ts:2)
+- `scripts/animations/concept-join.mjs` -mentions-> `scripts/make-animation.mjs` (C127 to C33, scripts/animations/concept-join.mjs:1)
+- `src/scripts/run-sql.ts` -mentions-> `src/scripts/sql-block.ts` (C43 to C70, src/scripts/run-sql.ts:2)
 - `src/layouts/HomeLayout.astro` -mentions-> `src/components/starlight/ThemeProvider.astro` (C190 to C187, src/layouts/HomeLayout.astro:39)
-- `src/styles/math.css` -uses-token-> `token:--fg` (C73 to C16, src/styles/math.css:17)
-- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C7 to C20, .claude/skills/kb/SKILL.md:3)
-- `M8` -mentions-> `D24` (C77 to C20, CLAUDE.md:67)
-- `D46` -mentions-> `README.md` (C2 to C7, SPEC.md:73)
-- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C31 to C53, design/README.md:181)
+- `.claude/skills/kb/SKILL.md` -mentions-> `D1` (C8 to C19, .claude/skills/kb/SKILL.md:3)
+- `M8` -mentions-> `D24` (C77 to C19, CLAUDE.md:67)
+- `src/styles/math.css` -uses-token-> `token:--fg` (C73 to C5, src/styles/math.css:17)
+- `D46` -mentions-> `README.md` (C2 to C8, SPEC.md:73)
+- `DG5:5a-bottom-taskbar-every-page-spec-d31-d35` -mentions-> `D37` (C30 to C52, design/README.md:181)
 - `M6` -mentions-> `D26` (C2 to C72, CLAUDE.md:63)
-- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C135 to C27, scripts/animations/concept-loss-bowl.mjs:2)
+- `scripts/animations/concept-loss-bowl.mjs` -mentions-> `scripts/lib/project3d.mjs` (C135 to C26, scripts/animations/concept-loss-bowl.mjs:2)
 
 ## Decisions (SPEC §1)
 

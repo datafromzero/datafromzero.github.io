@@ -78,5 +78,12 @@ You don't need the "right" background. You need a first step.
 
 ## Contact
 
+To get in touch with me, or to see what else I work on, visit my portfolio:
+
+<a class="author-card" href="https://johnha.info/">
+<img src="/images/about/john.webp" width="96" height="96" alt="" loading="lazy" decoding="async" />
+<span><span class="author-card-name">Nguyen “John” Ha</span><span class="author-card-note">Portfolio, background and how to reach me</span><span class="author-card-url">johnha.info →</span></span>
+</a>
+
 To report a mistake, ask a question or suggest an improvement, use the **Report a problem** button in the bar at the
 bottom of any page, or the **Report an issue** form at the end of a lesson. No account is needed.
