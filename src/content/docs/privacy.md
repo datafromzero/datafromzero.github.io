@@ -49,17 +49,19 @@ The site stores only what is needed for your own convenience, in your browser an
 
 ## Progress
 
-When you open a lesson, your browser keeps a short note of it: the lesson's address, its code and title, and the time.
-This is what lets the home page and the Start here page show "Continue" with a link to it. On Start here and on the
-page of each stage (for example `/sql/`) you can also tick lessons as done. Your ticks are kept as a short list of
-lesson ids.
+**Opening a lesson saves it in your browser automatically.** The note is the lesson's address, its code and title, and the
+time. It is written every time you open a lesson, without asking, and it is what lets the home page and the Start here page
+show "Continue" with a link to it. On Start here and on the page of each stage (for example `/sql/`) you can also tick
+lessons as done; the ticks are saved only when you tick a box, as a short list of lesson ids.
 
 - **It never leaves your device.** The note and the ticks are kept in your browser's local storage under the keys
   `dfz-last` and `dfz-done`. They are not sent to us or to anyone else, they are not part of analytics, and no one can
   see them from another device. There is no account.
-- **It is not a cookie.** It is storage you asked for by using the ticks and the Continue link, so it does not need
-  the analytics choice above. Analytics works the same whether you use it or not.
-- **To clear it,** press **Clear my progress** on Start here or on a stage page (it clears the ticks and the last lesson),
-  or clear this site's data in your browser settings. Private windows forget it when you close them.
-- **It is optional.** If your browser blocks storage, every page still works; you just do not get Continue or saved ticks.
-  If you use two browsers or two phones, each keeps its own.
+- **It is not a cookie and not analytics.** It is storage that a feature of the site needs (remembering your place), and
+  it is never sent anywhere, so it does not depend on the analytics choice above. Analytics works the same whether you
+  use it or not.
+- **To clear it,** press **Clear my progress** on Start here or on a stage page. That removes the ticks and the saved
+  lesson, but the next lesson you open is saved again. To stop the saving entirely, block site storage for this site in
+  your browser settings, or use a private window, which forgets everything when you close it.
+- **The site works without it.** If your browser blocks storage, every page still works; you just do not get Continue or
+  saved ticks. If you use two browsers or two phones, each keeps its own.

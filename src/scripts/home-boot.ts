@@ -41,7 +41,7 @@ const start = () => {
 		import('./home/careers')
 			.then((m) => m.init())
 			.catch(() => document.querySelector('[data-careers]')?.classList.add('is-static')),
-		// "Continue: S7 · Inner join" in the hero when this browser remembers a lesson (SPEC D64); runs itself on import.
+		// "Continue: S20 · INNER JOIN: pairing rows on a key" in the hero when this browser remembers a lesson (SPEC D64); runs itself on import.
 		import('./progress').catch(() => {}),
 	])
 		.then(() => (reduced ? undefined : import('./home/motion').then((m) => m.init())))

@@ -1,9 +1,9 @@
 // Learner progress in this browser (SPEC D64): the one script of /start/ and the stage pages (/excel/ and the others),
 // and, loaded after the load event, of the homepage. Under 2 KB gzipped, no library, fetches nothing, sends nothing.
-// - [data-continue] links show "Continue: S7 · Inner join" when the taskbar has stored a last lesson;
+// - [data-continue] links show "Continue: S20 · INNER JOIN: pairing rows on a key" when the taskbar has stored a last lesson;
 // - input[data-done] checkboxes are filled from, and saved to, the `dfz-done` list; [data-n] elements inside a
 //   [data-stage] container show "4 of 23 done";
-// - [data-clear] forgets the ticks and the last lesson (second tap within 5 s).
+// - [data-clear] forgets the ticks and the last lesson (second press within 5 s).
 // Everything is optional markup: a page with none of it does nothing. Storage can be blocked: the ticks then work
 // until the page is closed, and the page says so. Reads, limits and validation live in src/lib/progress.ts.
 import { browserStore, clearAll, countText, getDone, getLast, setDone } from '../lib/progress';
@@ -61,14 +61,17 @@ if (boxes.length) {
 		wrap.hidden = false;
 		const text = clear.textContent;
 		let timer: number | undefined;
+		const ask = 'Press the button again to clear your progress.';
 		const reset = () => {
 			clearTimeout(timer);
 			timer = undefined;
 			clear.textContent = text;
+			if (status?.textContent === ask) say('');
 		};
 		clear.addEventListener('click', () => {
 			if (timer === undefined) {
-				clear.textContent = 'Tap again to clear';
+				clear.textContent = 'Press again to clear';
+				say(ask);
 				timer = setTimeout(reset, 5000);
 				return;
 			}

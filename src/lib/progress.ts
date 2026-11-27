@@ -1,10 +1,10 @@
 /**
  * Learner progress kept in this browser only (SPEC D64). Two localStorage keys, nothing sent anywhere, no accounts:
  *
- * - `dfz-last`: the lesson read last, `{"p":"/sql/joins/","c":"S7","t":"Inner join","at":1795800000000}`
+ * - `dfz-last`: the lesson read last, `{"p":"/sql/inner-join/","c":"S20","t":"INNER JOIN: pairing rows on a key","at":1795800000000}`
  *   (path, code, title, time). Written by the taskbar script on lesson pages (`src/scripts/taskbar.ts`).
  * - `dfz-done`: the lessons the learner ticked, a JSON array of lesson ids (`["sql-joins"]`).
- *   Written by `src/scripts/progress.ts` on /start/ and the stage pages, and by the taskbar's "Mark done" button.
+ *   Written by `src/scripts/progress.ts` on /start/ and the stage pages.
  *
  * Pure TypeScript with no DOM types in use, so the unit tests and the scripts share it. Whatever is stored is
  * untrusted (another tab, an old version, a person editing it): every read validates, ignores what it cannot use
