@@ -267,7 +267,7 @@ abstract, schematic, looping, like an animated cheat-sheet figure. Owner request
 
 A concept animation may be drawn in 3D **only when the third dimension does real work**: a quantity over two inputs (a loss bowl over two
 coefficients) or an angle between vectors (MLE7). A stack, block, tower, layers, a table or a bar chart is drawn flat: depth that encodes
-nothing adds load and distorts what the learner compares. The team review of 2026-11-27 kept two of twelve built figures (MLE7, DS60).
+nothing adds load and distorts what the learner compares. The team review of 2026-11-27 kept two of twelve built figures (MLE7, DS6).
 It is the same figure type with the same controls, steps, Key idea and fallbacks; shapes are projected at build time at ONE fixed angle with
 `camera().P` from `scripts/lib/project3d.mjs` (the homepage projection) into `a.path` and `a.circle`. Motion is the shared CSS only (fades, `draw`, `move`).
 Rules: markup 15 KB or less (whole pixels, a few paths); every quantity is also written as text, so the learner never reads one off the projection;

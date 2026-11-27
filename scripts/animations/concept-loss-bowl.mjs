@@ -1,4 +1,4 @@
-// 3D concept animation (SPEC D41, "3D figures") for ridge and lasso (Data Scientist lesson DS60, unit 1). A loss surface over two coefficients is a bowl: the rings are contours of
+// 3D concept animation (SPEC D41, "3D figures") for ridge and lasso (Data Scientist lesson DS6, unit 1). A loss surface over two coefficients is a bowl: the rings are contours of
 // equal loss, drawn on the floor and lifted to their height (build-time projection, scripts/lib/project3d.mjs). The shape is a schematic: a quadratic bowl with its lowest point
 // off the middle, and no number is written (no coefficient, no loss, no C). The penalty is drawn as the region the coefficients may take, a circle for L2 (ridge) and a diamond for
 // L1 (lasso), centered on zero; the touch points are computed here, not placed by hand, and the spec throws when the lasso point is not on an axis or the ridge point is.
