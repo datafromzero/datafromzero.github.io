@@ -107,6 +107,8 @@ export interface MapLesson {
 	href: string;
 	prerequisites: string[];
 	status: string;
+	/** Minutes, shown in the stage index pages (D64). */
+	duration?: number;
 }
 
 export interface RoadmapLesson {
@@ -118,6 +120,8 @@ export interface RoadmapLesson {
 	href: string;
 	/** True for a lesson in the stage's optional deep dive (`DEEP_DIVES`). */
 	deepDive: boolean;
+	/** Minutes the lesson takes, when the caller passed it. */
+	duration?: number;
 	/** Codes of the prerequisites that are on the roadmap (other stages included), in the frontmatter order. */
 	needs: string[];
 }
@@ -159,6 +163,7 @@ export function groupRoadmap(lessons: MapLesson[], landings: ReadonlySet<string>
 				label: l.short_title ?? l.title,
 				href: l.href,
 				deepDive: isDeepDive(l.stage, l.order),
+				duration: l.duration,
 				needs: l.prerequisites.filter((p) => codeOf.has(p)).map((p) => codeOf.get(p)!),
 			})),
 	}));

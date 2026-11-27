@@ -48,7 +48,9 @@ function stageItems(stage: string, includeDrafts: boolean): (Link | Group)[] {
 	const deep = all.filter((l) => l.order >= from).map(strip);
 	if (deep.length > 0) main.push({ label: deepDiveLabel(stage)!, collapsed: true, items: deep });
 	const sheet = CHEATSHEETS[stage];
-	return sheet && all.length > 0 ? [...main, { label: sheet.label, link: sheet.href }] : main;
+	const body = sheet && all.length > 0 ? [...main, { label: sheet.label, link: sheet.href }] : main;
+	// The stage's index page (/excel/, D64) opens the group when its file exists.
+	return all.length > 0 && existsSync(join(DOCS, stage, 'index.md')) ? [{ label: 'All lessons', link: `/${stage}/` }, ...body] : body;
 }
 
 export function buildSidebar(includeDrafts: boolean): Group[] {

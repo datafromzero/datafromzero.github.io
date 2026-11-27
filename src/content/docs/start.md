@@ -3,9 +3,10 @@ title: Start here
 description: How to use datafromzero, a free, open roadmap for learning data from zero, and a map of the whole path.
 ---
 
-datafromzero is a free, open roadmap for people who only know Microsoft Office. It goes from
-Excel and Google Sheets to SQL, then Python, then an advanced core, and finally four data careers.
-The site is still being written, so lessons appear stage by stage.
+datafromzero is a free, open roadmap that starts where most people start, with spreadsheets. It goes
+from Excel and Google Sheets to SQL, then Python, then an advanced core of statistics, Git, data
+modeling and cloud basics, and finally the skills of four data careers. Every stage and every career branch is
+published; lessons are still reviewed and improved, and the [changelog](/changelog/) lists each change.
 
 Not an English reader yet? [Read in your language](/translate/) shows how to translate the pages with Chrome.
 
@@ -33,10 +34,16 @@ You can skip a stage you already know. Read its last lessons first: if they feel
 Try each exercise before you open its solution. Solutions are hidden directly under the exercise
 and open with a click; this works without JavaScript.
 
-Practice happens outside this site, so nothing you type here is run or saved:
+Where you practice depends on the stage:
 
-- Excel lessons link to a Google Sheets template. Use **Make a copy** to get your own.
-- Python and SQL lessons link to a Google Colab notebook. Use **Open in Colab** and run the cells.
+- **Excel:** each lesson has a practice workbook (`.xlsx`) to download. Open it in Excel, or upload
+  it to Google Drive and open it with Google Sheets.
+- **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
+  and nothing you type is sent anywhere.
+- **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (you sign in
+  with a Google account; Colab is free of charge). A notebook is easier on a computer or tablet than on a phone.
+- **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
+  a Colab notebook, or, for some, tools you install on your own computer.
 - Practice datasets are in the project repository and are free to reuse (see the license page).
 
 ## Prerequisites and "Unlocks next"
@@ -47,8 +54,15 @@ lists the published lessons that build on it, so you can see where it leads.
 
 ## Your progress
 
-datafromzero has no accounts and does not save progress. Bookmark the lesson you are on, or note
-it down yourself.
+datafromzero has no accounts. Your browser remembers the lesson you opened last, and when you open a lesson and come
+back to this page or the home page you will see **Continue** with a link to it. Below, tick a lesson when you finish
+it; each stage shows how many you have done. This is kept in this browser only: it is never sent anywhere, and it is
+not shared between your devices. **Clear my progress** removes it (see [Privacy](/privacy/#progress)). If your browser
+blocks storage, nothing is remembered; bookmark the lesson you are on, or note it down yourself.
+
+Each stage also has a page with its lessons in order: [Excel / Sheets](/excel/), [SQL](/sql/), [Python](/python/),
+[Advanced core](/core/), [Data Analyst](/data-analyst/), [Data Engineer](/data-engineer/),
+[Data Scientist](/data-scientist/) and [ML / AI Engineer](/ml-engineer/).
 
 ## Report a problem
 

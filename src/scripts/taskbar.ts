@@ -6,6 +6,9 @@
 // - the theme switch: Starlight's own state (data-theme on <html>, localStorage `starlight-theme`), so the
 //   homepage and the docs agree; dark unless the reader chose light;
 // - back-to-top (desktop) is dimmed near the top;
+// - on a lesson page (the bar carries data-l, the lesson title) it remembers the lesson in this browser (localStorage
+//   `dfz-last`, SPEC D64; read by src/scripts/progress.ts and validated by src/lib/progress.ts). Nothing is sent;
+//   a blocked or full store is ignored;
 // - the small label line names the section on screen: the homepage's sections ([data-tb-name]) or a docs page's
 //   h2s, behind the lesson code; the same section is marked in the sheet's This lesson tab.
 const d = document;
@@ -82,6 +85,12 @@ if (bar) {
 		setTimeout(() => {
 			paint();
 			dim();
+			if (bar.dataset.l)
+				try {
+					localStorage['dfz-last'] = JSON.stringify({ p: location.pathname, c: kick.dataset.c, t: bar.dataset.l, at: Date.now() });
+				} catch {
+					// Private mode or blocked storage: nothing is remembered, the page is unaffected.
+				}
 		}),
 	);
 

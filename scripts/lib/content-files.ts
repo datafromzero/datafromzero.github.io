@@ -23,7 +23,7 @@ function* markdownFiles(dir: string): Generator<string> {
 export function readContent(root: string, kinds: readonly Kind[] = ['lesson', 'reference', 'glossary']): ContentFile[] {
 	const out: ContentFile[] = [];
 	for (const path of [...markdownFiles(root)].sort()) {
-		const c = classify(relative(root, path).replace(/\\/g, '/').replace(/\.mdx?$/, ''));
+		const c = classify(relative(root, path).replace(/\\/g, '/').replace(/\.mdx?$/, '').replace(/\/index$/, ''));
 		if (c.locale !== null || !c.kind || !kinds.includes(c.kind)) continue;
 		const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readFileSync(path, 'utf8'));
 		let data: Record<string, unknown> | null = null;
