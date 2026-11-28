@@ -13,16 +13,16 @@ What you can show instead is a project. If you want a sheet for yourself, the [c
 
 ### How long it takes
 
-From the first Excel lesson to the capstone of this track, the lessons state about **131 hours** in all: 7,850 minutes in 149 lessons. That is 27 weeks at 5 hours a week, or 14 weeks at 10 hours a week. Every lesson of the track is on this route; nothing is left out.
+From the first Excel lesson to the capstone of this track, the lessons state about **131 hours** in all: 7,860 minutes in 149 lessons. That is 27 weeks at 5 hours a week, or 14 weeks at 10 hours a week. Every lesson of the track is on this route; nothing is left out.
 
 | Stage | Lessons | Minutes | Hours and minutes |
 |---|---:|---:|---:|
 | Excel / Sheets | 22 | 835 | 13 h 55 min |
 | SQL | 39 | 1,895 | 31 h 35 min |
-| Python | 28 | 1,315 | 21 h 55 min |
-| Advanced core | 44 | 2,700 | 45 h 00 min |
+| Python | 28 | 1,320 | 22 h 00 min |
+| Advanced core | 44 | 2,705 | 45 h 05 min |
 | Data Scientist | 16 | 1,105 | 18 h 25 min |
-| Total | 149 | 7,850 | 130 h 50 min |
+| Total | 149 | 7,860 | 131 h 00 min |
 
 The minutes are the ones printed on each lesson. They are estimates for a beginner who does every exercise, so some lessons will take you longer. If you already know a stage, take its placement test (Excel / Sheets, SQL, Python and the advanced core each end their page with one) and take that stage's hours off the total.
 

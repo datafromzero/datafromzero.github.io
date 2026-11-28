@@ -13,18 +13,18 @@ What you can show instead is a project. If you want a sheet for yourself, the [c
 
 ### How long it takes
 
-From the first Excel lesson to the capstone of this track, the lessons state about **133 hours** in all: 7,975 minutes in 153 lessons. That is 27 weeks at 5 hours a week, or 14 weeks at 10 hours a week.
+From the first Excel lesson to the capstone of this track, the lessons state about **133 hours** in all: 7,985 minutes in 153 lessons. That is 27 weeks at 5 hours a week, or 14 weeks at 10 hours a week.
 
 | Stage | Lessons | Minutes | Hours and minutes |
 |---|---:|---:|---:|
 | Excel / Sheets | 22 | 835 | 13 h 55 min |
 | SQL | 39 | 1,895 | 31 h 35 min |
-| Python | 28 | 1,315 | 21 h 55 min |
-| Advanced core | 44 | 2,700 | 45 h 00 min |
+| Python | 28 | 1,320 | 22 h 00 min |
+| Advanced core | 44 | 2,705 | 45 h 05 min |
 | Data Engineer | 20 | 1,230 | 20 h 30 min |
-| Total | 153 | 7,975 | 132 h 55 min |
+| Total | 153 | 7,985 | 133 h 05 min |
 
-Left out: the optional deep dive on database internals (11 lessons, 550 minutes), which is not required for a first job. The minutes are the ones printed on each lesson. They are estimates for a beginner who does every exercise, so some lessons will take you longer. If you already know a stage, take its placement test (Excel / Sheets, SQL, Python and the advanced core each end their page with one) and take that stage's hours off the total.
+Left out: the optional deep dive on database internals (11 lessons, 555 minutes), which is not required for a first job. The minutes are the ones printed on each lesson. They are estimates for a beginner who does every exercise, so some lessons will take you longer. If you already know a stage, take its placement test (Excel / Sheets, SQL, Python and the advanced core each end their page with one) and take that stage's hours off the total.
 
 If you come from the Data Analyst track and want only dbt, there is a shorter way: the [analytics engineer route](/data-analyst/#analytics-engineer-route).
 
