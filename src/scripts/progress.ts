@@ -12,8 +12,6 @@
 import { browserStore, clearAll, countText, getDone, getLast, ORDER_URL, parseOrder, pickNext, setDone, type OrderItem, type Pick } from '../lib/progress';
 
 const d = document;
-// A page with a placement test gets its "mark these lessons done" button from a separate module (D67).
-if (d.querySelector('[data-placement-test]')) import('./placement');
 const store = browserStore();
 const boxes = [...d.querySelectorAll<HTMLInputElement>('input[data-done]')];
 const status = d.querySelector<HTMLElement>('[data-status]');
@@ -73,6 +71,14 @@ if (boxes.length) {
 		b.closest('label')!.hidden = false;
 	}
 	paint();
+	// Another script of the page (the placement button) changed the list: show it in the ticks, the counts and Continue.
+	// (An event with a detail comes from this script: its boxes are already right, which matters when storage is blocked.)
+	addEventListener('dfz-progress', (e) => {
+		const now = getDone(store);
+		if (!(e as CustomEvent).detail) for (const b of boxes) b.checked = now.includes(b.dataset.done!);
+		paint();
+		showLast();
+	});
 	d.addEventListener('change', (e) => {
 		const b = e.target as HTMLInputElement;
 		if (!b.dataset.done) return;
@@ -81,8 +87,7 @@ if (boxes.length) {
 		if (b.checked) now.add(b.dataset.done);
 		else now.delete(b.dataset.done);
 		say(setDone(now, store) ? '' : 'This browser is not saving progress, so ticks last only until you close the page.');
-		paint();
-		showLast();
+		dispatchEvent(new CustomEvent('dfz-progress', { detail: 1 })); // repaints the counts and Continue (above) and any placement button
 	});
 
 	const wrap = d.querySelector<HTMLElement>('[data-clear-wrap]');
@@ -108,8 +113,7 @@ if (boxes.length) {
 			reset();
 			clearAll(store);
 			for (const b of boxes) b.checked = false;
-			paint();
-			showLast();
+			dispatchEvent(new CustomEvent('dfz-progress', { detail: 1 }));
 			say('Your progress is cleared.');
 		});
 	}

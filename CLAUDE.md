@@ -31,7 +31,11 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
   Every page must be readable with JavaScript disabled.
 - **Speed first:** lesson/reference pages ship no JS beyond Starlight's own and the taskbar script (D31: one script
   under 1 KB gzipped, no GSAP, no library). One exception (D33): `/career-quiz/` adds one scoring script under 4 KB
-  gzipped (vanilla, no GSAP, no storage, sends nothing). Another exception (D42): a lesson page that uses `<RunSQL>` also
+  gzipped (vanilla, no GSAP, no storage, sends nothing). Another exception (D64, owner-approved): every lesson also has the
+  "Mark this lesson done" module (`src/scripts/lesson-done.ts`, inlined by the build, 450 bytes gzipped measured from the built
+  page, imports nothing: a dynamic import adds Vite's 0.9 KB preload helper, so never add one); the five lessons that end a core
+  part, and the stage pages, add the placement button's script (`src/scripts/placement.ts`, 1.7 KB gzipped with the shared
+  progress library) only when their text has a `data-placement-test` marker. Another exception (D42): a lesson page that uses `<RunSQL>` also
   ships one small deferred module (`src/scripts/run-sql.ts`, under 1 KB gzipped, fetches nothing); the editor (CodeMirror)
   and the self-hosted DuckDB-Wasm engine (about 8 MB) load in the background after the load event, at idle, once a block is
   within one screen of the viewport (never with Data Saver or 2G: then on first focus or Run), so a reader who never nears
@@ -42,7 +46,7 @@ Built with **Astro + Starlight**, deployed to **GitHub Pages** at https://datafr
 - **No** accounts, server-side saved progress, comments or in-browser code execution (SPEC §15), except the in-page SQL runner of D42
   (`<RunSQL>`): DuckDB-Wasm self-hosted, loaded in the background near a block, no storage, nothing sent anywhere.
   Progress kept in the browser only is allowed (D64): `dfz-last` (written by the taskbar script on lessons) and `dfz-done`
-  (ticks on `/start/` and the stage pages, by `src/scripts/progress.ts`, under 2 KB gzipped); every access guarded, nothing sent.
+  (ticks on `/start/` and the stage pages, by `src/scripts/progress.ts`, 1.86 KB gzipped with its library, 2.06 KB counting the build's runtime stub and the ProgressClear stub; 1.42 KB before D64's Continue/Next); every access guarded, nothing sent.
 - Any change to a CONTRACT section or a decision in SPEC §1 must update `SPEC.md` in the same PR
   (add or amend the decision row) and `CHANGELOG.md`.
 
