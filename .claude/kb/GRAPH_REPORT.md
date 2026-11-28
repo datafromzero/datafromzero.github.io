@@ -5,9 +5,9 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 
 ## Summary
 
-- 1797 nodes, 2389 edges, 218 communities (704 isolated nodes).
+- 1797 nodes, 2392 edges, 218 communities (704 isolated nodes).
 - Nodes: agent 8, build plan 9, component 46, config 10, content 312, content-type 5, decision 68, dependency 26, design-section 15, doc 43, i18n 6, layout 1, module 34, npm-script 31, page 7, research-section 500, rule 11, script 209, skill 1, spec-section 25, starlight-component 6, style 9, symbol 401, template 2, token 12.
-- Edges: defines 401, imports 56, mentions 1213, overrides 6, references 33, runs 18, specified-by 4, uses 614, uses-token 39, validated-by 5.
+- Edges: defines 401, imports 56, mentions 1216, overrides 6, references 33, runs 18, specified-by 4, uses 614, uses-token 39, validated-by 5.
 
 ## God nodes (highest degree)
 
@@ -17,8 +17,8 @@ Lookup: `node scripts/kb.mjs query <terms>` | `path <a> <b>` | `explain <id>`. I
 | 2 | `src/components/content/Exercise.astro` | component | 206 | src/components/content/Exercise.astro:1 |
 | 3 | `D41` Lesson step-by-step figures | decision | 111 | SPEC.md:68 |
 | 4 | `src/components/content/OpenInColab.astro` | component | 78 | src/components/content/OpenInColab.astro:1 |
-| 5 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
-| 6 | `.claude/HANDOFF.md` | doc | 72 | .claude/HANDOFF.md:1 |
+| 5 | `.claude/HANDOFF.md` | doc | 75 | .claude/HANDOFF.md:1 |
+| 6 | `src/components/content/RunSQL.astro` | component | 73 | src/components/content/RunSQL.astro:1 |
 | 7 | `src/components/content/Term.astro` | component | 59 | src/components/content/Term.astro:1 |
 | 8 | `astro.config.mjs` | config | 50 | astro.config.mjs:1 |
 | 9 | `agent:LESSON-STANDARD` | agent | 45 | .claude/agents/LESSON-STANDARD.md:1 |
@@ -35,7 +35,7 @@ Label propagation; each community is named by its top-degree node.
 
 - **C1 Solution** (214): src/components/content/Solution.astro; src/components/content/Exercise.astro; src/components/content/OpenInColab.astro; src/components/content/RunSQL.astro; src/components/content/Term.astro; src/content/docs/core/designing-a-star-schema.mdx
 - **C2 HANDOFF.md** (39): .claude/HANDOFF.md; agent:LESSON-STANDARD LESSON-STANDARD; D42 In-page SQL runner; D44 Stage cheatsheets; a math block i…; S7 Datasets; S5.1 Lesson (`src/content/docs/{stage}…
-- **C3 career-route.ts** (30): src/lib/career-route.ts; pkg:@astrojs/starlight; D69 Completion page, unverified; src/pages/sql/playground.astro; scripts/career-route.ts; src/pages/completion.astro
+- **C3 career-route.ts** (30): src/lib/career-route.ts; pkg:@astrojs/starlight; D69 Completion page, unverified; scripts/career-route.ts; src/pages/sql/playground.astro; src/pages/completion.astro
 - **C4 progress.ts** (21): src/lib/progress.ts; src/lib/progress.ts#DONE_KEY; src/lib/progress.ts#LAST_KEY; src/lib/progress.ts#Last; src/lib/progress.ts#MAX_DONE; src/lib/progress.ts#MAX_RAW
 - **C5 README.md** (20): design/README.md; src/styles/tokens.css; S10 Design & motion; D9 Theme; D51 Math in lessons; src/styles/sql-runner.css
 - **C6 MISTAKES.md** (19): .claude/MISTAKES.md; README.md; CLAUDE.md; CHANGELOG.md; SPEC.md; agent:spec-reviewer spec-reviewer
