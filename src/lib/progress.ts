@@ -154,27 +154,14 @@ export function parseOrder(v: unknown): OrderItem[] | null {
 	if (!Array.isArray(v)) return null;
 	const out: OrderItem[] = [];
 	for (const r of v) {
-		if (!Array.isArray(r) || out.length >= MAX_DONE) continue;
+		if (!Array.isArray(r)) continue;
 		const [id, c, p, t] = r as unknown[];
-		if (typeof id === 'string' && ID.test(id) && typeof c === 'string' && CODE.test(c) && typeof p === 'string' && PATH.test(p) && typeof t === 'string' && t.trim() !== '') {
-			out.push({ id, c, p, t: t.trim().slice(0, MAX_TITLE) });
+		// The file is the site's own: the address and codes are checked (the address becomes a link), the title is only shown as text.
+		if (typeof id === 'string' && ID.test(id) && typeof c === 'string' && CODE.test(c) && typeof p === 'string' && PATH.test(p) && typeof t === 'string' && t) {
+			out.push({ id, c, p, t });
 		}
 	}
 	return out.length > 0 ? out : null;
-}
-
-/**
- * The lesson ids for the codes a placement test covers (`data-covers="S3 S4 S8"`), in the order given. A code the order does
- * not know (a lesson not published) is skipped; so is a repeat.
- */
-export function coveredIds(order: readonly OrderItem[], covers: string): string[] {
-	const byCode = new Map(order.map((x) => [x.c, x.id]));
-	const out = new Set<string>();
-	for (const c of covers.split(/\s+/)) {
-		const id = byCode.get(c);
-		if (id) out.add(id);
-	}
-	return [...out];
 }
 
 export interface Pick {

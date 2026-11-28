@@ -1,7 +1,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { clearAll, coveredIds, countText, DONE_KEY, getDone, getLast, LAST_KEY, MAX_DONE, MAX_RAW, MAX_TITLE, parseDone, parseLast, parseOrder, pickNext, setDone, type Store } from '../src/lib/progress.ts';
+import { coveredIds } from '../src/lib/placement.ts';
+import { clearAll, countText, DONE_KEY, getDone, getLast, LAST_KEY, MAX_DONE, MAX_RAW, MAX_TITLE, parseDone, parseLast, parseOrder, pickNext, setDone, type Store } from '../src/lib/progress.ts';
 
 function memory(initial: Record<string, string> = {}): Store & { data: Map<string, string> } {
 	const data = new Map(Object.entries(initial));
@@ -154,7 +155,7 @@ describe('Continue and Next (pickNext, parseOrder)', () => {
 		assert.equal(parseOrder({}), null);
 		assert.equal(parseOrder([['BAD ID', 'E1', '/excel/a/', 'x']]), null);
 		assert.equal(parseOrder([['a', 'E1', '/excel/a', 'x']]), null);
-		assert.equal(parseOrder([['a', 'E1', '/excel/a/', '  ']]), null);
+		assert.equal(parseOrder([['a', 'E1', '/excel/a/', '']]), null);
 		assert.equal(parseOrder([['a', 'E1', '/excel/a/', 'x'], 'junk', ['b', 'nope', '/excel/b/', 'y']])?.length, 1);
 	});
 	test('coveredIds maps a placement test\'s codes to lesson ids, skipping unknown codes and repeats', () => {
@@ -162,6 +163,10 @@ describe('Continue and Next (pickNext, parseOrder)', () => {
 		assert.deepEqual(coveredIds(o, 'E3  E3 X9 E1'), ['excel-c', 'excel-a']);
 		assert.deepEqual(coveredIds(o, ''), []);
 		assert.deepEqual(coveredIds(o, 'P1 P2'), []);
+	});
+	test('the done button of a lesson imports nothing, statically or dynamically (a dynamic import pulls in a 0.9 KB preload helper)', () => {
+		const src = readFileSync(new URL('../src/scripts/lesson-done.ts', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
+		assert.ok(!/\bimport\b/.test(src));
 	});
 	test('the order file the build writes has the row shape parseOrder reads', () => {
 		const src = readFileSync(new URL('../src/pages/lesson-order.json.ts', import.meta.url), 'utf8');
