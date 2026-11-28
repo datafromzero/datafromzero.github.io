@@ -6,7 +6,7 @@ description: Read EXPLAIN ANALYZE in PostgreSQL and DuckDB, compare estimated wi
 stage: data-engineer
 order: 200
 level: advanced
-duration: 65
+duration: 70
 objectives:
   - Compare the estimated rows of a plan node with its actual rows, in PostgreSQL and DuckDB
   - Say where an estimate comes from and refresh it with ANALYZE
@@ -30,6 +30,8 @@ sources:
     url: https://www.postgresql.org/docs/16/explicit-joins.html
   - title: 'DuckDB documentation: EXPLAIN (accessed 2026-11-24)'
     url: https://duckdb.org/docs/2.0/guides/meta/explain
+  - title: 'DuckDB source code, v1.4.3: relation_statistics_helper.cpp (accessed 2026-11-27)'
+    url: https://github.com/duckdb/duckdb/blob/v1.4.3/src/optimizer/join_order/relation_statistics_helper.cpp
   - title: 'PostgreSQL downloads (accessed 2026-11-24)'
     url: https://www.postgresql.org/download/
 status: published
@@ -91,9 +93,9 @@ A plan is a tree of boxes, and every box carries a guess: how many rows the plan
 
 ## Learn by doing
 
-About 65 minutes, 3 new ideas: the planner's guess beside the real count, where the guess comes from, and join order. The PostgreSQL steps run in `psql`; the DuckDB steps run in the page.
+About 70 minutes, 3 new ideas: the planner's guess beside the real count, where the guess comes from, and join order. The PostgreSQL steps run in `psql`; the DuckDB steps run in the page.
 
-**Set up once.** Install PostgreSQL 16 for your system from the PostgreSQL download page (the installers include `psql`), or start it with Docker and run `psql` from your computer. Then, in an empty folder, fetch the lab script and build the lab:
+**Set up once.** Install PostgreSQL 16 for your system from the PostgreSQL download page (the installers include `psql`), or start it with <Term id="glossary-docker">Docker</Term> and run `psql` from your computer. Then, in an empty folder, fetch the lab script and build the lab:
 
 ```bash
 docker run --name lab-pg -e POSTGRES_PASSWORD=lab -p 5432:5432 -d postgres:16
@@ -148,7 +150,7 @@ SELECT * FROM orders WHERE store_id = 3 AND ordered_at < '2026-04-01';
 
 </details>
 
-*Why:* the planner expected 142 rows and found 0. The `stores` table says Harbor opened on 2026-04-01, so it has no orders before April, but the planner does not know that two conditions are linked. The documentation says the planner normally assumes that multiple conditions are independent, and multiplies their chances: Harbor has 355 of the 1,800 orders and 718 orders are from before April, so $$355 \times 718 / 1800 = 141.6$$, which prints as 142. DuckDB makes its own guess. In the editor, the first block prints the plan with `~` estimates and the second the plan with true counts. Expected: the scan box ends with `~900 rows` in the first plan and with `0 rows` in the second (the page's engine and DuckDB 2.0.0 print the same two numbers):
+*Why:* the planner expected 142 rows and found 0. The `stores` table says Harbor opened on 2026-04-01, so it has no orders before April, but the planner does not know that two conditions are linked. The documentation says the planner normally assumes that multiple conditions are independent, and multiplies their chances: Harbor has 355 of the 1,800 orders and 718 orders are from before April, so $$355 \times 718 / 1800 = 141.6$$, which prints as 142. DuckDB makes its own guess, by a different rule that its source code shows: for an equality test such as `store_id = 3` it divides the table's row count by the number of distinct values it has recorded for that column (an approximate count that the table keeps for the column), and for a filter that is not an equality it takes a fixed 20 percent of the rows. Here the table's summary holds about 2 distinct values for `store_id` although there are 3 stores, so the guess is about 1,800 / 2 = 900, and the date condition does not change it. The count is approximate and can differ with the order the rows were written, so the same query on a shuffled copy of the table can print another guess. It is a guess from summaries, as in PostgreSQL, not a look at the rows. In the editor, the first block prints the plan with `~` estimates and the second the plan with true counts. Expected: the scan box ends with `~900 rows` in the first plan and with `0 rows` in the second (the page's engine and DuckDB 2.0.0 print the same two numbers):
 
 <RunSQL query={`EXPLAIN SELECT * FROM orders WHERE store_id = 3 AND ordered_at < '2026-04-01';`} />
 

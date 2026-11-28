@@ -22,8 +22,9 @@ Study the stages in this order:
 
 You can skip a stage you already know. Excel / Sheets, SQL, Python and the advanced core each end their stage page with a
 placement test: [Excel / Sheets](/excel/#placement-test), [SQL](/sql/#placement-test), [Python](/python/#placement-test)
-and [Advanced core](/core/#placement-test). Answer without looking anything up. If every answer is right, go on to the next stage;
-if not, the test tells you which lesson to start at.
+and [Advanced core](/core/#placement-test). Excel, SQL and Python have two parts each. Answer without looking anything up. If every
+answer is right, go on to the next stage; if not, the test tells you which lesson to start at, and it lists the lessons it does not
+test. New to statistics? Skip the advanced core's test and start at its first lesson; that is normal.
 
 ## Two ways to read
 
@@ -44,7 +45,8 @@ Where you practice depends on the stage:
 - **SQL:** you type and run queries in an editor on the lesson page. Nothing to install, no account,
   and nothing you type is sent anywhere.
 - **Python:** each lesson links to a notebook. Use **Open in Colab** to run it in Google Colab (you sign in
-  with a Google account; Colab is free of charge). A notebook is easier on a computer or tablet than on a phone.
+  with a Google account; Colab is free of charge; paid plans exist, and you do not need them). Python lessons are written
+  for a computer or tablet: on a phone you can read them, but running a notebook is hard.
 - **Advanced core and the career branches:** each lesson says what it uses: the SQL editor on the page,
   a Colab notebook, or, for some, tools you install on your own computer.
 - Practice datasets are in the project repository and are free to reuse (see the license page).
@@ -67,10 +69,19 @@ Each stage also has a page with its lessons in order: [Excel / Sheets](/excel/),
 [Advanced core](/core/), [Data Analyst](/data-analyst/), [Data Engineer](/data-engineer/),
 [Data Scientist](/data-scientist/) and [ML / AI Engineer](/ml-engineer/).
 
+## When you finish
+
+Each career page ([Data Analyst](/data-analyst/#what-you-finish-with), [Data Engineer](/data-engineer/#what-you-finish-with),
+[Data Scientist](/data-scientist/#what-you-finish-with) and [ML / AI Engineer](/ml-engineer/#what-you-finish-with)) has a
+section, **What you finish with**: the hours for the whole route from the first Excel lesson, the capstone you hand in, and what
+employers screen for. datafromzero gives no verified certificate, because it has no accounts. The [completion page](/completion/)
+prints on two pages for your own use, and says on it that it is not a certificate.
+
 ## Report a problem
 
-Every lesson ends with a **Report an issue** form, and the **Report a problem** button in the bar at the bottom of
-every page opens the same form: write what is wrong or unclear and send it, no account needed.
+Every lesson ends with a **Report an issue** form, and the **Report a problem** button (a small flag) in the menu at the
+bottom of every page opens the same form: open the menu, tap the flag, write what is wrong or unclear and send it, no
+account needed.
 
 ## The roadmap map
 

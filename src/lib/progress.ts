@@ -137,3 +137,53 @@ export function clearAll(s: Store | null = browserStore()): boolean {
 export function countText(done: number, total: number): string {
 	return `${done} of ${total} done`;
 }
+
+/** Where the build writes the lessons in study order (`src/pages/lesson-order.json.ts`). */
+export const ORDER_URL = '/lesson-order.json';
+
+/** One lesson of the study order: id (the `dfz-done` value), code, path, full title. Sent as `[id, code, path, title]`. */
+export interface OrderItem {
+	id: string;
+	c: string;
+	p: string;
+	t: string;
+}
+
+/** The study order from its JSON, keeping only well-formed rows; `null` when it is not an array or has no usable row. */
+export function parseOrder(v: unknown): OrderItem[] | null {
+	if (!Array.isArray(v)) return null;
+	const out: OrderItem[] = [];
+	for (const r of v) {
+		if (!Array.isArray(r)) continue;
+		const [id, c, p, t] = r as unknown[];
+		// The file is the site's own: the address and codes are checked (the address becomes a link), the title is only shown as text.
+		if (typeof id === 'string' && ID.test(id) && typeof c === 'string' && CODE.test(c) && typeof p === 'string' && PATH.test(p) && typeof t === 'string' && t) {
+			out.push({ id, c, p, t });
+		}
+	}
+	return out.length > 0 ? out : null;
+}
+
+export interface Pick {
+	p: string;
+	c: string;
+	t: string;
+	/** `continue`: the lesson opened last and not yet ticked; `next`: the first lesson after it that is not ticked. */
+	kind: 'continue' | 'next';
+}
+
+/**
+ * Where "Continue" points (SPEC D64). The last-opened lesson when it is not ticked done (or is not in the order);
+ * otherwise the next lesson after it in study order that is not done, the same stage first and then the following
+ * stages, wrapping to the start; when every lesson is done, the last-opened one again.
+ */
+export function pickNext(order: readonly OrderItem[], last: { p: string; c: string; t: string }, done: readonly string[]): Pick {
+	const same: Pick = { p: last.p, c: last.c, t: last.t, kind: 'continue' };
+	const i = order.findIndex((x) => x.p === last.p);
+	if (i < 0 || !done.includes(order[i].id)) return same;
+	for (let k = 1; k < order.length; k++) {
+		const x = order[(i + k) % order.length];
+		if (!done.includes(x.id)) return { p: x.p, c: x.c, t: x.t, kind: 'next' };
+	}
+	return same;
+}

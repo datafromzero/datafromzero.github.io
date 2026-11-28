@@ -2,7 +2,7 @@
 // running each wrong query; a rule without a captured message here must not exist.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { explain } from '../src/scripts/sql-errors.ts';
+import { caseQuery, emptyTip, explain, textLookup } from '../src/scripts/sql-errors.ts';
 
 const cases: [name: string, message: string, head: string, tip: RegExp | undefined][] = [
 	[
@@ -89,3 +89,38 @@ for (const [name, message, head, tip] of cases) {
 		else assert.equal(r.tip, undefined);
 	});
 }
+
+test('explain: an extra semicolon before WHERE', () => {
+	const q = "SELECT * FROM products; WHERE category = 'tea'";
+	const r = explain('Parser Error: syntax error at or near "WHERE"\n\nLINE 1: WHERE category = \'tea\'', q);
+	assert.match(r.tip ?? '', /^A semicolon ends the query, so WHERE starts a new one/);
+	assert.match(r.tip ?? '', /Remove the ; before WHERE/);
+});
+test('explain: the same message without a semicolon in the query keeps the general tip', () => {
+	const r = explain('Parser Error: syntax error at or near "WHERE"', 'SELECT * FROM products WHERE WHERE category = 1');
+	assert.match(r.tip ?? '', /Look just before WHERE/);
+});
+test('explain: curly quotes get their own tip, never a doubled quote', () => {
+	const q = 'SELECT * FROM products WHERE category = ‘tea’';
+	const r = explain('Binder Error: Referenced column "‘tea’" not found in FROM clause!\nCandidate bindings: "category"', q);
+	assert.match(r.tip ?? '', /curly quotes/);
+	assert.match(r.tip ?? '', /straight ones/);
+	assert.ok(!(r.tip ?? '').includes("'‘"));
+	// Also when only the message shows them, and for double curly quotes.
+	assert.match(explain('Parser Error: syntax error at or near "“"').tip ?? '', /curly quotes/);
+});
+test('textLookup finds a text comparison in a one-table query only', () => {
+	assert.deepEqual(textLookup("SELECT * FROM products WHERE category = 'Tea';"), { col: 'category', table: 'products', text: 'Tea' });
+	assert.deepEqual(textLookup("select name from stores where city='Oakland' -- note"), { col: 'city', table: 'stores', text: 'Oakland' });
+	assert.equal(textLookup("SELECT * FROM a JOIN b ON a.id = b.id WHERE a.x = 'Tea'"), null);
+	assert.equal(textLookup("SELECT 1; SELECT * FROM products WHERE category = 'Tea'"), null);
+	assert.equal(textLookup('SELECT * FROM products WHERE price = 5'), null);
+	assert.equal(textLookup("SELECT * FROM products WHERE code = '123'"), null);
+});
+test('the empty-result tip names the stored spelling when there is one', () => {
+	assert.equal(emptyTip('Tea', 'tea'), "No rows. Text must match exactly, including capitals: did you mean 'tea'?");
+	assert.match(emptyTip('Tea'), /^No rows\. Text must match exactly/);
+	const sql = caseQuery({ col: 'category', table: 'products', text: 'Tea' });
+	assert.match(sql, /lower\(category\) = lower\('Tea'\)/);
+	assert.match(sql, /category <> 'Tea'/);
+});

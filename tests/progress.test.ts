@@ -1,7 +1,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { clearAll, countText, DONE_KEY, getDone, getLast, LAST_KEY, MAX_DONE, MAX_RAW, MAX_TITLE, parseDone, parseLast, setDone, type Store } from '../src/lib/progress.ts';
+import { coveredIds } from '../src/lib/placement.ts';
+import { clearAll, countText, DONE_KEY, getDone, getLast, LAST_KEY, MAX_DONE, MAX_RAW, MAX_TITLE, parseDone, parseLast, parseOrder, pickNext, setDone, type Store } from '../src/lib/progress.ts';
 
 function memory(initial: Record<string, string> = {}): Store & { data: Map<string, string> } {
 	const data = new Map(Object.entries(initial));
@@ -119,5 +120,56 @@ describe('wording and the taskbar', () => {
 		const src = readFileSync(new URL('../src/scripts/taskbar.ts', import.meta.url), 'utf8');
 		assert.ok(src.includes(`'${LAST_KEY}'`));
 		for (const field of ['p:', 'c:', 't:', 'at:']) assert.ok(src.includes(field), field);
+	});
+});
+
+describe('Continue and Next (pickNext, parseOrder)', () => {
+	const order = [
+		['excel-a', 'E1', '/excel/a/', 'Rows'],
+		['excel-b', 'E2', '/excel/b/', 'Formulas'],
+		['excel-c', 'E3', '/excel/c/', 'References'],
+		['sql-a', 'S1', '/sql/a/', 'Select'],
+	];
+	const o = parseOrder(order)!;
+	const at = (p: string) => ({ p, c: 'E2', t: 'Formulas' });
+
+	test('a lesson that is not done stays the Continue target', () => {
+		assert.deepEqual(pickNext(o, at('/excel/b/'), ['excel-a']), { p: '/excel/b/', c: 'E2', t: 'Formulas', kind: 'continue' });
+		assert.equal(pickNext(o, at('/excel/b/'), []).kind, 'continue');
+	});
+	test('a done lesson moves on to the next one that is not done, in study order', () => {
+		assert.deepEqual(pickNext(o, at('/excel/b/'), ['excel-a', 'excel-b']), { p: '/excel/c/', c: 'E3', t: 'References', kind: 'next' });
+		// E3 done too: skips it and goes on into the next stage.
+		assert.equal(pickNext(o, at('/excel/b/'), ['excel-b', 'excel-c']).p, '/sql/a/');
+	});
+	test('after the last lesson the search wraps to the start', () => {
+		assert.equal(pickNext(o, at('/excel/b/'), ['excel-b', 'excel-c', 'sql-a']).p, '/excel/a/');
+	});
+	test('everything done, or a lesson not in the order: the last lesson again', () => {
+		assert.equal(pickNext(o, at('/excel/b/'), ['excel-a', 'excel-b', 'excel-c', 'sql-a']).kind, 'continue');
+		assert.equal(pickNext(o, at('/excel/z/'), ['excel-a']).p, '/excel/z/');
+		assert.equal(pickNext([], at('/excel/b/'), ['excel-b']).kind, 'continue');
+	});
+	test('parseOrder keeps well-formed rows only and returns null for the rest', () => {
+		assert.equal(parseOrder(null), null);
+		assert.equal(parseOrder({}), null);
+		assert.equal(parseOrder([['BAD ID', 'E1', '/excel/a/', 'x']]), null);
+		assert.equal(parseOrder([['a', 'E1', '/excel/a', 'x']]), null);
+		assert.equal(parseOrder([['a', 'E1', '/excel/a/', '']]), null);
+		assert.equal(parseOrder([['a', 'E1', '/excel/a/', 'x'], 'junk', ['b', 'nope', '/excel/b/', 'y']])?.length, 1);
+	});
+	test('coveredIds maps a placement test\'s codes to lesson ids, skipping unknown codes and repeats', () => {
+		assert.deepEqual(coveredIds(o, 'E1 E3 S1'), ['excel-a', 'excel-c', 'sql-a']);
+		assert.deepEqual(coveredIds(o, 'E3  E3 X9 E1'), ['excel-c', 'excel-a']);
+		assert.deepEqual(coveredIds(o, ''), []);
+		assert.deepEqual(coveredIds(o, 'P1 P2'), []);
+	});
+	test('the done button of a lesson imports nothing, statically or dynamically (a dynamic import pulls in a 0.9 KB preload helper)', () => {
+		const src = readFileSync(new URL('../src/scripts/lesson-done.ts', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
+		assert.ok(!/\bimport\b/.test(src));
+	});
+	test('the order file the build writes has the row shape parseOrder reads', () => {
+		const src = readFileSync(new URL('../src/pages/lesson-order.json.ts', import.meta.url), 'utf8');
+		assert.ok(src.includes('[l.id, l.code, l.href, l.title]'));
 	});
 });
