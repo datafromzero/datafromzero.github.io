@@ -9,6 +9,8 @@ export interface CompletionTrack {
 	id: 'data-analyst' | 'data-engineer' | 'data-scientist' | 'ml-engineer';
 	/** The name on the page: "I completed the datafromzero {name} roadmap." */
 	name: string;
+	/** What the roadmap led to, for the line "completed the {name} roadmap, {summary}" on the printed sheet. */
+	summary: string;
 	capstone: { code: string; title: string; href: string; handIn: string };
 	artifacts: string[];
 }
@@ -17,6 +19,7 @@ export const COMPLETION_TRACKS: readonly CompletionTrack[] = [
 	{
 		id: 'data-analyst',
 		name: 'Data Analyst',
+		summary: 'from spreadsheets to a dashboard project and case study',
 		capstone: { code: 'DA17', title: 'Capstone: a dashboard project and case study', href: '/data-analyst/portfolio-case-study/', handIn: '#deliverables' },
 		artifacts: [
 			'The cleaning log',
@@ -31,6 +34,7 @@ export const COMPLETION_TRACKS: readonly CompletionTrack[] = [
 	{
 		id: 'data-engineer',
 		name: 'Data Engineer',
+		summary: 'from spreadsheets to a pipeline repository someone else can run',
 		capstone: { code: 'DE18', title: 'Capstone: a pipeline repo someone else can run', href: '/data-engineer/analytics-platform-capstone/', handIn: '#the-brief' },
 		artifacts: [
 			'The clean-clone run and its output',
@@ -44,6 +48,7 @@ export const COMPLETION_TRACKS: readonly CompletionTrack[] = [
 	{
 		id: 'data-scientist',
 		name: 'Data Scientist',
+		summary: 'from spreadsheets to a model and a decision memo',
 		capstone: { code: 'DS16', title: 'Capstone: from model to decision', href: '/data-scientist/decision-product-case-study/', handIn: '#deliverables' },
 		artifacts: [
 			'The framing page',
@@ -58,6 +63,7 @@ export const COMPLETION_TRACKS: readonly CompletionTrack[] = [
 	{
 		id: 'ml-engineer',
 		name: 'ML / AI Engineer',
+		summary: 'from spreadsheets to a served model and a ship or no-ship memo',
 		capstone: { code: 'MLE16', title: 'Capstone: ship it and prove it works', href: '/ml-engineer/ml-capstone/', handIn: '#the-brief' },
 		artifacts: [
 			'The context pack',

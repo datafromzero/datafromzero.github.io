@@ -75,7 +75,7 @@ Each career page ([Data Analyst](/data-analyst/#what-you-finish-with), [Data Eng
 [Data Scientist](/data-scientist/#what-you-finish-with) and [ML / AI Engineer](/ml-engineer/#what-you-finish-with)) has a
 section, **What you finish with**: the hours for the whole route from the first Excel lesson, the capstone you hand in, and what
 employers screen for. datafromzero gives no verified certificate, because it has no accounts. The [completion page](/completion/)
-prints on one page for your own use, and says on it that it is not a certificate.
+prints on two pages for your own use, and says on it that it is not a certificate.
 
 ## Report a problem
 
