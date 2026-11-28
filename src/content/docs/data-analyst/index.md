@@ -9,7 +9,7 @@ description: Every Data Analyst lesson in the order to study them, with your don
 
 > A certificate has no value if you do not have personal projects that fit what employers need, and the skills and way of thinking to back them up. However strong the issuer is, if your ability does not yet fit or meet the job, the certificate is worth nothing.
 
-What you can show instead is a project. If you want a sheet for yourself, the [completion page](/completion/) prints on one page, and says on it that it is not a verified certificate.
+What you can show instead is a project. If you want a sheet for yourself, the [completion page](/completion/) prints on two pages, and says on it that it is not a verified certificate.
 
 ### How long it takes
 
