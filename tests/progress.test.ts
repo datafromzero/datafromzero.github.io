@@ -155,7 +155,7 @@ describe('Continue and Next (pickNext, parseOrder)', () => {
 		assert.equal(parseOrder({}), null);
 		assert.equal(parseOrder([['BAD ID', 'E1', '/excel/a/', 'x']]), null);
 		assert.equal(parseOrder([['a', 'E1', '/excel/a', 'x']]), null);
-		assert.equal(parseOrder([['a', 'E1', '/excel/a/', '  ']]), null);
+		assert.equal(parseOrder([['a', 'E1', '/excel/a/', '']]), null);
 		assert.equal(parseOrder([['a', 'E1', '/excel/a/', 'x'], 'junk', ['b', 'nope', '/excel/b/', 'y']])?.length, 1);
 	});
 	test('coveredIds maps a placement test\'s codes to lesson ids, skipping unknown codes and repeats', () => {

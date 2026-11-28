@@ -47,7 +47,7 @@ const showLast = async () => {
 	// The bottom bar's button (on /start/) points where Continue does, so the page says one thing.
 	if (cta && pick) {
 		cta.href = pick.p;
-		cta.setAttribute('aria-label', `${word}: ${pick.c} ${pick.t}`);
+		cta.ariaLabel = `${word}: ${pick.c} ${pick.t}`; // reflects aria-label (all current browsers)
 		cta.firstElementChild!.textContent = `${word} ${pick.c}`;
 	}
 };
@@ -86,7 +86,7 @@ if (boxes.length) {
 		const now = new Set(getDone(store));
 		if (b.checked) now.add(b.dataset.done);
 		else now.delete(b.dataset.done);
-		say(setDone(now, store) ? '' : 'This browser is not saving progress, so ticks last only until you close the page.');
+		say(setDone(now, store) ? '' : 'This browser is not saving ticks: they last until you close the page.');
 		dispatchEvent(new CustomEvent('dfz-progress', { detail: 1 })); // repaints the counts and Continue (above) and any placement button
 	});
 
@@ -96,7 +96,7 @@ if (boxes.length) {
 		wrap.hidden = false;
 		const text = clear.textContent;
 		let timer: number | undefined;
-		const ask = 'Press the button again to clear your progress.';
+		const ask = 'Press again to clear your progress.';
 		const reset = () => {
 			clearTimeout(timer);
 			timer = undefined;
